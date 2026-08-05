@@ -1,0 +1,34 @@
+{
+  "name": "@erp/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist node_modules/.vite"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "clsx": "^2.1.1",
+    "i18next": "^26.3.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.11",
+    "react-router-dom": "^7.18.2",
+    "zustand": "^5.0.14"
+  },
+  "//react-router-dom": "Keep this on the newest 7.x. React Router has a long advisory history and the ONLY safe direction is forward: 7.11.0 carries fourteen advisories (XSS via open redirects, RCE via vendored turbo-stream, DoS via route matching, CSRF in action processing), and 7.18.0 is the first release that clears all of them. One advisory still applies to 7.18.2 - GHSA-qwww-vcr4-c8h2, a CSRF bypass in RSC mode - and no published version fixes it, since its range runs to 8.2.0 and no 8.x is on npm. It is unreachable here: this is a client-rendered SPA with no server components and no server actions, so the RSC request path never executes. Do not 'fix' the audit warning by downgrading; that trades one unreachable issue for fourteen live ones.",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vite": "^8.2.0"
+  }
+}

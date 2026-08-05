@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+/*
+  Tailwind v4 is configured in CSS rather than a JavaScript config file.
+  Design tokens are declared as @theme variables so they are available both as
+  Tailwind utilities and as plain CSS custom properties.
+*/
+@theme {
+  --color-brand-50: oklch(0.97 0.02 250);
+  --color-brand-100: oklch(0.93 0.04 250);
+  --color-brand-500: oklch(0.55 0.17 250);
+  --color-brand-600: oklch(0.48 0.17 250);
+  --color-brand-700: oklch(0.41 0.15 250);
+  --color-brand-900: oklch(0.28 0.1 250);
+
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Arabic needs a font stack that actually has the glyphs, and a slightly
+     larger size: at the same point size Arabic script reads smaller than Latin
+     because its letterforms carry more detail. */
+  --font-arabic: 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    /* Tabular figures everywhere. In a financial table, proportional digits make
+       columns of numbers fail to line up, which is the single most common way an
+       accounting UI looks untrustworthy. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  html[dir='rtl'] body {
+    font-family: var(--font-arabic);
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300;
+  }
+
+  .field-input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+           text-slate-900 shadow-sm outline-none transition
+           placeholder:text-slate-400
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
+           disabled:cursor-not-allowed disabled:opacity-60
+           dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600
+           px-4 py-2 text-sm font-semibold text-white shadow-sm transition
+           hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500/40
+           disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* Money and quantity cells. Right-aligned because a column of figures is read
+     by its last digit, not its first. */
+  .cell-numeric {
+    @apply px-3 py-2 text-end font-mono text-sm whitespace-nowrap;
+  }
+}

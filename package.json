@@ -15,31 +15,16 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @erp/web",
-    "dev:admin": "npm run dev --workspace @erp/admin",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint . --max-warnings 0",
-    "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md,yml,yaml}\"",
     "test": "npm run test --workspaces --if-present",
-    "test:e2e": "npm run test:e2e --workspace @erp/web",
     "clean": "npm run clean --workspaces --if-present && rimraf node_modules"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "eslint": "^9.39.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
     "prettier": "^3.6.3",
-    "prettier-plugin-tailwindcss": "^0.6.15",
     "rimraf": "^6.0.1",
-    "typescript": "^5.9.4",
-    "typescript-eslint": "^8.48.2"
+    "typescript": "~5.9.3"
   }
 }
