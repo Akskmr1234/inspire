@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using ERP.Application.Accounting.Vouchers;
+using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -35,6 +36,7 @@ public sealed class VouchersController : ApiControllerBase
     /// or that the period is closed.
     /// </response>
     [HttpPost]
+    [RequiresPermission("accounting", "voucher", "create")]
     [ProducesResponseType(typeof(CreateVoucherResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -72,6 +74,7 @@ public sealed class VouchersController : ApiControllerBase
     /// <response code="401">Not authenticated.</response>
     /// <response code="404">No such voucher in the current tenant.</response>
     [HttpGet("{id:guid}")]
+    [RequiresPermission("accounting", "voucher", "view")]
     [ProducesResponseType(typeof(VoucherDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetByIdAsync(

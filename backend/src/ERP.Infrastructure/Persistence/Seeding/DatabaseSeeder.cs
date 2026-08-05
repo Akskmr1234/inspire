@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -139,6 +140,7 @@ public sealed partial class DatabaseSeeder
         int rolesAdded = await SeedRolesAsync(tenant.Id, cancellationToken);
         Firm firm = await EnsureFirmAsync(tenant.Id, cancellationToken);
         await EnsureFinancialYearAsync(tenant.Id, firm, cancellationToken);
+        int ledgersAdded = await EnsureChartOfAccountsAsync(firm, cancellationToken);
 
         Result<bool> administrator = await EnsureAdministratorAsync(
             tenant, firm, cancellationToken);
@@ -153,11 +155,12 @@ public sealed partial class DatabaseSeeder
             firm.Code,
             permissionsAdded,
             rolesAdded,
+            ledgersAdded,
             administrator.Value);
 
         LogSeedComplete(
             _logger, summary.TenantCode, summary.PermissionsAdded, summary.RolesAdded,
-            summary.AdministratorCreated);
+            summary.LedgersAdded, summary.AdministratorCreated);
 
         return Result.Success(summary);
     }
@@ -382,6 +385,108 @@ public sealed partial class DatabaseSeeder
         }
     }
 
+    /// <summary>
+    /// Seeds the account-group tree and the ledgers the software itself references.
+    /// </summary>
+    /// <param name="firm">The firm to seed the chart for.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many ledgers were created.</returns>
+    /// <remarks>
+    /// Idempotent by code, so adding a template entry later seeds only that entry
+    /// and re-running never disturbs a chart an accountant has since reshaped.
+    /// </remarks>
+    private async Task<int> EnsureChartOfAccountsAsync(
+        Firm firm,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, AccountGroup> groups = await _context.AccountGroups
+            .Where(g => g.FirmId == firm.Id)
+            .ToDictionaryAsync(g => g.Code, StringComparer.Ordinal, cancellationToken);
+
+        foreach (ChartOfAccountsTemplate.GroupTemplate root in ChartOfAccountsTemplate.Roots)
+        {
+            if (groups.ContainsKey(root.Code))
+            {
+                continue;
+            }
+
+            Result<AccountGroup> created = AccountGroup.CreateRoot(
+                firm.TenantId, firm.Id, root.Code, root.Name, root.Nature,
+                isSystemGroup: true);
+
+            if (created.IsSuccess)
+            {
+                created.Value.SetSchedule(root.Schedule);
+                _context.AccountGroups.Add(created.Value);
+                groups[root.Code] = created.Value;
+            }
+        }
+
+        foreach (ChartOfAccountsTemplate.ChildGroupTemplate child in
+            ChartOfAccountsTemplate.Children)
+        {
+            if (groups.ContainsKey(child.Code)
+                || !groups.TryGetValue(child.ParentCode, out AccountGroup? parent))
+            {
+                continue;
+            }
+
+            // CreateChild takes the nature from the parent, so a child can never
+            // contradict the root it hangs from.
+            Result<AccountGroup> created = AccountGroup.CreateChild(
+                parent, child.Code, child.Name);
+
+            if (created.IsSuccess)
+            {
+                _context.AccountGroups.Add(created.Value);
+                groups[child.Code] = created.Value;
+            }
+        }
+
+        // Groups are saved before the ledgers so the foreign key resolves, and so a
+        // failure part-way leaves a usable tree rather than orphaned ledgers.
+        await _context.SaveChangesAsync(cancellationToken);
+
+        HashSet<string> existingLedgers = await _context.Ledgers
+            .Where(l => l.FirmId == firm.Id)
+            .Select(l => l.Code)
+            .ToHashSetAsync(StringComparer.Ordinal, cancellationToken);
+
+        List<ChartOfAccountsTemplate.LedgerTemplate> templates =
+        [
+            .. ChartOfAccountsTemplate.CommonLedgers,
+            .. ChartOfAccountsTemplate.TaxLedgersFor(firm.TaxRegime),
+        ];
+
+        int added = 0;
+
+        foreach (ChartOfAccountsTemplate.LedgerTemplate template in templates)
+        {
+            if (existingLedgers.Contains(template.Code)
+                || !groups.TryGetValue(template.GroupCode, out AccountGroup? group))
+            {
+                continue;
+            }
+
+            Result<Ledger> created = Ledger.Create(
+                group, template.Code, template.Name, template.Kind, firm.BaseCurrency);
+
+            if (created.IsSuccess)
+            {
+                _context.Ledgers.Add(created.Value);
+                existingLedgers.Add(template.Code);
+                added++;
+            }
+        }
+
+        if (added > 0)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return added;
+    }
+
     /// <summary>Creates the administrator account.</summary>
     /// <returns>Whether an account was created.</returns>
     private async Task<Result<bool>> EnsureAdministratorAsync(
@@ -472,13 +577,14 @@ public sealed partial class DatabaseSeeder
         EventId = 1010,
         Level = LogLevel.Information,
         Message = "Seeding complete for tenant {TenantCode}: {PermissionsAdded} " +
-                  "permission(s) added, {RolesAdded} role(s) added, administrator " +
-                  "created: {AdministratorCreated}")]
+                  "permission(s), {RolesAdded} role(s), {LedgersAdded} ledger(s) added, " +
+                  "administrator created: {AdministratorCreated}")]
     private static partial void LogSeedComplete(
         ILogger logger,
         string tenantCode,
         int permissionsAdded,
         int rolesAdded,
+        int ledgersAdded,
         bool administratorCreated);
 }
 
@@ -487,10 +593,12 @@ public sealed partial class DatabaseSeeder
 /// <param name="FirmCode">The firm code.</param>
 /// <param name="PermissionsAdded">How many permissions were new.</param>
 /// <param name="RolesAdded">How many roles were new.</param>
+/// <param name="LedgersAdded">How many chart-of-accounts ledgers were new.</param>
 /// <param name="AdministratorCreated">Whether an administrator account was created.</param>
 public sealed record SeedSummary(
     string TenantCode,
     string FirmCode,
     int PermissionsAdded,
     int RolesAdded,
+    int LedgersAdded,
     bool AdministratorCreated);
