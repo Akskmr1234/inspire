@@ -1,8 +1,10 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Accounting.Reports;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
+using ERP.Infrastructure.Persistence.Reporting;
 using ERP.Infrastructure.Persistence.Repositories;
 using ERP.Infrastructure.Persistence.Seeding;
 using ERP.Infrastructure.Security;
@@ -66,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<IFirmRepository, FirmRepository>();
         services.AddScoped<IFinancialYearRepository, FinancialYearRepository>();
         services.AddScoped<INumberingSeriesRepository, NumberingSeriesRepository>();
+        services.AddScoped<ITrialBalanceReader, TrialBalanceReader>();
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();
