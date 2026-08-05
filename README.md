@@ -1,0 +1,142 @@
+# Inspire ERP
+
+A multi-tenant, multi-firm, multi-branch ERP platform: accounting, inventory with batch and serial tracking, sales, purchase, manufacturing, and mobile-device service management — with configurable menus, dashboards, reports, print layouts, and workflows.
+
+Built for both Gulf (VAT) and Indian (GST) tax regimes, in English and Arabic with full RTL support.
+
+> **Specification:** [`docs/SPEC.md`](docs/SPEC.md) is the canonical functional spec, distilled from `Inspire_web.docx` and the 14 reference screenshots of the legacy *Easy Retail* Windows application and the *mysalebooks.com* web reference. Where the prose and the screenshots disagreed, both are recorded along with the resolution. Read it before writing a feature.
+
+---
+
+## Current status
+
+This is an in-progress build. What follows is accurate as of the last commit — no module is claimed complete unless it is.
+
+| Area | State |
+|---|---|
+| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business |
+| Monorepo + solution scaffold (15 projects) | **Done** — builds clean, 0 warnings |
+| Dependency set, security-scanned & licence-audited | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md) |
+| Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests |
+| Domain — tenancy identifiers, `FinancialYear` | **Done** — 25 tests |
+| API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks | **Done** |
+| Domain — Firm, Branch, chart of accounts, vouchers | Not started |
+| Multi-tenancy — EF Core query filters + PostgreSQL RLS | Not started |
+| Auth — Keycloak, RBAC permission engine, dynamic menus | Not started |
+| Application layer — CQRS handlers, validation | Not started |
+| Accounting module — masters, transactions, reports | Not started |
+| Frontend — React shell, data grid, voucher screens | Not started |
+| Docker, CI/CD, Keycloak realm | Not started |
+
+**Test suite:** 61 passing, 0 failing. `ERP.Application.Tests`, `ERP.Infrastructure.Tests`, and `ERP.Api.Tests` are empty shells awaiting the layers they cover.
+
+---
+
+## Prerequisites
+
+| Tool | Version | Notes |
+|---|---|---|
+| .NET SDK | **10.0.302+** | The brief specified ASP.NET Core 9; only the .NET 10 SDK was present and 10 is current LTS, so projects target `net10.0`. |
+| Node.js | 22+ | 24.14.1 verified |
+| Docker | 29+ | Required for integration tests (Testcontainers) and local infrastructure |
+| PostgreSQL | 16+ | Supplied by Docker Compose; no local install needed |
+
+`pnpm` is **not** required — the frontend uses **npm workspaces**, which works with the npm you already have. Switching to pnpm later is a drop-in change.
+
+---
+
+## Getting started
+
+```bash
+git clone <repo> && cd Inspire
+```
+
+Build and test the backend:
+
+```bash
+dotnet test backend/ERP.slnx
+```
+
+Run the API:
+
+```bash
+dotnet run --project backend/src/ERP.Api
+```
+
+Swagger UI is then at `https://localhost:7001/swagger` (development only). Health endpoints:
+
+- `GET /health/live` — process liveness, no dependencies checked
+- `GET /health/ready` — readiness, including database and cache
+
+---
+
+## Repository layout
+
+```
+Inspire/
+├── apps/
+│   ├── web/                  React ERP client
+│   └── admin/                platform/tenant administration
+├── backend/
+│   ├── src/
+│   │   ├── ERP.SharedKernel      framework-free primitives; zero package refs
+│   │   ├── ERP.Domain            aggregates, invariants, domain events
+│   │   ├── ERP.Application       CQRS use cases, validation, abstractions
+│   │   ├── ERP.Infrastructure    EF Core, PostgreSQL, Redis, Hangfire
+│   │   ├── ERP.Identity          Keycloak/OIDC, permission engine, MFA
+│   │   ├── ERP.Reporting         dynamic report builder, Excel/CSV/PDF export
+│   │   ├── ERP.Notifications     in-app, email, SMS, WhatsApp, SignalR
+│   │   ├── ERP.DynamicForms      role-based grid/field configuration
+│   │   ├── ERP.PrintDesigner     drag-and-drop print templates
+│   │   ├── ERP.Workflow          configurable document state machines
+│   │   └── ERP.Api               composition root, /api/v1
+│   └── tests/                    unit, integration, API
+├── packages/                 shared TS: ui, types, hooks, utils
+├── infrastructure/           nginx, keycloak realm, k8s manifests
+├── docs/
+│   ├── SPEC.md               canonical functional specification
+│   └── adr/                  architecture decision records
+└── scripts/
+```
+
+### Dependency direction
+
+```
+SharedKernel  ←  Domain  ←  Application  ←  Infrastructure
+                                        ←  Identity / Reporting / Notifications
+                                        ←  DynamicForms / PrintDesigner / Workflow
+                                                                      ↑
+                                                                    Api
+```
+
+Enforced by project references. `ERP.SharedKernel` has **zero** package references by design — nothing in it may depend on EF Core, MediatR, or ASP.NET Core, which is what keeps the domain model testable in isolation.
+
+---
+
+## Decisions worth knowing before you contribute
+
+Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
+
+**Tenant isolation is enforced twice** — an EF Core global query filter *and* a PostgreSQL row-level-security policy. One layer would be a single point of failure, and the failure mode (one customer reading another's financial data) is the worst outcome this system can produce.
+
+**AutoMapper is not used.** Every freely-licensed version carries an unpatched high-severity advisory (`GHSA-rvv3-g6hj-g44x`); every patched version requires a paid licence. Mapping is hand-written, which is also compile-time checked. See [ADR 0002](docs/adr/0002-third-party-licensing.md).
+
+**MediatR is pinned to 12.5.0** — the last Apache-2.0 release. Feature code depends on our own messaging abstractions, so replacing it is mechanical.
+
+**Money is never a bare `decimal`.** `Money` carries its currency and refuses cross-currency arithmetic. Currency scale is not assumed to be 2 — KWD, BHD, and OMR use 3 decimals and JPY uses 0. `Money.Allocate` distributes remainders so an apportioned discount always re-sums to the document total.
+
+**Financial years are arbitrary date ranges.** The legacy system's year runs 01-10-2021 to 31-12-2026. Nothing may assume a 12-month period or a particular start month.
+
+**The tax engine is jurisdiction-pluggable.** The screenshots show Qatari Riyal with VAT reports *and* Indian CGST/SGST/IGST ledgers. Tax components are data, selected by a per-firm regime — not hardcoded.
+
+**Configuration must never require a redeploy.** Menus, permissions, grid columns, dashboards, print layouts, numbering series, and workflow transitions are all rows in the database. If a feature would need a code change to reconfigure, it is not finished.
+
+---
+
+## Code quality
+
+`dotnet build` must produce **zero warnings**. CI sets `TreatWarningsAsErrors`, so a warning breaks the build.
+
+Analyzers: .NET built-in (`latest-recommended`), SonarAnalyzer, and StyleCop. Where a rule is disabled, [`backend/.editorconfig`](backend/.editorconfig) states *why* — so nobody has to guess later whether it was deliberate.
+
+Conventions: nullable reference types enabled everywhere; XML documentation on public API (`CS1591` is a warning); British English in prose and comments.

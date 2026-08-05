@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Shared Kernel holds primitives every layer may depend on: entity and
+    aggregate base types, value objects, Result/Error, domain-event contracts,
+    and the tenancy/audit marker interfaces.
+
+    It deliberately has ZERO external package references. Nothing here may
+    depend on EF Core, MediatR, ASP.NET Core, or any other framework - that is
+    what keeps the domain model testable in isolation and the architecture
+    honest. Do not add a PackageReference to this project.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.SharedKernel</RootNamespace>
+  </PropertyGroup>
+
+</Project>

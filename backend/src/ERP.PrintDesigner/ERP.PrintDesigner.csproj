@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Drag-and-drop print layouts for invoices, receipts, vouchers, and job
+    cards: template storage, dynamic field binding, conditional sections,
+    barcode/QR rendering, RTL output, and branch-specific overrides.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.PrintDesigner</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+  </ItemGroup>
+
+</Project>

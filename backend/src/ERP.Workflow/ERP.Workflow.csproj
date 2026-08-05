@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The configurable workflow engine: document state machines (sales, purchase,
+    service, manufacturing) and approval chains defined as data so an
+    administrator can reorder or extend a flow without a deployment.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Workflow</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+  </ItemGroup>
+
+</Project>

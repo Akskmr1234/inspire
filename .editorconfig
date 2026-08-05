@@ -1,0 +1,86 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,csx}]
+indent_size = 4
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+
+[*.{sln,csproj,props,targets}]
+indent_style = space
+indent_size = 2
+end_of_line = crlf
+
+# ============================================================
+# C# code style — enforced as build warnings/errors
+# ============================================================
+[*.cs]
+# --- usings ---
+csharp_using_directive_placement = outside_namespace:error
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# --- modern language features ---
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_prefer_braces = true:warning
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+csharp_style_throw_expression = true:suggestion
+csharp_prefer_simple_using_statement = true:suggestion
+
+# --- null safety (we run with <Nullable>enable</Nullable>) ---
+csharp_style_conditional_delegate_call = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+
+# --- immutability & correctness ---
+dotnet_style_readonly_field = true:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:error
+csharp_prefer_static_local_function = true:suggestion
+
+# --- naming: interfaces must start with I ---
+dotnet_naming_rule.interfaces_start_with_i.severity = error
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbol
+dotnet_naming_rule.interfaces_start_with_i.style = prefix_i_style
+dotnet_naming_symbols.interface_symbol.applicable_kinds = interface
+dotnet_naming_style.prefix_i_style.required_prefix = I
+dotnet_naming_style.prefix_i_style.capitalization = pascal_case
+
+# --- naming: private fields _camelCase ---
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_field_symbol
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_style
+dotnet_naming_symbols.private_field_symbol.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbol.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_style.required_prefix = _
+dotnet_naming_style.underscore_camel_style.capitalization = camel_case
+
+# --- naming: types & members PascalCase ---
+dotnet_naming_rule.types_pascal.severity = warning
+dotnet_naming_rule.types_pascal.symbols = type_symbol
+dotnet_naming_rule.types_pascal.style = pascal_style
+dotnet_naming_symbols.type_symbol.applicable_kinds = class,struct,enum,property,method,event,delegate
+dotnet_naming_style.pascal_style.capitalization = pascal_case
+
+# --- analyzer severities that matter for a long-lived codebase ---
+dotnet_diagnostic.CA1848.severity = none      # LoggerMessage delegates: too noisy for app code
+dotnet_diagnostic.CA2007.severity = none      # ConfigureAwait: not needed in ASP.NET Core
+dotnet_diagnostic.CA1062.severity = none      # null checks: nullable reference types cover this
+dotnet_diagnostic.IDE0058.severity = none     # unused expression value
+dotnet_diagnostic.CS1591.severity = warning   # missing XML doc on public member
+
+[*.{ts,tsx,js,jsx,json,jsonc,css,scss,html,yml,yaml}]
+indent_size = 2

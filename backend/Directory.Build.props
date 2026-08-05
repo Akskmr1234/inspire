@@ -1,0 +1,62 @@
+<Project>
+
+  <!--
+    Shared build settings for every project under backend/.
+    Package versions are centralised in Directory.Packages.props (central package management).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Nullable reference types are mandatory per the code-quality requirement. -->
+    <Nullable>enable</Nullable>
+
+    <!-- Treat warnings as errors in CI so quality never silently regresses. -->
+    <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>CS1591</WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Deterministic, reproducible builds. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- Repository metadata -->
+    <Company>Inspire</Company>
+    <Product>Inspire ERP</Product>
+    <Authors>Inspire Engineering</Authors>
+    <Version>0.1.0</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Library projects: generate XML docs so public API is documented. -->
+  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('Tests'))">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Test projects: never ship, never pack, no XML docs. -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      SA0001 fires at the compiler level (not per-file), so it cannot be quieted
+      from .editorconfig. It reports that XML comment analysis is off - which is
+      exactly what GenerateDocumentationFile=false above asks for, since test
+      fixtures are not public API and do not carry XML docs.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1707;CA2007;SA0001</NoWarn>
+  </PropertyGroup>
+
+  <!-- StyleCop reads its configuration from an AdditionalFile, not MSBuild. -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
+</Project>

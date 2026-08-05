@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The composition root. This is the only project that knows every other
+    project exists; it wires them together and exposes /api/v1.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Api</RootNamespace>
+    <UserSecretsId>inspire-erp-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
+    <ProjectReference Include="..\ERP.Identity\ERP.Identity.csproj" />
+    <ProjectReference Include="..\ERP.Reporting\ERP.Reporting.csproj" />
+    <ProjectReference Include="..\ERP.Notifications\ERP.Notifications.csproj" />
+    <ProjectReference Include="..\ERP.DynamicForms\ERP.DynamicForms.csproj" />
+    <ProjectReference Include="..\ERP.PrintDesigner\ERP.PrintDesigner.csproj" />
+    <ProjectReference Include="..\ERP.Workflow\ERP.Workflow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Mvc" />
+    <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Sinks.Seq" />
+    <PackageReference Include="Serilog.Enrichers.Environment" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" />
+  </ItemGroup>
+
+</Project>

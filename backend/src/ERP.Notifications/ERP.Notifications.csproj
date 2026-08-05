@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Notification fan-out: in-app, email, SMS, WhatsApp, and SignalR real-time
+    push. Providers sit behind abstractions so a gateway can be swapped by
+    configuration rather than by a code change.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Notifications</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+  </ItemGroup>
+
+</Project>

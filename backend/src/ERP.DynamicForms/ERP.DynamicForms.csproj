@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Data-driven screen configuration: which columns a role sees in a grid, in
+    what order, which fields appear on a document, and the product-search
+    dropdown column sets. Backs the "no code change to reconfigure a screen"
+    requirement.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.DynamicForms</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+  </ItemGroup>
+
+</Project>

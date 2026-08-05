@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Application layer: use cases as MediatR commands/queries, pipeline
+    behaviours, validators, DTO mapping, and the abstractions that
+    Infrastructure implements (repositories, unit of work, clock, current user,
+    tenant context, mail/SMS gateways).
+
+    Knows the Domain. Knows nothing about EF Core, PostgreSQL, or HTTP.
+
+    Mapping is hand-written (see Common/Mapping) rather than AutoMapper-based -
+    the reasoning is recorded in backend/Directory.Packages.props and
+    docs/adr/0002-third-party-licensing.md.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" />
+  </ItemGroup>
+
+</Project>

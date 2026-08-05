@@ -1,0 +1,110 @@
+# Backend-specific analyzer configuration.
+# Merges with the repository-root .editorconfig (no `root = true` here).
+#
+# StyleCop ships with an opinionated ruleset written for a pre-C#-8 house style.
+# Several of its rules directly contradict the conventions this repository has
+# chosen (underscore-prefixed private fields, usings outside the namespace,
+# file-scoped namespaces, positional records). Those are switched off below with
+# the reason stated, so nobody has to guess later whether it was deliberate.
+
+[*.cs]
+
+# --- Rules that contradict our chosen conventions -----------------------------
+# CA1716 objects to type and member names that are keywords in *another* .NET
+# language (chiefly Visual Basic). `Error` is the idiomatic name in the Result
+# pattern and `Value`/`New` read correctly in C#. No VB consumer is planned, and
+# renaming domain vocabulary to accommodate one would make the code worse.
+dotnet_diagnostic.CA1716.severity = none
+# SA1642 mandates the exact phrase "Initializes a new instance of the ... class"
+# on every constructor. This repository writes documentation in British English
+# ("initialises", "behaviour", "centralised"); satisfying the analyzer would mean
+# one American spelling embedded in otherwise consistent prose. The rule is
+# purely cosmetic, so consistency wins.
+dotnet_diagnostic.SA1642.severity = none
+# SA1118 objects to any argument spanning multiple lines. That is precisely the
+# shape of a well-written [SuppressMessage(Justification = "...")] - the rule
+# would push us toward one-line justifications that explain nothing.
+dotnet_diagnostic.SA1118.severity = none
+dotnet_diagnostic.SA1101.severity = none   # "this." prefix - we do not use it
+dotnet_diagnostic.SA1200.severity = none   # usings inside namespace - we place them outside
+dotnet_diagnostic.SA1309.severity = none   # field must not start with _ - we require _camelCase
+dotnet_diagnostic.SA1310.severity = none   # field must not contain _ - conflicts with _camelCase
+dotnet_diagnostic.SA1313.severity = none   # parameter must be camelCase - positional records are PascalCase
+dotnet_diagnostic.SA1633.severity = none   # file header/copyright banner - not our practice
+dotnet_diagnostic.SA1128.severity = none   # constructor initializer on its own line
+dotnet_diagnostic.SA1009.severity = none   # closing paren spacing - fights nullable/tuple syntax
+dotnet_diagnostic.SA1111.severity = none   # closing paren on line of last parameter
+
+# --- Documentation: CS1591 is our single source of truth on missing XML docs ---
+# Leaving both CS1591 and the SA16xx family on produces duplicate diagnostics
+# for the same missing comment.
+dotnet_diagnostic.SA1600.severity = none   # elements must be documented
+dotnet_diagnostic.SA1601.severity = none   # partial elements must be documented
+dotnet_diagnostic.SA1602.severity = none   # enum members must be documented
+dotnet_diagnostic.SA1611.severity = none   # parameter must be documented
+dotnet_diagnostic.SA1615.severity = none   # return value must be documented
+dotnet_diagnostic.SA1618.severity = none   # generic parameter must be documented
+dotnet_diagnostic.SA1623.severity = none   # property summary must match accessors
+dotnet_diagnostic.SA1629.severity = none   # documentation must end with a period
+
+# --- Layout preferences: guidance, not gates ----------------------------------
+dotnet_diagnostic.SA1201.severity = suggestion   # element ordering by kind
+dotnet_diagnostic.SA1202.severity = suggestion   # element ordering by access
+dotnet_diagnostic.SA1204.severity = suggestion   # static before instance
+dotnet_diagnostic.SA1402.severity = suggestion   # one type per file - DTO groups are fine
+dotnet_diagnostic.SA1413.severity = suggestion   # trailing commas
+dotnet_diagnostic.SA1516.severity = suggestion   # blank line between elements
+dotnet_diagnostic.SA1117.severity = suggestion   # parameter line placement
+
+# --- Rules we genuinely want enforced ----------------------------------------
+dotnet_diagnostic.SA1503.severity = warning   # never omit braces
+dotnet_diagnostic.SA1649.severity = warning   # file name must match type name
+dotnet_diagnostic.SA1121.severity = warning   # use the built-in type alias
+dotnet_diagnostic.SA1507.severity = warning   # no multiple consecutive blank lines
+
+# --- Sonar: tuned for a domain-rich codebase ---------------------------------
+# S107 fires on constructors of aggregates that legitimately take many values.
+# Prefer reviewing these in code review over blocking the build.
+dotnet_diagnostic.S107.severity = suggestion    # too many parameters
+dotnet_diagnostic.S1192.severity = suggestion   # duplicated string literal
+dotnet_diagnostic.S4457.severity = none         # split null-check from async body
+
+# Files that deliberately group several small strongly-typed identifier structs.
+# SA1649 wants one type per file named after it; for a handful of two-line record
+# structs that would mean a dozen near-empty files and make the set harder to
+# read, not easier. The grouping is the point, so the rule is off for these
+# files only.
+[**/{*Ids,*Identifiers}.cs]
+dotnet_diagnostic.SA1649.severity = none
+
+# Domain entities expose private setters and a private parameterless constructor
+# purely so EF Core can materialise them. The analyzer cannot see that caller -
+# it is reflection inside the ORM - so it reports every audit property and every
+# persistence constructor as dead code. Suppressing per-member would mean an
+# attribute on roughly six members of every entity in the system.
+[src/ERP.Domain/**/*.cs]
+dotnet_diagnostic.S1144.severity = none
+
+[tests/**/*.cs]
+# Test method names read as sentences (Given_When_Then), and test classes
+# legitimately group many small fixtures per file.
+dotnet_diagnostic.SA1402.severity = none
+dotnet_diagnostic.SA1649.severity = none
+dotnet_diagnostic.CA1707.severity = none   # underscores in member names
+dotnet_diagnostic.S2699.severity = none    # Sonar cannot see Shouldly assertions
+dotnet_diagnostic.S101.severity = none     # type naming conventions in fixtures
+
+# Readability conventions specific to test files. A test is documentation, and
+# these rules actively work against making one readable:
+#   S125    reads a trailing explanatory comment containing numbers or operators
+#           ("// 2 places, away from zero") as commented-out code.
+#   SA1512  forbids the blank line after a "// ---- section ----" divider used to
+#           group related tests within a fixture.
+#   SA1025  forbids the run of spaces that aligns trailing comments into a column.
+#   SA1515  forbids a comment that is not preceded by a blank line, which rules
+#           out annotating individual [InlineData] rows - the clearest way to say
+#           what each case in a theory is actually testing.
+dotnet_diagnostic.S125.severity = none
+dotnet_diagnostic.SA1512.severity = none
+dotnet_diagnostic.SA1515.severity = none
+dotnet_diagnostic.SA1025.severity = none

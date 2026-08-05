@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The dynamic report builder: report definitions stored as data, safe SQL
+    projection, grouping, calculated fields, drill-down, scheduling, and
+    export to Excel (ClosedXML), CSV (CsvHelper), and PDF.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Reporting</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" />
+    <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
+</Project>

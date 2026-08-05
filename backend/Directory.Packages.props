@@ -1,0 +1,149 @@
+<Project>
+
+  <!--
+    ============================================================================
+    CENTRAL PACKAGE MANAGEMENT
+    ============================================================================
+    Every NuGet version used by the backend is declared here, exactly once.
+    Project files reference packages WITHOUT a Version attribute.
+
+    ============================================================================
+    DELIBERATE DEPENDENCY DECISIONS - READ BEFORE CHANGING
+    ============================================================================
+
+    1. AutoMapper is NOT USED. Explicit hand-written mapping instead.
+
+       The engagement brief asked for AutoMapper. It cannot be used safely:
+
+         GHSA-rvv3-g6hj-g44x (HIGH, DoS via uncontrolled recursion)
+           vulnerable: < 15.1.1          patched: 15.1.1
+           vulnerable: >= 16.0.0, < 16.1.1   patched: 16.1.1
+
+       AutoMapper relicensed to paid commercial terms at 14.0.0. The last
+       permissively-licensed release (13.0.1, MIT) falls inside the vulnerable
+       range and will never receive a patch. So the only options were: ship a
+       known high-severity advisory, or commit the project to a per-developer
+       commercial licence.
+
+       We did neither. DTO mapping is written by hand as extension methods in
+       ERP.Application. This is compile-time checked, allocation-free, has no
+       startup reflection scan, is trivially debuggable, and carries no licence
+       or CVE exposure. See docs/adr/0002-third-party-licensing.md.
+
+    2. MediatR is PINNED to 12.5.0 - the last Apache-2.0 release.
+       13.0.0+ requires a paid licence (Lucky Penny Software). 12.5.0 has no
+       known vulnerabilities. It is a small in-process dispatcher, so the frozen
+       version carries little risk; application code additionally depends on our
+       own abstractions in ERP.Application.Abstractions.Messaging rather than on
+       MediatR types directly, making replacement mechanical if that changes.
+
+    3. FluentAssertions is NOT USED. 8.0.0+ is commercial (Xceed).
+       We use Shouldly (BSD-3-Clause) instead.
+
+    4. Newtonsoft.Json is pinned transitively. Hangfire and Swashbuckle drag in
+       11.0.1, which carries GHSA-5crp-9r3c-p9vr (HIGH). With
+       CentralPackageTransitivePinningEnabled the pin below lifts every
+       transitive reference to a patched release. Do not remove it.
+    ============================================================================
+  -->
+
+  <ItemGroup Label="Runtime / ASP.NET Core">
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Extensions abstractions (kept out of Domain by design)">
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup Label="Persistence">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Application / CQRS">
+    <!-- PINNED at the last Apache-2.0 release. See note 2 above. -->
+    <PackageVersion Include="MediatR" Version="12.5.0" />
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="API surface">
+    <PackageVersion Include="Asp.Versioning.Mvc" Version="10.0.1" />
+    <PackageVersion Include="Asp.Versioning.Mvc.ApiExplorer" Version="10.0.1" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Observability">
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Seq" Version="9.1.0" />
+    <PackageVersion Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageVersion Include="AspNetCore.HealthChecks.Redis" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Background jobs">
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />
+    <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Security">
+    <!-- RFC 6238 TOTP for authenticator-app second factor. -->
+    <PackageVersion Include="Otp.NET" Version="1.4.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Export / documents">
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <PackageVersion Include="CsvHelper" Version="33.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Transitive security pins (see note 4)">
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- Shouldly (BSD-3-Clause) in place of FluentAssertions 8+ (commercial). -->
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="NSubstitute.Analyzers.CSharp" Version="1.0.17" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
+    <PackageVersion Include="Respawn" Version="7.0.0" />
+    <PackageVersion Include="Bogus" Version="35.6.5" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+  </ItemGroup>
+
+  <!--
+    Analyzers apply to every project automatically. GlobalPackageReference
+    implies PrivateAssets=all, so they stay out of published output, and it
+    declares its own version - a separate PackageVersion entry for the same
+    package would raise NU1506.
+
+    StyleCop 1.2.0-beta.556 is the last release and the only line that
+    understands modern C# (file-scoped namespaces, records); 1.1.118 misfires
+    on both.
+  -->
+  <ItemGroup Label="Global analyzer injection">
+    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="10.31.0.145097" />
+    <GlobalPackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
+  </ItemGroup>
+
+</Project>

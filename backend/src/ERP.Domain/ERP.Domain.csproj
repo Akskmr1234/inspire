@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Domain layer: aggregates, entities, value objects, domain events,
+    domain services, and business invariants. Persistence-ignorant.
+    Depends on nothing but the Shared Kernel.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>ERP.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.SharedKernel\ERP.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

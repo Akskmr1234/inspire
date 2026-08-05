@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ERP.Api/ERP.Api.csproj" />
+    <Project Path="src/ERP.Application/ERP.Application.csproj" />
+    <Project Path="src/ERP.Domain/ERP.Domain.csproj" />
+    <Project Path="src/ERP.DynamicForms/ERP.DynamicForms.csproj" />
+    <Project Path="src/ERP.Identity/ERP.Identity.csproj" />
+    <Project Path="src/ERP.Infrastructure/ERP.Infrastructure.csproj" />
+    <Project Path="src/ERP.Notifications/ERP.Notifications.csproj" />
+    <Project Path="src/ERP.PrintDesigner/ERP.PrintDesigner.csproj" />
+    <Project Path="src/ERP.Reporting/ERP.Reporting.csproj" />
+    <Project Path="src/ERP.SharedKernel/ERP.SharedKernel.csproj" />
+    <Project Path="src/ERP.Workflow/ERP.Workflow.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ERP.Api.Tests/ERP.Api.Tests.csproj" />
+    <Project Path="tests/ERP.Application.Tests/ERP.Application.Tests.csproj" />
+    <Project Path="tests/ERP.Domain.Tests/ERP.Domain.Tests.csproj" />
+    <Project Path="tests/ERP.Infrastructure.Tests/ERP.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
