@@ -31,6 +31,12 @@ dotnet_diagnostic.SA1642.severity = none
 # shape of a well-written [SuppressMessage(Justification = "...")] - the rule
 # would push us toward one-line justifications that explain nothing.
 dotnet_diagnostic.SA1118.severity = none
+# SA1515 requires a blank line before any comment, which makes it impossible to
+# annotate the first entry of a collection or the first statement of a block -
+# precisely where a section divider or an explanatory note is most useful. The
+# permission catalogue and the seeded role table are both large literal tables
+# that read far better with headings inside them.
+dotnet_diagnostic.SA1515.severity = none
 dotnet_diagnostic.SA1101.severity = none   # "this." prefix - we do not use it
 dotnet_diagnostic.SA1200.severity = none   # usings inside namespace - we place them outside
 dotnet_diagnostic.SA1309.severity = none   # field must not start with _ - we require _camelCase
@@ -128,12 +134,8 @@ dotnet_diagnostic.S101.severity = none     # type naming conventions in fixtures
 #   SA1512  forbids the blank line after a "// ---- section ----" divider used to
 #           group related tests within a fixture.
 #   SA1025  forbids the run of spaces that aligns trailing comments into a column.
-#   SA1515  forbids a comment that is not preceded by a blank line, which rules
-#           out annotating individual [InlineData] rows - the clearest way to say
-#           what each case in a theory is actually testing.
 dotnet_diagnostic.S125.severity = none
 dotnet_diagnostic.SA1512.severity = none
-dotnet_diagnostic.SA1515.severity = none
 dotnet_diagnostic.SA1025.severity = none
 
 # xUnit1051 asks that every awaited call be threaded with

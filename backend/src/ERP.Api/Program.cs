@@ -4,6 +4,7 @@ using Asp.Versioning;
 using ERP.Api.Middleware;
 using ERP.Identity;
 using ERP.Infrastructure;
+using ERP.Infrastructure.Persistence.Seeding;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using Serilog;
@@ -55,6 +56,15 @@ public static class Program
             Log.Information(
                 "Inspire ERP API starting in {Environment}",
                 app.Environment.EnvironmentName);
+
+            // Before the first request is served, so a request never arrives at a
+            // schema that is mid-migration or a database with no permission
+            // catalogue. Failure here aborts startup rather than surfacing later as
+            // an inexplicable authorisation error.
+            await DatabaseInitializer.InitializeAsync(
+                app.Services,
+                applyMigrations: builder.Configuration.GetValue(
+                    "Erp:Database:ApplyMigrationsOnStartup", app.Environment.IsDevelopment()));
 
             await app.RunAsync();
             return 0;

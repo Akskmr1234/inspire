@@ -51,6 +51,16 @@ public class ErpDbContext : DbContext
     public ErpDbContext(DbContextOptions<ErpDbContext> options, ITenantContext tenantContext)
         : base(options) => _tenantContext = tenantContext;
 
+    /// <summary>
+    /// Gets the tenant registry - the one unfiltered table in the schema.
+    /// </summary>
+    /// <remarks>
+    /// Not tenant-scoped and carries no row-level-security policy, because this is
+    /// the table that resolves which tenant a request belongs to. Use it only to
+    /// look a tenant up by code or identifier; never as a way to reach tenant data.
+    /// </remarks>
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
     /// <summary>Gets the firms.</summary>
     public DbSet<Firm> Firms => Set<Firm>();
 

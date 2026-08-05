@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
+using ERP.Infrastructure.Persistence.Seeding;
 using ERP.Infrastructure.Security;
 using ERP.Infrastructure.Tenancy;
 using ERP.Infrastructure.Time;
@@ -50,6 +51,12 @@ public static class DependencyInjection
         services.AddMemoryCache(options => options.SizeLimit = 50_000);
         services.AddScoped<IPermissionChecker, CachedPermissionChecker>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+        services.AddOptions<SeedOptions>()
+            .Bind(configuration.GetSection(SeedOptions.SectionName))
+            .ValidateOnStart();
+
+        services.AddScoped<DatabaseSeeder>();
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();

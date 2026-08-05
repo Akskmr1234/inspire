@@ -3,14 +3,34 @@ using ERP.SharedKernel.Tenancy;
 
 namespace ERP.Application.Abstractions.Security;
 
-/// <summary>What a client sends to sign in.</summary>
+/// <summary>Credentials presented at sign-in.</summary>
 /// <param name="UserName">The sign-in name or email address.</param>
-/// <param name="Password">The password.</param>
+/// <param name="Password">The plain-text password.</param>
+/// <param name="TenantCode">
+/// The tenant to sign in to - the "Company" field on the sign-in screen, or the
+/// subdomain in a hosted deployment.
+/// </param>
 /// <param name="UserAgent">The client's user agent, recorded against the session.</param>
-/// <param name="IpAddress">The client's IP address, recorded against the session.</param>
+/// <param name="IpAddress">The client's address, recorded against the session.</param>
+/// <remarks>
+/// <para>
+/// The tenant code is required because authentication faces a chicken-and-egg
+/// problem: the tenant scope must be established before the user table can be
+/// queried, but the user is what would identify the tenant. Resolving a code
+/// against the unfiltered tenant registry breaks the cycle without weakening
+/// isolation.
+/// </para>
+/// <para>
+/// It may be omitted where the deployment holds exactly one tenant, which is the
+/// normal on-premises case - see
+/// <see cref="IAuthenticationService.SignInAsync"/>. Nobody running a single-firm
+/// installation should have to type a company code.
+/// </para>
+/// </remarks>
 public sealed record SignInRequest(
     string UserName,
     string Password,
+    string? TenantCode = null,
     string? UserAgent = null,
     string? IpAddress = null);
 
@@ -109,6 +129,19 @@ public static class AuthenticationErrors
     public static readonly Error InvalidCredentials = Error.Unauthorized(
         "Auth.InvalidCredentials",
         "The user name or password is incorrect.");
+
+    /// <summary>
+    /// No tenant could be resolved for the sign-in attempt.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="InvalidCredentials"/> on purpose. A tenant code is
+    /// not a secret - it is a company's own identifier, typed on a sign-in screen -
+    /// so telling the user it is wrong reveals nothing and saves them guessing at
+    /// their password instead.
+    /// </remarks>
+    public static readonly Error TenantNotResolved = Error.Unauthorized(
+        "Auth.TenantNotResolved",
+        "No such company. Check the company code and try again.");
 
     /// <summary>The refresh token is unusable, whatever the reason.</summary>
     public static readonly Error InvalidRefreshToken = Error.Unauthorized(

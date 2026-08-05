@@ -1,0 +1,99 @@
+# ============================================================================
+# Local development stack for Inspire ERP.
+#
+#   docker compose up -d postgres redis
+#   dotnet run --project backend/src/ERP.Api
+#
+# Bring up the API in a container instead with:
+#   docker compose --profile api up -d
+#
+# Credentials here are local-development values only. Nothing in this file is
+# suitable for a deployed environment: see infrastructure/README.md.
+# ============================================================================
+
+name: inspire-erp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inspire_erp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_local_dev_only
+      # Deterministic collation, so an ORDER BY behaves the same on every
+      # developer's machine and in CI.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Scripts in this directory run once, in name order, on first start only.
+      # Delete the volume to re-run them.
+      - ./infrastructure/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # The API and the migration job both wait on this, so it must test the
+      # specific database rather than merely that the process is listening.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d inspire_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    # Caching only holds recomputable data - permission sets, menu trees,
+    # exchange rates. Persistence would buy nothing and slow every write, so
+    # appendonly stays off.
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    profiles: ["api"]
+    build:
+      context: .
+      dockerfile: backend/docker/Dockerfile.api
+    container_name: erp-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__Postgres: >-
+        Host=postgres;Port=5432;Database=inspire_erp;Username=erp_app;Password=erp_local_dev_only
+      ConnectionStrings__Redis: redis:6379
+      # Local-only signing key. A deployed environment must supply this from a
+      # secret store - anyone holding it can mint a token for any user in any
+      # tenant.
+      Jwt__SigningKey: local-development-signing-key-not-for-any-real-environment
+      Erp__Seed__Enabled: "true"
+      Erp__Seed__AdministratorPassword: ChangeMe!DevAdmin1
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres-data:

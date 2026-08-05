@@ -41,12 +41,16 @@ public sealed class AuthController : ControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // Named arguments deliberately: every parameter after Password is a
+        // nullable string, so a positional call silently puts the user agent in
+        // the tenant-code slot the moment the signature changes.
         Result<AuthenticationResponse> result = await _authentication.SignInAsync(
             new SignInRequest(
-                request.UserName,
-                request.Password,
-                Request.Headers.UserAgent.ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString()),
+                UserName: request.UserName,
+                Password: request.Password,
+                TenantCode: request.TenantCode,
+                UserAgent: Request.Headers.UserAgent.ToString(),
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString()),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
@@ -201,7 +205,14 @@ public sealed class AuthController : ControllerBase
 /// <summary>Credentials for signing in.</summary>
 /// <param name="UserName">The sign-in name or email address.</param>
 /// <param name="Password">The password.</param>
-public sealed record LoginRequest(string UserName, string Password);
+/// <param name="TenantCode">
+/// The company code to sign in to. Optional where the installation holds exactly
+/// one tenant, which is the usual on-premises case.
+/// </param>
+public sealed record LoginRequest(
+    string UserName,
+    string Password,
+    string? TenantCode = null);
 
 /// <summary>A refresh token.</summary>
 /// <param name="RefreshToken">The token issued previously.</param>

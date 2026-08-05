@@ -1,6 +1,7 @@
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Identity;
+using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
@@ -42,6 +43,7 @@ public sealed partial class AuthenticationService : IAuthenticationService
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
     private readonly IPermissionChecker _permissionChecker;
+    private readonly ITenantContext _tenantContext;
     private readonly IClock _clock;
     private readonly ILogger<AuthenticationService> _logger;
 
@@ -50,6 +52,7 @@ public sealed partial class AuthenticationService : IAuthenticationService
     /// <param name="passwordHasher">The password hasher.</param>
     /// <param name="tokenService">The token service.</param>
     /// <param name="permissionChecker">The permission checker.</param>
+    /// <param name="tenantContext">The ambient tenant scope, established here during sign-in.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="logger">The logger.</param>
     public AuthenticationService(
@@ -57,6 +60,7 @@ public sealed partial class AuthenticationService : IAuthenticationService
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
         IPermissionChecker permissionChecker,
+        ITenantContext tenantContext,
         IClock clock,
         ILogger<AuthenticationService> logger)
     {
@@ -64,8 +68,57 @@ public sealed partial class AuthenticationService : IAuthenticationService
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _permissionChecker = permissionChecker;
+        _tenantContext = tenantContext;
         _clock = clock;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Resolves the tenant a sign-in attempt belongs to, before any tenant scope
+    /// exists.
+    /// </summary>
+    /// <param name="tenantCode">The supplied company code, if any.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The tenant, or a failure.</returns>
+    /// <remarks>
+    /// Queries the tenant registry, which is deliberately the one table with no
+    /// tenant discriminator and no row-level-security policy. Nothing here is
+    /// confidential, and every query after this point runs inside a properly
+    /// established scope.
+    /// <para>
+    /// When no code is supplied and the installation holds exactly one tenant, it
+    /// is used. That is the on-premises single-firm case the specification calls
+    /// for, and nobody running one should have to type a company code. With more
+    /// than one tenant present the code becomes mandatory, because guessing would
+    /// mean signing somebody in to the wrong company's books.
+    /// </para>
+    /// </remarks>
+    private async Task<Result<Tenant>> ResolveTenantAsync(
+        string? tenantCode,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(tenantCode))
+        {
+            string code = tenantCode.Trim().ToLowerInvariant();
+
+            Tenant? byCode = await _context.Tenants
+                .FirstOrDefaultAsync(t => t.Code == code, cancellationToken);
+
+            return byCode is null
+                ? Result.Failure<Tenant>(AuthenticationErrors.TenantNotResolved)
+                : Result.Success(byCode);
+        }
+
+        // Take two so "exactly one" can be distinguished from "several" without a
+        // second round trip.
+        List<Tenant> candidates = await _context.Tenants
+            .Where(t => t.IsActive)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+
+        return candidates.Count == 1
+            ? Result.Success(candidates[0])
+            : Result.Failure<Tenant>(AuthenticationErrors.TenantNotResolved);
     }
 
     /// <inheritdoc />
@@ -77,6 +130,30 @@ public sealed partial class AuthenticationService : IAuthenticationService
 
         DateTimeOffset now = _clock.UtcNow;
         string identifier = request.UserName?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        // Sign-in arrives unauthenticated, so nothing has established a tenant.
+        // Until one is, the global query filter compares against default(TenantId)
+        // and the row-level-security policy against NULL - so the users table
+        // reads as empty and every attempt fails with "invalid credentials",
+        // however correct the password is. Resolving the tenant first is what
+        // makes authentication possible at all.
+        Result<Tenant> tenant = await ResolveTenantAsync(request.TenantCode, cancellationToken);
+
+        if (tenant.IsFailure)
+        {
+            LogSignInFailed(_logger, identifier, tenant.Error.Code);
+            return Result.Failure<AuthenticationResponse>(tenant.Error);
+        }
+
+        Result canSignIn = tenant.Value.EnsureCanSignIn(DateOnly.FromDateTime(now.UtcDateTime));
+
+        if (canSignIn.IsFailure)
+        {
+            LogSignInFailed(_logger, identifier, canSignIn.Error.Code);
+            return Result.Failure<AuthenticationResponse>(canSignIn.Error);
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(tenant.Value.Id);
 
         User? user = await _context.Users
             .Include(u => u.Roles)

@@ -65,6 +65,17 @@ public static class ConfigurationConventions
         // number that someone can forget to increment - and two users editing the
         // same voucher produce a 409 rather than one silently overwriting the
         // other.
+        //
+        // ONE MANUAL STEP FOLLOWS FROM THIS. EF Core does not know xmin already
+        // exists, so every scaffolded migration that creates a table for an
+        // aggregate emits a line like:
+        //
+        //     xmin = table.Column<uint>(type: "xid", rowVersion: true, ...)
+        //
+        // Delete that line from the migration. PostgreSQL refuses to create a
+        // column named xmin ("conflicts with a system column name"), so leaving it
+        // in place makes the migration fail to apply - loudly, and caught by
+        // ERP.Infrastructure.Tests, rather than silently.
         builder.Property(nameof(AggregateRoot<Guid>.Version))
             .HasColumnName("xmin")
             .HasColumnType("xid")
