@@ -354,7 +354,13 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
 
 ## 18. Open questions for the business
 
-1. **Tax regime per deployment** — is the first production tenant Qatar VAT, India GST, or both concurrently?
+1. ~~**Tax regime per deployment**~~ — **ANSWERED (2026-08-05): both are required, concurrently.**
+   A single platform instance must serve GCC VAT firms and Indian GST firms at the same time. Consequences, now binding:
+   - `TaxRegime` is a **per-firm** setting, not a build-time or deployment-time constant.
+   - Both component sets are seeded: VAT (input/output) **and** CGST / SGST / IGST / Cess.
+   - Place-of-supply comparison (which drives IGST vs CGST+SGST) applies only under the GST regime and must be inert under VAT.
+   - Every tax figure is stored per component on the document line, never as a single collapsed `TaxAmount`, so both the VAT return and the GST return can be produced from the same posting.
+   - Report menus are regime-filtered: a VAT firm must not be shown GST returns, and vice versa.
 2. **Loyalty rules** — earn rate, redemption value, expiry. Only “configurable settings” is stated.
 3. **Aging buckets** — 0-30/31-60/61-90/90+ assumed. **[ASSUMPTION]**
 4. **Rounding** — currency precision and rounding rule per tax component (a `Round` additional ledger exists, implying document-level rounding).
