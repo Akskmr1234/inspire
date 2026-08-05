@@ -4,6 +4,8 @@ import { AppShell } from '@/components/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { TrialBalancePage } from '@/pages/TrialBalancePage';
 import { VoucherEntryPage } from '@/pages/VoucherEntryPage';
+import { ProfitAndLossPage } from '@/pages/ProfitAndLossPage';
+import { BalanceSheetPage } from '@/pages/BalanceSheetPage';
 import { applyPresentation, useSession } from '@/stores/session';
 
 /** Routing and the signed-in gate. */
@@ -44,34 +46,10 @@ export function App(): React.JSX.Element {
       <Route element={<AppShell />}>
         <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
         <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
-        <Route
-          path="/accounting/profit-and-loss"
-          element={<Placeholder title="Profit and loss" />}
-        />
-        <Route
-          path="/accounting/balance-sheet"
-          element={<Placeholder title="Balance sheet" />}
-        />
+        <Route path="/accounting/profit-and-loss" element={<ProfitAndLossPage />} />
+        <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
         <Route path="*" element={<Navigate to="/accounting/trial-balance" replace />} />
       </Route>
     </Routes>
-  );
-}
-
-/**
- * A visible marker for a route whose screen is not built yet.
- *
- * Deliberately says so rather than rendering an empty page: an unfinished screen
- * that looks finished is worse than one that admits it.
- */
-function Placeholder({ title }: { readonly title: string }): React.JSX.Element {
-  return (
-    <section className="space-y-2">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500 dark:border-slate-700">
-        The API endpoint for this report is implemented and tested; this screen is
-        not built yet.
-      </p>
-    </section>
   );
 }

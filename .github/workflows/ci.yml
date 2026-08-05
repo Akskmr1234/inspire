@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# A new push supersedes an in-flight run on the same ref. Without this, a branch
+# pushed three times queues three full runs and the first two are wasted.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Restore output is noise in a CI log; failures still print.
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore backend/ERP.slnx
+
+      # ContinuousIntegrationBuild sets TreatWarningsAsErrors, so an analyzer
+      # warning fails the build here. That is the point: the repository's standard
+      # is zero warnings, and a standard nothing enforces decays.
+      - name: Build
+        run: |
+          dotnet build backend/ERP.slnx \
+            --no-restore \
+            --configuration Release \
+            -p:ContinuousIntegrationBuild=true
+
+      # The integration tests need a Docker daemon for Testcontainers, which
+      # ubuntu-latest provides. They are the only tests that can prove tenant
+      # isolation actually holds, so they must not be skipped in CI.
+      - name: Test
+        run: |
+          dotnet test backend/ERP.slnx \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory artifacts/test-results \
+            --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: artifacts/test-results
+          retention-days: 14
+
+      - name: Fail on vulnerable packages
+        run: |
+          # `dotnet list package --vulnerable` exits 0 even when it finds
+          # something, so the output has to be inspected. Three dependencies in
+          # this repository are pinned specifically to avoid advisories, and a
+          # transitive upgrade could silently reintroduce one.
+          dotnet list backend/ERP.slnx package --vulnerable --include-transitive \
+            > vulnerable.txt 2>&1 || true
+          cat vulnerable.txt
+          if grep -qiE '(^|\s)(Critical|High)(\s|$)' vulnerable.txt; then
+            echo "::error::A dependency with a High or Critical advisory is present."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Strict mode plus noUncheckedIndexedAccess and exactOptionalPropertyTypes.
+      # A type error must fail the build rather than reach a browser.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Check formatting
+        run: npm run format:check
+
+  container:
+    name: API image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only worth building once the code it contains is known good.
+    needs: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built but not pushed. Publishing to a registry needs credentials and a
+      # tagging policy the project has not settled yet; this at least proves the
+      # Dockerfile still works on every change.
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/docker/Dockerfile.api
+          push: false
+          tags: inspire-erp/api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

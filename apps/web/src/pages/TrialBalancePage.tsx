@@ -124,9 +124,7 @@ export function TrialBalancePage(): React.JSX.Element {
         </div>
       )}
 
-      {query.isPending && (
-        <p className="text-sm text-slate-500">{t('common.loading')}</p>
-      )}
+      {query.isPending && <p className="text-sm text-slate-500">{t('common.loading')}</p>}
 
       {query.data && (
         <>
@@ -211,12 +209,22 @@ export function TrialBalancePage(): React.JSX.Element {
                     <td className="px-3 py-2" colSpan={2}>
                       {t('reports.totals')}
                     </td>
-                    <td className="cell-numeric">{money(query.data.totalOpeningDebit)}</td>
-                    <td className="cell-numeric">{money(query.data.totalOpeningCredit)}</td>
+                    <td className="cell-numeric">
+                      {money(query.data.totalOpeningDebit)}
+                    </td>
+                    <td className="cell-numeric">
+                      {money(query.data.totalOpeningCredit)}
+                    </td>
                     <td className="cell-numeric">{money(query.data.totalPeriodDebit)}</td>
-                    <td className="cell-numeric">{money(query.data.totalPeriodCredit)}</td>
-                    <td className="cell-numeric">{money(query.data.totalClosingDebit)}</td>
-                    <td className="cell-numeric">{money(query.data.totalClosingCredit)}</td>
+                    <td className="cell-numeric">
+                      {money(query.data.totalPeriodCredit)}
+                    </td>
+                    <td className="cell-numeric">
+                      {money(query.data.totalClosingDebit)}
+                    </td>
+                    <td className="cell-numeric">
+                      {money(query.data.totalClosingCredit)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

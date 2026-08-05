@@ -21,7 +21,7 @@ namespace ERP.Api.Middleware;
 /// query could run with no tenant set.
 /// </para>
 /// </remarks>
-public sealed class TenantResolutionMiddleware
+public sealed partial class TenantResolutionMiddleware
 {
     /// <summary>The claim carrying the tenant.</summary>
     public const string TenantClaim = "tenant_id";
@@ -91,10 +91,7 @@ public sealed class TenantResolutionMiddleware
             // An authenticated token with no tenant is a misconfigured client or a
             // misconfigured realm. Refusing is safer than continuing untenanted and
             // letting it fail obscurely at the first query.
-            _logger.LogWarning(
-                "Authenticated request from {User} carried no {Claim} claim",
-                principal.Identity?.Name,
-                TenantClaim);
+            LogMissingTenantClaim(_logger, principal.Identity?.Name, TenantClaim);
 
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(
@@ -194,6 +191,15 @@ public sealed class TenantResolutionMiddleware
 
         return values;
     }
+
+    [LoggerMessage(
+        EventId = 3000,
+        Level = LogLevel.Warning,
+        Message = "Authenticated request from {User} carried no {Claim} claim")]
+    private static partial void LogMissingTenantClaim(
+        ILogger logger,
+        string? user,
+        string claim);
 }
 
 /// <summary>Registers <see cref="TenantResolutionMiddleware"/>.</summary>

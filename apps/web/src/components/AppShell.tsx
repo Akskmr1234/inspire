@@ -16,8 +16,15 @@ import { useSession, type Language, type Theme } from '@/stores/session';
 export function AppShell(): React.JSX.Element {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
-  const { displayName, mustChangePassword, theme, language, setTheme, setLanguage, signOut } =
-    useSession();
+  const {
+    displayName,
+    mustChangePassword,
+    theme,
+    language,
+    setTheme,
+    setLanguage,
+    signOut,
+  } = useSession();
 
   const changeLanguage = async (next: Language): Promise<void> => {
     setLanguage(next);

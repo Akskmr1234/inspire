@@ -1,0 +1,53 @@
+# =============================================================================
+# Build-context exclusions.
+#
+# Excluding bin/ and obj/ is not merely an optimisation. A project.assets.json
+# produced on a Windows host records absolute paths - including the Visual Studio
+# fallback package folder - and copying it into a Linux image makes
+# ResolvePackageAssets fail with "Unable to find fallback package folder
+# 'C:\Program Files (x86)\...'". The Dockerfile restores inside the image, so
+# these directories must never be part of the context.
+# =============================================================================
+
+# ---------- .NET intermediate output ----------
+**/bin/
+**/obj/
+**/.vs/
+**/artifacts/
+**/TestResults/
+**/coverage/
+**/*.user
+
+# ---------- Node ----------
+**/node_modules/
+**/dist/
+**/.vite/
+**/.turbo/
+
+# ---------- Version control and CI ----------
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# ---------- Local environment and secrets ----------
+**/.env
+**/.env.*
+!**/.env.example
+**/appsettings.Local.json
+**/*.pfx
+**/*.p12
+
+# ---------- Logs and scratch ----------
+**/logs/
+**/*.log
+.docker-data/
+
+# ---------- Documentation and tooling not needed to build ----------
+docs/
+scripts/
+**/*.md
+!README.md
+Dockerfile*
+**/.dockerignore
+docker-compose*.yml
