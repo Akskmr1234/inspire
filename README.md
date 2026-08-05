@@ -36,9 +36,9 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 310 passing, 0 failing (226 domain + 47 application + 20 identity + 17 integration).
+**Test suite:** 345 passing, 0 failing (226 domain + 47 application + 35 API + 20 identity + 17 integration).
 
-> **Known coverage gap:** `ERP.Api.Tests` is still empty — no controller, routing, auth-enforcement, or ProblemDetails tests. The layers beneath it are covered: domain invariants, persistence and tenant isolation, and now the report and voucher-posting handlers. The HTTP edge is what remains untested.
+> **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
 Integration tests need a running Docker daemon.
 

@@ -139,7 +139,10 @@ function refreshSession(): Promise<boolean> {
 
       const response = await send('/auth/refresh', {
         method: 'POST',
-        body: { refreshToken },
+        // The tenant code travels with the refresh. Refresh arrives
+        // unauthenticated and refresh tokens are tenant-scoped, so without it the
+        // server cannot find the token at all.
+        body: { refreshToken, tenantCode: getStoredTenantCode() },
         skipRefresh: true,
       });
 
@@ -205,7 +208,7 @@ export async function logout(): Promise<void> {
     // when they have asked to leave, so the local session is cleared regardless.
     await request('/auth/logout', {
       method: 'POST',
-      body: { refreshToken },
+      body: { refreshToken, tenantCode: getStoredTenantCode() },
       skipRefresh: true,
     }).catch(() => undefined);
   }

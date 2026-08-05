@@ -231,6 +231,22 @@ public sealed partial class AuthenticationService : IAuthenticationService
         }
 
         DateTimeOffset now = _clock.UtcNow;
+
+        // Refresh arrives unauthenticated, so nothing has established a tenant,
+        // and refresh tokens are tenant-scoped. Without a scope the global query
+        // filter compares against default(TenantId) and finds nothing - and
+        // row-level security would block the read for the same reason. Sign-in
+        // does exactly this before its own lookup.
+        Result<Tenant> tenant = await ResolveTenantAsync(request.TenantCode, cancellationToken);
+
+        if (tenant.IsFailure)
+        {
+            return Result.Failure<AuthenticationResponse>(
+                AuthenticationErrors.InvalidRefreshToken);
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(tenant.Value.Id);
+
         string hash = _tokenService.HashRefreshToken(request.RefreshToken);
 
         RefreshToken? token = await _context.RefreshTokens
@@ -291,12 +307,25 @@ public sealed partial class AuthenticationService : IAuthenticationService
     /// <inheritdoc />
     public async Task<Result> SignOutAsync(
         string refreshToken,
+        string? tenantCode = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
             return Result.Success();
         }
+
+        // Without a tenant scope the lookup below finds nothing, and sign-out
+        // would report success while revoking nothing at all - the worst possible
+        // outcome for an endpoint whose entire job is to end a session.
+        Result<Tenant> tenant = await ResolveTenantAsync(tenantCode, cancellationToken);
+
+        if (tenant.IsFailure)
+        {
+            return Result.Success();
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(tenant.Value.Id);
 
         string hash = _tokenService.HashRefreshToken(refreshToken);
 

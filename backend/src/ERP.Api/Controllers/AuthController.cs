@@ -78,9 +78,10 @@ public sealed class AuthController : ApiControllerBase
 
         Result<AuthenticationResponse> result = await _authentication.RefreshAsync(
             new RefreshRequest(
-                request.RefreshToken,
-                Request.Headers.UserAgent.ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString()),
+                RefreshToken: request.RefreshToken,
+                TenantCode: request.TenantCode,
+                UserAgent: Request.Headers.UserAgent.ToString(),
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString()),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
@@ -104,7 +105,8 @@ public sealed class AuthController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await _authentication.SignOutAsync(request.RefreshToken, cancellationToken);
+        await _authentication.SignOutAsync(
+            request.RefreshToken, request.TenantCode, cancellationToken);
 
         return NoContent();
     }
@@ -188,7 +190,12 @@ public sealed record LoginRequest(
 
 /// <summary>A refresh token.</summary>
 /// <param name="RefreshToken">The token issued previously.</param>
-public sealed record RefreshTokenRequest(string RefreshToken);
+/// <param name="TenantCode">
+/// The company code. Required because refresh and sign-out arrive
+/// unauthenticated and refresh tokens are tenant-scoped; without it the token
+/// cannot be found. The client already holds it from sign-in.
+/// </param>
+public sealed record RefreshTokenRequest(string RefreshToken, string? TenantCode = null);
 
 /// <summary>A password change.</summary>
 /// <param name="CurrentPassword">The existing password.</param>

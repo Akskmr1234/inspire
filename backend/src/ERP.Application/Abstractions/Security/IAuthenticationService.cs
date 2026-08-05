@@ -36,10 +36,20 @@ public sealed record SignInRequest(
 
 /// <summary>What a client sends to renew an access token.</summary>
 /// <param name="RefreshToken">The refresh token issued previously.</param>
+/// <param name="TenantCode">The company code, used to resolve the tenant.</param>
 /// <param name="UserAgent">The client's user agent.</param>
 /// <param name="IpAddress">The client's IP address.</param>
+/// <remarks>
+/// <paramref name="TenantCode"/> is required for the same reason sign-in needs
+/// it. Refresh arrives unauthenticated, so nothing has established a tenant, and
+/// refresh tokens are tenant-scoped: without one the global query filter compares
+/// against <c>default(TenantId)</c> and the lookup silently finds nothing.
+/// Row-level security would block it in production for the same reason. The
+/// client already holds the code from sign-in.
+/// </remarks>
 public sealed record RefreshRequest(
     string RefreshToken,
+    string? TenantCode = null,
     string? UserAgent = null,
     string? IpAddress = null);
 
@@ -91,6 +101,12 @@ public interface IAuthenticationService
 
     /// <summary>Signs a user out by revoking a refresh token.</summary>
     /// <param name="refreshToken">The token to revoke.</param>
+    /// <param name="tenantCode">
+    /// The company code, needed to resolve the tenant. Sign-out arrives
+    /// unauthenticated, and refresh tokens are tenant-scoped, so without it the
+    /// token cannot be found and the sign-out would silently revoke nothing while
+    /// still reporting success.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>Success, whether or not the token was found.</returns>
     /// <remarks>
@@ -98,7 +114,10 @@ public interface IAuthenticationService
     /// that token cannot be used - already holds, and reporting a failure would
     /// tell the caller whether a given token had ever existed.
     /// </remarks>
-    Task<Result> SignOutAsync(string refreshToken, CancellationToken cancellationToken = default);
+    Task<Result> SignOutAsync(
+        string refreshToken,
+        string? tenantCode = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Changes a signed-in user's password.</summary>
     /// <param name="userId">The user.</param>

@@ -21,8 +21,20 @@ namespace ERP.Api;
 /// than inlined here, so this file stays a readable table of contents for the
 /// application's wiring as the platform grows.
 /// </remarks>
-public static class Program
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1052:Static holder types should be Static or NotInheritable",
+    Justification =
+        "WebApplicationFactory<TEntryPoint> takes the entry-point type as a generic " +
+        "argument, and a static class cannot be used as one. Making this static would " +
+        "make the API untestable through the standard in-memory host. The private " +
+        "constructor prevents instantiation, which is what the rule is actually for.")]
+public partial class Program
 {
+    private Program()
+    {
+    }
+
     /// <summary>Application entry point.</summary>
     /// <param name="args">Command-line arguments.</param>
     /// <returns>The process exit code: 0 on clean shutdown, 1 on startup failure.</returns>
