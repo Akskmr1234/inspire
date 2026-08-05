@@ -16,6 +16,7 @@
     <Project Path="tests/ERP.Api.Tests/ERP.Api.Tests.csproj" />
     <Project Path="tests/ERP.Application.Tests/ERP.Application.Tests.csproj" />
     <Project Path="tests/ERP.Domain.Tests/ERP.Domain.Tests.csproj" />
+    <Project Path="tests/ERP.Identity.Tests/ERP.Identity.Tests.csproj" />
     <Project Path="tests/ERP.Infrastructure.Tests/ERP.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>

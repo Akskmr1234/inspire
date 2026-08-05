@@ -15,6 +15,12 @@
 # pattern and `Value`/`New` read correctly in C#. No VB consumer is planned, and
 # renaming domain vocabulary to accommodate one would make the code worse.
 dotnet_diagnostic.CA1716.severity = none
+# CA1711 reserves a set of type-name suffixes, among them "Permission" (from the
+# long-retired Code Access Security model) and "Collection". In an ERP the word
+# permission is domain vocabulary with one obvious meaning, and xUnit's own
+# convention for a fixture group is a type named ...Collection. Renaming either
+# to satisfy a rule about .NET Framework CAS would make the code read worse.
+dotnet_diagnostic.CA1711.severity = none
 # SA1642 mandates the exact phrase "Initializes a new instance of the ... class"
 # on every constructor. This repository writes documentation in British English
 # ("initialises", "behaviour", "centralised"); satisfying the analyzer would mean
@@ -133,6 +139,3 @@ dotnet_diagnostic.SA1025.severity = none
 # needs to be cancellable mid-run.
 dotnet_diagnostic.xUnit1051.severity = none
 
-# CA1711 objects to a type name ending in "Collection". xUnit's own convention
-# for a fixture collection is exactly that, and renaming would obscure its role.
-dotnet_diagnostic.CA1711.severity = none
