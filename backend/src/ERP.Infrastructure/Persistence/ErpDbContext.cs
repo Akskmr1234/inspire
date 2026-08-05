@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
@@ -82,6 +83,25 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the issued refresh tokens.</summary>
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    /// <summary>Gets the account groups forming the chart of accounts.</summary>
+    public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
+
+    /// <summary>Gets the ledgers.</summary>
+    public DbSet<Ledger> Ledgers => Set<Ledger>();
+
+    /// <summary>Gets the accounting vouchers.</summary>
+    public DbSet<Voucher> Vouchers => Set<Voucher>();
+
+    /// <summary>
+    /// Gets the voucher lines.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for reporting, which reads postings across many vouchers - a trial
+    /// balance or ledger report has no interest in voucher headers. Writes still go
+    /// through <see cref="Voucher"/>, which owns the balance invariant.
+    /// </remarks>
+    public DbSet<VoucherLine> VoucherLines => Set<VoucherLine>();
+
     /// <summary>
     /// Gets the tenant that global query filters compare against.
     /// </summary>
@@ -141,6 +161,12 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<PermissionId>().HaveConversion<PermissionIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
+        configurationBuilder.Properties<AccountGroupId>()
+            .HaveConversion<AccountGroupIdConverter>();
+        configurationBuilder.Properties<LedgerId>().HaveConversion<LedgerIdConverter>();
+        configurationBuilder.Properties<VoucherId>().HaveConversion<VoucherIdConverter>();
+        configurationBuilder.Properties<VoucherLineId>()
+            .HaveConversion<VoucherLineIdConverter>();
 
         configurationBuilder.Properties<CurrencyCode>()
             .HaveConversion<CurrencyCodeConverter>()
