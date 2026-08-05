@@ -3,6 +3,7 @@ using System.Reflection;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Numbering;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -82,6 +83,9 @@ public class ErpDbContext : DbContext
 
     /// <summary>Gets the issued refresh tokens.</summary>
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    /// <summary>Gets the document numbering series.</summary>
+    public DbSet<NumberingSeries> NumberingSeries => Set<NumberingSeries>();
 
     /// <summary>Gets the account groups forming the chart of accounts.</summary>
     public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
@@ -167,6 +171,8 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<VoucherId>().HaveConversion<VoucherIdConverter>();
         configurationBuilder.Properties<VoucherLineId>()
             .HaveConversion<VoucherLineIdConverter>();
+        configurationBuilder.Properties<NumberingSeriesId>()
+            .HaveConversion<NumberingSeriesIdConverter>();
 
         configurationBuilder.Properties<CurrencyCode>()
             .HaveConversion<CurrencyCodeConverter>()

@@ -1,7 +1,9 @@
+using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
+using ERP.Infrastructure.Persistence.Repositories;
 using ERP.Infrastructure.Persistence.Seeding;
 using ERP.Infrastructure.Security;
 using ERP.Infrastructure.Tenancy;
@@ -57,6 +59,13 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddScoped<DatabaseSeeder>();
+
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IVoucherRepository, VoucherRepository>();
+        services.AddScoped<ILedgerRepository, LedgerRepository>();
+        services.AddScoped<IFirmRepository, FirmRepository>();
+        services.AddScoped<IFinancialYearRepository, FinancialYearRepository>();
+        services.AddScoped<INumberingSeriesRepository, NumberingSeriesRepository>();
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();

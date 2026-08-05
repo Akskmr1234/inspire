@@ -13,7 +13,7 @@ namespace ERP.Api.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/auth")]
 [Produces("application/json")]
-public sealed class AuthController : ControllerBase
+public sealed class AuthController : ApiControllerBase
 {
     private readonly IAuthenticationService _authentication;
 
@@ -171,34 +171,6 @@ public sealed class AuthController : ControllerBase
             UserId.From(userId), cancellationToken);
 
         return Ok(permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray());
-    }
-
-    /// <summary>
-    /// Translates a domain error into an RFC 9457 problem response.
-    /// </summary>
-    /// <param name="error">The failure.</param>
-    /// <returns>The problem response.</returns>
-    /// <remarks>
-    /// The single place error kinds become HTTP status codes, so the mapping
-    /// cannot drift between endpoints.
-    /// </remarks>
-    private ObjectResult Problem(Error error)
-    {
-        int status = error.Kind switch
-        {
-            ErrorKind.Validation => StatusCodes.Status400BadRequest,
-            ErrorKind.NotFound => StatusCodes.Status404NotFound,
-            ErrorKind.Conflict => StatusCodes.Status409Conflict,
-            ErrorKind.Forbidden => StatusCodes.Status403Forbidden,
-            ErrorKind.Unauthorized => StatusCodes.Status401Unauthorized,
-            ErrorKind.BusinessRule => StatusCodes.Status422UnprocessableEntity,
-            _ => StatusCodes.Status500InternalServerError,
-        };
-
-        return Problem(
-            detail: error.Description,
-            statusCode: status,
-            title: error.Code);
     }
 }
 

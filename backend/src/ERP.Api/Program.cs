@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Asp.Versioning;
 using ERP.Api.Middleware;
+using ERP.Application;
 using ERP.Identity;
 using ERP.Infrastructure;
 using ERP.Infrastructure.Persistence.Seeding;
@@ -84,6 +85,7 @@ public static class Program
     {
         IServiceCollection services = builder.Services;
 
+        services.AddApplication();
         services.AddInfrastructure(builder.Configuration);
         services.AddErpIdentity(builder.Configuration);
 
