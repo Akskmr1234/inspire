@@ -53,4 +53,59 @@ public sealed class AccountingReportsController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Produces a profit and loss statement for a date range.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Income, expenses, and the net result for the period.</returns>
+    /// <remarks>
+    /// Period figures, not cumulative: this answers what the business earned between
+    /// the two dates.
+    /// </remarks>
+    /// <response code="200">Income and expense lines with the net result.</response>
+    /// <response code="400">The date range is invalid.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("profit-and-loss")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(ProfitAndLossResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetProfitAndLossAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        Result<ProfitAndLossResponse> result = await _sender.Send(
+            new GetProfitAndLossQuery(from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Produces a balance sheet as at a date.</summary>
+    /// <param name="asAt">The date the position is stated as at, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Assets against liabilities and equity.</returns>
+    /// <remarks>
+    /// Cumulative figures, and the retained result of every income and expense
+    /// posting is carried into equity - without it the statement would be out by
+    /// exactly the period's profit.
+    /// </remarks>
+    /// <response code="200">Assets, liabilities, equity, and a balance check.</response>
+    /// <response code="400">The date is missing.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("balance-sheet")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(BalanceSheetResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetBalanceSheetAsync(
+        [FromQuery] DateOnly asAt,
+        CancellationToken cancellationToken)
+    {
+        Result<BalanceSheetResponse> result = await _sender.Send(
+            new GetBalanceSheetQuery(asAt), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 }
