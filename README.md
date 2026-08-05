@@ -19,6 +19,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Dependency set, security-scanned & licence-audited | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md) |
 | Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests |
 | Domain — tenancy identifiers, `FinancialYear` | **Done** — 25 tests |
+| Tax engine — GCC VAT + India GST concurrently, inclusive/exclusive, CGST/SGST/IGST | **Done** — 38 tests |
 | API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks | **Done** |
 | Domain — Firm, Branch, chart of accounts, vouchers | Not started |
 | Multi-tenancy — EF Core query filters + PostgreSQL RLS | Not started |
@@ -28,7 +29,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Frontend — React shell, data grid, voucher screens | Not started |
 | Docker, CI/CD, Keycloak realm | Not started |
 
-**Test suite:** 61 passing, 0 failing. `ERP.Application.Tests`, `ERP.Infrastructure.Tests`, and `ERP.Api.Tests` are empty shells awaiting the layers they cover.
+**Test suite:** 99 passing, 0 failing. `ERP.Application.Tests`, `ERP.Infrastructure.Tests`, and `ERP.Api.Tests` are empty shells awaiting the layers they cover.
 
 ---
 
