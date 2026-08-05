@@ -5,6 +5,15 @@ namespace ERP.Application.Abstractions.Security;
 /// <summary>Issues access tokens and the opaque refresh tokens that renew them.</summary>
 public interface ITokenService
 {
+    /// <summary>Gets how long an issued refresh token remains valid.</summary>
+    /// <remarks>
+    /// Exposed here so callers that persist a token do not need the JWT
+    /// configuration type - which lives in ERP.Identity and is not visible from
+    /// Infrastructure. The service already owns the setting; surfacing it keeps
+    /// the layering intact.
+    /// </remarks>
+    TimeSpan RefreshTokenLifetime { get; }
+
     /// <summary>Issues a signed access token.</summary>
     /// <param name="request">What the token should assert.</param>
     /// <returns>The token and the instant it expires.</returns>

@@ -1,6 +1,8 @@
+using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
+using ERP.Infrastructure.Security;
 using ERP.Infrastructure.Tenancy;
 using ERP.Infrastructure.Time;
 using ERP.SharedKernel.Abstractions;
@@ -44,6 +46,10 @@ public static class DependencyInjection
         services.AddSingleton<ICurrentUser>(sp => sp.GetRequiredService<AmbientCurrentUser>());
 
         services.AddSingleton<IClock, SystemClock>();
+
+        services.AddMemoryCache(options => options.SizeLimit = 50_000);
+        services.AddScoped<IPermissionChecker, CachedPermissionChecker>();
+        services.AddScoped<IAuthenticationService, AuthenticationService>();
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();

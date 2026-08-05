@@ -46,6 +46,9 @@ public sealed class JwtTokenService : ITokenService
     }
 
     /// <inheritdoc />
+    public TimeSpan RefreshTokenLifetime => TimeSpan.FromDays(_options.RefreshTokenDays);
+
+    /// <inheritdoc />
     public AccessToken CreateAccessToken(AccessTokenRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

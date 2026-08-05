@@ -1,8 +1,7 @@
-using ERP.Application.Abstractions.Security;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 
-namespace ERP.Identity.Authentication;
+namespace ERP.Application.Abstractions.Security;
 
 /// <summary>What a client sends to sign in.</summary>
 /// <param name="UserName">The sign-in name or email address.</param>

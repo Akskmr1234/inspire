@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Asp.Versioning;
 using ERP.Api.Middleware;
+using ERP.Identity;
 using ERP.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
@@ -74,6 +75,7 @@ public static class Program
         IServiceCollection services = builder.Services;
 
         services.AddInfrastructure(builder.Configuration);
+        services.AddErpIdentity(builder.Configuration);
 
         services.AddControllers();
         services.AddEndpointsApiExplorer();
@@ -155,7 +157,8 @@ public static class Program
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
                 Description =
-                    "JWT issued by Keycloak. Paste the token only, without the 'Bearer ' prefix.",
+                    "JWT from POST /api/v1/auth/login. Paste the access token only, " +
+                    "without the 'Bearer ' prefix.",
             });
 
             // Microsoft.OpenApi v2, which Swashbuckle 10 targets, replaced the
