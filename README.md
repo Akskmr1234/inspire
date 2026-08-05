@@ -21,15 +21,16 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Domain — tenancy identifiers, `FinancialYear` | **Done** — 25 tests |
 | Tax engine — GCC VAT + India GST concurrently, inclusive/exclusive, CGST/SGST/IGST | **Done** — 38 tests |
 | API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks | **Done** |
-| Domain — Firm, Branch, chart of accounts, vouchers | Not started |
-| Multi-tenancy — EF Core query filters + PostgreSQL RLS | Not started |
+| Domain — Firm, Branch aggregates | **Done** — 20 tests |
+| Multi-tenancy — EF query filters + PostgreSQL RLS, verified on real Postgres | **Done** — 17 integration tests |
+| Domain — chart of accounts, vouchers | Not started |
 | Auth — Keycloak, RBAC permission engine, dynamic menus | Not started |
 | Application layer — CQRS handlers, validation | Not started |
 | Accounting module — masters, transactions, reports | Not started |
 | Frontend — React shell, data grid, voucher screens | Not started |
 | Docker, CI/CD, Keycloak realm | Not started |
 
-**Test suite:** 99 passing, 0 failing. `ERP.Application.Tests`, `ERP.Infrastructure.Tests`, and `ERP.Api.Tests` are empty shells awaiting the layers they cover.
+**Test suite:** 136 passing, 0 failing (119 domain + 17 integration). `ERP.Application.Tests` and `ERP.Api.Tests` are empty shells awaiting the layers they cover. Integration tests need a running Docker daemon.
 
 ---
 
@@ -119,6 +120,14 @@ Enforced by project references. `ERP.SharedKernel` has **zero** package referenc
 Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 
 **Tenant isolation is enforced twice** — an EF Core global query filter *and* a PostgreSQL row-level-security policy. One layer would be a single point of failure, and the failure mode (one customer reading another's financial data) is the worst outcome this system can produce.
+
+> ### ⚠️ The application must never connect to PostgreSQL as a superuser
+>
+> PostgreSQL exempts superusers — and any role holding `BYPASSRLS` — from row-level security entirely. **`FORCE ROW LEVEL SECURITY` does not bind them.** Point the application at a superuser connection string and every isolation policy silently stops applying: no error, no warning, no visible change, until one customer sees another's books.
+>
+> This was caught by an integration test that initially reported 14 rows where 1 was expected, because Testcontainers' bootstrap user is a superuser.
+>
+> **Deployment requirement:** the app connects as a dedicated role created `NOSUPERUSER NOBYPASSRLS`, holding only `SELECT/INSERT/UPDATE/DELETE`. Schema ownership and migrations use a *separate*, more privileged role. `SchemaTests.The_application_role_cannot_bypass_row_level_security` fails the build if this is ever violated.
 
 **AutoMapper is not used.** Every freely-licensed version carries an unpatched high-severity advisory (`GHSA-rvv3-g6hj-g44x`); every patched version requires a paid licence. Mapping is hand-written, which is also compile-time checked. See [ADR 0002](docs/adr/0002-third-party-licensing.md).
 

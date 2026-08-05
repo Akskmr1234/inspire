@@ -105,10 +105,39 @@ public sealed class SchemaTests
             SELECT count(*)
             FROM information_schema.columns
             WHERE table_schema = 'public'
+              AND table_name NOT LIKE '\_\_%'
               AND column_name <> lower(column_name)
             """);
 
         badlyNamed.ShouldBe(0L);
+    }
+
+    [Fact]
+    public async Task The_application_role_cannot_bypass_row_level_security()
+    {
+        // The most dangerous misconfiguration this system can have, and an
+        // entirely silent one. PostgreSQL exempts superusers and any role holding
+        // BYPASSRLS from row-level security - FORCE ROW LEVEL SECURITY does not
+        // bind them. Point the application at a superuser connection string and
+        // every policy in the database stops applying, with no error, no warning,
+        // and no visible change until one customer sees another's books.
+        //
+        // This test exists so that mistake fails here instead of in production.
+        await using ErpDbContext context =
+            _fixture.CreateContext(PostgresFixture.ScopedTo(TenantId.NewId()));
+
+        bool isSuperUser = await ScalarAsync<bool>(
+            context, "SELECT rolsuper FROM pg_roles WHERE rolname = current_user");
+
+        bool canBypassRls = await ScalarAsync<bool>(
+            context, "SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user");
+
+        isSuperUser.ShouldBeFalse(
+            "the application must never connect as a superuser - superusers ignore " +
+            "every row-level-security policy");
+
+        canBypassRls.ShouldBeFalse(
+            "the application role must not hold BYPASSRLS");
     }
 
     private static IReadOnlyList<string> TenantScopedTableNames(ErpDbContext context) =>

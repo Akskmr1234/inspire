@@ -75,8 +75,15 @@ public class ErpDbContext : DbContext
     /// answer has a configuration fault worth surfacing immediately.
     /// </para>
     /// </remarks>
-    public Guid CurrentTenantId =>
-        _tenantContext.IsResolved ? _tenantContext.TenantId.Value : Guid.Empty;
+    /// <remarks>
+    /// Typed as <see cref="TenantId"/> rather than <see cref="Guid"/> so the query
+    /// filter can compare whole identifiers. Comparing
+    /// <c>e.TenantId.Value == someGuid</c> does not translate to SQL: the value
+    /// converter already maps <see cref="TenantId"/> to a single column, so
+    /// reaching into <c>.Value</c> asks EF Core to navigate inside a scalar.
+    /// </remarks>
+    public TenantId CurrentTenant =>
+        _tenantContext.IsResolved ? _tenantContext.TenantId : default;
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -145,7 +152,13 @@ public class ErpDbContext : DbContext
 
             if (isTenantScoped)
             {
-                // e.TenantId.Value == this.CurrentTenantId
+                // e.TenantId == this.CurrentTenant
+                //
+                // Both sides are TenantId. Comparing the whole identifier lets the
+                // registered value converter turn it into a plain uuid comparison;
+                // reaching into e.TenantId.Value instead fails to translate,
+                // because the converter has already collapsed the type to a single
+                // column and there is nothing inside it to navigate to.
                 //
                 // Reading the tenant through a context property, rather than
                 // baking a value into the model, is what lets one cached model
@@ -154,13 +167,10 @@ public class ErpDbContext : DbContext
                 MemberExpression tenantId = Expression.Property(
                     entity, nameof(ITenantScoped.TenantId));
 
-                MemberExpression rawValue = Expression.Property(
-                    tenantId, nameof(TenantId.Value));
-
                 MemberExpression currentTenant = Expression.Property(
-                    Expression.Constant(this), nameof(CurrentTenantId));
+                    Expression.Constant(this), nameof(CurrentTenant));
 
-                predicate = Expression.Equal(rawValue, currentTenant);
+                predicate = Expression.Equal(tenantId, currentTenant);
             }
 
             if (isSoftDeletable)
