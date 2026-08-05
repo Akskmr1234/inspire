@@ -36,9 +36,9 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 296 passing, 0 failing (226 domain + 33 application + 20 identity + 17 integration).
+**Test suite:** 310 passing, 0 failing (226 domain + 47 application + 20 identity + 17 integration).
 
-> **Known coverage gap:** `ERP.Api.Tests` is still empty, and `ERP.Application.Tests` covers only the report handlers so far — command handlers such as CreateVoucher have no tests of their own. Domain invariants and persistence are well covered; use-case orchestration is only starting to be. This remains the largest outstanding risk against the 80% coverage target.
+> **Known coverage gap:** `ERP.Api.Tests` is still empty — no controller, routing, auth-enforcement, or ProblemDetails tests. The layers beneath it are covered: domain invariants, persistence and tenant isolation, and now the report and voucher-posting handlers. The HTTP edge is what remains untested.
 
 Integration tests need a running Docker daemon.
 
