@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialYearRepository, FinancialYearRepository>();
         services.AddScoped<INumberingSeriesRepository, NumberingSeriesRepository>();
         services.AddScoped<ITrialBalanceReader, TrialBalanceReader>();
+        services.AddScoped<ILedgerStatementReader, LedgerStatementReader>();
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();
