@@ -160,3 +160,5 @@ Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 Analyzers: .NET built-in (`latest-recommended`), SonarAnalyzer, and StyleCop. Where a rule is disabled, [`backend/.editorconfig`](backend/.editorconfig) states *why* — so nobody has to guess later whether it was deliberate.
 
 Conventions: nullable reference types enabled everywhere; XML documentation on public API (`CS1591` is a warning); British English in prose and comments.
+#   I n s p i r e  
+ 
