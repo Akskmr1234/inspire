@@ -6,6 +6,7 @@ import { TrialBalancePage } from '@/pages/TrialBalancePage';
 import { VoucherEntryPage } from '@/pages/VoucherEntryPage';
 import { ProfitAndLossPage } from '@/pages/ProfitAndLossPage';
 import { BalanceSheetPage } from '@/pages/BalanceSheetPage';
+import { DayBookPage } from '@/pages/DayBookPage';
 import { applyPresentation, useSession } from '@/stores/session';
 
 /** Routing and the signed-in gate. */
@@ -48,6 +49,7 @@ export function App(): React.JSX.Element {
         <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
         <Route path="/accounting/profit-and-loss" element={<ProfitAndLossPage />} />
         <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
+        <Route path="/accounting/day-book" element={<DayBookPage />} />
         <Route path="*" element={<Navigate to="/accounting/trial-balance" replace />} />
       </Route>
     </Routes>

@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using ERP.Application.Accounting.Reports;
+using ERP.Domain.Accounting;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -136,6 +137,42 @@ public sealed class AccountingReportsController : ApiControllerBase
     {
         Result<LedgerStatementResponse> result = await _sender.Send(
             new GetLedgerStatementQuery(ledgerId, from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Produces the day book: every voucher posted in a date range.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="voucherType">
+    /// Restricts the register to one kind of voucher. Omit for all kinds; pass
+    /// <c>CashReceipt</c> and <c>CashPayment</c> style values to narrow it.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The vouchers of the period, oldest first, each with its lines.</returns>
+    /// <remarks>
+    /// The chronological register of what the firm actually did, as opposed to
+    /// where it stands. Posted vouchers only, so it reconciles with the trial
+    /// balance. <c>totalDebit</c> and <c>totalCredit</c> are both returned and must
+    /// agree; if they ever differ, something has posted incorrectly and the caller
+    /// should say so rather than present the figures.
+    /// </remarks>
+    /// <response code="200">The register, with period totals and a voucher count.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("day-book")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(DayBookResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetDayBookAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] VoucherType? voucherType,
+        CancellationToken cancellationToken)
+    {
+        Result<DayBookResponse> result = await _sender.Send(
+            new GetDayBookQuery(from, to, voucherType), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }

@@ -21,16 +21,27 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Domain — tenancy identifiers, `FinancialYear` | **Done** — 25 tests |
 | Tax engine — GCC VAT + India GST concurrently, inclusive/exclusive, CGST/SGST/IGST | **Done** — 38 tests |
 | API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks | **Done** |
-| Domain — Firm, Branch aggregates | **Done** — 20 tests |
+| Domain — Tenant, Firm, Branch aggregates | **Done** |
 | Multi-tenancy — EF query filters + PostgreSQL RLS, verified on real Postgres | **Done** — 17 integration tests |
-| Domain — chart of accounts, vouchers | Not started |
-| Auth — Keycloak, RBAC permission engine, dynamic menus | Not started |
-| Application layer — CQRS handlers, validation | Not started |
-| Accounting module — masters, transactions, reports | Not started |
-| Frontend — React shell, data grid, voucher screens | Not started |
-| Docker, CI/CD, Keycloak realm | Not started |
+| Auth — JWT sign-in, refresh rotation with theft detection, DB-driven RBAC | **Done** — 20 tests |
+| Domain — chart of accounts, double-entry vouchers, numbering series | **Done** |
+| Application layer — CQRS pipeline, validation, repositories | **Done** |
+| Seeding — permission catalogue, roles, chart of accounts, first administrator | **Done** |
+| Accounting reports — Trial Balance, P&L, Balance Sheet, Ledger Statement | **Done** |
+| Frontend — React shell, sign-in, voucher entry, report screens | **Done** |
+| Docker Compose, API container image, GitHub Actions CI | **Done** |
+| Accounting reports — Day Book | **Done** — 14 application tests |
+| Accounting reports — Cash Book, Bank Book | Not started |
+| Accounting — bill-wise settlement, Outstanding, Aging, PDC/cheques | Not started |
+| Dynamic menus, report builder, print designer, workflow engine | Not started |
+| Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
+| Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 136 passing, 0 failing (119 domain + 17 integration). `ERP.Application.Tests` and `ERP.Api.Tests` are empty shells awaiting the layers they cover. Integration tests need a running Docker daemon.
+**Test suite:** 277 passing, 0 failing (226 domain + 20 identity + 17 integration + 14 application).
+
+> **Known coverage gap:** `ERP.Api.Tests` is still empty, and `ERP.Application.Tests` covers only the day book so far — the other CQRS handlers have no tests of their own. Domain invariants and persistence are well covered; use-case orchestration is only starting to be. This remains the largest outstanding risk against the 80% coverage target.
+
+Integration tests need a running Docker daemon.
 
 ---
 

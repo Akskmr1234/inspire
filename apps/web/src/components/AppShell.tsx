@@ -71,6 +71,11 @@ export function AppShell(): React.JSX.Element {
             label={t('nav.balanceSheet')}
             collapsed={collapsed}
           />
+          <SidebarLink
+            to="/accounting/day-book"
+            label={t('nav.dayBook')}
+            collapsed={collapsed}
+          />
         </nav>
 
         <button
