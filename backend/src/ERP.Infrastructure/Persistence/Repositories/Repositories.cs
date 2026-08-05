@@ -119,6 +119,26 @@ public sealed class LedgerRepository : ILedgerRepository
 
         return found.ToDictionary(l => l.Id);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<(Ledger Ledger, AccountGroup Group)>> ListWithGroupAsync(
+        FirmId firmId,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Ledgers
+            .Where(l => l.FirmId == firmId && (!activeOnly || l.IsActive))
+            .Join(
+                _context.AccountGroups,
+                ledger => ledger.AccountGroupId,
+                group => group.Id,
+                (ledger, group) => new { ledger, group })
+            .OrderBy(x => x.group.Code)
+            .ThenBy(x => x.ledger.Code)
+            .ToListAsync(cancellationToken);
+
+        return [.. rows.Select(x => (x.ledger, x.group))];
+    }
 }
 
 /// <summary>The EF Core firm repository.</summary>

@@ -45,6 +45,11 @@ export function AppShell(): React.JSX.Element {
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
           <SidebarSection label={t('nav.accounting')} collapsed={collapsed} />
           <SidebarLink
+            to="/accounting/vouchers/new"
+            label={t('nav.voucherEntry')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
             to="/accounting/trial-balance"
             label={t('nav.trialBalance')}
             collapsed={collapsed}

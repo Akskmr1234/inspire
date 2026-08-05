@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
 import { LoginPage } from '@/pages/LoginPage';
 import { TrialBalancePage } from '@/pages/TrialBalancePage';
+import { VoucherEntryPage } from '@/pages/VoucherEntryPage';
 import { applyPresentation, useSession } from '@/stores/session';
 
 /** Routing and the signed-in gate. */
@@ -41,6 +42,7 @@ export function App(): React.JSX.Element {
   return (
     <Routes>
       <Route element={<AppShell />}>
+        <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
         <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
         <Route
           path="/accounting/profit-and-loss"

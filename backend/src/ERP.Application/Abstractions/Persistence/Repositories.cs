@@ -68,6 +68,21 @@ public interface ILedgerRepository
     Task<IReadOnlyDictionary<LedgerId, Ledger>> GetManyAsync(
         IEnumerable<LedgerId> ids,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists a firm's ledgers with their account groups, for lookup.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="activeOnly">Whether to exclude deactivated ledgers.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The ledgers, each paired with its group, ordered by group then code.</returns>
+    /// <remarks>
+    /// Returns the group alongside each ledger because every lookup that uses this
+    /// shows it - a voucher entry grid needs to distinguish "Sales Account" under
+    /// Sales Accounts from a similarly-named ledger elsewhere in the chart.
+    /// </remarks>
+    Task<IReadOnlyList<(Ledger Ledger, AccountGroup Group)>> ListWithGroupAsync(
+        FirmId firmId,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads firms.</summary>

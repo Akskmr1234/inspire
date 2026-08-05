@@ -23,6 +23,7 @@ const en = {
   nav: {
     dashboard: 'Dashboard',
     accounting: 'Accounting',
+    voucherEntry: 'Voucher entry',
     trialBalance: 'Trial balance',
     profitAndLoss: 'Profit and loss',
     balanceSheet: 'Balance sheet',
@@ -71,6 +72,7 @@ const ar = {
   nav: {
     dashboard: 'لوحة المعلومات',
     accounting: 'المحاسبة',
+    voucherEntry: 'إدخال قيد',
     trialBalance: 'ميزان المراجعة',
     profitAndLoss: 'الأرباح والخسائر',
     balanceSheet: 'الميزانية العمومية',
