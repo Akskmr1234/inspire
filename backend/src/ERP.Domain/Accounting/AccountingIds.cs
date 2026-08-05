@@ -57,3 +57,17 @@ public readonly record struct VoucherLineId(Guid Value) : IStronglyTypedId<Vouch
     /// <inheritdoc />
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>Identifies a bill: one outstanding receivable or payable.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct BillId(Guid Value) : IStronglyTypedId<BillId>
+{
+    /// <inheritdoc />
+    public static BillId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static BillId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}

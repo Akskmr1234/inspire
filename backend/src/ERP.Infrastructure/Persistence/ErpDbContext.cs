@@ -72,6 +72,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the financial years.</summary>
     public DbSet<FinancialYear> FinancialYears => Set<FinancialYear>();
 
+    /// <summary>Gets the outstanding bills.</summary>
+    public DbSet<Bill> Bills => Set<Bill>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -163,6 +166,7 @@ public class ErpDbContext : DbContext
             .HaveConversion<FinancialYearIdConverter>();
         configurationBuilder.Properties<RoleId>().HaveConversion<RoleIdConverter>();
         configurationBuilder.Properties<PermissionId>().HaveConversion<PermissionIdConverter>();
+        configurationBuilder.Properties<BillId>().HaveConversion<BillIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

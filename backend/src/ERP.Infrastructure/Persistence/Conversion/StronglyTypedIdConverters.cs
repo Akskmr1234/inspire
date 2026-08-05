@@ -1,3 +1,4 @@
+using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
@@ -108,6 +109,16 @@ public sealed class CurrencyCodeConverter : ValueConverter<CurrencyCode, string>
     /// <summary>Initialises a new instance of the <see cref="CurrencyCodeConverter"/> class.</summary>
     public CurrencyCodeConverter()
         : base(currency => currency.Code, code => CurrencyCode.FromTrusted(code))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BillId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillIdConverter : ValueConverter<BillId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillIdConverter"/> class.</summary>
+    public BillIdConverter()
+        : base(id => id.Value, value => BillId.From(value))
     {
     }
 }

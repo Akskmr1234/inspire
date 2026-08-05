@@ -31,12 +31,13 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Frontend — React shell, sign-in, voucher entry, report screens | **Done** |
 | Docker Compose, API container image, GitHub Actions CI | **Done** |
 | Accounting reports — Day Book, Cash Book, Bank Book | **Done** — 33 application tests |
-| Accounting — bill-wise settlement, Outstanding, Aging, PDC/cheques | Not started |
+| Accounting — bill-wise settlement (domain + persistence) | **Done** — 24 tests |
+| Accounting — Outstanding and Aging reports, PDC/cheques | Not started |
 | Dynamic menus, report builder, print designer, workflow engine | Not started |
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 345 passing, 0 failing (226 domain + 47 application + 35 API + 20 identity + 17 integration).
+**Test suite:** 369 passing, 0 failing (250 domain + 47 application + 35 API + 20 identity + 17 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
