@@ -30,16 +30,15 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting reports — Trial Balance, P&L, Balance Sheet, Ledger Statement | **Done** |
 | Frontend — React shell, sign-in, voucher entry, report screens | **Done** |
 | Docker Compose, API container image, GitHub Actions CI | **Done** |
-| Accounting reports — Day Book | **Done** — 14 application tests |
-| Accounting reports — Cash Book, Bank Book | Not started |
+| Accounting reports — Day Book, Cash Book, Bank Book | **Done** — 33 application tests |
 | Accounting — bill-wise settlement, Outstanding, Aging, PDC/cheques | Not started |
 | Dynamic menus, report builder, print designer, workflow engine | Not started |
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 277 passing, 0 failing (226 domain + 20 identity + 17 integration + 14 application).
+**Test suite:** 296 passing, 0 failing (226 domain + 33 application + 20 identity + 17 integration).
 
-> **Known coverage gap:** `ERP.Api.Tests` is still empty, and `ERP.Application.Tests` covers only the day book so far — the other CQRS handlers have no tests of their own. Domain invariants and persistence are well covered; use-case orchestration is only starting to be. This remains the largest outstanding risk against the 80% coverage target.
+> **Known coverage gap:** `ERP.Api.Tests` is still empty, and `ERP.Application.Tests` covers only the report handlers so far — command handlers such as CreateVoucher have no tests of their own. Domain invariants and persistence are well covered; use-case orchestration is only starting to be. This remains the largest outstanding risk against the 80% coverage target.
 
 Integration tests need a running Docker daemon.
 

@@ -28,6 +28,8 @@ const en = {
     profitAndLoss: 'Profit and loss',
     balanceSheet: 'Balance sheet',
     dayBook: 'Day book',
+    cashBook: 'Cash book',
+    bankBook: 'Bank book',
     signOut: 'Sign out',
   },
   reports: {
@@ -71,6 +73,12 @@ const en = {
     allTypes: 'All types',
     voucherCount_one: '{{count}} voucher',
     voucherCount_other: '{{count}} vouchers',
+    receipts: 'Receipts',
+    payments: 'Payments',
+    balance: 'Balance',
+    openingBalance: 'Opening balance',
+    closingBalance: 'Closing balance',
+    allAccounts: 'All accounts',
   },
   voucherTypes: {
     CashReceipt: 'Cash receipt',
@@ -109,6 +117,8 @@ const ar = {
     profitAndLoss: 'الأرباح والخسائر',
     balanceSheet: 'الميزانية العمومية',
     dayBook: 'دفتر اليومية',
+    cashBook: 'دفتر الصندوق',
+    bankBook: 'دفتر البنك',
     signOut: 'تسجيل الخروج',
   },
   reports: {
@@ -159,6 +169,12 @@ const ar = {
     voucherCount_few: '{{count}} قيود',
     voucherCount_many: '{{count}} قيدًا',
     voucherCount_other: '{{count}} قيد',
+    receipts: 'المقبوضات',
+    payments: 'المدفوعات',
+    balance: 'الرصيد',
+    openingBalance: 'الرصيد الافتتاحي',
+    closingBalance: 'الرصيد الختامي',
+    allAccounts: 'كل الحسابات',
   },
   voucherTypes: {
     CashReceipt: 'سند قبض نقدي',

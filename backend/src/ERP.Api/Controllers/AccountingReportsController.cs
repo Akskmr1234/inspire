@@ -176,4 +176,78 @@ public sealed class AccountingReportsController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Produces the cash book: movement on every cash account.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="ledgerId">Restricts the report to one till. Omit for all of them.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One section per cash account, with a running balance.</returns>
+    /// <remarks>
+    /// Figures are labelled receipts and payments rather than debits and credits:
+    /// cash is an asset, so a debit is money arriving, and that is how the people
+    /// who read a cash book think about it.
+    /// </remarks>
+    /// <response code="200">The cash book.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    /// <response code="404">A ledger was named that is not a cash account of this firm.</response>
+    [HttpGet("cash-book")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(CashBankBookResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetCashBookAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken) =>
+        SendCashBankBookAsync(from, to, LedgerKind.Cash, ledgerId, cancellationToken);
+
+    /// <summary>Produces the bank book: movement on every bank account.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="ledgerId">Restricts the report to one account. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One section per bank account, with a running balance.</returns>
+    /// <response code="200">The bank book.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    /// <response code="404">A ledger was named that is not a bank account of this firm.</response>
+    [HttpGet("bank-book")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(CashBankBookResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public Task<IActionResult> GetBankBookAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken) =>
+        SendCashBankBookAsync(from, to, LedgerKind.Bank, ledgerId, cancellationToken);
+
+    /// <summary>
+    /// Dispatches the shared cash/bank book query.
+    /// </summary>
+    /// <param name="from">The first date included.</param>
+    /// <param name="to">The last date included.</param>
+    /// <param name="kind">Which book to produce.</param>
+    /// <param name="ledgerId">The single account to restrict to, if any.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The report.</returns>
+    /// <remarks>
+    /// The two books are one report over a different set of accounts. They get
+    /// separate routes because that is how an accountant asks for them, but only
+    /// one implementation, so the arithmetic cannot drift between them.
+    /// </remarks>
+    private async Task<IActionResult> SendCashBankBookAsync(
+        DateOnly from,
+        DateOnly to,
+        LedgerKind kind,
+        Guid? ledgerId,
+        CancellationToken cancellationToken)
+    {
+        Result<CashBankBookResponse> result = await _sender.Send(
+            new GetCashBankBookQuery(from, to, kind, ledgerId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 }

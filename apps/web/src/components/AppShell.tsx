@@ -76,6 +76,16 @@ export function AppShell(): React.JSX.Element {
             label={t('nav.dayBook')}
             collapsed={collapsed}
           />
+          <SidebarLink
+            to="/accounting/cash-book"
+            label={t('nav.cashBook')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
+            to="/accounting/bank-book"
+            label={t('nav.bankBook')}
+            collapsed={collapsed}
+          />
         </nav>
 
         <button
