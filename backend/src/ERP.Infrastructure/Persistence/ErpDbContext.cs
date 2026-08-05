@@ -1,0 +1,265 @@
+using System.Linq.Expressions;
+using System.Reflection;
+using ERP.Application.Abstractions.Tenancy;
+using ERP.Domain.Tenancy;
+using ERP.Infrastructure.Persistence.Conversion;
+using ERP.SharedKernel.Abstractions;
+using ERP.SharedKernel.Tenancy;
+using ERP.SharedKernel.ValueObjects;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+
+namespace ERP.Infrastructure.Persistence;
+
+/// <summary>
+/// The application database context.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Two global query filters are applied automatically to every entity that opts
+/// in by implementing the corresponding marker interface:
+/// </para>
+/// <list type="bullet">
+/// <item>
+/// <description>
+/// <see cref="ITenantScoped"/> restricts rows to the current tenant.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// <see cref="ISoftDeletable"/> hides rows flagged as deleted.
+/// </description>
+/// </item>
+/// </list>
+/// <para>
+/// The filters are attached by reflection rather than declared per entity. With
+/// several hundred tables coming, "remember to add the tenant filter" is a rule
+/// that will eventually be broken, and the consequence of breaking it is one
+/// customer reading another's financial data. Applying it from the interface
+/// makes it structural: implementing <see cref="ITenantScoped"/> is the only
+/// thing a developer has to get right.
+/// </para>
+/// </remarks>
+public class ErpDbContext : DbContext
+{
+    private readonly ITenantContext _tenantContext;
+
+    /// <summary>Initialises a new instance of the <see cref="ErpDbContext"/> class.</summary>
+    /// <param name="options">The context options.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    public ErpDbContext(DbContextOptions<ErpDbContext> options, ITenantContext tenantContext)
+        : base(options) => _tenantContext = tenantContext;
+
+    /// <summary>Gets the firms.</summary>
+    public DbSet<Firm> Firms => Set<Firm>();
+
+    /// <summary>Gets the branches.</summary>
+    public DbSet<Branch> Branches => Set<Branch>();
+
+    /// <summary>Gets the financial years.</summary>
+    public DbSet<FinancialYear> FinancialYears => Set<FinancialYear>();
+
+    /// <summary>
+    /// Gets the tenant that global query filters compare against.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Falls back to <see cref="Guid.Empty"/> when no tenant has been resolved,
+    /// which matches no rows. This is a deliberate difference from
+    /// <see cref="ITenantContext.TenantId"/>, which throws.
+    /// </para>
+    /// <para>
+    /// The data layer fails closed and the application layer fails loud. A query
+    /// running without a tenant should return nothing rather than everything;
+    /// application code that explicitly asks "which tenant am I?" without an
+    /// answer has a configuration fault worth surfacing immediately.
+    /// </para>
+    /// </remarks>
+    public Guid CurrentTenantId =>
+        _tenantContext.IsResolved ? _tenantContext.TenantId.Value : Guid.Empty;
+
+    /// <inheritdoc />
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ErpDbContext).Assembly);
+
+        ApplyGlobalQueryFilters(modelBuilder);
+        ApplySnakeCaseNames(modelBuilder);
+    }
+
+    /// <inheritdoc />
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(configurationBuilder);
+
+        base.ConfigureConventions(configurationBuilder);
+
+        // Registering converters by type means every property of these types is
+        // mapped automatically, on every entity, for ever. The alternative -
+        // configuring each property individually - fails silently by omission.
+        configurationBuilder.Properties<TenantId>().HaveConversion<TenantIdConverter>();
+        configurationBuilder.Properties<FirmId>().HaveConversion<FirmIdConverter>();
+        configurationBuilder.Properties<BranchId>().HaveConversion<BranchIdConverter>();
+        configurationBuilder.Properties<UserId>().HaveConversion<UserIdConverter>();
+        configurationBuilder.Properties<FinancialYearId>()
+            .HaveConversion<FinancialYearIdConverter>();
+
+        configurationBuilder.Properties<CurrencyCode>()
+            .HaveConversion<CurrencyCodeConverter>()
+            .HaveMaxLength(3)
+            .AreFixedLength();
+
+        // Money amounts and quantities: 19 total digits with 4 decimals. Four
+        // decimals rather than two because unit rates, exchange rates, and
+        // three-decimal Gulf currencies all need more precision than the
+        // presentation scale.
+        configurationBuilder.Properties<decimal>().HavePrecision(19, 4);
+
+        configurationBuilder.Properties<string>().HaveMaxLength(256);
+    }
+
+    /// <summary>
+    /// Attaches the tenant and soft-delete filters to every entity that opts in.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
+    private void ApplyGlobalQueryFilters(ModelBuilder modelBuilder)
+    {
+        foreach (IMutableEntityType entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            Type clrType = entityType.ClrType;
+
+            bool isTenantScoped = typeof(ITenantScoped).IsAssignableFrom(clrType);
+            bool isSoftDeletable = typeof(ISoftDeletable).IsAssignableFrom(clrType);
+
+            if (!isTenantScoped && !isSoftDeletable)
+            {
+                continue;
+            }
+
+            ParameterExpression entity = Expression.Parameter(clrType, "e");
+            Expression? predicate = null;
+
+            if (isTenantScoped)
+            {
+                // e.TenantId.Value == this.CurrentTenantId
+                //
+                // Reading the tenant through a context property, rather than
+                // baking a value into the model, is what lets one cached model
+                // serve every tenant: EF Core lifts the member access into a
+                // query parameter and evaluates it per execution.
+                MemberExpression tenantId = Expression.Property(
+                    entity, nameof(ITenantScoped.TenantId));
+
+                MemberExpression rawValue = Expression.Property(
+                    tenantId, nameof(TenantId.Value));
+
+                MemberExpression currentTenant = Expression.Property(
+                    Expression.Constant(this), nameof(CurrentTenantId));
+
+                predicate = Expression.Equal(rawValue, currentTenant);
+            }
+
+            if (isSoftDeletable)
+            {
+                UnaryExpression notDeleted = Expression.Not(
+                    Expression.Property(entity, nameof(ISoftDeletable.IsDeleted)));
+
+                predicate = predicate is null
+                    ? notDeleted
+                    : Expression.AndAlso(predicate, notDeleted);
+            }
+
+            entityType.SetQueryFilter(Expression.Lambda(predicate!, entity));
+        }
+    }
+
+    /// <summary>
+    /// Renames tables, columns, keys, and indexes to snake_case.
+    /// </summary>
+    /// <param name="modelBuilder">The model being built.</param>
+    /// <remarks>
+    /// PostgreSQL folds unquoted identifiers to lower case, so a
+    /// <c>TaxRegistrationNumber</c> column has to be double-quoted in every piece
+    /// of hand-written SQL or it will not be found. The report builder, the
+    /// row-level-security policies, and day-to-day debugging all involve raw SQL
+    /// here, so the convention pays for itself.
+    /// </remarks>
+    private static void ApplySnakeCaseNames(ModelBuilder modelBuilder)
+    {
+        foreach (IMutableEntityType entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (entityType.GetTableName() is { } tableName)
+            {
+                entityType.SetTableName(ToSnakeCase(tableName));
+            }
+
+            foreach (IMutableProperty property in entityType.GetProperties())
+            {
+                property.SetColumnName(ToSnakeCase(property.GetColumnName()));
+            }
+
+            foreach (IMutableKey key in entityType.GetKeys())
+            {
+                key.SetName(ToSnakeCase(key.GetName()!));
+            }
+
+            foreach (IMutableForeignKey foreignKey in entityType.GetForeignKeys())
+            {
+                foreignKey.SetConstraintName(ToSnakeCase(foreignKey.GetConstraintName()!));
+            }
+
+            foreach (IMutableIndex index in entityType.GetIndexes())
+            {
+                index.SetDatabaseName(ToSnakeCase(index.GetDatabaseName()!));
+            }
+        }
+    }
+
+    /// <summary>Converts a PascalCase identifier to snake_case.</summary>
+    /// <param name="name">The identifier.</param>
+    /// <returns>The snake_case form.</returns>
+    private static string ToSnakeCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
+        System.Text.StringBuilder builder = new(name.Length + 8);
+
+        for (int i = 0; i < name.Length; i++)
+        {
+            char current = name[i];
+
+            if (char.IsUpper(current))
+            {
+                // Insert a separator before an upper-case letter, but not at the
+                // start and not in the middle of an existing run - so "TenantId"
+                // becomes "tenant_id" while "GSTIN" stays "gstin" rather than
+                // "g_s_t_i_n".
+                bool previousIsLower = i > 0 && char.IsLower(name[i - 1]);
+                bool startsNewWord = i > 0
+                    && i + 1 < name.Length
+                    && char.IsUpper(name[i - 1])
+                    && char.IsLower(name[i + 1]);
+
+                if (previousIsLower || startsNewWord)
+                {
+                    builder.Append('_');
+                }
+
+                builder.Append(char.ToLowerInvariant(current));
+            }
+            else
+            {
+                builder.Append(current);
+            }
+        }
+
+        return builder.ToString();
+    }
+}

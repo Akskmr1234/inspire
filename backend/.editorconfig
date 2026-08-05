@@ -69,12 +69,29 @@ dotnet_diagnostic.S107.severity = suggestion    # too many parameters
 dotnet_diagnostic.S1192.severity = suggestion   # duplicated string literal
 dotnet_diagnostic.S4457.severity = none         # split null-check from async body
 
-# Files that deliberately group several small strongly-typed identifier structs.
-# SA1649 wants one type per file named after it; for a handful of two-line record
-# structs that would mean a dozen near-empty files and make the set harder to
-# read, not easier. The grouping is the point, so the rule is off for these
+# EF Core scaffolds migrations with its own formatting - block namespaces, its own
+# ordering, no XML documentation. They are generated artefacts that happen to be
+# checked in, and reformatting one by hand guarantees the next scaffold reverts
+# it. Marking them as generated code exempts them from style analysis while
+# leaving real compiler diagnostics in force.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1200.severity = none
+dotnet_diagnostic.SA1516.severity = none
+dotnet_diagnostic.SA1649.severity = none
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.S1192.severity = none
+dotnet_diagnostic.S4144.severity = none
+
+# Files that deliberately group a family of small related types - strongly-typed
+# identifier structs, and the one-line EF Core value converters that map them.
+# SA1649 wants one type per file named after it; for a handful of two-line
+# declarations that would mean a dozen near-empty files and make the set harder
+# to read, not easier. The grouping is the point, so the rule is off for these
 # files only.
-[**/{*Ids,*Identifiers}.cs]
+[**/{*Ids,*Identifiers,*Converters}.cs]
 dotnet_diagnostic.SA1649.severity = none
 
 # Domain entities expose private setters and a private parameterless constructor
@@ -108,3 +125,14 @@ dotnet_diagnostic.S125.severity = none
 dotnet_diagnostic.SA1512.severity = none
 dotnet_diagnostic.SA1515.severity = none
 dotnet_diagnostic.SA1025.severity = none
+
+# xUnit1051 asks that every awaited call be threaded with
+# TestContext.Current.CancellationToken. These tests are short and own their
+# container fixture, so the token would add a parameter to well over a hundred
+# call sites without changing any observable behaviour. Revisit if a test ever
+# needs to be cancellable mid-run.
+dotnet_diagnostic.xUnit1051.severity = none
+
+# CA1711 objects to a type name ending in "Collection". xUnit's own convention
+# for a fixture collection is exactly that, and renaming would obscure its role.
+dotnet_diagnostic.CA1711.severity = none

@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using Asp.Versioning;
+using ERP.Api.Middleware;
+using ERP.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using Serilog;
@@ -70,6 +72,8 @@ public static class Program
     private static void ConfigureServices(WebApplicationBuilder builder)
     {
         IServiceCollection services = builder.Services;
+
+        services.AddInfrastructure(builder.Configuration);
 
         services.AddControllers();
         services.AddEndpointsApiExplorer();
@@ -191,6 +195,12 @@ public static class Program
         app.UseHttpsRedirection();
         app.UseCors("erp-web");
         app.UseAuthentication();
+
+        // Between authentication and authorisation, and before any endpoint can
+        // reach the database: there must be no window in which a query could run
+        // without a tenant established.
+        app.UseTenantResolution();
+
         app.UseAuthorization();
 
         app.MapControllers();
