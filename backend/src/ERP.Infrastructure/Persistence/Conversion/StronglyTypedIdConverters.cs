@@ -1,3 +1,4 @@
+using ERP.Domain.Identity;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -60,6 +61,36 @@ public sealed class FinancialYearIdConverter : ValueConverter<FinancialYearId, G
     /// <summary>Initialises a new instance of the <see cref="FinancialYearIdConverter"/> class.</summary>
     public FinancialYearIdConverter()
         : base(id => id.Value, value => FinancialYearId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RoleId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RoleIdConverter : ValueConverter<RoleId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RoleIdConverter"/> class.</summary>
+    public RoleIdConverter()
+        : base(id => id.Value, value => RoleId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="PermissionId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PermissionIdConverter : ValueConverter<PermissionId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PermissionIdConverter"/> class.</summary>
+    public PermissionIdConverter()
+        : base(id => id.Value, value => PermissionId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RefreshTokenId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RefreshTokenIdConverter : ValueConverter<RefreshTokenId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RefreshTokenIdConverter"/> class.</summary>
+    public RefreshTokenIdConverter()
+        : base(id => id.Value, value => RefreshTokenId.From(value))
     {
     }
 }

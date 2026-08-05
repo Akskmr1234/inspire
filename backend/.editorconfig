@@ -64,9 +64,21 @@ dotnet_diagnostic.SA1117.severity = suggestion   # parameter line placement
 
 # --- Rules we genuinely want enforced ----------------------------------------
 dotnet_diagnostic.SA1503.severity = warning   # never omit braces
-dotnet_diagnostic.SA1649.severity = warning   # file name must match type name
 dotnet_diagnostic.SA1121.severity = warning   # use the built-in type alias
 dotnet_diagnostic.SA1507.severity = warning   # no multiple consecutive blank lines
+
+# SA1649 requires the file name to match the *first* type in it. This codebase
+# deliberately groups small, cohesive families of types in one file - the
+# strongly-typed identifiers for a module, the EF value converters that map them,
+# the entity configurations for an area, a requirement with its attribute,
+# provider and handler, a request/response pair with the interface that uses
+# them. Splitting each into its own file would produce dozens of five-line files
+# and make the set harder to follow, not easier.
+#
+# Demoted to a suggestion rather than switched off: it still flags the genuine
+# case it is good at, a file whose leading type was renamed and left the name
+# behind, without blocking the grouping.
+dotnet_diagnostic.SA1649.severity = suggestion
 
 # --- Sonar: tuned for a domain-rich codebase ---------------------------------
 # S107 fires on constructors of aggregates that legitimately take many values.
@@ -91,14 +103,6 @@ dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.S1192.severity = none
 dotnet_diagnostic.S4144.severity = none
 
-# Files that deliberately group a family of small related types - strongly-typed
-# identifier structs, and the one-line EF Core value converters that map them.
-# SA1649 wants one type per file named after it; for a handful of two-line
-# declarations that would mean a dozen near-empty files and make the set harder
-# to read, not easier. The grouping is the point, so the rule is off for these
-# files only.
-[**/{*Ids,*Identifiers,*Converters}.cs]
-dotnet_diagnostic.SA1649.severity = none
 
 # Domain entities expose private setters and a private parameterless constructor
 # purely so EF Core can materialise them. The analyzer cannot see that caller -
@@ -112,7 +116,7 @@ dotnet_diagnostic.S1144.severity = none
 # Test method names read as sentences (Given_When_Then), and test classes
 # legitimately group many small fixtures per file.
 dotnet_diagnostic.SA1402.severity = none
-dotnet_diagnostic.SA1649.severity = none
+
 dotnet_diagnostic.CA1707.severity = none   # underscores in member names
 dotnet_diagnostic.S2699.severity = none    # Sonar cannot see Shouldly assertions
 dotnet_diagnostic.S101.severity = none     # type naming conventions in fixtures

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Domain.Identity;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -59,6 +60,18 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the financial years.</summary>
     public DbSet<FinancialYear> FinancialYears => Set<FinancialYear>();
 
+    /// <summary>Gets the permission catalogue.</summary>
+    public DbSet<Permission> Permissions => Set<Permission>();
+
+    /// <summary>Gets the roles.</summary>
+    public DbSet<Role> Roles => Set<Role>();
+
+    /// <summary>Gets the users.</summary>
+    public DbSet<User> Users => Set<User>();
+
+    /// <summary>Gets the issued refresh tokens.</summary>
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     /// <summary>
     /// Gets the tenant that global query filters compare against.
     /// </summary>
@@ -114,6 +127,10 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<UserId>().HaveConversion<UserIdConverter>();
         configurationBuilder.Properties<FinancialYearId>()
             .HaveConversion<FinancialYearIdConverter>();
+        configurationBuilder.Properties<RoleId>().HaveConversion<RoleIdConverter>();
+        configurationBuilder.Properties<PermissionId>().HaveConversion<PermissionIdConverter>();
+        configurationBuilder.Properties<RefreshTokenId>()
+            .HaveConversion<RefreshTokenIdConverter>();
 
         configurationBuilder.Properties<CurrencyCode>()
             .HaveConversion<CurrencyCodeConverter>()
