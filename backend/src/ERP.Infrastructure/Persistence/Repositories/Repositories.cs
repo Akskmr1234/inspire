@@ -1,5 +1,6 @@
 using ERP.Application;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Platform.Grids;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
@@ -376,4 +377,29 @@ public sealed class MenuItemRepository : IMenuItemRepository
 
     /// <inheritdoc />
     public void Remove(MenuItem item) => _context.MenuItems.Remove(item);
+}
+
+/// <summary>Reads and writes saved grid layouts.</summary>
+public sealed class GridLayoutRepository : IGridLayoutRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="GridLayoutRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public GridLayoutRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<GridLayout?> FindAsync(
+        UserId userId,
+        string gridKey,
+        CancellationToken cancellationToken = default) =>
+        _context.GridLayouts.FirstOrDefaultAsync(
+            layout => layout.UserId == userId && layout.GridKey == gridKey,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(GridLayout layout) => _context.GridLayouts.Add(layout);
+
+    /// <inheritdoc />
+    public void Remove(GridLayout layout) => _context.GridLayouts.Remove(layout);
 }

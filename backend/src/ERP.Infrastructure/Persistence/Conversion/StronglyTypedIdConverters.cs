@@ -153,3 +153,13 @@ public sealed class BillAllocationIdConverter : ValueConverter<BillAllocationId,
     {
     }
 }
+
+/// <summary>Converts <see cref="GridLayoutId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class GridLayoutIdConverter : ValueConverter<GridLayoutId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="GridLayoutIdConverter"/> class.</summary>
+    public GridLayoutIdConverter()
+        : base(id => id.Value, value => GridLayoutId.From(value))
+    {
+    }
+}

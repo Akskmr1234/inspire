@@ -45,6 +45,22 @@ public static class MenuCatalogue
     public static IReadOnlyList<MenuBlueprint> Default { get; } =
     [
         new(
+            "masters",
+            "Masters",
+            "البيانات الأساسية",
+            "accounting",
+            Children:
+            [
+                new(
+                    "masters.ledgers",
+                    "Chart of accounts",
+                    "دليل الحسابات",
+                    "accounting",
+                    "/accounting/ledgers",
+                    "accounting:ledger:view"),
+            ]),
+
+        new(
             "transactions",
             "Transactions",
             "الحركات",

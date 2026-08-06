@@ -94,6 +94,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the navigation menu, one tree per firm.</summary>
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
 
+    /// <summary>Gets the saved data-grid layouts, one per user per grid.</summary>
+    public DbSet<GridLayout> GridLayouts => Set<GridLayout>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -190,6 +193,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<BillAllocationIdConverter>();
         configurationBuilder.Properties<ChequeId>().HaveConversion<ChequeIdConverter>();
         configurationBuilder.Properties<MenuItemId>().HaveConversion<MenuItemIdConverter>();
+        configurationBuilder.Properties<GridLayoutId>()
+            .HaveConversion<GridLayoutIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
