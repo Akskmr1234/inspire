@@ -216,6 +216,26 @@ public sealed class BrandIdConverter : ValueConverter<BrandId, Guid>
 }
 
 /// <summary>Converts <see cref="WarehouseId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class ProductIdConverter : ValueConverter<ProductId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="ProductIdConverter"/> class.</summary>
+    public ProductIdConverter()
+        : base(id => id.Value, value => ProductId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="ProductBarcodeId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class ProductBarcodeIdConverter : ValueConverter<ProductBarcodeId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="ProductBarcodeIdConverter"/> class.</summary>
+    public ProductBarcodeIdConverter()
+        : base(id => id.Value, value => ProductBarcodeId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="WarehouseId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class WarehouseIdConverter : ValueConverter<WarehouseId, Guid>
 {
     /// <summary>Initialises a new instance of the <see cref="WarehouseIdConverter"/> class.</summary>

@@ -45,6 +45,39 @@ public readonly record struct BrandId(Guid Value) : IStronglyTypedId<BrandId>
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies a product.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct ProductId(Guid Value) : IStronglyTypedId<ProductId>
+{
+    /// <inheritdoc />
+    public static ProductId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static ProductId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
+/// <summary>Identifies one barcode of a product.</summary>
+/// <param name="Value">The underlying value.</param>
+/// <remarks>
+/// A barcode needs an identity of its own because a product may carry several, each
+/// with its own rates - the specification's multiple-rate barcode grid - and the
+/// barcode string itself is the one thing about it that may have to be corrected.
+/// </remarks>
+public readonly record struct ProductBarcodeId(Guid Value) : IStronglyTypedId<ProductBarcodeId>
+{
+    /// <inheritdoc />
+    public static ProductBarcodeId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static ProductBarcodeId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Identifies a warehouse, called a godown in the reference application.</summary>
 /// <param name="Value">The underlying value.</param>
 public readonly record struct WarehouseId(Guid Value) : IStronglyTypedId<WarehouseId>

@@ -113,6 +113,19 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the places stock is held.</summary>
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
+    /// <summary>Gets the product master.</summary>
+    public DbSet<Product> Products => Set<Product>();
+
+    /// <summary>
+    /// Gets the barcodes products are found by.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for the till, which looks a product up by scanned barcode and has no
+    /// interest in loading the product to do it. Writes still go through
+    /// <see cref="Product"/>, which owns the no-duplicates rule.
+    /// </remarks>
+    public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -221,6 +234,9 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<BrandId>().HaveConversion<BrandIdConverter>();
         configurationBuilder.Properties<WarehouseId>()
             .HaveConversion<WarehouseIdConverter>();
+        configurationBuilder.Properties<ProductId>().HaveConversion<ProductIdConverter>();
+        configurationBuilder.Properties<ProductBarcodeId>()
+            .HaveConversion<ProductBarcodeIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
