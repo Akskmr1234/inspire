@@ -41,11 +41,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — cash flow statement (direct method) | **Done** — 15 application + 11 integration tests |
 | Deployment — container images for API and web, platform configuration | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 | Accounting — automatic ledger reversal for a bounced cheque | Not started — see below |
-| Dynamic menus, report builder, print designer, workflow engine | Not started |
+| Dynamic menus — DB-driven tree, permission-filtered, seeded per firm | **Done** — 15 domain + 9 application + 5 API tests |
+| Report builder, print designer, workflow engine | Not started |
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 590 passing, 0 failing (285 domain + 173 application + 49 API + 20 identity + 63 integration).
+**Test suite:** 619 passing, 0 failing (300 domain + 182 application + 54 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

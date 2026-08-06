@@ -1,5 +1,6 @@
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -129,6 +130,16 @@ public sealed class ChequeIdConverter : ValueConverter<ChequeId, Guid>
     /// <summary>Initialises a new instance of the <see cref="ChequeIdConverter"/> class.</summary>
     public ChequeIdConverter()
         : base(id => id.Value, value => ChequeId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="MenuItemId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class MenuItemIdConverter : ValueConverter<MenuItemId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="MenuItemIdConverter"/> class.</summary>
+    public MenuItemIdConverter()
+        : base(id => id.Value, value => MenuItemId.From(value))
     {
     }
 }

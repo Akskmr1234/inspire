@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Platform;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
@@ -141,6 +142,7 @@ public sealed partial class DatabaseSeeder
         Firm firm = await EnsureFirmAsync(tenant.Id, cancellationToken);
         await EnsureFinancialYearAsync(tenant.Id, firm, cancellationToken);
         int ledgersAdded = await EnsureChartOfAccountsAsync(firm, cancellationToken);
+        int menuEntriesAdded = await EnsureMenuAsync(firm, cancellationToken);
 
         Result<bool> administrator = await EnsureAdministratorAsync(
             tenant, firm, cancellationToken);
@@ -156,6 +158,7 @@ public sealed partial class DatabaseSeeder
             permissionsAdded,
             rolesAdded,
             ledgersAdded,
+            menuEntriesAdded,
             administrator.Value);
 
         LogSeedComplete(
@@ -487,6 +490,98 @@ public sealed partial class DatabaseSeeder
         return added;
     }
 
+    /// <summary>Creates any menu entries the firm does not already have.</summary>
+    /// <param name="firm">The firm the menu belongs to.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many entries were added.</returns>
+    /// <remarks>
+    /// Keyed on the catalogue code, so a firm whose administrator has renamed,
+    /// reordered, or hidden an entry keeps their version: this adds what is missing and
+    /// touches nothing that is present. That matters more here than elsewhere in the
+    /// seeder, because the menu is the one seeded structure users are expected to
+    /// rearrange, and a reseed that reset it would undo their work on every deploy.
+    /// </remarks>
+    private async Task<int> EnsureMenuAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        // The entries themselves rather than just their codes: a heading that already
+        // exists is the parent the new entries beneath it must attach to, so the
+        // recursion needs the object, and fetching it per level would be a query per
+        // heading for no benefit on a few dozen rows.
+        Dictionary<string, MenuItem> existing = await _context.MenuItems
+            .Where(item => item.FirmId == firm.Id)
+            .ToDictionaryAsync(item => item.Code, StringComparer.Ordinal, cancellationToken);
+
+        int added = AddMenuLevel(MenuCatalogue.Default, parent: null, firm, existing);
+
+        if (added > 0)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return added;
+    }
+
+    /// <summary>Adds one level of the catalogue, and everything beneath it.</summary>
+    /// <param name="blueprints">The entries at this level.</param>
+    /// <param name="parent">The entry they sit beneath, or null at the top.</param>
+    /// <param name="firm">The firm.</param>
+    /// <param name="existing">The entries the firm already has, by code.</param>
+    /// <returns>How many entries were added at this level and below.</returns>
+    /// <remarks>
+    /// Sort order is the catalogue's own ordering multiplied out, leaving gaps between
+    /// entries. An administrator inserting something between two of them then has room
+    /// to do it without renumbering the level.
+    /// </remarks>
+    private int AddMenuLevel(
+        IReadOnlyList<MenuBlueprint> blueprints,
+        MenuItem? parent,
+        Firm firm,
+        Dictionary<string, MenuItem> existing)
+    {
+        int added = 0;
+
+        for (int index = 0; index < blueprints.Count; index++)
+        {
+            MenuBlueprint blueprint = blueprints[index];
+            int sortOrder = (index + 1) * 10;
+
+            // A heading that already exists is not re-created, but its children still
+            // have to be checked - a release adding one screen beneath an existing
+            // heading is the ordinary case.
+            if (!existing.TryGetValue(blueprint.Code, out MenuItem? item))
+            {
+                Result<MenuItem> created = parent is null
+                    ? MenuItem.CreateRoot(
+                        firm.TenantId, firm.Id, blueprint.Code, blueprint.Label,
+                        blueprint.Module, sortOrder, isSystem: true)
+                    : MenuItem.CreateChild(
+                        parent, blueprint.Code, blueprint.Label, sortOrder,
+                        blueprint.Module, isSystem: true);
+
+                if (created.IsFailure)
+                {
+                    continue;
+                }
+
+                item = created.Value;
+                item.SetArabicLabel(blueprint.LabelArabic);
+                item.RequirePermission(blueprint.RequiredPermission);
+                item.SetRoute(blueprint.Route);
+
+                _context.MenuItems.Add(item);
+                existing[blueprint.Code] = item;
+                added++;
+            }
+
+            if (blueprint.Children is { Count: > 0 } children)
+            {
+                added += AddMenuLevel(children, item, firm, existing);
+            }
+        }
+
+        return added;
+    }
+
     /// <summary>Creates the administrator account.</summary>
     /// <returns>Whether an account was created.</returns>
     private async Task<Result<bool>> EnsureAdministratorAsync(
@@ -594,6 +689,7 @@ public sealed partial class DatabaseSeeder
 /// <param name="PermissionsAdded">How many permissions were new.</param>
 /// <param name="RolesAdded">How many roles were new.</param>
 /// <param name="LedgersAdded">How many chart-of-accounts ledgers were new.</param>
+/// <param name="MenuEntriesAdded">How many navigation menu entries were new.</param>
 /// <param name="AdministratorCreated">Whether an administrator account was created.</param>
 public sealed record SeedSummary(
     string TenantCode,
@@ -601,4 +697,5 @@ public sealed record SeedSummary(
     int PermissionsAdded,
     int RolesAdded,
     int LedgersAdded,
+    int MenuEntriesAdded,
     bool AdministratorCreated);

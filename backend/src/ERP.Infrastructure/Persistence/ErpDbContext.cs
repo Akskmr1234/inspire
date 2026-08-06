@@ -4,6 +4,7 @@ using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Numbering;
+using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -89,6 +90,9 @@ public class ErpDbContext : DbContext
 
     /// <summary>Gets the cheque register.</summary>
     public DbSet<Cheque> Cheques => Set<Cheque>();
+
+    /// <summary>Gets the navigation menu, one tree per firm.</summary>
+    public DbSet<MenuItem> MenuItems => Set<MenuItem>();
 
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -185,6 +189,7 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<BillAllocationId>()
             .HaveConversion<BillAllocationIdConverter>();
         configurationBuilder.Properties<ChequeId>().HaveConversion<ChequeIdConverter>();
+        configurationBuilder.Properties<MenuItemId>().HaveConversion<MenuItemIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

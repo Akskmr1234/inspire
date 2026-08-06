@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import i18next from '@/i18n';
+import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
+import type { ApiError } from '@/lib/api';
 import { useSession, type Language, type Theme } from '@/stores/session';
 
 /**
@@ -25,6 +28,15 @@ export function AppShell(): React.JSX.Element {
     setLanguage,
     signOut,
   } = useSession();
+
+  // The menu is data, not code: it is fetched once a session begins and rendered as
+  // it comes back. Kept fresh for a working session rather than refetched on every
+  // navigation, because it changes when an administrator edits it and not otherwise.
+  const menu = useQuery<Menu, ApiError>({
+    queryKey: ['menu'],
+    queryFn: fetchMenu,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const changeLanguage = async (next: Language): Promise<void> => {
     setLanguage(next);
@@ -50,77 +62,24 @@ export function AppShell(): React.JSX.Element {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          <SidebarSection label={t('nav.accounting')} collapsed={collapsed} />
-          <SidebarLink
-            to="/accounting/vouchers/new"
-            label={t('nav.voucherEntry')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/trial-balance"
-            label={t('nav.trialBalance')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/account-group-summary"
-            label={t('nav.accountGroupSummary')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/profit-and-loss"
-            label={t('nav.profitAndLoss')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/balance-sheet"
-            label={t('nav.balanceSheet')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/day-book"
-            label={t('nav.dayBook')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/voucher-report"
-            label={t('nav.voucherReport')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/transaction-summary"
-            label={t('nav.transactionSummary')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/cash-book"
-            label={t('nav.cashBook')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/bank-book"
-            label={t('nav.bankBook')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/cash-flow"
-            label={t('nav.cashFlow')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/post-dated-cheques"
-            label={t('nav.postDatedCheques')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/cheque-calendar"
-            label={t('nav.chequeCalendar')}
-            collapsed={collapsed}
-          />
-          <SidebarLink
-            to="/accounting/cheque-register"
-            label={t('nav.chequeRegister')}
-            collapsed={collapsed}
-          />
+          {menu.isPending && !collapsed && (
+            <p className="px-3 py-2 text-xs text-slate-400">{t('common.loading')}</p>
+          )}
+
+          {menu.isError && !collapsed && (
+            <p className="px-3 py-2 text-xs text-red-600 dark:text-red-400">
+              {t('nav.menuUnavailable')}
+            </p>
+          )}
+
+          {menu.data?.items.map((entry) => (
+            <SidebarEntry
+              key={entry.id}
+              entry={entry}
+              language={language}
+              collapsed={collapsed}
+            />
+          ))}
         </nav>
 
         <button
@@ -182,44 +141,84 @@ export function AppShell(): React.JSX.Element {
   );
 }
 
-function SidebarSection({
-  label,
+/**
+ * One menu entry and everything beneath it.
+ *
+ * Recursive because the menu is a tree of arbitrary depth - the specification allows
+ * an administrator to create their own groups, so two levels is a guess rather than a
+ * limit. An entry with a route is a link; one without is a heading that labels the
+ * entries under it.
+ *
+ * The server has already removed anything the user cannot reach, so there is no
+ * filtering here. Nothing arrives that should not be shown.
+ */
+function SidebarEntry({
+  entry,
+  language,
   collapsed,
+  depth = 0,
 }: {
-  readonly label: string;
+  readonly entry: MenuEntry;
+  readonly language: string;
   readonly collapsed: boolean;
-}): React.JSX.Element | null {
-  return collapsed ? null : (
-    <p className="px-3 pt-3 pb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-      {label}
-    </p>
-  );
-}
-
-function SidebarLink({
-  to,
-  label,
-  collapsed,
-}: {
-  readonly to: string;
-  readonly label: string;
-  readonly collapsed: boolean;
+  readonly depth?: number;
 }): React.JSX.Element {
+  const label = labelFor(entry, language);
+
+  // Indented by depth so a nested group reads as nested, on the logical start edge so
+  // Arabic indents from the right without a second rule. An empty object rather than
+  // undefined: the project compiles with exactOptionalPropertyTypes, which treats
+  // "explicitly undefined" and "absent" as different things.
+  const indent: React.CSSProperties =
+    !collapsed && depth > 1 ? { paddingInlineStart: `${depth * 0.75}rem` } : {};
+
+  const children = entry.children.map((child) => (
+    <SidebarEntry
+      key={child.id}
+      entry={child}
+      language={language}
+      collapsed={collapsed}
+      depth={depth + 1}
+    />
+  ));
+
+  if (!entry.route) {
+    return (
+      <div className="space-y-1">
+        {/*
+          A heading is hidden rather than abbreviated when the sidebar is collapsed:
+          one letter of "Accounts reports" tells a reader nothing, while the icons of
+          the links beneath it still do.
+        */}
+        {!collapsed && (
+          <p className="px-3 pt-3 pb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+            {label}
+          </p>
+        )}
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <NavLink
-      to={to}
-      title={collapsed ? label : undefined}
-      className={({ isActive }) =>
-        clsx(
-          'block truncate rounded-lg px-3 py-2 text-sm transition',
-          isActive
-            ? 'bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-100'
-            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-        )
-      }
-    >
-      {collapsed ? label.slice(0, 1) : label}
-    </NavLink>
+    <div className="space-y-1">
+      <NavLink
+        to={entry.route}
+        title={collapsed ? label : undefined}
+        style={indent}
+        className={({ isActive }) =>
+          clsx(
+            'block truncate rounded-lg px-3 py-2 text-sm transition',
+            isActive
+              ? 'bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-100'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+          )
+        }
+      >
+        {collapsed ? label.slice(0, 1) : label}
+      </NavLink>
+      {children}
+    </div>
   );
 }
 

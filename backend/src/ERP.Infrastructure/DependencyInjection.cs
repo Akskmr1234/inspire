@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
+using ERP.Application.Platform.Menus;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
 using ERP.Infrastructure.Persistence.Reporting;
@@ -76,6 +77,7 @@ public static class DependencyInjection
         services.AddScoped<IVoucherReportReader, VoucherReportReader>();
         services.AddScoped<ITransactionSummaryReader, TransactionSummaryReader>();
         services.AddScoped<ICashFlowReader, CashFlowReader>();
+        services.AddScoped<IMenuReader, MenuReader>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 
