@@ -177,6 +177,76 @@ public sealed class AccountingReportsController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Produces the voucher report: a register of vouchers by document.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="type">Restricts the register to one kind of voucher. Omit for all.</param>
+    /// <param name="status">
+    /// Restricts to one status. Omit for all - showing drafts and cancelled vouchers,
+    /// which the posted-only day book cannot, is the register's reason to exist beside
+    /// it.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per voucher, most recent first, with its value.</returns>
+    /// <remarks>
+    /// Read document by document rather than line by line: what an operator opens to
+    /// find a particular voucher, across every status rather than the posted ones the
+    /// day book is limited to. Amounts are shown in each voucher's own currency and
+    /// totalled in the base currency.
+    /// </remarks>
+    /// <response code="200">The register, with a count by status and a base-currency total.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("voucher-report")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(VoucherReportResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetVoucherReportAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] VoucherType? type,
+        [FromQuery] VoucherStatus? status,
+        CancellationToken cancellationToken)
+    {
+        Result<VoucherReportResponse> result = await _sender.Send(
+            new GetVoucherReportQuery(from, to, type, status), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Produces the transaction summary: activity in totals, by type and month.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="status">Restricts the summary to one status. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Totals per voucher type and per calendar month.</returns>
+    /// <remarks>
+    /// No individual voucher appears: just how many of each kind were raised and what
+    /// they came to. The control total an auditor ticks against, and the shape of a
+    /// period's activity before deciding which report to open next. Figures are stated
+    /// in the base currency, converted at the rate each voucher was posted with.
+    /// </remarks>
+    /// <response code="200">Totals by type and by month, with a count by status.</response>
+    /// <response code="400">The date range is invalid, or spans more than three years.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("transaction-summary")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(TransactionSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetTransactionSummaryAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] VoucherStatus? status,
+        CancellationToken cancellationToken)
+    {
+        Result<TransactionSummaryResponse> result = await _sender.Send(
+            new GetTransactionSummaryQuery(from, to, status), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Produces the cash book: movement on every cash account.</summary>
     /// <param name="from">The first date included, inclusive.</param>
     /// <param name="to">The last date included, inclusive.</param>
@@ -223,6 +293,44 @@ public sealed class AccountingReportsController : ApiControllerBase
         [FromQuery] Guid? ledgerId,
         CancellationToken cancellationToken) =>
         SendCashBankBookAsync(from, to, LedgerKind.Bank, ledgerId, cancellationToken);
+
+    /// <summary>Produces the account group report: the trial balance rolled up by group.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="includeZeroBalances">Whether to keep groups and ledgers with no activity.</param>
+    /// <param name="includeLedgers">
+    /// Whether each group carries the ledgers behind its subtotal, for drill-down.
+    /// Defaults to <c>true</c>; pass <c>false</c> for group totals alone.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per group, with opening, period, and closing columns.</returns>
+    /// <remarks>
+    /// The same postings as the trial balance, summed a level up, so the two reconcile.
+    /// The response carries <c>isBalanced</c>; if it is ever false the books are broken
+    /// and the caller should say so rather than present the figures.
+    /// </remarks>
+    /// <response code="200">The group report, with per-group subtotals and column totals.</response>
+    /// <response code="400">The date range is invalid.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("account-group-summary")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(AccountGroupSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAccountGroupSummaryAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] bool includeZeroBalances,
+        [FromQuery] bool? includeLedgers,
+        CancellationToken cancellationToken)
+    {
+        Result<AccountGroupSummaryResponse> result = await _sender.Send(
+            new GetAccountGroupSummaryQuery(
+                from, to, includeZeroBalances, includeLedgers ?? true),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 
     /// <summary>Produces the debtors report: what customers still owe, bill by bill.</summary>
     /// <param name="asAt">The date the position is stated as at.</param>
@@ -328,6 +436,107 @@ public sealed class AccountingReportsController : ApiControllerBase
         [FromQuery] Guid? ledgerId,
         CancellationToken cancellationToken) =>
         SendAgingAsync(BillType.Payable, asAt, bucketDays, ledgerId, cancellationToken);
+
+    /// <summary>Lists the post-dated cheques still in hand: the PDC report.</summary>
+    /// <param name="asAt">The date the position is stated as at.</param>
+    /// <param name="direction">
+    /// <c>Received</c> for cheques the firm holds, <c>Issued</c> for those it has
+    /// written and not yet seen presented. Omit for both.
+    /// </param>
+    /// <param name="ledgerId">Restricts the report to one party. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The pending cheques dated after the reporting date, soonest due first.</returns>
+    /// <remarks>
+    /// Only cheques still in hand appear: one already with the bank is no longer a
+    /// promise but an outcome waiting to be reported, and belongs on the register. A
+    /// cheque counts as post-dated only while its own date is still in the future
+    /// relative to <c>asAt</c>.
+    /// </remarks>
+    /// <response code="200">The pending post-dated cheques, with receivable and payable totals.</response>
+    /// <response code="400">The date is missing, or the direction is not recognised.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("post-dated-cheques")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(PostDatedChequesResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetPostDatedChequesAsync(
+        [FromQuery] DateOnly asAt,
+        [FromQuery] ChequeDirection? direction,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken)
+    {
+        Result<PostDatedChequesResponse> result = await _sender.Send(
+            new GetPostDatedChequesQuery(asAt, direction, ledgerId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Groups pending cheques by the day they fall due: the PDC calendar.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="direction">Received, issued, or both.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The days on which something falls due, in date order, with a net figure.</returns>
+    /// <remarks>
+    /// The same cheques as the PDC report, arranged by date rather than by party,
+    /// because the question is different: not who owes what but what lands this week
+    /// and whether the account can carry it. Only days with cheques on them appear.
+    /// </remarks>
+    /// <response code="200">The calendar, with receivable and payable totals over the period.</response>
+    /// <response code="400">The range is invalid, or spans more than two years.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("cheque-calendar")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(ChequeCalendarResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetChequeCalendarAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] ChequeDirection? direction,
+        CancellationToken cancellationToken)
+    {
+        Result<ChequeCalendarResponse> result = await _sender.Send(
+            new GetChequeCalendarQuery(from, to, direction), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Lists every cheque taken in or written out over a period: the register.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="direction">Received, issued, or both.</param>
+    /// <param name="status">Restricts to one lifecycle status. Omit for all.</param>
+    /// <param name="ledgerId">Restricts to one party. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The cheques of the period, most recently taken in first.</returns>
+    /// <remarks>
+    /// Read by when a cheque changed hands, not by when it falls due, and it shows
+    /// closed cheques as well as live ones - a register that dropped a cheque the
+    /// moment it cleared could not answer the question it is usually opened for.
+    /// </remarks>
+    /// <response code="200">The register, with totals taken in and written out, and a count by status.</response>
+    /// <response code="400">The range is invalid, or spans more than two years.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("cheque-register")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(ChequeRegisterResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetChequeRegisterAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] ChequeDirection? direction,
+        [FromQuery] ChequeStatus? status,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken)
+    {
+        Result<ChequeRegisterResponse> result = await _sender.Send(
+            new GetChequeRegisterQuery(from, to, direction, status, ledgerId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 
     /// <summary>Dispatches the shared outstanding query.</summary>
     /// <param name="type">Receivable for debtors, payable for creditors.</param>

@@ -26,11 +26,17 @@ public sealed class AuthorizationTests
     [
         "/api/v1/auth/permissions",
         "/api/v1/accounting/reports/trial-balance?from=2026-01-01&to=2026-12-31",
+        "/api/v1/accounting/reports/account-group-summary?from=2026-01-01&to=2026-12-31",
         "/api/v1/accounting/reports/profit-and-loss?from=2026-01-01&to=2026-12-31",
         "/api/v1/accounting/reports/balance-sheet?asAt=2026-12-31",
         "/api/v1/accounting/reports/day-book?from=2026-01-01&to=2026-01-31",
+        "/api/v1/accounting/reports/voucher-report?from=2026-01-01&to=2026-01-31",
+        "/api/v1/accounting/reports/transaction-summary?from=2026-01-01&to=2026-12-31",
         "/api/v1/accounting/reports/cash-book?from=2026-01-01&to=2026-01-31",
         "/api/v1/accounting/reports/bank-book?from=2026-01-01&to=2026-01-31",
+        "/api/v1/accounting/reports/post-dated-cheques?asAt=2026-12-31",
+        "/api/v1/accounting/reports/cheque-calendar?from=2026-01-01&to=2026-12-31",
+        "/api/v1/accounting/reports/cheque-register?from=2026-01-01&to=2026-12-31",
         "/api/v1/accounting/ledgers",
     ];
 
