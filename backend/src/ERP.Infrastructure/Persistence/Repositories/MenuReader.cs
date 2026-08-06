@@ -44,3 +44,40 @@ public sealed class MenuReader : IMenuReader
                 item.RequiredPermission))
             .ToListAsync(cancellationToken);
 }
+
+/// <summary>Reads every menu row of a firm, hidden entries included.</summary>
+/// <remarks>
+/// Separate from <see cref="MenuReader"/> because it answers a different question.
+/// That one returns what a user may navigate to and leaves out anything switched off;
+/// this returns what exists, because an administrator cannot switch something back on
+/// that the screen never showed them.
+/// </remarks>
+public sealed class MenuAdministrationReader : IMenuAdministrationReader
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="MenuAdministrationReader"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public MenuAdministrationReader(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MenuAdministrationRow>> ReadAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        await _context.MenuItems
+            .Where(item => item.FirmId == firmId)
+            .Select(item => new MenuAdministrationRow(
+                item.Id.Value,
+                item.ParentId == null ? null : item.ParentId.Value.Value,
+                item.Code,
+                item.Label,
+                item.LabelArabic,
+                item.Icon,
+                item.Route,
+                item.Module,
+                item.RequiredPermission,
+                item.SortOrder,
+                item.IsEnabled,
+                item.IsSystem))
+            .ToListAsync(cancellationToken);
+}

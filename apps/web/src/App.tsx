@@ -11,6 +11,7 @@ import { VoucherReportPage } from '@/pages/VoucherReportPage';
 import { TransactionSummaryPage } from '@/pages/TransactionSummaryPage';
 import { CashBankBookPage } from '@/pages/CashBankBookPage';
 import { CashFlowPage } from '@/pages/CashFlowPage';
+import { MenuAdministrationPage } from '@/pages/MenuAdministrationPage';
 import { AccountGroupSummaryPage } from '@/pages/AccountGroupSummaryPage';
 import { PostDatedChequesPage } from '@/pages/PostDatedChequesPage';
 import { ChequeCalendarPage } from '@/pages/ChequeCalendarPage';
@@ -70,6 +71,7 @@ export function App(): React.JSX.Element {
         <Route path="/accounting/cash-book" element={<CashBankBookPage book="cash-book" />} />
         <Route path="/accounting/bank-book" element={<CashBankBookPage book="bank-book" />} />
         <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
+        <Route path="/settings/menu" element={<MenuAdministrationPage />} />
         <Route path="/accounting/post-dated-cheques" element={<PostDatedChequesPage />} />
         <Route path="/accounting/cheque-calendar" element={<ChequeCalendarPage />} />
         <Route path="/accounting/cheque-register" element={<ChequeRegisterPage />} />

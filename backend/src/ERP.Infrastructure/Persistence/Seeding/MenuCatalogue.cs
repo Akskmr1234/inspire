@@ -168,5 +168,25 @@ public static class MenuCatalogue
                     "/accounting/cheque-register",
                     ViewReports),
             ]),
+
+        new(
+            "settings",
+            "Settings",
+            "الإعدادات",
+            "platform",
+            Children:
+            [
+                // The screen that edits this menu, reachable from the menu it edits.
+                // Behind the menu permission rather than the reports one, so holding
+                // it is a deliberate grant: rearranging what everybody else sees is
+                // an administrative act, not a consequence of being able to read.
+                new(
+                    "settings.menu",
+                    "Menu settings",
+                    "إعدادات القائمة",
+                    "platform",
+                    "/settings/menu",
+                    "platform:menu:view"),
+            ]),
     ];
 }

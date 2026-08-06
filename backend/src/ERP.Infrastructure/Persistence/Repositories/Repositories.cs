@@ -2,6 +2,7 @@ using ERP.Application;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
+using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -339,4 +340,40 @@ public sealed class NumberingSeriesRepository : INumberingSeriesRepository
 
     /// <inheritdoc />
     public void Add(NumberingSeries series) => _context.NumberingSeries.Add(series);
+}
+
+/// <summary>Reads and writes menu entries.</summary>
+public sealed class MenuItemRepository : IMenuItemRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="MenuItemRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public MenuItemRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<MenuItem?> FindAsync(
+        MenuItemId id,
+        CancellationToken cancellationToken = default) =>
+        _context.MenuItems.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> CodeExistsAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default) =>
+        _context.MenuItems.AnyAsync(
+            item => item.FirmId == firmId && item.Code == code, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<int> CountChildrenAsync(
+        MenuItemId id,
+        CancellationToken cancellationToken = default) =>
+        _context.MenuItems.CountAsync(item => item.ParentId == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(MenuItem item) => _context.MenuItems.Add(item);
+
+    /// <inheritdoc />
+    public void Remove(MenuItem item) => _context.MenuItems.Remove(item);
 }

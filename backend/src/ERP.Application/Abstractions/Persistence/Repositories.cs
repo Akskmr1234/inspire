@@ -1,5 +1,6 @@
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
+using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 
@@ -233,4 +234,50 @@ public interface INumberingSeriesRepository
     /// <summary>Adds a series.</summary>
     /// <param name="series">The series to add.</param>
     void Add(NumberingSeries series);
+}
+
+/// <summary>Reads and writes menu entries.</summary>
+public interface IMenuItemRepository
+{
+    /// <summary>Finds a menu entry.</summary>
+    /// <param name="id">The entry.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The entry, or <see langword="null"/>.</returns>
+    Task<MenuItem?> FindAsync(MenuItemId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Determines whether a firm already uses a menu code.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The code to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the code is taken.</returns>
+    /// <remarks>
+    /// Checked before insert so a duplicate is refused with a message naming the code,
+    /// rather than surfacing as a unique-index violation the caller cannot interpret.
+    /// The index is still the backstop against two administrators racing.
+    /// </remarks>
+    Task<bool> CodeExistsAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Counts the entries sitting directly beneath one.</summary>
+    /// <param name="id">The parent entry.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many entries name it as their parent.</returns>
+    /// <remarks>
+    /// Deleting a heading must not silently take a subtree of screens with it, so the
+    /// caller is refused until the children have been moved. The foreign key restricts
+    /// the delete regardless; this turns that into an error somebody can act on.
+    /// </remarks>
+    Task<int> CountChildrenAsync(
+        MenuItemId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a menu entry.</summary>
+    /// <param name="item">The entry to add.</param>
+    void Add(MenuItem item);
+
+    /// <summary>Removes a menu entry.</summary>
+    /// <param name="item">The entry to remove.</param>
+    void Remove(MenuItem item);
 }
