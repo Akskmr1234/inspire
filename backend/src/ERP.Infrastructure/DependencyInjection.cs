@@ -75,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<IDayBookReader, DayBookReader>();
         services.AddScoped<IVoucherReportReader, VoucherReportReader>();
         services.AddScoped<ITransactionSummaryReader, TransactionSummaryReader>();
+        services.AddScoped<ICashFlowReader, CashFlowReader>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 

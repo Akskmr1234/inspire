@@ -102,6 +102,11 @@ export function AppShell(): React.JSX.Element {
             collapsed={collapsed}
           />
           <SidebarLink
+            to="/accounting/cash-flow"
+            label={t('nav.cashFlow')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
             to="/accounting/post-dated-cheques"
             label={t('nav.postDatedCheques')}
             collapsed={collapsed}

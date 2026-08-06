@@ -33,6 +33,7 @@ const en = {
     transactionSummary: 'Transaction summary',
     cashBook: 'Cash book',
     bankBook: 'Bank book',
+    cashFlow: 'Cash flow',
     postDatedCheques: 'Post-dated cheques',
     chequeCalendar: 'Cheque calendar',
     chequeRegister: 'Cheque register',
@@ -84,6 +85,12 @@ const en = {
     count: 'Count',
     byType: 'By voucher type',
     byMonth: 'By month',
+    cashIn: 'Cash in',
+    cashOut: 'Cash out',
+    netChange: 'Net change in cash',
+    noMovement: 'No movement',
+    cashReconciled: 'Movement accounts for the change in cash',
+    cashNotReconciled: 'DOES NOT RECONCILE',
     voucherCount_one: '{{count}} voucher',
     voucherCount_other: '{{count}} vouchers',
     receipts: 'Receipts',
@@ -107,6 +114,11 @@ const en = {
     Draft: 'Draft',
     Posted: 'Posted',
     Cancelled: 'Cancelled',
+  },
+  cashFlow: {
+    Operating: 'Operating activities',
+    Investing: 'Investing activities',
+    Financing: 'Financing activities',
   },
   cheques: {
     direction: {
@@ -181,6 +193,7 @@ const ar = {
     transactionSummary: 'ملخص الحركات',
     cashBook: 'دفتر الصندوق',
     bankBook: 'دفتر البنك',
+    cashFlow: 'التدفقات النقدية',
     postDatedCheques: 'الشيكات المؤجلة',
     chequeCalendar: 'تقويم الشيكات',
     chequeRegister: 'سجل الشيكات',
@@ -232,6 +245,12 @@ const ar = {
     count: 'العدد',
     byType: 'حسب نوع القيد',
     byMonth: 'حسب الشهر',
+    cashIn: 'النقد الوارد',
+    cashOut: 'النقد الصادر',
+    netChange: 'صافي التغير في النقد',
+    noMovement: 'لا توجد حركة',
+    cashReconciled: 'الحركة تفسّر التغير في النقد',
+    cashNotReconciled: 'غير مطابق',
     // Arabic has dual and plural forms beyond one/other, which i18next selects
     // by the same suffix convention. Providing them all keeps the count reading
     // naturally instead of forcing the English two-form shape onto it.
@@ -262,6 +281,11 @@ const ar = {
     Draft: 'مسودة',
     Posted: 'مرحّل',
     Cancelled: 'ملغى',
+  },
+  cashFlow: {
+    Operating: 'الأنشطة التشغيلية',
+    Investing: 'الأنشطة الاستثمارية',
+    Financing: 'الأنشطة التمويلية',
   },
   cheques: {
     direction: {

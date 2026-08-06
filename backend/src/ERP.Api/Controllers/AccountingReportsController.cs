@@ -215,6 +215,41 @@ public sealed class AccountingReportsController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Produces the cash flow statement for a date range.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Operating, investing, and financing movements, with the cash position.</returns>
+    /// <remarks>
+    /// The direct method: built from the postings themselves rather than reconstructed
+    /// backwards from profit. A transfer between the firm's own accounts contributes
+    /// nothing, since it does not change what the firm holds.
+    /// <para>
+    /// The response carries <c>isReconciled</c>: whether the opening position plus the
+    /// classified movement equals the closing position. If it is ever false, something
+    /// moved through the bank the statement has not accounted for, and the caller
+    /// should say so rather than present three sections that do not sum.
+    /// </para>
+    /// </remarks>
+    /// <response code="200">The statement, with a reconciliation check.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("cash-flow")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(CashFlowResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetCashFlowAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        Result<CashFlowResponse> result = await _sender.Send(
+            new GetCashFlowQuery(from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Produces the transaction summary: activity in totals, by type and month.</summary>
     /// <param name="from">The first date included, inclusive.</param>
     /// <param name="to">The last date included, inclusive.</param>
