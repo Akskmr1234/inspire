@@ -15,11 +15,11 @@ namespace ERP.Application.Platform.Dashboards;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A closed registry rather than a query the widget carries. The specification asks
-/// for custom SQL widgets eventually, and that is a decision with teeth: arbitrary SQL
-/// arriving from a browser needs its own read-only role, a statement timeout, and
-/// somebody to have vetted the views it can reach. None of that exists yet, and
-/// shipping it without would hand every dashboard editor the whole database.
+/// A closed registry of figures the server knows how to compute, reviewed like any
+/// other code. Custom queries are supported too - see <see cref="CustomWidgetQuery"/> -
+/// but they are a separate path with its own guards, and the two are deliberately not
+/// the same mechanism: a metric is something somebody signed off, a custom query is
+/// text somebody typed this morning.
 /// </para>
 /// <para>
 /// Each metric names the permission its underlying report requires, so a dashboard
@@ -82,8 +82,12 @@ public sealed record GetDashboardDataQuery(Guid DashboardId, DateOnly? AsAt = nu
 /// <param name="Value">Its value.</param>
 public sealed record MetricPoint(string Label, decimal Value);
 
-/// <summary>One computed metric.</summary>
-/// <param name="MetricCode">The metric.</param>
+/// <summary>One computed panel.</summary>
+/// <param name="WidgetId">
+/// The panel this belongs to. Keyed by widget rather than by metric because a custom
+/// panel has no metric to key on, and two panels may draw the same metric differently.
+/// </param>
+/// <param name="MetricCode">The metric, or null on a custom panel.</param>
 /// <param name="Value">The headline figure.</param>
 /// <param name="Count">How many things it counts, where that means something.</param>
 /// <param name="Series">The points behind it, for a chart or a ranked list.</param>
@@ -92,12 +96,18 @@ public sealed record MetricPoint(string Label, decimal Value);
 /// the panel is drawn as withheld rather than as nil - a dashboard reporting nothing
 /// owing and one refusing to say are different facts.
 /// </param>
+/// <param name="Error">
+/// Why this panel could not be drawn, when it could not. A widget whose query no longer
+/// runs reports its own failure and leaves the rest of the dashboard standing.
+/// </param>
 public sealed record DashboardMetric(
-    string MetricCode,
+    Guid WidgetId,
+    string? MetricCode,
     decimal Value,
     int Count,
     IReadOnlyList<MetricPoint> Series,
-    bool IsPermitted);
+    bool IsPermitted,
+    string? Error = null);
 
 /// <summary>A dashboard's figures.</summary>
 /// <param name="DashboardId">The dashboard.</param>
@@ -146,8 +156,20 @@ public sealed class GetDashboardDataQueryHandler
     /// <summary>The permission code standing for every permission.</summary>
     private const string WildcardPermission = "*";
 
+    /// <summary>
+    /// The permission needed to read a custom panel, which is the same one needed to
+    /// author it.
+    /// </summary>
+    /// <remarks>
+    /// A statement somebody wrote can reach anything row-level security allows the
+    /// tenant to see - which is far more than any single report exposes. Being assigned
+    /// a dashboard that happens to carry one is not consent to that.
+    /// </remarks>
+    private const string CustomWidgetPermission = "reporting:dashboard:create";
+
     private readonly IDashboardReader _dashboards;
     private readonly IDashboardMetricReader _metrics;
+    private readonly ICustomWidgetExecutor _custom;
     private readonly IPermissionChecker _permissions;
     private readonly IFirmRepository _firms;
     private readonly ICurrentUser _currentUser;
@@ -157,6 +179,7 @@ public sealed class GetDashboardDataQueryHandler
     /// <summary>Initialises a new instance of the <see cref="GetDashboardDataQueryHandler"/> class.</summary>
     /// <param name="dashboards">The dashboard reader.</param>
     /// <param name="metrics">The metric reader.</param>
+    /// <param name="custom">The custom query executor.</param>
     /// <param name="permissions">The permission checker.</param>
     /// <param name="firms">The firm repository.</param>
     /// <param name="currentUser">The signed-in user.</param>
@@ -165,6 +188,7 @@ public sealed class GetDashboardDataQueryHandler
     public GetDashboardDataQueryHandler(
         IDashboardReader dashboards,
         IDashboardMetricReader metrics,
+        ICustomWidgetExecutor custom,
         IPermissionChecker permissions,
         IFirmRepository firms,
         ICurrentUser currentUser,
@@ -173,6 +197,7 @@ public sealed class GetDashboardDataQueryHandler
     {
         _dashboards = dashboards;
         _metrics = metrics;
+        _custom = custom;
         _permissions = permissions;
         _firms = firms;
         _currentUser = currentUser;
@@ -229,7 +254,8 @@ public sealed class GetDashboardDataQueryHandler
         List<string> requested =
         [
             .. dashboard.Widgets
-                .Select(widget => widget.MetricCode)
+                .Where(widget => !widget.IsCustom && widget.MetricCode is not null)
+                .Select(widget => widget.MetricCode!)
                 .Where(DashboardMetrics.IsKnown)
                 .Distinct(StringComparer.Ordinal)
                 .Where(code => IsPermitted(code, held, holdsEverything)),
@@ -239,28 +265,100 @@ public sealed class GetDashboardDataQueryHandler
             ? new Dictionary<string, DashboardMetric>(StringComparer.Ordinal)
             : await _metrics.ReadAsync(firm.Value.Id, requested, asAt, cancellationToken);
 
+        IReadOnlyDictionary<Guid, string> queries = dashboard.Widgets.Any(w => w.IsCustom)
+            ? await _dashboards.ReadWidgetQueriesAsync(dashboard.Id, cancellationToken)
+            : new Dictionary<Guid, string>();
+
         List<DashboardMetric> metrics = [];
 
-        foreach (string code in dashboard.Widgets
-            .Select(widget => widget.MetricCode)
-            .Distinct(StringComparer.Ordinal))
+        foreach (DashboardWidgetView widget in dashboard.Widgets)
         {
+            if (widget.IsCustom)
+            {
+                metrics.Add(await RunCustomAsync(
+                    widget, queries, held, holdsEverything, cancellationToken));
+
+                continue;
+            }
+
+            string? code = widget.MetricCode;
+
             // A metric the caller may not read comes back explicitly withheld rather
             // than missing. The panel then says so, instead of drawing a confident
             // zero that reads as "nothing is owed".
-            if (!DashboardMetrics.IsKnown(code) || !IsPermitted(code, held, holdsEverything))
+            if (code is null
+                || !DashboardMetrics.IsKnown(code)
+                || !IsPermitted(code, held, holdsEverything))
             {
-                metrics.Add(new DashboardMetric(code, 0m, 0, [], IsPermitted: false));
+                metrics.Add(new DashboardMetric(
+                    widget.Id, code, 0m, 0, [], IsPermitted: false));
+
                 continue;
             }
 
             metrics.Add(computed.TryGetValue(code, out DashboardMetric? metric)
-                ? metric
-                : new DashboardMetric(code, 0m, 0, [], IsPermitted: true));
+                ? metric with { WidgetId = widget.Id }
+                : new DashboardMetric(widget.Id, code, 0m, 0, [], IsPermitted: true));
         }
 
         return Result.Success(new DashboardDataResponse(
             dashboard.Id, asAt, firm.Value.BaseCurrency.Code, metrics));
+    }
+
+    /// <summary>Runs one custom panel's query.</summary>
+    /// <param name="widget">The panel.</param>
+    /// <param name="queries">The statements, keyed by widget.</param>
+    /// <param name="held">The permissions the caller holds.</param>
+    /// <param name="holdsEverything">Whether the caller holds the wildcard.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The panel's figures, or why it could not be drawn.</returns>
+    /// <remarks>
+    /// Reading a custom panel requires the same permission as authoring one. A query
+    /// somebody wrote can reach anything row-level security allows the tenant to see,
+    /// which is a good deal more than any single report exposes, so it is not something
+    /// to hand to a reader who was merely assigned the dashboard.
+    /// </remarks>
+    private async Task<DashboardMetric> RunCustomAsync(
+        DashboardWidgetView widget,
+        IReadOnlyDictionary<Guid, string> queries,
+        IReadOnlySet<string> held,
+        bool holdsEverything,
+        CancellationToken cancellationToken)
+    {
+        if (!holdsEverything && !held.Contains(CustomWidgetPermission))
+        {
+            return new DashboardMetric(widget.Id, null, 0m, 0, [], IsPermitted: false);
+        }
+
+        if (!queries.TryGetValue(widget.Id, out string? query))
+        {
+            return new DashboardMetric(
+                widget.Id, null, 0m, 0, [], IsPermitted: true,
+                Error: "This panel has no query.");
+        }
+
+        Result<IReadOnlyList<MetricPoint>> executed =
+            await _custom.ExecuteAsync(query, cancellationToken);
+
+        if (executed.IsFailure)
+        {
+            return new DashboardMetric(
+                widget.Id, null, 0m, 0, [], IsPermitted: true,
+                Error: executed.Error.Description);
+        }
+
+        IReadOnlyList<MetricPoint> points = executed.Value;
+
+        // A headline panel takes the first row's value; a chart or a list takes them
+        // all. The same query therefore serves either, and somebody changing how a
+        // panel is drawn does not have to rewrite the SQL behind it.
+        return new DashboardMetric(
+            widget.Id,
+            null,
+            points.Count > 0 ? points[0].Value : 0m,
+            points.Count,
+            points,
+            IsPermitted: true);
     }
 
     /// <summary>Whether the caller may read one metric.</summary>

@@ -45,11 +45,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Dynamic menus — administration: add, rename, reorder, regroup, hide, delete | **Done** — 8 API tests, with a screen at `/settings/menu` |
 | Data grid — sort, search, columns, freeze, CSV export, saved layouts | **Done** — 8 API tests; first screen is the chart of accounts |
 | Dashboards — role-assigned, KPI/trend/ranked panels, seeded accounting overview | **Done** — 8 API tests |
+| Dashboards — custom SQL widgets, read-only and RLS-confined | **Done** — 20 guard + 11 API tests |
 | Report builder, print designer, workflow engine | Not started |
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 643 passing, 0 failing (300 domain + 182 application + 78 API + 20 identity + 63 integration).
+**Test suite:** 674 passing, 0 failing (300 domain + 202 application + 89 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

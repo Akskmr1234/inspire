@@ -67,11 +67,15 @@ public sealed class DashboardWidget : Entity<DashboardWidgetId>
     /// <summary>The longest a title may be.</summary>
     public const int MaximumTitleLength = 100;
 
+    /// <summary>The longest a custom query may be.</summary>
+    public const int MaximumQueryLength = 4_000;
+
     internal DashboardWidget(
         DashboardWidgetId id,
         DashboardId dashboardId,
         TenantId tenantId,
-        string metricCode,
+        string? metricCode,
+        string? query,
         string title,
         WidgetKind kind,
         int sortOrder,
@@ -81,6 +85,7 @@ public sealed class DashboardWidget : Entity<DashboardWidgetId>
         DashboardId = dashboardId;
         TenantId = tenantId;
         MetricCode = metricCode;
+        Query = query;
         Title = title;
         Kind = kind;
         SortOrder = sortOrder;
@@ -88,11 +93,7 @@ public sealed class DashboardWidget : Entity<DashboardWidgetId>
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private DashboardWidget()
-    {
-        MetricCode = string.Empty;
-        Title = string.Empty;
-    }
+    private DashboardWidget() => Title = string.Empty;
 
     /// <summary>Gets the dashboard this widget belongs to.</summary>
     public DashboardId DashboardId { get; private set; }
@@ -100,8 +101,27 @@ public sealed class DashboardWidget : Entity<DashboardWidgetId>
     /// <summary>Gets the owning tenant.</summary>
     public TenantId TenantId { get; private set; }
 
-    /// <summary>Gets the metric the server computes for this widget.</summary>
-    public string MetricCode { get; private set; }
+    /// <summary>Gets the metric the server computes, or null on a custom widget.</summary>
+    public string? MetricCode { get; private set; }
+
+    /// <summary>Gets the custom query behind this widget, or null on a metric widget.</summary>
+    /// <remarks>
+    /// Exactly one of <see cref="MetricCode"/> and this is set. A widget that carried
+    /// both would leave the reader choosing, and whichever it chose would surprise
+    /// somebody.
+    /// <para>
+    /// The query is stored as written and validated before it is accepted, but the
+    /// storage is not where its safety comes from. It runs inside a read-only
+    /// transaction, under a statement timeout and a row cap, as the ordinary
+    /// application role - so PostgreSQL's row-level security applies to it exactly as
+    /// to every other query, and a statement naming another tenant's rows returns
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    public string? Query { get; private set; }
+
+    /// <summary>Gets whether this widget runs a query of somebody's own.</summary>
+    public bool IsCustom => Query is not null;
 
     /// <summary>Gets the heading shown on the panel.</summary>
     public string Title { get; private set; }
@@ -341,12 +361,86 @@ public sealed class Dashboard : AggregateRoot<DashboardId>, IFirmScoped, IAudita
 
         DashboardWidget widget = new(
             DashboardWidgetId.NewId(), Id, TenantId, metricCode.Trim().ToLowerInvariant(),
+            query: null, title.Trim(), kind, sortOrder, span);
+
+        _widgets.Add(widget);
+
+        return Result.Success(widget);
+    }
+
+    /// <summary>Adds a panel driven by a query of somebody's own.</summary>
+    /// <param name="query">
+    /// The statement, already validated as a single read-only select by the
+    /// application layer.
+    /// </param>
+    /// <param name="title">The heading shown on the panel.</param>
+    /// <param name="kind">How the result is drawn.</param>
+    /// <param name="sortOrder">The position among the dashboard's panels.</param>
+    /// <param name="span">How many grid columns it occupies.</param>
+    /// <returns>The widget, or a validation failure.</returns>
+    /// <remarks>
+    /// The aggregate checks that a query is present and of a sane length, and nothing
+    /// more. Deciding whether a statement is read-only means understanding SQL, which
+    /// is not something a domain model should be doing - and the guarantee that
+    /// actually holds comes from the read-only transaction it runs in rather than from
+    /// any inspection of the text.
+    /// </remarks>
+    public Result<DashboardWidget> AddCustomWidget(
+        string query,
+        string title,
+        WidgetKind kind,
+        int sortOrder = 0,
+        int span = 1)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Result.Failure<DashboardWidget>(Error.Validation(
+                "DashboardWidget.QueryRequired", "A custom widget must carry a query."));
+        }
+
+        if (query.Trim().Length > DashboardWidget.MaximumQueryLength)
+        {
+            return Result.Failure<DashboardWidget>(Error.Validation(
+                "DashboardWidget.QueryTooLong",
+                $"A query cannot exceed {DashboardWidget.MaximumQueryLength} characters."));
+        }
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return Result.Failure<DashboardWidget>(Error.Validation(
+                "DashboardWidget.TitleRequired", "A widget title is required."));
+        }
+
+        if (!Enum.IsDefined(kind))
+        {
+            return Result.Failure<DashboardWidget>(Error.Validation(
+                "DashboardWidget.UnknownKind", $"'{kind}' is not a recognised widget kind."));
+        }
+
+        if (span is < 1 or > 4)
+        {
+            return Result.Failure<DashboardWidget>(Error.Validation(
+                "DashboardWidget.SpanOutOfRange",
+                "A widget must span between one and four columns."));
+        }
+
+        DashboardWidget widget = new(
+            DashboardWidgetId.NewId(), Id, TenantId, metricCode: null, query.Trim(),
             title.Trim(), kind, sortOrder, span);
 
         _widgets.Add(widget);
 
         return Result.Success(widget);
     }
+
+    /// <summary>Removes a panel.</summary>
+    /// <param name="widgetId">The panel to remove.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result RemoveWidget(DashboardWidgetId widgetId) =>
+        _widgets.RemoveAll(widget => widget.Id == widgetId) > 0
+            ? Result.Success()
+            : Result.Failure(Error.NotFound(
+                "DashboardWidget.NotFound", "No such panel on this dashboard."));
 
     /// <summary>Shows this dashboard to a role.</summary>
     /// <param name="roleId">The role.</param>

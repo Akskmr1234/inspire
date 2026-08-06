@@ -1,5 +1,6 @@
 using ERP.Application;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
@@ -402,4 +403,22 @@ public sealed class GridLayoutRepository : IGridLayoutRepository
 
     /// <inheritdoc />
     public void Remove(GridLayout layout) => _context.GridLayouts.Remove(layout);
+}
+
+/// <summary>Reads and writes dashboards.</summary>
+public sealed class DashboardRepository : IDashboardRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="DashboardRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public DashboardRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<Dashboard?> FindAsync(
+        DashboardId id,
+        CancellationToken cancellationToken = default) =>
+        _context.Dashboards
+            .Include(dashboard => dashboard.Widgets)
+            .FirstOrDefaultAsync(dashboard => dashboard.Id == id, cancellationToken);
 }

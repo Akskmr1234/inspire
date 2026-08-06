@@ -85,6 +85,8 @@ public static class DependencyInjection
         services.AddScoped<IGridLayoutRepository, GridLayoutRepository>();
         services.AddScoped<IDashboardReader, DashboardReader>();
         services.AddScoped<IDashboardMetricReader, DashboardMetricReader>();
+        services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
+        services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 

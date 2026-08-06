@@ -365,6 +365,18 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
 3. **Aging buckets** — 0-30/31-60/61-90/90+ assumed. **[ASSUMPTION]**
 4. **Rounding** — currency precision and rounding rule per tax component (a `Round` additional ledger exists, implying document-level rounding).
 5. **`COR%`** on the product master — meaning not defined in the document.
-6. **Costing methods** — prose names Last Purchase Rate and Average Rate only; FIFO is absent yet implied by batch-wise costing. Confirm whether FIFO is required.
+6. ~~**Costing methods**~~ — **ANSWERED (2026-08-06): average costing. FIFO is not required.**
+   Consequences, now binding:
+   - Stock is valued at **weighted average cost**, recomputed on every receipt into a location.
+   - `CostingMethod` remains a per-product field, since the prose names Last Purchase Rate beside it, but **Average Rate is the default** and the only method the valuation engine must support for the first release.
+   - Batch-wise costing (§10) still holds where batches are enabled: a batch carries its own purchase rate, and profit on a batched item uses that actual rate rather than the running average. The two coexist — the average is the item's position across locations, the batch rate is what a specific unit cost.
+   - No FIFO queue is modelled. Nothing should be built that depends on issue order, because reintroducing FIFO later would then be a data migration rather than a new strategy.
 7. **Approval matrix** — which documents require approval, and at what thresholds.
 8. Whether **Payroll** and **POS** are needed in the first release or genuinely deferred.
+9. ~~**Custom SQL dashboard widgets**~~ — **ANSWERED (2026-08-06): required, all of them.**
+   Arbitrary SQL reaching the database from a browser is the largest deliberate attack surface in the platform, so it is built with the guards named when the question was raised rather than without them:
+   - **Read-only by construction.** Every custom query runs inside a `READ ONLY` transaction, so a statement that slipped past validation still cannot write.
+   - **One statement, and it must read.** Only a single `SELECT` or `WITH` is accepted; batching, data-modifying CTEs, and anything else are refused before the database sees them.
+   - **Bounded.** A per-statement timeout and a hard row cap, so a widget cannot exhaust a connection or return a million rows into a dashboard panel.
+   - **Tenant isolation is not on trust.** Custom queries run as the ordinary application role, so PostgreSQL row-level security applies to them exactly as to everything else. A query naming another tenant's rows returns nothing — the guard is in the database, not in the parser.
+   - **Defining one is privileged.** Authoring a custom widget requires `reporting:dashboard:create`; *reading* a dashboard does not let anybody write SQL.

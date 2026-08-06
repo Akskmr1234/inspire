@@ -10,7 +10,9 @@ const KIND = { Kpi: 1, Series: 2, Breakdown: 3 } as const;
 
 interface DashboardWidget {
   readonly id: string;
-  readonly metricCode: string;
+  readonly metricCode: string | null;
+  /** True when the panel runs a query of somebody's own rather than a named metric. */
+  readonly isCustom: boolean;
   readonly title: string;
   readonly titleArabic: string | null;
   readonly kind: number;
@@ -31,12 +33,16 @@ interface MetricPoint {
 }
 
 interface DashboardMetric {
-  readonly metricCode: string;
+  /** Keyed per panel: a custom panel has no metric code to key on. */
+  readonly widgetId: string;
+  readonly metricCode: string | null;
   readonly value: number;
   readonly count: number;
   readonly series: readonly MetricPoint[];
   /** False when the caller may not read this figure — drawn as withheld, not as nil. */
   readonly isPermitted: boolean;
+  /** Why this panel could not be drawn, when it could not. */
+  readonly error: string | null;
 }
 
 interface DashboardData {
@@ -79,7 +85,9 @@ export function DashboardPage(): React.JSX.Element {
     return <p className="text-sm text-slate-500">{t('dashboard.none')}</p>;
   }
 
-  const byCode = new Map(data.data?.metrics.map((metric) => [metric.metricCode, metric]));
+  // Keyed by panel rather than by metric. A custom panel has no metric code, and two
+  // panels may draw the same metric differently, so the widget is the only stable key.
+  const byWidget = new Map(data.data?.metrics.map((metric) => [metric.widgetId, metric]));
   const currency = data.data?.currency ?? '';
 
   return (
@@ -109,7 +117,7 @@ export function DashboardPage(): React.JSX.Element {
           <Panel
             key={widget.id}
             widget={widget}
-            metric={byCode.get(widget.metricCode)}
+            metric={byWidget.get(widget.id)}
             currency={currency}
             loading={data.isPending}
             language={language}
@@ -154,6 +162,10 @@ function Panel({
         <p className="mt-3 text-sm text-slate-400">{t('common.loading')}</p>
       ) : !metric ? (
         <p className="mt-3 text-sm text-slate-400">—</p>
+      ) : metric.error ? (
+        // One panel failing must not take the dashboard with it, so the failure is
+        // reported here and the rest of the grid still draws.
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">{metric.error}</p>
       ) : !metric.isPermitted ? (
         // Withheld rather than zero. A dashboard reporting nothing owing and one
         // refusing to say are different facts, and drawing them the same way would

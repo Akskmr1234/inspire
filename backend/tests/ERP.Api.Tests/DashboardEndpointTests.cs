@@ -67,8 +67,12 @@ public sealed class DashboardEndpointTests
         DashboardsResponse response =
             (await client.GetFromJsonAsync<DashboardsResponse>(Dashboards))!;
 
-        foreach (DashboardWidgetView widget in response.Dashboards.SelectMany(d => d.Widgets))
+        foreach (DashboardWidgetView widget in response.Dashboards
+            .SelectMany(dashboard => dashboard.Widgets)
+            .Where(widget => !widget.IsCustom))
         {
+            widget.MetricCode.ShouldNotBeNull("a metric panel must name a metric");
+
             DashboardMetrics.IsKnown(widget.MetricCode)
                 .ShouldBeTrue($"'{widget.MetricCode}' is not in the metric registry");
         }

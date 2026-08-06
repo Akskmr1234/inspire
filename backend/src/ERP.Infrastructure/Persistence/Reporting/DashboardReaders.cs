@@ -59,7 +59,8 @@ public sealed class DashboardReader : IDashboardReader
                         widget.Title,
                         widget.TitleArabic,
                         widget.Kind,
-                        widget.Span))
+                        widget.Span,
+                        widget.Query != null))
                     .ToList(),
             })
             .ToListAsync(cancellationToken);
@@ -73,6 +74,21 @@ public sealed class DashboardReader : IDashboardReader
                 dashboard.NameArabic,
                 dashboard.Widgets)),
         ];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, string>> ReadWidgetQueriesAsync(
+        Guid dashboardId,
+        CancellationToken cancellationToken = default)
+    {
+        DashboardId id = DashboardId.From(dashboardId);
+
+        var queries = await _context.Set<DashboardWidget>()
+            .Where(widget => widget.DashboardId == id && widget.Query != null)
+            .Select(widget => new { widget.Id, widget.Query })
+            .ToListAsync(cancellationToken);
+
+        return queries.ToDictionary(row => row.Id.Value, row => row.Query!);
     }
 }
 
@@ -138,6 +154,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
             if (metricCodes.Contains(DashboardMetrics.Receivables))
             {
                 results[DashboardMetrics.Receivables] = new DashboardMetric(
+                    Guid.Empty,
                     DashboardMetrics.Receivables,
                     rows.Sum(row => row.OutstandingAmount),
                     rows.Count,
@@ -158,6 +175,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
                 ];
 
                 results[DashboardMetrics.TopDebtors] = new DashboardMetric(
+                    Guid.Empty,
                     DashboardMetrics.TopDebtors,
                     ranked.Sum(point => point.Value),
                     ranked.Count,
@@ -172,6 +190,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
                 firmId, BillType.Payable, asAt, null, cancellationToken);
 
             results[DashboardMetrics.Payables] = new DashboardMetric(
+                Guid.Empty,
                 DashboardMetrics.Payables,
                 rows.Sum(row => row.OutstandingAmount),
                 rows.Count,
@@ -235,6 +254,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
         List<ChequeReportRow> materialised = [.. rows];
 
         return new DashboardMetric(
+            Guid.Empty,
             metricCode,
             materialised.Sum(row => row.Amount),
             materialised.Count,
@@ -268,6 +288,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
         if (accounts.Count == 0)
         {
             return new DashboardMetric(
+                Guid.Empty,
                 DashboardMetrics.CashAndBank, 0m, 0, [], IsPermitted: true);
         }
 
@@ -295,6 +316,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
                 cancellationToken);
 
         return new DashboardMetric(
+            Guid.Empty,
             DashboardMetrics.CashAndBank,
             opening + movement,
             accounts.Count,
@@ -330,6 +352,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
         }
 
         return new DashboardMetric(
+            Guid.Empty,
             DashboardMetrics.MonthlyPostings,
             series.Sum(point => point.Value),
             cells.Sum(cell => cell.VoucherCount),

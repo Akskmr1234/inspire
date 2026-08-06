@@ -71,8 +71,19 @@ public sealed class DashboardWidgetConfiguration : IEntityTypeConfiguration<Dash
         builder.HasKey(widget => widget.Id);
         builder.Property(widget => widget.Id).ValueGeneratedNever();
 
+        // Neither is required on its own: a panel names a metric or carries a query,
+        // and exactly one of them is set. Which one is enforced by the aggregate's two
+        // factory methods rather than by a check constraint, there being no way to
+        // construct a widget except through them.
         builder.Property(widget => widget.MetricCode)
-            .HasMaxLength(DashboardWidget.MaximumMetricCodeLength).IsRequired();
+            .HasMaxLength(DashboardWidget.MaximumMetricCodeLength);
+
+        builder.Property(widget => widget.Query)
+            .HasMaxLength(DashboardWidget.MaximumQueryLength);
+
+        // Projected from whether a query is present rather than stored beside it,
+        // which could disagree with it.
+        builder.Ignore(widget => widget.IsCustom);
         builder.Property(widget => widget.Title)
             .HasMaxLength(DashboardWidget.MaximumTitleLength).IsRequired();
         builder.Property(widget => widget.TitleArabic)
