@@ -1,5 +1,6 @@
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Inventory;
 using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
@@ -180,6 +181,46 @@ public sealed class DashboardWidgetIdConverter : ValueConverter<DashboardWidgetI
     /// <summary>Initialises a new instance of the <see cref="DashboardWidgetIdConverter"/> class.</summary>
     public DashboardWidgetIdConverter()
         : base(id => id.Value, value => DashboardWidgetId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="UnitOfMeasureId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class UnitOfMeasureIdConverter : ValueConverter<UnitOfMeasureId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="UnitOfMeasureIdConverter"/> class.</summary>
+    public UnitOfMeasureIdConverter()
+        : base(id => id.Value, value => UnitOfMeasureId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="CategoryId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class CategoryIdConverter : ValueConverter<CategoryId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="CategoryIdConverter"/> class.</summary>
+    public CategoryIdConverter()
+        : base(id => id.Value, value => CategoryId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BrandId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BrandIdConverter : ValueConverter<BrandId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BrandIdConverter"/> class.</summary>
+    public BrandIdConverter()
+        : base(id => id.Value, value => BrandId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="WarehouseId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class WarehouseIdConverter : ValueConverter<WarehouseId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="WarehouseIdConverter"/> class.</summary>
+    public WarehouseIdConverter()
+        : base(id => id.Value, value => WarehouseId.From(value))
     {
     }
 }

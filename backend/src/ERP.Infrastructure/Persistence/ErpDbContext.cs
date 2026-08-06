@@ -3,6 +3,7 @@ using System.Reflection;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
@@ -99,6 +100,18 @@ public class ErpDbContext : DbContext
 
     /// <summary>Gets the dashboards, with their panels and role assignments.</summary>
     public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+
+    /// <summary>Gets the units things are counted, weighed, or measured in.</summary>
+    public DbSet<UnitOfMeasure> UnitsOfMeasure => Set<UnitOfMeasure>();
+
+    /// <summary>Gets the product categories and sub-classes.</summary>
+    public DbSet<Category> Categories => Set<Category>();
+
+    /// <summary>Gets the brands products are sold under.</summary>
+    public DbSet<Brand> Brands => Set<Brand>();
+
+    /// <summary>Gets the places stock is held.</summary>
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -202,6 +215,12 @@ public class ErpDbContext : DbContext
             .HaveConversion<DashboardIdConverter>();
         configurationBuilder.Properties<DashboardWidgetId>()
             .HaveConversion<DashboardWidgetIdConverter>();
+        configurationBuilder.Properties<UnitOfMeasureId>()
+            .HaveConversion<UnitOfMeasureIdConverter>();
+        configurationBuilder.Properties<CategoryId>().HaveConversion<CategoryIdConverter>();
+        configurationBuilder.Properties<BrandId>().HaveConversion<BrandIdConverter>();
+        configurationBuilder.Properties<WarehouseId>()
+            .HaveConversion<WarehouseIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
