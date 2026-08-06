@@ -205,6 +205,13 @@ const en = {
     Income: 'Income',
     Expense: 'Expense',
   },
+  dashboard: {
+    none: 'No dashboard has been assigned to you.',
+    withheld: 'Not available to you',
+    noData: 'Nothing recorded yet.',
+    itemCount_one: '{{count}} item',
+    itemCount_other: '{{count}} items',
+  },
   grid: {
     search: 'Search all columns…',
     columns: 'Columns',
@@ -434,6 +441,17 @@ const ar = {
     Equity: 'حقوق ملكية',
     Income: 'إيرادات',
     Expense: 'مصروفات',
+  },
+  dashboard: {
+    none: 'لم يتم تعيين أي لوحة لك.',
+    withheld: 'غير متاح لك',
+    noData: 'لا توجد بيانات بعد.',
+    itemCount_zero: 'لا عناصر',
+    itemCount_one: 'عنصر واحد',
+    itemCount_two: 'عنصران',
+    itemCount_few: '{{count}} عناصر',
+    itemCount_many: '{{count}} عنصرًا',
+    itemCount_other: '{{count}} عنصر',
   },
   grid: {
     search: 'ابحث في كل الأعمدة…',

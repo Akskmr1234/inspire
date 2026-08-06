@@ -163,3 +163,23 @@ public sealed class GridLayoutIdConverter : ValueConverter<GridLayoutId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="DashboardId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class DashboardIdConverter : ValueConverter<DashboardId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="DashboardIdConverter"/> class.</summary>
+    public DashboardIdConverter()
+        : base(id => id.Value, value => DashboardId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="DashboardWidgetId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class DashboardWidgetIdConverter : ValueConverter<DashboardWidgetId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="DashboardWidgetIdConverter"/> class.</summary>
+    public DashboardWidgetIdConverter()
+        : base(id => id.Value, value => DashboardWidgetId.From(value))
+    {
+    }
+}

@@ -143,6 +143,7 @@ public sealed partial class DatabaseSeeder
         await EnsureFinancialYearAsync(tenant.Id, firm, cancellationToken);
         int ledgersAdded = await EnsureChartOfAccountsAsync(firm, cancellationToken);
         int menuEntriesAdded = await EnsureMenuAsync(firm, cancellationToken);
+        await EnsureDashboardsAsync(firm, cancellationToken);
 
         Result<bool> administrator = await EnsureAdministratorAsync(
             tenant, firm, cancellationToken);
@@ -580,6 +581,84 @@ public sealed partial class DatabaseSeeder
         }
 
         return added;
+    }
+
+    /// <summary>Creates any dashboards the firm does not already have.</summary>
+    /// <param name="firm">The firm the dashboards belong to.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the operation.</returns>
+    /// <remarks>
+    /// Keyed on the dashboard code and left alone once present, for the same reason the
+    /// menu is: these are arrangements users are expected to change, and a reseed that
+    /// reset them would undo that work on every deploy. A role named in the catalogue
+    /// but missing from the database is skipped rather than treated as an error - roles
+    /// can be renamed, and a dashboard reaching one audience short is a better outcome
+    /// than a seeder that refuses to finish.
+    /// </remarks>
+    private async Task EnsureDashboardsAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        HashSet<string> existing = await _context.Dashboards
+            .Where(dashboard => dashboard.FirmId == firm.Id)
+            .Select(dashboard => dashboard.Code)
+            .ToHashSetAsync(StringComparer.Ordinal, cancellationToken);
+
+        Dictionary<string, RoleId> rolesByName = await _context.Roles
+            .Select(role => new { role.Name, role.Id })
+            .ToDictionaryAsync(role => role.Name, role => role.Id, StringComparer.Ordinal, cancellationToken);
+
+        bool added = false;
+
+        for (int index = 0; index < DashboardCatalogue.Default.Count; index++)
+        {
+            DashboardBlueprint blueprint = DashboardCatalogue.Default[index];
+
+            if (existing.Contains(blueprint.Code))
+            {
+                continue;
+            }
+
+            Result<Dashboard> created = Dashboard.Create(
+                firm.TenantId, firm.Id, blueprint.Code, blueprint.Name,
+                (index + 1) * 10, isSystem: true);
+
+            if (created.IsFailure)
+            {
+                continue;
+            }
+
+            Dashboard dashboard = created.Value;
+            dashboard.SetArabicName(blueprint.NameArabic);
+
+            for (int position = 0; position < blueprint.Widgets.Count; position++)
+            {
+                WidgetBlueprint widget = blueprint.Widgets[position];
+
+                Result<DashboardWidget> panel = dashboard.AddWidget(
+                    widget.MetricCode, widget.Title, widget.Kind,
+                    (position + 1) * 10, widget.Span);
+
+                if (panel.IsSuccess)
+                {
+                    panel.Value.SetArabicTitle(widget.TitleArabic);
+                }
+            }
+
+            foreach (string roleName in blueprint.RoleNames)
+            {
+                if (rolesByName.TryGetValue(roleName, out RoleId roleId))
+                {
+                    dashboard.AssignToRole(roleId);
+                }
+            }
+
+            _context.Dashboards.Add(dashboard);
+            added = true;
+        }
+
+        if (added)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     /// <summary>Creates the administrator account.</summary>

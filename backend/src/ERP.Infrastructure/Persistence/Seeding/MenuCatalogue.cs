@@ -44,6 +44,15 @@ public static class MenuCatalogue
     /// <summary>The default menu tree, in display order.</summary>
     public static IReadOnlyList<MenuBlueprint> Default { get; } =
     [
+        // No permission: a dashboard is assigned to roles rather than gated, and the
+        // screen itself says so when somebody has been given none.
+        new(
+            "dashboard",
+            "Dashboard",
+            "لوحة المعلومات",
+            "platform",
+            "/dashboard"),
+
         new(
             "masters",
             "Masters",

@@ -97,6 +97,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the saved data-grid layouts, one per user per grid.</summary>
     public DbSet<GridLayout> GridLayouts => Set<GridLayout>();
 
+    /// <summary>Gets the dashboards, with their panels and role assignments.</summary>
+    public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -195,6 +198,10 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<MenuItemId>().HaveConversion<MenuItemIdConverter>();
         configurationBuilder.Properties<GridLayoutId>()
             .HaveConversion<GridLayoutIdConverter>();
+        configurationBuilder.Properties<DashboardId>()
+            .HaveConversion<DashboardIdConverter>();
+        configurationBuilder.Properties<DashboardWidgetId>()
+            .HaveConversion<DashboardWidgetIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
