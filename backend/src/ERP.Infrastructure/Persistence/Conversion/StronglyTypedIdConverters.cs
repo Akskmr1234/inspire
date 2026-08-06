@@ -122,3 +122,13 @@ public sealed class BillIdConverter : ValueConverter<BillId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="BillAllocationId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillAllocationIdConverter : ValueConverter<BillAllocationId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillAllocationIdConverter"/> class.</summary>
+    public BillAllocationIdConverter()
+        : base(id => id.Value, value => BillAllocationId.From(value))
+    {
+    }
+}

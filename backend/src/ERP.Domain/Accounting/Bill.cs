@@ -340,6 +340,7 @@ public sealed class BillAllocation : ITenantScoped
         DateOnly allocatedOn,
         TenantId tenantId)
     {
+        Id = BillAllocationId.NewId();
         BillId = billId;
         VoucherId = voucherId;
         Amount = amount;
@@ -351,6 +352,9 @@ public sealed class BillAllocation : ITenantScoped
     private BillAllocation()
     {
     }
+
+    /// <summary>Gets this allocation's identity.</summary>
+    public BillAllocationId Id { get; private set; }
 
     /// <summary>Gets the bill settled.</summary>
     public BillId BillId { get; private set; }

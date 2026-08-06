@@ -224,6 +224,161 @@ public sealed class AccountingReportsController : ApiControllerBase
         CancellationToken cancellationToken) =>
         SendCashBankBookAsync(from, to, LedgerKind.Bank, ledgerId, cancellationToken);
 
+    /// <summary>Produces the debtors report: what customers still owe, bill by bill.</summary>
+    /// <param name="asAt">The date the position is stated as at.</param>
+    /// <param name="ledgerId">Restricts the report to one customer. Omit for all.</param>
+    /// <param name="overdueOnly">Restricts it to bills already past their due date.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One section per customer, with their open bills.</returns>
+    /// <remarks>
+    /// Historically accurate: bills raised after <c>asAt</c> are excluded and receipts
+    /// made after it are ignored, so re-running the report for a past period end gives
+    /// the figures that were printed at the time rather than today's.
+    /// <para>
+    /// Bills are stated in the currency they were raised in. The response carries
+    /// <c>currencies</c>; where it holds more than one entry the totals are a sum
+    /// across currencies and should not be presented as a single figure.
+    /// </para>
+    /// </remarks>
+    /// <response code="200">The debtors report.</response>
+    /// <response code="400">The date is missing.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("debtors")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(OutstandingBillsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetDebtorsAsync(
+        [FromQuery] DateOnly asAt,
+        [FromQuery] Guid? ledgerId,
+        [FromQuery] bool overdueOnly,
+        CancellationToken cancellationToken) =>
+        SendOutstandingAsync(
+            BillType.Receivable, asAt, ledgerId, overdueOnly, cancellationToken);
+
+    /// <summary>Produces the creditors report: what the firm still owes suppliers.</summary>
+    /// <param name="asAt">The date the position is stated as at.</param>
+    /// <param name="ledgerId">Restricts the report to one supplier. Omit for all.</param>
+    /// <param name="overdueOnly">Restricts it to bills already past their due date.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One section per supplier, with their open bills.</returns>
+    /// <response code="200">The creditors report.</response>
+    /// <response code="400">The date is missing.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("creditors")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(OutstandingBillsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetCreditorsAsync(
+        [FromQuery] DateOnly asAt,
+        [FromQuery] Guid? ledgerId,
+        [FromQuery] bool overdueOnly,
+        CancellationToken cancellationToken) =>
+        SendOutstandingAsync(BillType.Payable, asAt, ledgerId, overdueOnly, cancellationToken);
+
+    /// <summary>Ages the debtors into buckets.</summary>
+    /// <param name="asAt">The date the position is aged as at.</param>
+    /// <param name="bucketDays">
+    /// The upper bound of each bucket, in days overdue, ascending. Omit for
+    /// 30/60/90, which gives 1-30, 31-60, 61-90, and over 90.
+    /// </param>
+    /// <param name="ledgerId">Restricts the report to one customer. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per customer, with an amount per bucket.</returns>
+    /// <remarks>
+    /// Bills not yet due are reported in their own column rather than in the first
+    /// bucket. An aging report exists to separate what is late from what is merely
+    /// owed, and folding the two together defeats the point of running it.
+    /// </remarks>
+    /// <response code="200">The age-wise debtors report.</response>
+    /// <response code="400">The date is missing, or the buckets do not ascend.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("debtors-aging")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(AgingAnalysisResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetDebtorsAgingAsync(
+        [FromQuery] DateOnly asAt,
+        [FromQuery] int[]? bucketDays,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken) =>
+        SendAgingAsync(BillType.Receivable, asAt, bucketDays, ledgerId, cancellationToken);
+
+    /// <summary>Ages the creditors into buckets.</summary>
+    /// <param name="asAt">The date the position is aged as at.</param>
+    /// <param name="bucketDays">
+    /// The upper bound of each bucket, in days overdue, ascending. Omit for 30/60/90.
+    /// </param>
+    /// <param name="ledgerId">Restricts the report to one supplier. Omit for all.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per supplier, with an amount per bucket.</returns>
+    /// <response code="200">The age-wise creditors report.</response>
+    /// <response code="400">The date is missing, or the buckets do not ascend.</response>
+    /// <response code="403">No firm is selected, or permission is lacking.</response>
+    [HttpGet("creditors-aging")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(AgingAnalysisResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public Task<IActionResult> GetCreditorsAgingAsync(
+        [FromQuery] DateOnly asAt,
+        [FromQuery] int[]? bucketDays,
+        [FromQuery] Guid? ledgerId,
+        CancellationToken cancellationToken) =>
+        SendAgingAsync(BillType.Payable, asAt, bucketDays, ledgerId, cancellationToken);
+
+    /// <summary>Dispatches the shared outstanding query.</summary>
+    /// <param name="type">Receivable for debtors, payable for creditors.</param>
+    /// <param name="asAt">The date the position is stated as at.</param>
+    /// <param name="ledgerId">The single party to restrict to, if any.</param>
+    /// <param name="overdueOnly">Whether to list only bills past their due date.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The report.</returns>
+    /// <remarks>
+    /// Debtors and creditors are one report over the opposite kind of bill. Separate
+    /// routes because that is how they are asked for, one implementation so the
+    /// arithmetic cannot drift between them.
+    /// </remarks>
+    private async Task<IActionResult> SendOutstandingAsync(
+        BillType type,
+        DateOnly asAt,
+        Guid? ledgerId,
+        bool overdueOnly,
+        CancellationToken cancellationToken)
+    {
+        Result<OutstandingBillsResponse> result = await _sender.Send(
+            new GetOutstandingBillsQuery(type, asAt, ledgerId, overdueOnly), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Dispatches the shared aging query.</summary>
+    /// <param name="type">Receivable for debtors, payable for creditors.</param>
+    /// <param name="asAt">The date the position is aged as at.</param>
+    /// <param name="bucketDays">The bucket boundaries, or null for the default.</param>
+    /// <param name="ledgerId">The single party to restrict to, if any.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The report.</returns>
+    private async Task<IActionResult> SendAgingAsync(
+        BillType type,
+        DateOnly asAt,
+        int[]? bucketDays,
+        Guid? ledgerId,
+        CancellationToken cancellationToken)
+    {
+        Result<AgingAnalysisResponse> result = await _sender.Send(
+            new GetAgingAnalysisQuery(
+                type,
+                asAt,
+                bucketDays is { Length: > 0 } ? bucketDays : null,
+                ledgerId),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>
     /// Dispatches the shared cash/bank book query.
     /// </summary>

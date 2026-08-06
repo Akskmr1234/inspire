@@ -290,6 +290,23 @@ public sealed class BillTests
         settled.SettledOn.ShouldBe(Raised.AddDays(5));
     }
 
+    [Fact]
+    public void Every_allocation_gets_an_identity_of_its_own()
+    {
+        // Neither the bill nor the voucher distinguishes two allocations - one
+        // receipt may settle the same bill on two lines - so each needs its own
+        // key. Leaving it unassigned gave every allocation the same empty
+        // identifier, and the second one saved collided with the first.
+        Bill bill = Raise(1000m);
+        VoucherId receipt = VoucherId.NewId();
+
+        bill.Allocate(receipt, Money.Of(300m, Qar), Raised);
+        bill.Allocate(receipt, Money.Of(200m, Qar), Raised);
+
+        bill.Allocations.Select(a => a.Id).Distinct().Count().ShouldBe(2);
+        bill.Allocations.ShouldAllBe(a => a.Id != default);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private static Result<Bill> TryRaise(

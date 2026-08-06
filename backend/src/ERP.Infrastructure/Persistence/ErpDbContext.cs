@@ -75,6 +75,18 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the outstanding bills.</summary>
     public DbSet<Bill> Bills => Set<Bill>();
 
+    /// <summary>
+    /// Gets the settlements made against bills.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for reporting, for the same reason as <see cref="VoucherLines"/>: an
+    /// outstanding report as at a past date has to sum the allocations made up to
+    /// that date across every bill, and doing so through each bill's navigation
+    /// would load history the report then discards. Writes still go through
+    /// <see cref="Bill"/>, which owns the over-allocation rule.
+    /// </remarks>
+    public DbSet<BillAllocation> BillAllocations => Set<BillAllocation>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -167,6 +179,8 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<RoleId>().HaveConversion<RoleIdConverter>();
         configurationBuilder.Properties<PermissionId>().HaveConversion<PermissionIdConverter>();
         configurationBuilder.Properties<BillId>().HaveConversion<BillIdConverter>();
+        configurationBuilder.Properties<BillAllocationId>()
+            .HaveConversion<BillAllocationIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

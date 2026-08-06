@@ -93,11 +93,13 @@ public sealed class BillAllocationConfiguration : IEntityTypeConfiguration<BillA
 
         builder.ToTable("bill_allocations");
 
-        // A surrogate key rather than (BillId, VoucherId): one voucher may settle
+        // A key of its own rather than (BillId, VoucherId): one voucher may settle
         // the same bill on more than one line, and a composite key would silently
-        // reject the second.
-        builder.Property<Guid>("Id").ValueGeneratedNever();
-        builder.HasKey("Id");
+        // reject the second. The value is assigned by the domain - an unassigned
+        // shadow key would leave every allocation with the same empty identifier,
+        // and the second one saved would collide with the first.
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Id).ValueGeneratedNever();
 
         builder.Property(a => a.AllocatedOn).IsRequired();
 
