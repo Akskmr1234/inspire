@@ -47,12 +47,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Dashboards — role-assigned, KPI/trend/ranked panels, seeded accounting overview | **Done** — 8 API tests |
 | Dashboards — custom SQL widgets, read-only and RLS-confined | **Done** — 20 guard + 11 API tests |
 | Report builder, print designer, workflow engine | Not started |
-| Inventory — masters: units with conversion groups, categories, brands, warehouses | **Done** — 33 domain tests; no API or UI yet |
+| Inventory — masters: units with conversion groups, categories, brands, warehouses | **Done** — 33 domain + 10 API tests, with screens on the data grid |
 | Inventory — product master, stock operations, valuation | Not started |
 | Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 707 passing, 0 failing (333 domain + 202 application + 89 API + 20 identity + 63 integration).
+**Test suite:** 717 passing, 0 failing (333 domain + 202 application + 99 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

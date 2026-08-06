@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
+using ERP.Application.Inventory.Masters;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Menus;
@@ -87,6 +88,8 @@ public static class DependencyInjection
         services.AddScoped<IDashboardMetricReader, DashboardMetricReader>();
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
+        services.AddScoped<IInventoryMasterReader, InventoryMasterReader>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 

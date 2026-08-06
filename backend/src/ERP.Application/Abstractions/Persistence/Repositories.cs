@@ -1,4 +1,5 @@
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
@@ -280,4 +281,107 @@ public interface IMenuItemRepository
     /// <summary>Removes a menu entry.</summary>
     /// <param name="item">The entry to remove.</param>
     void Remove(MenuItem item);
+}
+
+/// <summary>Reads and writes the inventory masters.</summary>
+/// <remarks>
+/// One repository for four aggregates, which is unusual here and deliberate. They are
+/// edited from one screen, share a shape - a code unique within the firm, a name, an
+/// active flag - and every operation on them is the same three questions: does this
+/// code exist, fetch this one, add this one. Four near-identical repositories would be
+/// four places to fix the same thing.
+/// </remarks>
+public interface IInventoryMasterRepository
+{
+    /// <summary>Finds a unit of measurement.</summary>
+    /// <param name="id">The unit.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The unit, or <see langword="null"/>.</returns>
+    Task<UnitOfMeasure?> FindUnitAsync(
+        UnitOfMeasureId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds a category.</summary>
+    /// <param name="id">The category.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The category, or <see langword="null"/>.</returns>
+    Task<Category?> FindCategoryAsync(
+        CategoryId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds a brand.</summary>
+    /// <param name="id">The brand.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The brand, or <see langword="null"/>.</returns>
+    Task<Brand?> FindBrandAsync(BrandId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Finds a warehouse.</summary>
+    /// <param name="id">The warehouse.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The warehouse, or <see langword="null"/>.</returns>
+    Task<Warehouse?> FindWarehouseAsync(
+        WarehouseId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the warehouse new documents currently default to.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The default warehouse, or <see langword="null"/> when none is set.</returns>
+    /// <remarks>
+    /// Needed because promoting one warehouse has to demote the other in the same
+    /// transaction. The filtered unique index would otherwise reject the second write,
+    /// correctly but unhelpfully.
+    /// </remarks>
+    Task<Warehouse?> FindDefaultWarehouseAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Determines whether a code is already used by a master of one kind.</summary>
+    /// <param name="kind">Which master to look in.</param>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The code to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the code is taken.</returns>
+    /// <remarks>
+    /// Checked before insert so a duplicate is refused with a message naming the code
+    /// rather than surfacing as a unique-index violation nobody can interpret. The
+    /// index remains the backstop against two people saving at once.
+    /// </remarks>
+    Task<bool> CodeExistsAsync(
+        InventoryMasterKind kind,
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a unit of measurement.</summary>
+    /// <param name="unit">The unit to add.</param>
+    void Add(UnitOfMeasure unit);
+
+    /// <summary>Adds a category.</summary>
+    /// <param name="category">The category to add.</param>
+    void Add(Category category);
+
+    /// <summary>Adds a brand.</summary>
+    /// <param name="brand">The brand to add.</param>
+    void Add(Brand brand);
+
+    /// <summary>Adds a warehouse.</summary>
+    /// <param name="warehouse">The warehouse to add.</param>
+    void Add(Warehouse warehouse);
+}
+
+/// <summary>Which inventory master a code is being checked against.</summary>
+public enum InventoryMasterKind
+{
+    /// <summary>A unit of measurement.</summary>
+    UnitOfMeasure = 1,
+
+    /// <summary>A product category or sub-class.</summary>
+    Category = 2,
+
+    /// <summary>A brand.</summary>
+    Brand = 3,
+
+    /// <summary>A warehouse.</summary>
+    Warehouse = 4,
 }

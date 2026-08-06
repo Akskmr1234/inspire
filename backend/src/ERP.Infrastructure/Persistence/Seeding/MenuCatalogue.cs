@@ -67,6 +67,39 @@ public static class MenuCatalogue
                     "accounting",
                     "/accounting/ledgers",
                     "accounting:ledger:view"),
+
+                // Inventory masters, surfaced under the shared Masters heading rather
+                // than a module of their own. The specification asks for exactly this -
+                // an entry belonging to one module shown under another - and the
+                // Module field records where each really belongs.
+                new(
+                    "masters.units",
+                    "Units of measure",
+                    "وحدات القياس",
+                    "inventory",
+                    "/inventory/units",
+                    "inventory:unit:view"),
+                new(
+                    "masters.categories",
+                    "Categories",
+                    "الفئات",
+                    "inventory",
+                    "/inventory/categories",
+                    "inventory:category:view"),
+                new(
+                    "masters.brands",
+                    "Brands",
+                    "العلامات التجارية",
+                    "inventory",
+                    "/inventory/brands",
+                    "inventory:category:view"),
+                new(
+                    "masters.warehouses",
+                    "Warehouses",
+                    "المستودعات",
+                    "inventory",
+                    "/inventory/warehouses",
+                    "inventory:warehouse:view"),
             ]),
 
         new(

@@ -14,6 +14,9 @@ import { CashFlowPage } from '@/pages/CashFlowPage';
 import { MenuAdministrationPage } from '@/pages/MenuAdministrationPage';
 import { LedgersPage } from '@/pages/LedgersPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { UnitsPage } from '@/pages/UnitsPage';
+import { BrandsPage, CategoriesPage } from '@/pages/CategoriesPage';
+import { WarehousesPage } from '@/pages/WarehousesPage';
 import { AccountGroupSummaryPage } from '@/pages/AccountGroupSummaryPage';
 import { PostDatedChequesPage } from '@/pages/PostDatedChequesPage';
 import { ChequeCalendarPage } from '@/pages/ChequeCalendarPage';
@@ -76,6 +79,10 @@ export function App(): React.JSX.Element {
         <Route path="/settings/menu" element={<MenuAdministrationPage />} />
         <Route path="/accounting/ledgers" element={<LedgersPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/inventory/units" element={<UnitsPage />} />
+        <Route path="/inventory/categories" element={<CategoriesPage />} />
+        <Route path="/inventory/brands" element={<BrandsPage />} />
+        <Route path="/inventory/warehouses" element={<WarehousesPage />} />
         <Route path="/accounting/post-dated-cheques" element={<PostDatedChequesPage />} />
         <Route path="/accounting/cheque-calendar" element={<ChequeCalendarPage />} />
         <Route path="/accounting/cheque-register" element={<ChequeRegisterPage />} />
