@@ -1,6 +1,17 @@
 # =============================================================================
-# ERP.Api container image.
-# Build from the repository root:  docker build -f backend/docker/Dockerfile.api .
+# ERP.Api container image — the backend service.
+#
+# This file sits at the repository root because the build genuinely needs the
+# whole repository as its context: the root .editorconfig carries analyzer
+# severities the backend compiles against, and the image is built with warnings
+# promoted to errors. A Dockerfile under backend/ could not reach it, and the
+# container build would apply a different ruleset from a local one.
+#
+# On a deployment platform this is the service whose ROOT DIRECTORY is "."; the
+# web client is a separate service with its root directory set to apps/web,
+# where it has a Dockerfile of its own.
+#
+#   docker build -t inspire-erp/api .
 # =============================================================================
 
 # ---------- build ----------
@@ -55,8 +66,13 @@ WORKDIR /app
 # these the container starts and then fails on the first TimeZoneInfo lookup.
 RUN apk add --no-cache icu-libs icu-data-full tzdata
 
+# ASPNETCORE_HTTP_PORTS is the fallback for a plain `docker run`. A deployment
+# platform injects PORT instead, and the application binds that in preference -
+# see PlatformConfiguration.ResolveListenUrl. The two agree by default so that
+# EXPOSE below is accurate either way.
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     ASPNETCORE_HTTP_PORTS=8080 \
+    PORT=8080 \
     DOTNET_gcServer=1
 
 # A non-root user. The application needs no write access to its own files, and
@@ -66,11 +82,14 @@ USER erp
 
 COPY --from=build --chown=erp:erp /app/publish .
 
+# How the platform discovers which port to publish. Keep this in step with the
+# PORT default above.
 EXPOSE 8080
 
 # Hits the liveness probe, which is dependency-free by design - so the container
 # is not reported unhealthy merely because PostgreSQL is briefly unreachable.
+# Shell form, so PORT is expanded at runtime rather than baked in at build.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD wget -qO- http://localhost:8080/health/live || exit 1
+    CMD wget -qO- "http://localhost:${PORT:-8080}/health/live" || exit 1
 
 ENTRYPOINT ["dotnet", "ERP.Api.dll"]

@@ -36,13 +36,15 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — Debtors/Creditors and age-wise reports | **Done** — 23 application + 9 integration tests |
 | Accounting — cheque lifecycle incl. PDC (domain + persistence) | **Done** — 34 tests |
 | Accounting — cheques recorded on posting; bank, clear, bounce, stop, void | **Done** — 31 tests |
-| Accounting — PDC report, PDC calendar, cheque register | Not started |
+| Accounting — PDC report, PDC calendar, cheque register | **Done** — 15 application + 11 integration tests |
+| Accounting — account group summary, voucher report, transaction summary | **Done** — 23 application + 15 integration tests |
+| Deployment — container images for API and web, platform configuration | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
 | Accounting — automatic ledger reversal for a bounced cheque | Not started — see below |
 | Dynamic menus, report builder, print designer, workflow engine | Not started |
 | Inventory, Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 486 passing, 0 failing (285 domain + 120 application + 35 API + 20 identity + 26 integration).
+**Test suite:** 562 passing, 0 failing (285 domain + 158 application + 47 API + 20 identity + 52 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

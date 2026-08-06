@@ -15,11 +15,28 @@ namespace ERP.Infrastructure.Persistence.Seeding;
 /// </remarks>
 public static partial class DatabaseInitializer
 {
+    /// <summary>How long to wait for the database at startup, in seconds.</summary>
+    /// <remarks>
+    /// Chosen to sit inside the startup budget a deployment platform allows - commonly
+    /// about a minute - with time to spare for the migrations that follow. Waiting
+    /// longer than the platform is willing to wait achieves nothing: it rolls the
+    /// deployment back regardless, and a container still waiting is a container that
+    /// never reported why.
+    /// </remarks>
+    private const int DefaultDatabaseWaitSeconds = 30;
+
+    /// <summary>How long to pause between connection attempts.</summary>
+    private const int RetryDelayMilliseconds = 1_000;
+
     /// <summary>
     /// Brings the database up to date and seeds it, if seeding is enabled.
     /// </summary>
     /// <param name="services">The application's root service provider.</param>
     /// <param name="applyMigrations">Whether to apply pending migrations.</param>
+    /// <param name="databaseWaitTimeout">
+    /// How long to keep waiting for the database to accept connections before giving
+    /// up. Defaults to <see cref="DefaultDatabaseWaitSeconds"/> seconds.
+    /// </param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task representing the operation.</returns>
     /// <exception cref="InvalidOperationException">
@@ -43,6 +60,7 @@ public static partial class DatabaseInitializer
     public static async Task InitializeAsync(
         IServiceProvider services,
         bool applyMigrations,
+        TimeSpan? databaseWaitTimeout = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -51,6 +69,12 @@ public static partial class DatabaseInitializer
 
         ILoggerFactory loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
         ILogger logger = loggerFactory.CreateLogger(typeof(DatabaseInitializer));
+
+        await WaitForDatabaseAsync(
+            scope.ServiceProvider,
+            logger,
+            databaseWaitTimeout ?? TimeSpan.FromSeconds(DefaultDatabaseWaitSeconds),
+            cancellationToken);
 
         if (applyMigrations)
         {
@@ -99,6 +123,93 @@ public static partial class DatabaseInitializer
             LogAdministratorCreated(logger, summary.TenantCode);
         }
     }
+
+    /// <summary>Waits for the database to start accepting connections.</summary>
+    /// <param name="services">The scoped provider to resolve the context from.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="timeout">How long to keep trying.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the operation.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the database is still unreachable when the timeout expires.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// A container and the database it depends on are frequently started together, and
+    /// PostgreSQL takes several seconds to initialise on its first boot. Connecting
+    /// once and exiting on failure turns that ordinary race into a failed deployment,
+    /// and the error it reports - "connection refused" - describes a database that is
+    /// merely a few seconds late as though it were misconfigured.
+    /// </para>
+    /// <para>
+    /// The wait is bounded, and expiry still throws. A database that never arrives is
+    /// a genuine failure and must be loud: a process that hangs waiting for one is far
+    /// harder to diagnose than a container that exits saying what it wanted.
+    /// </para>
+    /// </remarks>
+    private static async Task WaitForDatabaseAsync(
+        IServiceProvider services,
+        ILogger logger,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ErpDbContext context = services.GetRequiredService<ErpDbContext>();
+
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
+        int attempt = 0;
+        Exception? lastFailure = null;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            attempt++;
+
+            try
+            {
+                if (await context.Database.CanConnectAsync(cancellationToken))
+                {
+                    if (attempt > 1)
+                    {
+                        LogDatabaseReady(logger, attempt);
+                    }
+
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Every provider reports "not listening yet" as its own exception
+                // type, and none of them is worth enumerating: while the deadline
+                // holds, any failure to connect is treated as the database still
+                // coming up. The last one is kept so the give-up message can say what
+                // was actually wrong.
+                lastFailure = ex;
+            }
+
+            LogWaitingForDatabase(logger, attempt);
+
+            await Task.Delay(RetryDelayMilliseconds, cancellationToken);
+        }
+
+        throw new InvalidOperationException(
+            $"The database did not accept connections within {timeout.TotalSeconds:N0} " +
+            $"seconds. Check that the server is running and that the connection string " +
+            $"names the right host - on a managed platform it is built from PGHOST, " +
+            $"PGPORT, PGDATABASE, PGUSER and PGPASSWORD unless ConnectionStrings__Postgres " +
+            $"is set explicitly.",
+            lastFailure);
+    }
+
+    [LoggerMessage(
+        EventId = 1003,
+        Level = LogLevel.Information,
+        Message = "Waiting for the database to accept connections (attempt {Attempt})")]
+    private static partial void LogWaitingForDatabase(ILogger logger, int attempt);
+
+    [LoggerMessage(
+        EventId = 1004,
+        Level = LogLevel.Information,
+        Message = "Database accepted connections after {Attempts} attempts")]
+    private static partial void LogDatabaseReady(ILogger logger, int attempts);
 
     [LoggerMessage(
         EventId = 1000,

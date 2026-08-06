@@ -1,0 +1,59 @@
+# =============================================================================
+# nginx configuration for the Inspire ERP web client.
+#
+# Processed by the nginx image's entrypoint, which runs envsubst over every
+# template in /etc/nginx/templates and writes the result to /etc/nginx/conf.d.
+#
+# Only ${PORT} is substituted, and that is enforced by NGINX_ENVSUBST_FILTER in
+# the Dockerfile. Without that filter envsubst would also replace nginx's own
+# runtime variables - $uri, $host - with empty strings, and the server would
+# start with a configuration that routes every request to nowhere.
+# =============================================================================
+
+server {
+    listen ${PORT};
+    listen [::]:${PORT};
+
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The platform terminates TLS in front of this container and health-probes it
+    # over plain HTTP, so nothing here redirects to HTTPS.
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json
+               image/svg+xml application/manifest+json;
+
+    # Vite fingerprints every asset it emits, so a changed file arrives under a
+    # changed name and can be cached indefinitely.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # index.html must never be cached. It is the one file whose name does not
+    # change between releases, and a cached copy keeps pointing at the previous
+    # build's asset names - which the new image no longer contains, so the
+    # application loads to a blank page until the browser is hard-refreshed.
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate";
+        expires off;
+    }
+
+    # A single-page application owns its own routing: /accounting/day-book is a
+    # client route, not a file. Anything not found on disk is served the shell,
+    # which then renders the right screen.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Hardening that costs nothing. The API sets its own headers; these cover the
+    # documents this server hands out.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+}

@@ -131,7 +131,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: backend/docker/Dockerfile.api
+          file: Dockerfile
           push: false
           tags: inspire-erp/api:${{ github.sha }}
           cache-from: type=gha

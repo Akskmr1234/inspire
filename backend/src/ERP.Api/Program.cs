@@ -7,6 +7,7 @@ using ERP.Identity;
 using ERP.Infrastructure;
 using ERP.Infrastructure.Persistence.Seeding;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi;
 using Serilog;
 using Serilog.Events;
@@ -52,6 +53,17 @@ public partial class Program
         {
             WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+            // Before anything reads configuration: turns the names a hosting platform
+            // injects - PGHOST, DATABASE_URL, PORT - into the names this application
+            // reads. Without it a deployed container starts up pointing at the
+            // localhost placeholder in appsettings.json.
+            builder.AddPlatformConfiguration();
+
+            if (PlatformConfiguration.ResolveListenUrl() is { } listenUrl)
+            {
+                builder.WebHost.UseUrls(listenUrl);
+            }
+
             builder.Host.UseSerilog((context, services, configuration) => configuration
                 .ReadFrom.Configuration(context.Configuration)
                 .ReadFrom.Services(services)
@@ -74,10 +86,17 @@ public partial class Program
             // schema that is mid-migration or a database with no permission
             // catalogue. Failure here aborts startup rather than surfacing later as
             // an inexplicable authorisation error.
+            // Migrations run by default. A container deployed against a fresh managed
+            // database has no schema at all, and an API that waits to be migrated by
+            // hand serves nothing but 500s until somebody does it. Set
+            // Erp__Database__ApplyMigrationsOnStartup to false where migrations are a
+            // separate release step - and do so once they grow long enough to threaten
+            // the platform's startup health-check budget, because a container still
+            // migrating is a container not yet answering.
             await DatabaseInitializer.InitializeAsync(
                 app.Services,
                 applyMigrations: builder.Configuration.GetValue(
-                    "Erp:Database:ApplyMigrationsOnStartup", app.Environment.IsDevelopment()));
+                    "Erp:Database:ApplyMigrationsOnStartup", true));
 
             await app.RunAsync();
             return 0;
@@ -196,6 +215,23 @@ public partial class Program
 
     private static void ConfigurePipeline(WebApplication app)
     {
+        // Deployed behind a reverse proxy that terminates TLS, the request arrives
+        // over plain HTTP carrying X-Forwarded-*. Without this the application
+        // believes every request is insecure and generates http:// links for an
+        // https:// site.
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                | ForwardedHeaders.XForwardedProto
+                | ForwardedHeaders.XForwardedHost,
+
+            // The proxy is the platform's own, on an address the container has no way
+            // to know. Restricting to known proxies here would reject its headers and
+            // defeat the point; the container is not reachable except through it.
+            KnownIPNetworks = { },
+            KnownProxies = { },
+        });
+
         app.UseSerilogRequestLogging(options => options.GetLevel = ResolveRequestLogLevel);
 
         app.UseExceptionHandler();
@@ -219,7 +255,17 @@ public partial class Program
             app.UseHsts();
         }
 
-        app.UseHttpsRedirection();
+        // Off by default wherever the platform assigned the port, which is the reliable
+        // signal that TLS is being terminated in front of this process. Redirecting
+        // there sends the health probe - which speaks plain HTTP to the container - to
+        // an https:// URL the container does not serve, and the deployment is rolled
+        // back for a healthy application.
+        if (app.Configuration.GetValue(
+            "Erp:Hosting:HttpsRedirection", PlatformConfiguration.ResolveListenUrl() is null))
+        {
+            app.UseHttpsRedirection();
+        }
+
         app.UseCors("erp-web");
         app.UseAuthentication();
 
@@ -231,6 +277,18 @@ public partial class Program
         app.UseAuthorization();
 
         app.MapControllers();
+
+        // The root path, because a deployment platform probes GET / unless told
+        // otherwise, and an API that answers 404 there is relying on 404 counting as
+        // "not a server error" - true today, and a poor thing to stake a rollback on.
+        // Dependency-free like the liveness probe: it reports that the process is
+        // serving, not that the database is reachable.
+        app.MapGet("/", () => Results.Ok(new
+        {
+            name = "Inspire ERP API",
+            status = "ok",
+            documentation = "/swagger",
+        })).AllowAnonymous();
 
         app.MapHealthChecks("/health/live", new HealthCheckOptions
         {

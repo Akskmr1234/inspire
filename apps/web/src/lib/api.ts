@@ -19,6 +19,23 @@
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
 
+/**
+ * Where the API lives, baked in when the bundle is built.
+ *
+ * Vite inlines `VITE_*` variables at build time, so this is fixed the moment the
+ * image is produced and cannot be changed by setting an environment variable on the
+ * running container. Deploying the UI and the API as separate services therefore
+ * means supplying the API's public HTTPS origin as a build argument.
+ *
+ * Left unset it falls back to a same-origin relative path, which is what local
+ * development wants - Vite proxies `/api` to the API and the browser issues no
+ * preflight - and what a single-origin deployment behind one reverse proxy wants too.
+ * Deliberately no localhost default: a default that happens to work on a developer's
+ * machine ships a bundle pointing at the user's own computer, which fails only in the
+ * browser and leaves nothing in any log.
+ */
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
 let accessToken: string | null = null;
 
 /** An error carrying the API's RFC 9457 problem details. */
@@ -110,7 +127,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  return fetch(`/api/v1${path}`, {
+  return fetch(`${API_BASE_URL}/api/v1${path}`, {
     method: options.method ?? 'GET',
     headers,
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),

@@ -66,7 +66,7 @@ services:
     profiles: ["api"]
     build:
       context: .
-      dockerfile: backend/docker/Dockerfile.api
+      dockerfile: Dockerfile
     container_name: erp-api
     restart: unless-stopped
     depends_on:

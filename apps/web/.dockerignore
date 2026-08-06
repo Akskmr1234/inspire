@@ -1,0 +1,28 @@
+# =============================================================================
+# Build-context exclusions for the web image.
+#
+# The repository-root .dockerignore does not apply here: this image is built
+# with apps/web as its context, and Docker reads the ignore file belonging to
+# the context it is given.
+#
+# node_modules is the one that actually breaks a build rather than merely
+# slowing it. The Dockerfile installs dependencies and then copies the source
+# over the top; without this line the host's node_modules - built against the
+# host's platform and architecture - would be copied over the freshly installed
+# Linux ones, and the build would fail on a native binary that is not for this
+# operating system.
+# =============================================================================
+
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Never bake local environment overrides into an image. They routinely point at
+# a developer's own machine, and inlined into the bundle they would ship that.
+.env
+.env.*
+!.env.example
+
+Dockerfile
+.dockerignore
