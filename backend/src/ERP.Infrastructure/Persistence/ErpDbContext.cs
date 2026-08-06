@@ -87,6 +87,9 @@ public class ErpDbContext : DbContext
     /// </remarks>
     public DbSet<BillAllocation> BillAllocations => Set<BillAllocation>();
 
+    /// <summary>Gets the cheque register.</summary>
+    public DbSet<Cheque> Cheques => Set<Cheque>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -181,6 +184,7 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<BillId>().HaveConversion<BillIdConverter>();
         configurationBuilder.Properties<BillAllocationId>()
             .HaveConversion<BillAllocationIdConverter>();
+        configurationBuilder.Properties<ChequeId>().HaveConversion<ChequeIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

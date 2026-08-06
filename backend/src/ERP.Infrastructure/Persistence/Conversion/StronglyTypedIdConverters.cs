@@ -123,6 +123,16 @@ public sealed class BillIdConverter : ValueConverter<BillId, Guid>
     }
 }
 
+/// <summary>Converts <see cref="ChequeId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class ChequeIdConverter : ValueConverter<ChequeId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="ChequeIdConverter"/> class.</summary>
+    public ChequeIdConverter()
+        : base(id => id.Value, value => ChequeId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="BillAllocationId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class BillAllocationIdConverter : ValueConverter<BillAllocationId, Guid>
 {

@@ -72,6 +72,20 @@ public readonly record struct BillId(Guid Value) : IStronglyTypedId<BillId>
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies a cheque.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct ChequeId(Guid Value) : IStronglyTypedId<ChequeId>
+{
+    /// <inheritdoc />
+    public static ChequeId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static ChequeId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Identifies one settlement against a bill.</summary>
 /// <param name="Value">The underlying value.</param>
 /// <remarks>
