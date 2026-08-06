@@ -34,6 +34,7 @@ internal sealed class Fixture
 
     private readonly Dictionary<LedgerId, Ledger> _ledgersById;
     private readonly Dictionary<BillId, Bill> _billsById = [];
+    private readonly Dictionary<ChequeId, Cheque> _chequesById = [];
     private readonly CreateVoucherCommandHandler _handler;
 
     /// <summary>Initialises a new instance of the <see cref="Fixture"/> class.</summary>
@@ -90,6 +91,16 @@ internal sealed class Fixture
                 call.ArgAt<LedgerId>(1), call.ArgAt<IEnumerable<string>>(2)));
         Bills.When(b => b.Add(Arg.Any<Bill>())).Do(call => Raised.Add(call.Arg<Bill>()!));
 
+        Cheques = Substitute.For<IChequeRepository>();
+        Cheques
+            .FindLiveNumbersAsync(
+                Arg.Any<FirmId>(), Arg.Any<LedgerId>(), Arg.Any<IEnumerable<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => NumbersInUse(
+                call.ArgAt<LedgerId>(1), call.ArgAt<IEnumerable<string>>(2)));
+        Cheques.When(c => c.Add(Arg.Any<Cheque>()))
+            .Do(call => Recorded.Add(call.Arg<Cheque>()!));
+
         Firms = Substitute.For<IFirmRepository>();
         Firms.FindAsync(Firm.Id, Arg.Any<CancellationToken>()).Returns(Firm);
 
@@ -124,7 +135,7 @@ internal sealed class Fixture
         clock.UtcNow.Returns(Now);
 
         _handler = new CreateVoucherCommandHandler(
-            Vouchers, Ledgers, Bills, FinancialYears, Numbering, Firms,
+            Vouchers, Ledgers, Bills, Cheques, FinancialYears, Numbering, Firms,
             tenant, user, clock, UnitOfWork);
     }
 
@@ -158,6 +169,9 @@ internal sealed class Fixture
     /// <summary>Gets the bill repository.</summary>
     internal IBillRepository Bills { get; }
 
+    /// <summary>Gets the cheque repository.</summary>
+    internal IChequeRepository Cheques { get; }
+
     /// <summary>Gets the firm repository.</summary>
     internal IFirmRepository Firms { get; }
 
@@ -175,6 +189,9 @@ internal sealed class Fixture
 
     /// <summary>Gets the bills the handler raised, in the order it raised them.</summary>
     internal List<Bill> Raised { get; } = [];
+
+    /// <summary>Gets the cheques the handler recorded, in the order it recorded them.</summary>
+    internal List<Cheque> Recorded { get; } = [];
 
     /// <summary>Creates a ledger under a fresh current-assets group of a firm.</summary>
     /// <param name="firm">The owning firm.</param>
@@ -204,6 +221,39 @@ internal sealed class Fixture
         _billsById[bill.Id] = bill;
 
         return bill;
+    }
+
+    /// <summary>Records a cheque against a party and registers it as already open.</summary>
+    /// <param name="party">The party the cheque came from or goes to.</param>
+    /// <param name="direction">Received or issued.</param>
+    /// <param name="number">The cheque number.</param>
+    /// <param name="amount">The amount, in the firm's base currency.</param>
+    /// <param name="instrumentDate">The date on its face. Defaults to the posting date.</param>
+    /// <returns>The registered cheque.</returns>
+    internal Cheque ExistingCheque(
+        Ledger party,
+        ChequeDirection direction,
+        string number,
+        decimal amount,
+        DateOnly? instrumentDate = null)
+    {
+        ArgumentNullException.ThrowIfNull(party);
+
+        Cheque cheque = Cheque.Record(
+            Tenant,
+            Firm.Id,
+            direction,
+            party.Id,
+            VoucherId.NewId(),
+            number,
+            instrumentDate ?? PostingDate,
+            PostingDate,
+            Money.Of(amount, Firm.BaseCurrency),
+            direction == ChequeDirection.Issued ? BankLedger.Id : null).Value;
+
+        _chequesById[cheque.Id] = cheque;
+
+        return cheque;
     }
 
     /// <summary>Raises a bill against a party and registers it.</summary>
@@ -255,6 +305,26 @@ internal sealed class Fixture
         return _billsById.Values
             .Where(b => b.LedgerId == ledgerId && requested.Contains(b.BillNumber))
             .Select(b => b.BillNumber)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Answers the cheque repository's uniqueness check from the cheques already
+    /// registered.
+    /// </summary>
+    /// <param name="ledgerId">The party.</param>
+    /// <param name="numbers">The numbers being checked.</param>
+    /// <returns>Those already on an open cheque.</returns>
+    private HashSet<string> NumbersInUse(LedgerId ledgerId, IEnumerable<string> numbers)
+    {
+        HashSet<string> requested = numbers.ToHashSet(StringComparer.Ordinal);
+
+        return _chequesById.Values
+            .Where(c =>
+                c.PartyLedgerId == ledgerId
+                && c.IsOutstanding
+                && requested.Contains(c.ChequeNumber))
+            .Select(c => c.ChequeNumber)
             .ToHashSet(StringComparer.Ordinal);
     }
 }

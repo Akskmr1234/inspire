@@ -22,12 +22,18 @@ namespace ERP.Application.Accounting.Vouchers;
 /// Supplied, they must account for the whole line; omitted, the posting simply moves
 /// the party's balance without touching any bill.
 /// </param>
+/// <param name="Cheques">
+/// The cheques changing hands on this line. Supplied, they must account for the
+/// whole of it. Post-dated cheques are recorded here like any other; what makes them
+/// post-dated is only that their instrument date has not yet arrived.
+/// </param>
 public sealed record CreateVoucherLine(
     Guid LedgerId,
     EntrySide Side,
     decimal Amount,
     string? Narration = null,
-    IReadOnlyList<CreateVoucherBillReference>? BillReferences = null);
+    IReadOnlyList<CreateVoucherBillReference>? BillReferences = null,
+    IReadOnlyList<CreateVoucherCheque>? Cheques = null);
 
 /// <summary>Creates a voucher and posts it to the ledgers.</summary>
 /// <param name="Type">The kind of voucher.</param>
@@ -127,6 +133,26 @@ public sealed class CreateVoucherCommandValidator : AbstractValidator<CreateVouc
                         .WithMessage("A credit period cannot be negative.");
                 })
                 .When(l => l.BillReferences is not null);
+
+            line.RuleForEach(l => l.Cheques!)
+                .ChildRules(cheque =>
+                {
+                    cheque.RuleFor(c => c.ChequeNumber)
+                        .NotEmpty()
+                        .MaximumLength(Cheque.MaximumNumberLength);
+
+                    cheque.RuleFor(c => c.InstrumentDate)
+                        .NotEqual(default(DateOnly))
+                        .WithMessage("A cheque needs the date written on its face.");
+
+                    cheque.RuleFor(c => c.Amount)
+                        .GreaterThan(0m)
+                        .WithMessage("Each cheque must be for a positive amount.");
+
+                    cheque.RuleFor(c => c.DrawnOnBank)
+                        .MaximumLength(Cheque.MaximumBankNameLength);
+                })
+                .When(l => l.Cheques is not null);
         });
 
         RuleFor(c => c.ExchangeRate).GreaterThan(0m);
@@ -151,11 +177,13 @@ public sealed class CreateVoucherCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly VoucherBillReferencePoster _billReferences;
+    private readonly VoucherChequeRecorder _chequeRecorder;
 
     /// <summary>Initialises a new instance of the <see cref="CreateVoucherCommandHandler"/> class.</summary>
     /// <param name="vouchers">The voucher repository.</param>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="bills">The bill repository.</param>
+    /// <param name="cheques">The cheque repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="firms">The firm repository.</param>
@@ -167,6 +195,7 @@ public sealed class CreateVoucherCommandHandler
         IVoucherRepository vouchers,
         ILedgerRepository ledgers,
         IBillRepository bills,
+        IChequeRepository cheques,
         IFinancialYearRepository financialYears,
         INumberingSeriesRepository numbering,
         IFirmRepository firms,
@@ -185,6 +214,7 @@ public sealed class CreateVoucherCommandHandler
         _clock = clock;
         _unitOfWork = unitOfWork;
         _billReferences = new VoucherBillReferencePoster(bills);
+        _chequeRecorder = new VoucherChequeRecorder(cheques);
     }
 
     /// <inheritdoc />
@@ -302,6 +332,14 @@ public sealed class CreateVoucherCommandHandler
         if (settled.IsFailure)
         {
             return Result.Failure<CreateVoucherResponse>(settled.Error);
+        }
+
+        Result recorded = await _chequeRecorder.RecordAsync(
+            voucher, request.Lines, ledgers.Value, cancellationToken);
+
+        if (recorded.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(recorded.Error);
         }
 
         _vouchers.Add(voucher);

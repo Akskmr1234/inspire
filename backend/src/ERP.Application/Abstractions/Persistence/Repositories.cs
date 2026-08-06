@@ -122,9 +122,55 @@ public interface IBillRepository
         IEnumerable<string> billNumbers,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Loads every bill a voucher allocated against.</summary>
+    /// <param name="voucherId">The settling voucher.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The bills that voucher settled, with their allocations.</returns>
+    /// <remarks>
+    /// Wanted when a settlement has to be undone - a cheque that bounces, or a
+    /// receipt that is cancelled. The voucher knows what it paid; the bills know
+    /// what they were paid by, and this is the direction the reversal needs.
+    /// </remarks>
+    Task<IReadOnlyList<Bill>> FindAllocatedByAsync(
+        VoucherId voucherId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds a bill.</summary>
     /// <param name="bill">The bill to add.</param>
     void Add(Bill bill);
+}
+
+/// <summary>Reads and writes cheques.</summary>
+public interface IChequeRepository
+{
+    /// <summary>Finds a cheque.</summary>
+    /// <param name="id">The cheque.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The cheque, or <see langword="null"/>.</returns>
+    Task<Cheque?> FindAsync(ChequeId id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Determines which of a set of cheque numbers a party already has live.
+    /// </summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="partyLedgerId">The party.</param>
+    /// <param name="chequeNumbers">The numbers to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Those of the supplied numbers already on an open cheque.</returns>
+    /// <remarks>
+    /// Only open cheques count, matching the filtered unique index. A cheque that
+    /// bounced is re-presented under the same number, so a check over all history
+    /// would refuse the very thing that happens next.
+    /// </remarks>
+    Task<IReadOnlySet<string>> FindLiveNumbersAsync(
+        FirmId firmId,
+        LedgerId partyLedgerId,
+        IEnumerable<string> chequeNumbers,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a cheque.</summary>
+    /// <param name="cheque">The cheque to add.</param>
+    void Add(Cheque cheque);
 }
 
 /// <summary>Reads firms.</summary>

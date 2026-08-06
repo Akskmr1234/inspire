@@ -191,7 +191,75 @@ public sealed class BillRepository : IBillRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Bill>> FindAllocatedByAsync(
+        VoucherId voucherId,
+        CancellationToken cancellationToken = default)
+    {
+        // Through the allocations table rather than the bills' navigation, so the
+        // filter runs in the database on the indexed voucher column instead of
+        // loading every bill's history to sift it in memory.
+        List<BillId> billIds = await _context.BillAllocations
+            .Where(a => a.VoucherId == voucherId)
+            .Select(a => a.BillId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (billIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _context.Bills
+            .Include(b => b.Allocations)
+            .Where(b => billIds.Contains(b.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public void Add(Bill bill) => _context.Bills.Add(bill);
+}
+
+/// <summary>The EF Core cheque repository.</summary>
+public sealed class ChequeRepository : IChequeRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="ChequeRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public ChequeRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<Cheque?> FindAsync(ChequeId id, CancellationToken cancellationToken = default) =>
+        _context.Cheques.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> FindLiveNumbersAsync(
+        FirmId firmId,
+        LedgerId partyLedgerId,
+        IEnumerable<string> chequeNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        List<string> requested = [.. chequeNumbers];
+
+        if (requested.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        List<string> live = await _context.Cheques
+            .Where(c =>
+                c.FirmId == firmId
+                && c.PartyLedgerId == partyLedgerId
+                && (c.Status == ChequeStatus.Pending || c.Status == ChequeStatus.Deposited)
+                && requested.Contains(c.ChequeNumber))
+            .Select(c => c.ChequeNumber)
+            .ToListAsync(cancellationToken);
+
+        return live.ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public void Add(Cheque cheque) => _context.Cheques.Add(cheque);
 }
 
 /// <summary>The EF Core firm repository.</summary>
