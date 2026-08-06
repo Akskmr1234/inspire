@@ -17,11 +17,17 @@ namespace ERP.Application.Accounting.Vouchers;
 /// <param name="Side">Whether the line debits or credits that ledger.</param>
 /// <param name="Amount">The amount, in the entry currency. Must be positive.</param>
 /// <param name="Narration">An optional line narration.</param>
+/// <param name="BillReferences">
+/// The bills this line raises or settles, for a posting against a bill-wise ledger.
+/// Supplied, they must account for the whole line; omitted, the posting simply moves
+/// the party's balance without touching any bill.
+/// </param>
 public sealed record CreateVoucherLine(
     Guid LedgerId,
     EntrySide Side,
     decimal Amount,
-    string? Narration = null);
+    string? Narration = null,
+    IReadOnlyList<CreateVoucherBillReference>? BillReferences = null);
 
 /// <summary>Creates a voucher and posts it to the ledgers.</summary>
 /// <param name="Type">The kind of voucher.</param>
@@ -100,6 +106,27 @@ public sealed class CreateVoucherCommandValidator : AbstractValidator<CreateVouc
             line.RuleFor(l => l.Side).IsInEnum();
 
             line.RuleFor(l => l.Narration).MaximumLength(500);
+
+            // Shape only, again. Whether the references account for the line, and
+            // whether the ledger is even tracked bill-wise, needs the ledger loaded -
+            // so those live with the posting rules rather than here.
+            line.RuleForEach(l => l.BillReferences!)
+                .ChildRules(reference =>
+                {
+                    reference.RuleFor(r => r.Kind).IsInEnum();
+
+                    reference.RuleFor(r => r.Amount)
+                        .GreaterThan(0m)
+                        .WithMessage("Each bill reference must be for a positive amount.");
+
+                    reference.RuleFor(r => r.BillNumber).MaximumLength(50);
+
+                    reference.RuleFor(r => r.CreditDays)
+                        .GreaterThanOrEqualTo(0)
+                        .When(r => r.CreditDays.HasValue)
+                        .WithMessage("A credit period cannot be negative.");
+                })
+                .When(l => l.BillReferences is not null);
         });
 
         RuleFor(c => c.ExchangeRate).GreaterThan(0m);
@@ -123,10 +150,12 @@ public sealed class CreateVoucherCommandHandler
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly VoucherBillReferencePoster _billReferences;
 
     /// <summary>Initialises a new instance of the <see cref="CreateVoucherCommandHandler"/> class.</summary>
     /// <param name="vouchers">The voucher repository.</param>
     /// <param name="ledgers">The ledger repository.</param>
+    /// <param name="bills">The bill repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="firms">The firm repository.</param>
@@ -137,6 +166,7 @@ public sealed class CreateVoucherCommandHandler
     public CreateVoucherCommandHandler(
         IVoucherRepository vouchers,
         ILedgerRepository ledgers,
+        IBillRepository bills,
         IFinancialYearRepository financialYears,
         INumberingSeriesRepository numbering,
         IFirmRepository firms,
@@ -154,6 +184,7 @@ public sealed class CreateVoucherCommandHandler
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _billReferences = new VoucherBillReferencePoster(bills);
     }
 
     /// <inheritdoc />
@@ -259,6 +290,18 @@ public sealed class CreateVoucherCommandHandler
             {
                 return Result.Failure<CreateVoucherResponse>(posted.Error);
             }
+        }
+
+        // After posting, so a draft's references are refused rather than acted on,
+        // and before the save, so the voucher and the settlements it makes commit
+        // together. The command is ITransactional; a failure here rolls the posting
+        // back with it.
+        Result settled = await _billReferences.ApplyAsync(
+            voucher, request.Lines, ledgers.Value, cancellationToken);
+
+        if (settled.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(settled.Error);
         }
 
         _vouchers.Add(voucher);

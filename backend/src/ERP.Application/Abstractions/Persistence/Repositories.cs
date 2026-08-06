@@ -85,6 +85,48 @@ public interface ILedgerRepository
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>Reads and writes bills.</summary>
+public interface IBillRepository
+{
+    /// <summary>Loads several bills at once, keyed by identifier.</summary>
+    /// <param name="ids">The bills to load.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The bills found, with their allocations, keyed by identifier.</returns>
+    /// <remarks>
+    /// Allocations are loaded with the bill because settling one appends to them and
+    /// re-derives the status from the total. A bill loaded without them would
+    /// compute its outstanding amount from an empty collection and let a settled
+    /// bill be paid twice.
+    /// </remarks>
+    Task<IReadOnlyDictionary<BillId, Bill>> GetManyAsync(
+        IEnumerable<BillId> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Determines whether a party already has a bill under a reference.
+    /// </summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="ledgerId">The party.</param>
+    /// <param name="billNumbers">The references to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Those of the supplied references that are already in use.</returns>
+    /// <remarks>
+    /// A unique index already forbids the duplicate. Checking first turns what would
+    /// be a constraint violation surfacing as a 500 into a message naming the
+    /// reference that clashed - which is the difference between an operator fixing
+    /// their own typo and raising a support ticket.
+    /// </remarks>
+    Task<IReadOnlySet<string>> FindExistingReferencesAsync(
+        FirmId firmId,
+        LedgerId ledgerId,
+        IEnumerable<string> billNumbers,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a bill.</summary>
+    /// <param name="bill">The bill to add.</param>
+    void Add(Bill bill);
+}
+
 /// <summary>Reads firms.</summary>
 public interface IFirmRepository
 {

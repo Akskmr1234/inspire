@@ -1,11 +1,9 @@
 using ERP.Application.Abstractions.Persistence;
-using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
-using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -24,9 +22,8 @@ namespace ERP.Application.Tests.Accounting.Vouchers;
 /// </remarks>
 public sealed class CreateVoucherTests
 {
-    private static readonly TenantId Tenant = TenantId.NewId();
-    private static readonly DateOnly PostingDate = new(2026, 6, 15);
-    private static readonly DateTimeOffset Now = new(2026, 6, 15, 9, 0, 0, TimeSpan.Zero);
+    private static readonly TenantId Tenant = Fixture.Tenant;
+    private static readonly DateOnly PostingDate = Fixture.PostingDate;
 
     // ------------------------------------------------------------ happy path
 
@@ -287,115 +284,6 @@ public sealed class CreateVoucherTests
     private static CreateVoucherLine Credit(Ledger ledger, decimal amount) =>
         new(ledger.Id.Value, EntrySide.Credit, amount);
 
-    private static Ledger LedgerIn(Firm firm, string code, string name, LedgerKind kind)
-    {
-        AccountGroup group = AccountGroup.CreateRoot(
-            firm.TenantId, firm.Id, "CA", "Current Assets", AccountNature.Asset).Value;
-
-        return Ledger.Create(group, code, name, kind, firm.BaseCurrency).Value;
-    }
-
-    /// <summary>
-    /// A working handler with every dependency substituted and wired to succeed,
-    /// so each test changes only the one thing it is about.
-    /// </summary>
-    private sealed class Fixture
-    {
-        internal Fixture(bool firmSelected = true)
-        {
-            Firm = Firm.Create(
-                Tenant, "ACME", "Acme Trading", CurrencyCode.Qar,
-                TaxRegime.GccVat, "Asia/Qatar").Value;
-
-            BranchId = SharedKernel.Tenancy.BranchId.NewId();
-
-            FinancialYear = Domain.Tenancy.FinancialYear.Create(
-                Tenant, Firm.Id, "2026",
-                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), []).Value;
-
-            CashLedger = LedgerIn(Firm, "1000", "Cash in hand", LedgerKind.Cash);
-            BankLedger = LedgerIn(Firm, "1100", "Bank current", LedgerKind.Bank);
-            SalesLedger = LedgerIn(Firm, "4000", "Sales", LedgerKind.General);
-
-            _ledgersById = new Dictionary<LedgerId, Ledger>
-            {
-                [CashLedger.Id] = CashLedger,
-                [BankLedger.Id] = BankLedger,
-                [SalesLedger.Id] = SalesLedger,
-            };
-
-            Ledgers = Substitute.For<ILedgerRepository>();
-            Ledgers
-                .GetManyAsync(Arg.Any<IEnumerable<LedgerId>>(), Arg.Any<CancellationToken>())
-                .Returns(_ => _ledgersById);
-
-            Firms = Substitute.For<IFirmRepository>();
-            Firms.FindAsync(Firm.Id, Arg.Any<CancellationToken>()).Returns(Firm);
-
-            FinancialYears = Substitute.For<IFinancialYearRepository>();
-            FinancialYears
-                .FindContainingAsync(Firm.Id, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-                .Returns(FinancialYear);
-
-            NumberingSeries series = Domain.Numbering.NumberingSeries.Create(
-                Tenant, Firm.Id, DocumentTypes.CashReceipt, BranchId, FinancialYear.Id).Value;
-
-            Numbering = Substitute.For<INumberingSeriesRepository>();
-            Numbering
-                .FindForUpdateAsync(
-                    Arg.Any<string>(), Arg.Any<FirmId>(), Arg.Any<BranchId>(),
-                    Arg.Any<FinancialYearId>(), Arg.Any<CancellationToken>())
-                .Returns(series);
-
-            Vouchers = Substitute.For<IVoucherRepository>();
-            UnitOfWork = Substitute.For<IUnitOfWork>();
-
-            ITenantContext tenant = Substitute.For<ITenantContext>();
-            tenant.IsResolved.Returns(true);
-            tenant.TenantId.Returns(Tenant);
-            tenant.FirmId.Returns(firmSelected ? Firm.Id : null);
-            tenant.BranchId.Returns(firmSelected ? BranchId : null);
-
-            ICurrentUser user = Substitute.For<ICurrentUser>();
-            user.UserId.Returns(UserId.NewId());
-
-            IClock clock = Substitute.For<IClock>();
-            clock.UtcNow.Returns(Now);
-
-            _handler = new CreateVoucherCommandHandler(
-                Vouchers, Ledgers, FinancialYears, Numbering, Firms, tenant, user, clock, UnitOfWork);
-        }
-
-        private readonly Dictionary<LedgerId, Ledger> _ledgersById;
-        private readonly CreateVoucherCommandHandler _handler;
-
-        internal Firm Firm { get; }
-
-        internal BranchId BranchId { get; }
-
-        internal FinancialYear FinancialYear { get; }
-
-        internal Ledger CashLedger { get; }
-
-        internal Ledger BankLedger { get; }
-
-        internal Ledger SalesLedger { get; }
-
-        internal ILedgerRepository Ledgers { get; }
-
-        internal IFirmRepository Firms { get; }
-
-        internal IFinancialYearRepository FinancialYears { get; }
-
-        internal INumberingSeriesRepository Numbering { get; }
-
-        internal IVoucherRepository Vouchers { get; }
-
-        internal IUnitOfWork UnitOfWork { get; }
-
-        internal void RegisterLedger(Ledger ledger) => _ledgersById[ledger.Id] = ledger;
-
-        internal Task<Result<CreateVoucherResponse>> Handle(CreateVoucherCommand command) =>
-            _handler.Handle(command, TestContext.Current.CancellationToken);
-    }
+    private static Ledger LedgerIn(Firm firm, string code, string name, LedgerKind kind) =>
+        Fixture.LedgerIn(firm, code, name, kind);
 }

@@ -141,6 +141,59 @@ public sealed class LedgerRepository : ILedgerRepository
     }
 }
 
+/// <summary>The EF Core bill repository.</summary>
+public sealed class BillRepository : IBillRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="BillRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public BillRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<BillId, Bill>> GetManyAsync(
+        IEnumerable<BillId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        List<BillId> requested = [.. ids];
+
+        List<Bill> found = await _context.Bills
+            .Include(b => b.Allocations)
+            .Where(b => requested.Contains(b.Id))
+            .ToListAsync(cancellationToken);
+
+        return found.ToDictionary(b => b.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> FindExistingReferencesAsync(
+        FirmId firmId,
+        LedgerId ledgerId,
+        IEnumerable<string> billNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        List<string> requested = [.. billNumbers];
+
+        if (requested.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        List<string> existing = await _context.Bills
+            .Where(b =>
+                b.FirmId == firmId
+                && b.LedgerId == ledgerId
+                && requested.Contains(b.BillNumber))
+            .Select(b => b.BillNumber)
+            .ToListAsync(cancellationToken);
+
+        return existing.ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public void Add(Bill bill) => _context.Bills.Add(bill);
+}
+
 /// <summary>The EF Core firm repository.</summary>
 public sealed class FirmRepository : IFirmRepository
 {
