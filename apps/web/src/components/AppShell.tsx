@@ -62,6 +62,11 @@ export function AppShell(): React.JSX.Element {
             collapsed={collapsed}
           />
           <SidebarLink
+            to="/accounting/account-group-summary"
+            label={t('nav.accountGroupSummary')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
             to="/accounting/profit-and-loss"
             label={t('nav.profitAndLoss')}
             collapsed={collapsed}
@@ -77,6 +82,16 @@ export function AppShell(): React.JSX.Element {
             collapsed={collapsed}
           />
           <SidebarLink
+            to="/accounting/voucher-report"
+            label={t('nav.voucherReport')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
+            to="/accounting/transaction-summary"
+            label={t('nav.transactionSummary')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
             to="/accounting/cash-book"
             label={t('nav.cashBook')}
             collapsed={collapsed}
@@ -84,6 +99,21 @@ export function AppShell(): React.JSX.Element {
           <SidebarLink
             to="/accounting/bank-book"
             label={t('nav.bankBook')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
+            to="/accounting/post-dated-cheques"
+            label={t('nav.postDatedCheques')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
+            to="/accounting/cheque-calendar"
+            label={t('nav.chequeCalendar')}
+            collapsed={collapsed}
+          />
+          <SidebarLink
+            to="/accounting/cheque-register"
+            label={t('nav.chequeRegister')}
             collapsed={collapsed}
           />
         </nav>
