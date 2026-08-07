@@ -25,6 +25,29 @@ public sealed class ProductRepository : IProductRepository
             .FirstOrDefaultAsync(product => product.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<ProductId, Product>> GetManyAsync(
+        IReadOnlyCollection<ProductId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Count == 0)
+        {
+            return new Dictionary<ProductId, Product>();
+        }
+
+        List<ProductId> wanted = [.. ids.Distinct()];
+
+        // Without the barcodes. A stock document needs a product's code, its stock
+        // unit and its item type; the barcodes are a child collection nothing here
+        // reads, and loading forty products' worth of them per document would be the
+        // largest part of the query for no purpose.
+        return await _context.Products
+            .Where(product => wanted.Contains(product.Id))
+            .ToDictionaryAsync(product => product.Id, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<bool> CodeExistsAsync(
         FirmId firmId,
         string code,

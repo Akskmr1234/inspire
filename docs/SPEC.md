@@ -373,6 +373,20 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - No FIFO queue is modelled. Nothing should be built that depends on issue order, because reintroducing FIFO later would then be a data migration rather than a new strategy.
 7. **Approval matrix** — which documents require approval, and at what thresholds.
 8. Whether **Payroll** and **POS** are needed in the first release or genuinely deferred.
+   
+   **8a. Which accounts a stock movement posts to.** Raised 2026-08-07, while building §8.3.
+   Stock operations move goods and value, and the stock ledger they write is complete and
+   self-consistent — but nothing bridges it to the nominal ledger, because the mapping does
+   not exist anywhere in the source document. A material issue debits *something* (works in
+   progress, a consumption account, a department); damaged stock debits a loss account; an
+   opening stock document credits opening equity. Each is a business decision, and inventing
+   defaults would put figures in the accounts that nobody asked for and that would be found
+   at the first reconciliation.
+   
+   What is needed to close it: an account per movement type, and probably per product
+   category, plus the inventory control account each firm posts stock to. Until then,
+   inventory value lives in the stock ledger only, and a trial balance does not include it.
+   This is a **known, deliberate gap**, not an oversight.
 9. ~~**Custom SQL dashboard widgets**~~ — **ANSWERED (2026-08-06): required, all of them.**
    Arbitrary SQL reaching the database from a browser is the largest deliberate attack surface in the platform, so it is built with the guards named when the question was raised rather than without them:
    - **Read-only by construction.** Every custom query runs inside a `READ ONLY` transaction, so a statement that slipped past validation still cannot write.

@@ -293,6 +293,20 @@ public interface IMenuItemRepository
 /// </remarks>
 public interface IInventoryMasterRepository
 {
+    /// <summary>Loads several units of measurement at once.</summary>
+    /// <param name="ids">The units.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The units that exist, by identifier.</returns>
+    /// <remarks>
+    /// A stock document needs both the unit each line was entered in and each
+    /// product's own stock unit, to convert between them. Fetched together because
+    /// they overlap heavily - most lines are entered in the stock unit - and a query
+    /// per line would be mostly the same query.
+    /// </remarks>
+    Task<IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure>> GetUnitsAsync(
+        IReadOnlyCollection<UnitOfMeasureId> ids,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Finds a unit of measurement.</summary>
     /// <param name="id">The unit.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -426,7 +440,82 @@ public interface IProductRepository
         string prefix,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Loads several products at once.</summary>
+    /// <param name="ids">The products.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The products that exist, by identifier.</returns>
+    /// <remarks>
+    /// One query rather than one per line. A stock document naming forty products
+    /// would otherwise be forty round trips before it could refuse the first bad one.
+    /// </remarks>
+    Task<IReadOnlyDictionary<ProductId, Product>> GetManyAsync(
+        IReadOnlyCollection<ProductId> ids,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds a product.</summary>
     /// <param name="product">The product to add.</param>
     void Add(Product product);
+}
+
+/// <summary>Reads and writes stock documents.</summary>
+public interface IStockDocumentRepository
+{
+    /// <summary>Finds a stock document with its lines.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The document, or <see langword="null"/>.</returns>
+    Task<StockDocument?> FindAsync(
+        StockDocumentId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a stock document.</summary>
+    /// <param name="document">The document to add.</param>
+    void Add(StockDocument document);
+}
+
+/// <summary>Reads and writes stock positions.</summary>
+/// <remarks>
+/// Positions are loaded for update in one query per document rather than one per
+/// line. A transfer of forty products would otherwise be eighty round trips, and the
+/// ordering of those round trips is what decides whether two concurrent transfers
+/// deadlock.
+/// </remarks>
+public interface IStockBalanceRepository
+{
+    /// <summary>Loads the positions of several products in one warehouse.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="warehouseId">The warehouse.</param>
+    /// <param name="productIds">The products.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The positions that exist, by product. Missing means never traded.</returns>
+    Task<IReadOnlyDictionary<ProductId, StockBalance>> GetPositionsAsync(
+        FirmId firmId,
+        WarehouseId warehouseId,
+        IReadOnlyCollection<ProductId> productIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a position opened by its first movement.</summary>
+    /// <param name="balance">The position.</param>
+    void Add(StockBalance balance);
+}
+
+/// <summary>Writes and reads back the stock ledger.</summary>
+public interface IStockLedgerRepository
+{
+    /// <summary>Records a movement.</summary>
+    /// <param name="entry">The movement.</param>
+    void Add(StockLedgerEntry entry);
+
+    /// <summary>Reads the movements a document produced, oldest first.</summary>
+    /// <param name="documentId">The document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The movements, in the order they were posted.</returns>
+    /// <remarks>
+    /// Cancelling a document reverses it from these rather than from its lines,
+    /// because they are what actually happened: they carry the cost each movement was
+    /// valued at, which a line of a transfer or an issue never held.
+    /// </remarks>
+    Task<IReadOnlyList<StockLedgerEntry>> ForDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default);
 }

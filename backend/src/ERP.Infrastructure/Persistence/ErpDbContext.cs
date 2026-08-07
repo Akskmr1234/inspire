@@ -126,6 +126,26 @@ public class ErpDbContext : DbContext
     /// </remarks>
     public DbSet<ProductBarcode> ProductBarcodes => Set<ProductBarcode>();
 
+    /// <summary>Gets the documents that move stock.</summary>
+    public DbSet<StockDocument> StockDocuments => Set<StockDocument>();
+
+    /// <summary>Gets the lines of those documents.</summary>
+    public DbSet<StockDocumentLine> StockDocumentLines => Set<StockDocumentLine>();
+
+    /// <summary>
+    /// Gets what is on hand of each product in each warehouse, and what it cost.
+    /// </summary>
+    /// <remarks>
+    /// A running figure rather than a sum over the ledger, unlike a ledger balance in
+    /// accounting. Valuing a sales line has to answer "what does the next issue cost"
+    /// on every line of every invoice, and replaying a product's movement history to
+    /// answer it would make invoicing quadratic in the life of the business.
+    /// </remarks>
+    public DbSet<StockBalance> StockBalances => Set<StockBalance>();
+
+    /// <summary>Gets the stock ledger: every movement, written once and never changed.</summary>
+    public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -237,6 +257,14 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<ProductId>().HaveConversion<ProductIdConverter>();
         configurationBuilder.Properties<ProductBarcodeId>()
             .HaveConversion<ProductBarcodeIdConverter>();
+        configurationBuilder.Properties<StockDocumentId>()
+            .HaveConversion<StockDocumentIdConverter>();
+        configurationBuilder.Properties<StockDocumentLineId>()
+            .HaveConversion<StockDocumentLineIdConverter>();
+        configurationBuilder.Properties<StockBalanceId>()
+            .HaveConversion<StockBalanceIdConverter>();
+        configurationBuilder.Properties<StockLedgerEntryId>()
+            .HaveConversion<StockLedgerEntryIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

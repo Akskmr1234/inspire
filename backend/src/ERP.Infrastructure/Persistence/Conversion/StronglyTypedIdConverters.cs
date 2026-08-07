@@ -244,3 +244,43 @@ public sealed class WarehouseIdConverter : ValueConverter<WarehouseId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="StockDocumentId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockDocumentIdConverter : ValueConverter<StockDocumentId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockDocumentIdConverter"/> class.</summary>
+    public StockDocumentIdConverter()
+        : base(id => id.Value, value => StockDocumentId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockDocumentLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockDocumentLineIdConverter : ValueConverter<StockDocumentLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockDocumentLineIdConverter"/> class.</summary>
+    public StockDocumentLineIdConverter()
+        : base(id => id.Value, value => StockDocumentLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockBalanceId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockBalanceIdConverter : ValueConverter<StockBalanceId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockBalanceIdConverter"/> class.</summary>
+    public StockBalanceIdConverter()
+        : base(id => id.Value, value => StockBalanceId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockLedgerEntryId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockLedgerEntryIdConverter : ValueConverter<StockLedgerEntryId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockLedgerEntryIdConverter"/> class.</summary>
+    public StockLedgerEntryIdConverter()
+        : base(id => id.Value, value => StockLedgerEntryId.From(value))
+    {
+    }
+}

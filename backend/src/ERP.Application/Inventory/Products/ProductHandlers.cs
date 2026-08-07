@@ -82,14 +82,15 @@ public sealed class ProductQueryHandler
 
         Result<FirmId> firm = ProductContext.ResolveFirm(_tenantContext);
 
-        return firm.IsFailure
-            ? Result.Failure<IReadOnlyList<ProductSummary>>(firm.Error)
-            : Result.Success(await _reader.ListAsync(
-                firm.Value,
-                request.Search,
-                request.CategoryId is { } id ? CategoryId.From(id) : null,
-                request.IncludeInactive,
-                cancellationToken));
+        if (firm.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<ProductSummary>>(firm.Error);
+        }
+
+        CategoryId? category = request.CategoryId is { } id ? CategoryId.From(id) : null;
+
+        return Result.Success(await _reader.ListAsync(
+            firm.Value, request.Search, category, request.IncludeInactive, cancellationToken));
     }
 
     /// <inheritdoc />

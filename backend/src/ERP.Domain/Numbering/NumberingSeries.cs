@@ -431,6 +431,27 @@ public static class DocumentTypes
     /// <summary>A service job card.</summary>
     public const string JobCard = "service.job-card";
 
+    /// <summary>An opening-stock document.</summary>
+    public const string OpeningStock = "inventory.opening-stock";
+
+    /// <summary>A material receipt.</summary>
+    public const string MaterialReceipt = "inventory.material-receipt";
+
+    /// <summary>A material issue.</summary>
+    public const string MaterialIssue = "inventory.material-issue";
+
+    /// <summary>A stock transfer between warehouses.</summary>
+    public const string StockTransfer = "inventory.stock-transfer";
+
+    /// <summary>A stock adjustment.</summary>
+    public const string StockAdjustment = "inventory.stock-adjustment";
+
+    /// <summary>A damaged-stock write-off.</summary>
+    public const string DamagedStock = "inventory.damaged-stock";
+
+    /// <summary>A physical stock verification.</summary>
+    public const string PhysicalVerification = "inventory.physical-verification";
+
     /// <summary>Maps a voucher type onto its document type.</summary>
     /// <param name="type">The voucher type.</param>
     /// <returns>The document-type key.</returns>
@@ -446,5 +467,27 @@ public static class DocumentTypes
         Accounting.VoucherType.OpeningBalance => OpeningBalance,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this voucher type."),
+    };
+
+    /// <summary>Maps a stock operation onto its document type.</summary>
+    /// <param name="type">The stock document type.</param>
+    /// <returns>The document-type key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown for an unrecognised type.</exception>
+    /// <remarks>
+    /// A series each rather than one shared inventory sequence. A firm reconciling a
+    /// month of transfers should not have to read past its issues to do it, and the
+    /// reference application numbers them separately for the same reason.
+    /// </remarks>
+    public static string ForStockDocument(Inventory.StockDocumentType type) => type switch
+    {
+        Inventory.StockDocumentType.OpeningStock => OpeningStock,
+        Inventory.StockDocumentType.MaterialReceipt => MaterialReceipt,
+        Inventory.StockDocumentType.MaterialIssue => MaterialIssue,
+        Inventory.StockDocumentType.StockTransfer => StockTransfer,
+        Inventory.StockDocumentType.StockAdjustment => StockAdjustment,
+        Inventory.StockDocumentType.DamagedStock => DamagedStock,
+        Inventory.StockDocumentType.PhysicalVerification => PhysicalVerification,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(type), type, "No document type is mapped for this stock operation."),
     };
 }

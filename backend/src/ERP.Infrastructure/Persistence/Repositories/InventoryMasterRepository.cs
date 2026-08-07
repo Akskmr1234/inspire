@@ -17,6 +17,25 @@ public sealed class InventoryMasterRepository : IInventoryMasterRepository
     public InventoryMasterRepository(ErpDbContext context) => _context = context;
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure>> GetUnitsAsync(
+        IReadOnlyCollection<UnitOfMeasureId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Count == 0)
+        {
+            return new Dictionary<UnitOfMeasureId, UnitOfMeasure>();
+        }
+
+        List<UnitOfMeasureId> wanted = [.. ids.Distinct()];
+
+        return await _context.UnitsOfMeasure
+            .Where(unit => wanted.Contains(unit.Id))
+            .ToDictionaryAsync(unit => unit.Id, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<UnitOfMeasure?> FindUnitAsync(
         UnitOfMeasureId id,
         CancellationToken cancellationToken = default) =>

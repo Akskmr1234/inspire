@@ -18,6 +18,12 @@ import { UnitsPage } from '@/pages/UnitsPage';
 import { BrandsPage, CategoriesPage } from '@/pages/CategoriesPage';
 import { WarehousesPage } from '@/pages/WarehousesPage';
 import { ProductsPage } from '@/pages/ProductsPage';
+import { StockOperationsPage } from '@/pages/StockOperationsPage';
+import {
+  ItemMovementPage,
+  StockLedgerPage,
+  StockValuationPage,
+} from '@/pages/StockReportPages';
 import { AccountGroupSummaryPage } from '@/pages/AccountGroupSummaryPage';
 import { PostDatedChequesPage } from '@/pages/PostDatedChequesPage';
 import { ChequeCalendarPage } from '@/pages/ChequeCalendarPage';
@@ -81,6 +87,10 @@ export function App(): React.JSX.Element {
         <Route path="/accounting/ledgers" element={<LedgersPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/inventory/products" element={<ProductsPage />} />
+        <Route path="/inventory/stock" element={<StockOperationsPage />} />
+        <Route path="/inventory/valuation" element={<StockValuationPage />} />
+        <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
+        <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
         <Route path="/inventory/units" element={<UnitsPage />} />
         <Route path="/inventory/categories" element={<CategoriesPage />} />
         <Route path="/inventory/brands" element={<BrandsPage />} />

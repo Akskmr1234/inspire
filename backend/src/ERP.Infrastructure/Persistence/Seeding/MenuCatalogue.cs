@@ -38,8 +38,11 @@ public sealed record MenuBlueprint(
 /// </remarks>
 public static class MenuCatalogue
 {
-    /// <summary>The permission every report screen requires.</summary>
+    /// <summary>The permission every accounts report screen requires.</summary>
     private const string ViewReports = "accounting:report:view";
+
+    /// <summary>The permission every stock report screen requires.</summary>
+    private const string ViewInventoryReports = "inventory:report:view";
 
     /// <summary>The default menu tree, in display order.</summary>
     public static IReadOnlyList<MenuBlueprint> Default { get; } =
@@ -123,6 +126,47 @@ public static class MenuCatalogue
                     "accounting",
                     "/accounting/vouchers/new",
                     "accounting:voucher:create"),
+
+                // Under Transactions rather than under a heading of its own. A stock
+                // movement is a transaction, and somebody entering a receipt is doing
+                // the same kind of work as somebody entering a voucher.
+                new(
+                    "transactions.stock",
+                    "Stock operations",
+                    "حركات المخزون",
+                    "inventory",
+                    "/inventory/stock",
+                    "inventory:stock-adjustment:view"),
+            ]),
+
+        new(
+            "inventory-reports",
+            "Stock reports",
+            "تقارير المخزون",
+            "inventory",
+            Children:
+            [
+                new(
+                    "inventory-reports.valuation",
+                    "Stock valuation",
+                    "تقييم المخزون",
+                    "inventory",
+                    "/inventory/valuation",
+                    ViewInventoryReports),
+                new(
+                    "inventory-reports.ledger",
+                    "Stock ledger",
+                    "دفتر المخزون",
+                    "inventory",
+                    "/inventory/stock-ledger",
+                    ViewInventoryReports),
+                new(
+                    "inventory-reports.movement",
+                    "Item movement",
+                    "حركة الأصناف",
+                    "inventory",
+                    "/inventory/item-movement",
+                    ViewInventoryReports),
             ]),
 
         new(
