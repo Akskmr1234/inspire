@@ -73,6 +73,13 @@ public static class MenuCatalogue
                 // an entry belonging to one module shown under another - and the
                 // Module field records where each really belongs.
                 new(
+                    "masters.products",
+                    "Products",
+                    "المنتجات",
+                    "inventory",
+                    "/inventory/products",
+                    "inventory:product:view"),
+                new(
                     "masters.units",
                     "Units of measure",
                     "وحدات القياس",

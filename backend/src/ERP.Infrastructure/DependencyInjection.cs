@@ -3,6 +3,7 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
+using ERP.Application.Inventory.Products;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Menus;
@@ -90,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
         services.AddScoped<IInventoryMasterReader, InventoryMasterReader>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IProductReader, ProductReader>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 

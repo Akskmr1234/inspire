@@ -385,3 +385,48 @@ public enum InventoryMasterKind
     /// <summary>A warehouse.</summary>
     Warehouse = 4,
 }
+
+/// <summary>Reads and writes the product master.</summary>
+public interface IProductRepository
+{
+    /// <summary>Finds a product with its barcodes.</summary>
+    /// <param name="id">The product.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The product, or <see langword="null"/>.</returns>
+    Task<Product?> FindAsync(ProductId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Determines whether a firm already uses a product code.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The code to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the code is taken.</returns>
+    Task<bool> CodeExistsAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Issues the next code in a firm's product sequence.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="prefix">The prefix the sequence runs under.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The next unused code.</returns>
+    /// <remarks>
+    /// The reference application issues the next number when the code field is left
+    /// blank - PRO-1004 becomes PRO-1005 - and this reproduces that. It reads the
+    /// highest existing suffix rather than counting rows, because products are
+    /// withdrawn rather than deleted and a count would eventually reissue a code that
+    /// is still in use.
+    /// <para>
+    /// The unique index remains the arbiter: two people saving at once can both be
+    /// issued the same number, and the second insert is the one that fails.
+    /// </para>
+    /// </remarks>
+    Task<string> NextCodeAsync(
+        FirmId firmId,
+        string prefix,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a product.</summary>
+    /// <param name="product">The product to add.</param>
+    void Add(Product product);
+}

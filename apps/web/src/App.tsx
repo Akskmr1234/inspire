@@ -17,6 +17,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { UnitsPage } from '@/pages/UnitsPage';
 import { BrandsPage, CategoriesPage } from '@/pages/CategoriesPage';
 import { WarehousesPage } from '@/pages/WarehousesPage';
+import { ProductsPage } from '@/pages/ProductsPage';
 import { AccountGroupSummaryPage } from '@/pages/AccountGroupSummaryPage';
 import { PostDatedChequesPage } from '@/pages/PostDatedChequesPage';
 import { ChequeCalendarPage } from '@/pages/ChequeCalendarPage';
@@ -79,6 +80,7 @@ export function App(): React.JSX.Element {
         <Route path="/settings/menu" element={<MenuAdministrationPage />} />
         <Route path="/accounting/ledgers" element={<LedgersPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/inventory/products" element={<ProductsPage />} />
         <Route path="/inventory/units" element={<UnitsPage />} />
         <Route path="/inventory/categories" element={<CategoriesPage />} />
         <Route path="/inventory/brands" element={<BrandsPage />} />
