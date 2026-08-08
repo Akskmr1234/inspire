@@ -49,12 +49,14 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Report builder, print designer, workflow engine | Not started |
 | Inventory — masters: units with conversion groups, categories, brands, warehouses | **Done** — 33 domain + 10 API tests, with screens on the data grid |
 | Inventory — product master: rates, units, tracking, barcodes (domain + persistence) | **Done** — 45 tests |
-| Inventory — product master screens and API | Not started |
-| Inventory — stock operations, batches, serial numbers, valuation | Not started |
+| Inventory — product master screens and API | **Done** — 13 API tests, with a three-tab editor |
+| Inventory — stock operations and average costing | **Done** — 34 domain + 19 API tests, with screens and 3 reports |
+| Inventory — batch tracking: per-batch cost, expiry, generated numbers | **Done** — 34 domain + 13 API tests, with a batch column and 2 reports |
+| Inventory — serial numbers | Not started |
 | Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 762 passing, 0 failing (378 domain + 202 application + 99 API + 20 identity + 63 integration).
+**Test suite:** 875 passing, 0 failing (446 domain + 202 application + 144 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

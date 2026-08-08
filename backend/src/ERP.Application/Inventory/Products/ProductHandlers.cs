@@ -442,22 +442,26 @@ public sealed class SetProductStockingCommandHandler
 {
     private readonly IProductRepository _products;
     private readonly IInventoryMasterRepository _masters;
+    private readonly IStockBalanceRepository _balances;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="SetProductStockingCommandHandler"/> class.</summary>
     /// <param name="products">The product repository.</param>
     /// <param name="masters">The inventory master repository.</param>
+    /// <param name="balances">The stock balance repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public SetProductStockingCommandHandler(
         IProductRepository products,
         IInventoryMasterRepository masters,
+        IStockBalanceRepository balances,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _products = products;
         _masters = masters;
+        _balances = balances;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
@@ -517,6 +521,23 @@ public sealed class SetProductStockingCommandHandler
         if (movement.IsFailure)
         {
             return movement;
+        }
+
+        // Turning batch tracking on over stock that is already there is refused, and
+        // the refusal is worth the trouble. Stock received before the switch belongs
+        // to no batch, so the position would carry a quantity its batches cannot
+        // account for - the stock valuation and the batch-wise valuation would report
+        // two different figures for the same shelf, permanently, and no later document
+        // could reconcile them. Selling the stock down first, or writing it off and
+        // receiving it in batches, both leave books that add up.
+        if (request.TracksBatches
+            && !product.TracksBatches
+            && await _balances.HasStockAsync(product.FirmId, product.Id, cancellationToken))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Product.BatchTrackingOverStock",
+                $"'{product.Code}' already holds stock that belongs to no batch. Sell "
+                + "or write that stock down before tracking it in batches."));
         }
 
         Result tracking = product.SetTracking(

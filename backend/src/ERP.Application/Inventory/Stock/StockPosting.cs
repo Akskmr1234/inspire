@@ -29,35 +29,53 @@ namespace ERP.Application.Inventory.Stock;
 internal sealed class StockPoster
 {
     private readonly IStockBalanceRepository _balances;
+    private readonly IBatchBalanceRepository _batchBalances;
     private readonly IStockLedgerRepository _ledger;
 
-    internal StockPoster(IStockBalanceRepository balances, IStockLedgerRepository ledger)
+    internal StockPoster(
+        IStockBalanceRepository balances,
+        IBatchBalanceRepository batchBalances,
+        IStockLedgerRepository ledger)
     {
         _balances = balances;
+        _batchBalances = batchBalances;
         _ledger = ledger;
     }
 
     /// <summary>Moves the stock a posted document says has moved.</summary>
     /// <param name="document">The document, already posted.</param>
     /// <param name="products">Every product it names.</param>
+    /// <param name="batches">Every batch it names.</param>
     /// <param name="currency">The firm's base currency.</param>
     /// <param name="postedAtUtc">The instant it was posted.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The movements written, or the first line that could not move.</returns>
+    /// <remarks>
+    /// A batched line moves two positions rather than one: the batch's, at what that
+    /// batch costs, and the product's, by the same quantity and the same value. Both,
+    /// always, in the same direction - which is what keeps the product position equal
+    /// to the sum of its batches and the two valuations equal to each other.
+    /// </remarks>
     internal async Task<Result<IReadOnlyList<StockLedgerEntry>>> ApplyAsync(
         StockDocument document,
         IReadOnlyDictionary<ProductId, Product> products,
+        IReadOnlyDictionary<BatchId, Batch> batches,
         CurrencyCode currency,
         DateTimeOffset postedAtUtc,
         CancellationToken cancellationToken)
     {
         List<ProductId> productIds = [.. document.Lines.Select(line => line.ProductId)];
+        List<BatchId> batchIds =
+            [.. document.Lines.Where(line => line.BatchId is not null)
+                .Select(line => line.BatchId!.Value)];
 
         PositionSet source = await LoadAsync(
-            document, document.WarehouseId, productIds, currency, cancellationToken);
+            document, document.WarehouseId, productIds, batchIds, batches, currency,
+            cancellationToken);
 
         PositionSet? destination = document.DestinationWarehouseId is { } into
-            ? await LoadAsync(document, into, productIds, currency, cancellationToken)
+            ? await LoadAsync(
+                document, into, productIds, batchIds, batches, currency, cancellationToken)
             : null;
 
         List<StockLedgerEntry> written = [];
@@ -67,7 +85,10 @@ internal sealed class StockPoster
             Result applied = document.Type switch
             {
                 StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt =>
-                    Take(written, ReceiveInto(source, document, line, line.Rate, postedAtUtc)),
+                    Take(
+                        written,
+                        ReceiveInto(
+                            source, document, line, line.StockQuantity, line.Rate, postedAtUtc)),
 
                 StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
                     Take(written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc)),
@@ -107,6 +128,7 @@ internal sealed class StockPoster
     /// <param name="document">The document being cancelled.</param>
     /// <param name="movements">The entries it originally wrote.</param>
     /// <param name="products">Every product it names.</param>
+    /// <param name="batches">Every batch it names.</param>
     /// <param name="currency">The firm's base currency.</param>
     /// <param name="reversedAtUtc">The instant the reversal is posted.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -121,10 +143,13 @@ internal sealed class StockPoster
         StockDocument document,
         IReadOnlyList<StockLedgerEntry> movements,
         IReadOnlyDictionary<ProductId, Product> products,
+        IReadOnlyDictionary<BatchId, Batch> batches,
         CurrencyCode currency,
         DateTimeOffset reversedAtUtc,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(batches);
+
         // Newest first. A transfer put goods into the destination after taking them
         // out of the source; undoing it in the same order would try to take them out
         // of a destination that had not yet received them.
@@ -132,6 +157,7 @@ internal sealed class StockPoster
             .ThenByDescending(entry => entry.Id.Value)];
 
         Dictionary<(WarehouseId, ProductId), StockBalance> loaded = [];
+        Dictionary<(WarehouseId, BatchId), BatchBalance> loadedBatches = [];
 
         foreach (WarehouseId warehouse in ordered.Select(entry => entry.WarehouseId).Distinct())
         {
@@ -147,6 +173,24 @@ internal sealed class StockPoster
             {
                 loaded[(warehouse, productId)] = balance;
             }
+
+            List<BatchId> batchIds =
+                [.. ordered.Where(entry => entry.WarehouseId == warehouse && entry.BatchId is not null)
+                    .Select(entry => entry.BatchId!.Value).Distinct()];
+
+            if (batchIds.Count == 0)
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<BatchId, BatchBalance> batchPositions =
+                await _batchBalances.GetPositionsAsync(
+                    document.FirmId, warehouse, batchIds, cancellationToken);
+
+            foreach ((BatchId batchId, BatchBalance balance) in batchPositions)
+            {
+                loadedBatches[(warehouse, batchId)] = balance;
+            }
         }
 
         List<StockLedgerEntry> contras = [];
@@ -158,6 +202,32 @@ internal sealed class StockPoster
                 return Result.Failure(Error.BusinessRule(
                     "StockDocument.PositionMissing",
                     "The stock position this document moved no longer exists."));
+            }
+
+            Batch? batch = null;
+
+            if (entry.BatchId is { } batchId)
+            {
+                if (!loadedBatches.TryGetValue((entry.WarehouseId, batchId), out BatchBalance? batchBalance)
+                    || !batches.TryGetValue(batchId, out batch))
+                {
+                    return Result.Failure(Error.BusinessRule(
+                        "StockDocument.BatchPositionMissing",
+                        $"The position of batch '{entry.BatchNumber}' that this document "
+                        + "moved no longer exists."));
+                }
+
+                // The batch first, so a reversal the batch refuses - goods long since
+                // sold out of it - never reaches the product position it would
+                // otherwise have moved on its own.
+                Result<Money> batchReversed = entry.Quantity > 0m
+                    ? batchBalance.ReverseReceipt(entry.Quantity, entry.UnitCost, reversedAtUtc)
+                    : batchBalance.Receive(-entry.Quantity, entry.UnitCost, reversedAtUtc);
+
+                if (batchReversed.IsFailure)
+                {
+                    return Result.Failure(Contextualise(batchReversed.Error, entry, products));
+                }
             }
 
             // A movement in is undone at the cost it came in at; a movement out is
@@ -180,7 +250,8 @@ internal sealed class StockPoster
                 entry.UnitCost,
                 entry.Quantity > 0m ? -reversed.Value : reversed.Value,
                 reversedAtUtc,
-                $"Reversal of {document.Number}");
+                $"Reversal of {document.Number}",
+                batch);
 
             if (contra.IsFailure)
             {
@@ -210,24 +281,50 @@ internal sealed class StockPoster
         return Result.Success();
     }
 
+    /// <summary>Takes goods in, into the batch first where there is one.</summary>
+    /// <remarks>
+    /// The batch position is moved before the product's, so a receipt the batch
+    /// refuses never reaches the product at all. Both take the same quantity at the
+    /// same cost, which is what keeps one the sum of the other.
+    /// </remarks>
     private static Result<StockLedgerEntry> ReceiveInto(
         PositionSet positions,
         StockDocument document,
         StockDocumentLine line,
+        decimal quantity,
         decimal unitCost,
         DateTimeOffset postedAtUtc)
     {
+        if (positions.BatchOf(line) is { } batch)
+        {
+            Result<Money> intoBatch = positions.ForBatch(batch)
+                .Receive(quantity, unitCost, postedAtUtc);
+
+            if (intoBatch.IsFailure)
+            {
+                return Result.Failure<StockLedgerEntry>(intoBatch.Error);
+            }
+        }
+
         StockBalance balance = positions.For(line.ProductId);
 
-        Result<Money> received = balance.Receive(line.StockQuantity, unitCost, postedAtUtc);
+        Result<Money> received = balance.Receive(quantity, unitCost, postedAtUtc);
 
         return received.IsFailure
             ? Result.Failure<StockLedgerEntry>(received.Error)
             : StockLedgerEntry.Record(
-                balance, document.Date, document, line.StockQuantity, unitCost,
-                received.Value, postedAtUtc, line.Remarks ?? document.Narration);
+                balance, document.Date, document, quantity, unitCost,
+                received.Value, postedAtUtc, line.Remarks ?? document.Narration,
+                positions.BatchOf(line));
     }
 
+    /// <summary>Takes goods out, at what the batch cost where there is one.</summary>
+    /// <remarks>
+    /// A batched issue leaves the product position at the batch's cost rather than at
+    /// the product's average, because those are the goods that were picked. Removing
+    /// them at the average would leave the product position holding a value its
+    /// batches no longer add up to.
+    /// </remarks>
     private static Result<StockLedgerEntry> IssueFrom(
         PositionSet positions,
         StockDocument document,
@@ -236,19 +333,32 @@ internal sealed class StockPoster
         DateTimeOffset postedAtUtc)
     {
         StockBalance balance = positions.For(line.ProductId);
+        Batch? batch = positions.BatchOf(line);
 
-        // Read before the issue, not after. The issue does not move the average, but
-        // relying on that here would make this quietly wrong the day something else
-        // does.
-        decimal unitCost = balance.AverageCost;
+        // Read before the issue, not after. Neither issue moves the cost it was read
+        // from, but relying on that here would make this quietly wrong the day
+        // something else does.
+        decimal unitCost = positions.CostOf(line);
 
-        Result<Money> issued = balance.Issue(quantity, postedAtUtc);
+        if (batch is not null)
+        {
+            Result<Money> outOfBatch = positions.ForBatch(batch).Issue(quantity, postedAtUtc);
+
+            if (outOfBatch.IsFailure)
+            {
+                return Result.Failure<StockLedgerEntry>(outOfBatch.Error);
+            }
+        }
+
+        Result<Money> issued = batch is null
+            ? balance.Issue(quantity, postedAtUtc)
+            : balance.IssueAt(quantity, unitCost, postedAtUtc);
 
         return issued.IsFailure
             ? Result.Failure<StockLedgerEntry>(issued.Error)
             : StockLedgerEntry.Record(
                 balance, document.Date, document, -quantity, unitCost,
-                -issued.Value, postedAtUtc, line.Remarks ?? document.Narration);
+                -issued.Value, postedAtUtc, line.Remarks ?? document.Narration, batch);
     }
 
     /// <summary>Moves goods between two positions at the cost they leave at.</summary>
@@ -266,14 +376,17 @@ internal sealed class StockPoster
         StockDocumentLine line,
         DateTimeOffset postedAtUtc)
     {
-        decimal unitCost = source.For(line.ProductId).AverageCost;
+        decimal unitCost = source.CostOf(line);
 
         Result outgoing = Take(
             written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc));
 
         return outgoing.IsFailure
             ? outgoing
-            : Take(written, ReceiveInto(destination, document, line, unitCost, postedAtUtc));
+            : Take(
+                written,
+                ReceiveInto(
+                    destination, document, line, line.StockQuantity, unitCost, postedAtUtc));
     }
 
     /// <summary>Corrects a position up or down.</summary>
@@ -293,10 +406,12 @@ internal sealed class StockPoster
     {
         if (line.StockQuantity > 0m)
         {
-            StockBalance balance = positions.For(line.ProductId);
-            decimal unitCost = line.Rate > 0m ? line.Rate : balance.AverageCost;
+            decimal unitCost = line.Rate > 0m ? line.Rate : positions.CostOf(line);
 
-            return Take(written, ReceiveInto(positions, document, line, unitCost, postedAtUtc));
+            return Take(
+                written,
+                ReceiveInto(
+                    positions, document, line, line.StockQuantity, unitCost, postedAtUtc));
         }
 
         return Take(
@@ -316,6 +431,12 @@ internal sealed class StockPoster
     /// nothing, which is honest - nobody has said what it cost. Establishing an
     /// opening position with a value is what the opening-stock document is for.
     /// </para>
+    /// <para>
+    /// A batched line is counted against the batch rather than against the product.
+    /// Somebody counting a shelf counts the cartons in front of them, which carry one
+    /// batch number and one expiry date; comparing that figure against everything the
+    /// product holds in the warehouse would report every other batch as missing.
+    /// </para>
     /// </remarks>
     private static Result Count(
         List<StockLedgerEntry> written,
@@ -324,44 +445,19 @@ internal sealed class StockPoster
         StockDocumentLine line,
         DateTimeOffset postedAtUtc)
     {
-        StockBalance balance = positions.For(line.ProductId);
-        decimal difference = line.StockQuantity - balance.Quantity;
+        decimal difference = line.StockQuantity - positions.QuantityOf(line);
 
         if (difference == 0m)
         {
             return Result.Success();
         }
 
-        if (difference > 0m)
-        {
-            Result<Money> received = balance.Receive(
-                difference, balance.AverageCost, postedAtUtc);
-
-            if (received.IsFailure)
-            {
-                return Result.Failure(received.Error);
-            }
-
-            Result<StockLedgerEntry> entry = StockLedgerEntry.Record(
-                balance, document.Date, document, difference, balance.AverageCost,
-                received.Value, postedAtUtc, line.Remarks ?? document.Narration);
-
-            return Take(written, entry);
-        }
-
-        decimal unitCost = balance.AverageCost;
-        Result<Money> issued = balance.Issue(-difference, postedAtUtc);
-
-        if (issued.IsFailure)
-        {
-            return Result.Failure(issued.Error);
-        }
-
-        return Take(
-            written,
-            StockLedgerEntry.Record(
-                balance, document.Date, document, difference, unitCost,
-                -issued.Value, postedAtUtc, line.Remarks ?? document.Narration));
+        return difference > 0m
+            ? Take(
+                written,
+                ReceiveInto(
+                    positions, document, line, difference, positions.CostOf(line), postedAtUtc))
+            : Take(written, IssueFrom(positions, document, line, -difference, postedAtUtc));
     }
 
     private static Error Contextualise(
@@ -388,6 +484,8 @@ internal sealed class StockPoster
         StockDocument document,
         WarehouseId warehouseId,
         IReadOnlyCollection<ProductId> productIds,
+        List<BatchId> batchIds,
+        IReadOnlyDictionary<BatchId, Batch> batches,
         CurrencyCode currency,
         CancellationToken cancellationToken)
     {
@@ -395,9 +493,20 @@ internal sealed class StockPoster
             await _balances.GetPositionsAsync(
                 document.FirmId, warehouseId, productIds, cancellationToken);
 
+        IReadOnlyDictionary<BatchId, BatchBalance> existingBatches = batchIds.Count == 0
+            ? new Dictionary<BatchId, BatchBalance>()
+            : await _batchBalances.GetPositionsAsync(
+                document.FirmId, warehouseId, batchIds, cancellationToken);
+
         return new PositionSet(
-            document, warehouseId, currency, new Dictionary<ProductId, StockBalance>(existing),
-            _balances);
+            document,
+            warehouseId,
+            currency,
+            new Dictionary<ProductId, StockBalance>(existing),
+            new Dictionary<BatchId, BatchBalance>(existingBatches),
+            batches,
+            _balances,
+            _batchBalances);
     }
 
     /// <summary>The positions of one warehouse, opening any that do not exist yet.</summary>
@@ -407,20 +516,29 @@ internal sealed class StockPoster
         private readonly WarehouseId _warehouseId;
         private readonly CurrencyCode _currency;
         private readonly Dictionary<ProductId, StockBalance> _balances;
+        private readonly Dictionary<BatchId, BatchBalance> _batchBalances;
+        private readonly IReadOnlyDictionary<BatchId, Batch> _batches;
         private readonly IStockBalanceRepository _repository;
+        private readonly IBatchBalanceRepository _batchRepository;
 
         internal PositionSet(
             StockDocument document,
             WarehouseId warehouseId,
             CurrencyCode currency,
             Dictionary<ProductId, StockBalance> balances,
-            IStockBalanceRepository repository)
+            Dictionary<BatchId, BatchBalance> batchBalances,
+            IReadOnlyDictionary<BatchId, Batch> batches,
+            IStockBalanceRepository repository,
+            IBatchBalanceRepository batchRepository)
         {
             _document = document;
             _warehouseId = warehouseId;
             _currency = currency;
             _balances = balances;
+            _batchBalances = batchBalances;
+            _batches = batches;
             _repository = repository;
+            _batchRepository = batchRepository;
         }
 
         internal StockBalance For(ProductId productId)
@@ -442,5 +560,44 @@ internal sealed class StockPoster
 
             return opened;
         }
+
+        internal BatchBalance ForBatch(Batch batch)
+        {
+            if (_batchBalances.TryGetValue(batch.Id, out BatchBalance? balance))
+            {
+                return balance;
+            }
+
+            BatchBalance opened = BatchBalance.Open(batch, _warehouseId, _currency);
+
+            _batchRepository.Add(opened);
+            _batchBalances[batch.Id] = opened;
+
+            return opened;
+        }
+
+        /// <summary>The batch a line moves, or null where the product has none.</summary>
+        /// <remarks>
+        /// The dictionary is loaded from the identifiers on the lines themselves, so a
+        /// miss cannot happen for a document that was assembled through the handler.
+        /// It throws rather than returning null on a miss because the alternative -
+        /// treating a batched line as unbatched - would move the product position
+        /// without moving the batch's, which is precisely the drift this design exists
+        /// to prevent.
+        /// </remarks>
+        internal Batch? BatchOf(StockDocumentLine line) =>
+            line.BatchId is { } batchId ? _batches[batchId] : null;
+
+        /// <summary>What one unit of what a line moves is currently carried at.</summary>
+        internal decimal CostOf(StockDocumentLine line) =>
+            BatchOf(line) is { } batch
+                ? ForBatch(batch).UnitCost
+                : For(line.ProductId).AverageCost;
+
+        /// <summary>What is on hand of what a line moves, batch by batch where batched.</summary>
+        internal decimal QuantityOf(StockDocumentLine line) =>
+            BatchOf(line) is { } batch
+                ? ForBatch(batch).Quantity
+                : For(line.ProductId).Quantity;
     }
 }

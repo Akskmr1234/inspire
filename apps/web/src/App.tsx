@@ -20,6 +20,8 @@ import { WarehousesPage } from '@/pages/WarehousesPage';
 import { ProductsPage } from '@/pages/ProductsPage';
 import { StockOperationsPage } from '@/pages/StockOperationsPage';
 import {
+  BatchStockPage,
+  ExpiryReportPage,
   ItemMovementPage,
   StockLedgerPage,
   StockValuationPage,
@@ -91,6 +93,8 @@ export function App(): React.JSX.Element {
         <Route path="/inventory/valuation" element={<StockValuationPage />} />
         <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
         <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
+        <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
+        <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
         <Route path="/inventory/units" element={<UnitsPage />} />
         <Route path="/inventory/categories" element={<CategoriesPage />} />
         <Route path="/inventory/brands" element={<BrandsPage />} />

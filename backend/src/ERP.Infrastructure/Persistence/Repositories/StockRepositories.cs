@@ -74,7 +74,163 @@ public sealed class StockBalanceRepository : IStockBalanceRepository
     }
 
     /// <inheritdoc />
+    public Task<bool> HasStockAsync(
+        FirmId firmId,
+        ProductId productId,
+        CancellationToken cancellationToken = default) =>
+        _context.StockBalances
+            .AnyAsync(
+                balance => balance.FirmId == firmId
+                    && balance.ProductId == productId
+                    && balance.Quantity != 0m,
+                cancellationToken);
+
+    /// <inheritdoc />
     public void Add(StockBalance balance) => _context.StockBalances.Add(balance);
+}
+
+/// <summary>Reads and writes batches.</summary>
+public sealed class BatchRepository : IBatchRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="BatchRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public BatchRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<Batch?> FindAsync(BatchId id, CancellationToken cancellationToken = default) =>
+        _context.Batches.FirstOrDefaultAsync(batch => batch.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<BatchId, Batch>> GetManyAsync(
+        IReadOnlyCollection<BatchId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Count == 0)
+        {
+            return new Dictionary<BatchId, Batch>();
+        }
+
+        List<BatchId> ordered = [.. ids.Distinct().OrderBy(id => id.Value)];
+
+        List<Batch> batches = await _context.Batches
+            .Where(batch => ordered.Contains(batch.Id))
+            .ToListAsync(cancellationToken);
+
+        return batches.ToDictionary(batch => batch.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<(ProductId Product, string Number), Batch>>
+        GetByNumbersAsync(
+            FirmId firmId,
+            IReadOnlyCollection<(ProductId Product, string Number)> numbers,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(numbers);
+
+        if (numbers.Count == 0)
+        {
+            return new Dictionary<(ProductId, string), Batch>();
+        }
+
+        // Both sides of the pair are filtered in the database and the pairing is
+        // matched in memory. A document naming several products and several numbers
+        // would otherwise be an OR of tuple comparisons that no provider indexes well,
+        // and the two lists are short: they come from the lines of one document.
+        List<ProductId> productIds = [.. numbers.Select(pair => pair.Product).Distinct()];
+        List<string> batchNumbers = [.. numbers.Select(pair => pair.Number).Distinct()];
+
+        List<Batch> found = await _context.Batches
+            .Where(batch =>
+                batch.FirmId == firmId
+                && productIds.Contains(batch.ProductId)
+                && batchNumbers.Contains(batch.Number))
+            .ToListAsync(cancellationToken);
+
+        HashSet<(ProductId, string)> wanted = [.. numbers];
+
+        return found
+            .Where(batch => wanted.Contains((batch.ProductId, batch.Number)))
+            .ToDictionary(batch => (batch.ProductId, batch.Number));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<ProductId, int>> GetHighestAutoSequencesAsync(
+        FirmId firmId,
+        IReadOnlyCollection<ProductId> productIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(productIds);
+
+        if (productIds.Count == 0)
+        {
+            return new Dictionary<ProductId, int>();
+        }
+
+        List<ProductId> ordered = [.. productIds.Distinct().OrderBy(id => id.Value)];
+
+        List<KeyValuePair<ProductId, int>> highest = await _context.Batches
+            .Where(batch =>
+                batch.FirmId == firmId
+                && ordered.Contains(batch.ProductId)
+                && batch.AutoSequence != null)
+            .GroupBy(batch => batch.ProductId)
+            .Select(group => new KeyValuePair<ProductId, int>(
+                group.Key, group.Max(batch => batch.AutoSequence!.Value)))
+            .ToListAsync(cancellationToken);
+
+        return new Dictionary<ProductId, int>(highest);
+    }
+
+    /// <inheritdoc />
+    public void Add(Batch batch) => _context.Batches.Add(batch);
+}
+
+/// <summary>Reads and writes the position of a batch in a warehouse.</summary>
+public sealed class BatchBalanceRepository : IBatchBalanceRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="BatchBalanceRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public BatchBalanceRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<BatchId, BatchBalance>> GetPositionsAsync(
+        FirmId firmId,
+        WarehouseId warehouseId,
+        IReadOnlyCollection<BatchId> batchIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(batchIds);
+
+        if (batchIds.Count == 0)
+        {
+            return new Dictionary<BatchId, BatchBalance>();
+        }
+
+        // Ordered for the same reason the product positions are: a stable update order
+        // across concurrent documents, so two of them touching the same two batches
+        // cannot take PostgreSQL's row locks in opposite orders at write time.
+        List<BatchId> ordered = [.. batchIds.Distinct().OrderBy(id => id.Value)];
+
+        List<BatchBalance> balances = await _context.BatchBalances
+            .Where(balance =>
+                balance.FirmId == firmId
+                && balance.WarehouseId == warehouseId
+                && ordered.Contains(balance.BatchId))
+            .OrderBy(balance => balance.BatchId)
+            .ToListAsync(cancellationToken);
+
+        return balances.ToDictionary(balance => balance.BatchId);
+    }
+
+    /// <inheritdoc />
+    public void Add(BatchBalance balance) => _context.BatchBalances.Add(balance);
 }
 
 /// <summary>Writes and reads back the stock ledger.</summary>

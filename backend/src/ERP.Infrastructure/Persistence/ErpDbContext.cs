@@ -146,6 +146,21 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the stock ledger: every movement, written once and never changed.</summary>
     public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
+    /// <summary>Gets the batches goods are held in.</summary>
+    /// <remarks>
+    /// Per product rather than per warehouse: a batch number, an expiry date and what
+    /// the goods were bought at are facts about the goods, wherever they are sitting.
+    /// </remarks>
+    public DbSet<Batch> Batches => Set<Batch>();
+
+    /// <summary>Gets what is on hand of each batch in each warehouse.</summary>
+    /// <remarks>
+    /// The batch-level counterpart of <see cref="StockBalances"/>, and kept in step
+    /// with it movement by movement: a product's position is the sum of its batches'
+    /// positions, in quantity and in value both.
+    /// </remarks>
+    public DbSet<BatchBalance> BatchBalances => Set<BatchBalance>();
+
     /// <summary>Gets the permission catalogue.</summary>
     public DbSet<Permission> Permissions => Set<Permission>();
 
@@ -265,6 +280,10 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockBalanceIdConverter>();
         configurationBuilder.Properties<StockLedgerEntryId>()
             .HaveConversion<StockLedgerEntryIdConverter>();
+        configurationBuilder.Properties<BatchId>()
+            .HaveConversion<BatchIdConverter>();
+        configurationBuilder.Properties<BatchBalanceId>()
+            .HaveConversion<BatchBalanceIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()

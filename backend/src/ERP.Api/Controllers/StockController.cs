@@ -119,7 +119,15 @@ public sealed class StockController : ApiControllerBase
                 request.WarehouseId,
                 [
                     .. request.Lines.Select(line => new StockDocumentLineInput(
-                        line.ProductId, line.Quantity, line.UnitId, line.Rate, line.Remarks)),
+                        line.ProductId,
+                        line.Quantity,
+                        line.UnitId,
+                        line.Rate,
+                        line.Remarks,
+                        line.BatchId,
+                        line.BatchNumber,
+                        line.ManufacturedOn,
+                        line.ExpiresOn)),
                 ],
                 request.DestinationWarehouseId,
                 request.ReferenceNumber,
@@ -266,6 +274,121 @@ public sealed class StockController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Lists the batches of one product that can be picked from.</summary>
+    /// <param name="productId">The product.</param>
+    /// <param name="warehouseId">One warehouse. Omit for every one.</param>
+    /// <param name="includeEmpty">Whether to include batches nothing is left of.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The batches in stock, soonest to expire first.</returns>
+    /// <remarks>
+    /// What section 10 means by selection on sale. Each row carries the quantity
+    /// available, the rate the batch was bought at and its expiry date, so an entry
+    /// screen can offer a choice - or make it, when only one batch comes back.
+    /// </remarks>
+    /// <response code="200">The batches.</response>
+    [HttpGet("batches")]
+    [RequiresPermission("inventory", "stock-adjustment", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<BatchStockRow>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProductBatchesAsync(
+        [FromQuery] Guid productId,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] bool includeEmpty,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<BatchStockRow>> result = await _sender.Send(
+            new ListProductBatchesQuery(productId, warehouseId, includeEmpty),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads the batch-wise stock.</summary>
+    /// <param name="warehouseId">One warehouse. Omit for every one.</param>
+    /// <param name="productId">One product. Omit for every one.</param>
+    /// <param name="categoryId">One category. Omit for every one.</param>
+    /// <param name="includeZero">Whether to include emptied batches.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The batch-wise stock, valued at what each batch cost.</returns>
+    /// <response code="200">The batch-wise stock.</response>
+    [HttpGet("batch-stock")]
+    [RequiresPermission("inventory", "report", "view")]
+    [ProducesResponseType(typeof(BatchStockReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBatchStockAsync(
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? productId,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] bool includeZero,
+        CancellationToken cancellationToken)
+    {
+        Result<BatchStockReport> result = await _sender.Send(
+            new BatchStockQuery(warehouseId, productId, categoryId, includeZero),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads what has expired, and what is about to.</summary>
+    /// <param name="asOn">The date to judge expiry against. Defaults to today.</param>
+    /// <param name="withinDays">
+    /// How far ahead to look. Omit to report only what has already expired.
+    /// </param>
+    /// <param name="warehouseId">One warehouse. Omit for every one.</param>
+    /// <param name="categoryId">One category. Omit for every one.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The batches still on a shelf, soonest to expire first.</returns>
+    /// <response code="200">The expiring stock.</response>
+    /// <response code="400">The horizon is negative.</response>
+    [HttpGet("expiry")]
+    [RequiresPermission("inventory", "report", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<BatchStockRow>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetExpiryAsync(
+        [FromQuery] DateOnly asOn,
+        [FromQuery] int? withinDays,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? categoryId,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<BatchStockRow>> result = await _sender.Send(
+            new ExpiryReportQuery(asOn, withinDays, warehouseId, categoryId),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Corrects the dates recorded against a batch.</summary>
+    /// <param name="id">The batch.</param>
+    /// <param name="request">The dates as they should read.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing.</returns>
+    /// <remarks>
+    /// The one thing about a batch that can be changed after goods have moved, and it
+    /// earns the exception: an expiry date is transcribed off a carton by somebody in
+    /// a hurry, and the alternative to correcting it is writing the batch off and
+    /// receiving it again - stock movements invented to fix a typing mistake.
+    /// </remarks>
+    /// <response code="204">Corrected.</response>
+    /// <response code="400">The expiry date falls before the manufacturing date.</response>
+    /// <response code="404">No such batch in the selected firm.</response>
+    [HttpPut("batches/{id:guid}/dates")]
+    [RequiresPermission("inventory", "stock-adjustment", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CorrectBatchDatesAsync(
+        Guid id,
+        [FromBody] CorrectBatchDatesRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new CorrectBatchDatesCommand(id, request.ManufacturedOn, request.ExpiresOn),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }
 
 /// <summary>One line of a stock document being entered.</summary>
@@ -277,12 +400,29 @@ public sealed class StockController : ApiControllerBase
 /// <param name="UnitId">The unit it is entered in. Omit for the product's stock unit.</param>
 /// <param name="Rate">What one stock unit cost, where the document carries a cost.</param>
 /// <param name="Remarks">A line-level remark.</param>
+/// <param name="BatchId">
+/// The batch that moved, chosen from those in stock. Required on a product tracked in
+/// batches unless <paramref name="BatchNumber"/> names it instead.
+/// </param>
+/// <param name="BatchNumber">
+/// The batch by number rather than by identifier. On a document that brings goods in,
+/// an unknown number opens that batch and no number at all generates the next one.
+/// </param>
+/// <param name="ManufacturedOn">When the goods in the batch were produced.</param>
+/// <param name="ExpiresOn">
+/// When the batch expires. Taken from the product's shelf life when omitted and the
+/// manufacturing date is given.
+/// </param>
 public sealed record CreateStockDocumentLine(
     [property: JsonRequired] Guid ProductId,
     [property: JsonRequired] decimal Quantity,
     Guid? UnitId = null,
     decimal Rate = 0m,
-    string? Remarks = null);
+    string? Remarks = null,
+    Guid? BatchId = null,
+    string? BatchNumber = null,
+    DateOnly? ManufacturedOn = null,
+    DateOnly? ExpiresOn = null);
 
 /// <summary>Entering a stock document.</summary>
 /// <param name="Type">The kind of operation.</param>
@@ -306,3 +446,10 @@ public sealed record CreateStockDocumentRequest(
 /// <summary>Cancelling a stock document.</summary>
 /// <param name="Reason">Why. Required, and kept on the document.</param>
 public sealed record CancelStockDocumentRequest([property: JsonRequired] string Reason);
+
+/// <summary>Correcting the dates on a batch.</summary>
+/// <param name="ManufacturedOn">When the goods were produced, or null to clear it.</param>
+/// <param name="ExpiresOn">When they expire, or null to clear it.</param>
+public sealed record CorrectBatchDatesRequest(
+    DateOnly? ManufacturedOn = null,
+    DateOnly? ExpiresOn = null);

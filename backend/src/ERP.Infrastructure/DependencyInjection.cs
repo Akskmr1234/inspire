@@ -97,8 +97,11 @@ public static class DependencyInjection
         services.AddScoped<IStockDocumentRepository, StockDocumentRepository>();
         services.AddScoped<IStockBalanceRepository, StockBalanceRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
+        services.AddScoped<IBatchRepository, BatchRepository>();
+        services.AddScoped<IBatchBalanceRepository, BatchBalanceRepository>();
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
+        services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 

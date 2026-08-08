@@ -203,6 +203,32 @@ public sealed class StockDocument
             or StockDocumentType.StockAdjustment;
 
     /// <summary>
+    /// Gets a value indicating whether this kind of document may put a batch on the
+    /// books that was not there before.
+    /// </summary>
+    /// <remarks>
+    /// The documents that can increase stock. Everything else moves goods that are
+    /// already somewhere, so a batch number it does not recognise is a typing mistake
+    /// rather than a new lot - and creating one would put an issue's worth of stock
+    /// into a batch that had never received any.
+    /// </remarks>
+    public bool OpensBatches =>
+        Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
+            or StockDocumentType.StockAdjustment or StockDocumentType.PhysicalVerification;
+
+    /// <summary>
+    /// Gets a value indicating whether this kind of document may invent the batch
+    /// number as well as the batch.
+    /// </summary>
+    /// <remarks>
+    /// Section 10's auto-generation, kept to the documents that bring goods in from
+    /// outside. A physical verification is deliberately excluded: somebody counting a
+    /// shelf is reading a number off a carton, and generating one for them would file
+    /// the count against a batch that exists nowhere but here.
+    /// </remarks>
+    public bool GeneratesBatchNumbers => CarriesRate;
+
+    /// <summary>
     /// Gets a value indicating whether a line quantity may be negative.
     /// </summary>
     /// <remarks>
@@ -316,13 +342,15 @@ public sealed class StockDocument
     /// <param name="quantity">How much, in that unit.</param>
     /// <param name="stockQuantity">The same quantity converted to the stock unit.</param>
     /// <param name="rate">What one stock unit cost, where the document carries a rate.</param>
+    /// <param name="batch">The batch that moved, on a product tracked in batches.</param>
     /// <param name="remarks">A line-level remark.</param>
     /// <returns>The line, or the reason it was refused.</returns>
     /// <remarks>
     /// The conversion is done by the caller and passed in rather than computed here.
     /// The unit and its factor belong to a different aggregate, and an aggregate that
     /// reached into another to convert its own quantities would be holding a
-    /// reference this design does not permit it to hold.
+    /// reference this design does not permit it to hold. The batch arrives the same
+    /// way and for the same reason: finding or generating it is the caller's work.
     /// </remarks>
     public Result<StockDocumentLine> AddLine(
         Product product,
@@ -330,6 +358,7 @@ public sealed class StockDocument
         decimal quantity,
         decimal stockQuantity,
         decimal rate = 0m,
+        Batch? batch = null,
         string? remarks = null)
     {
         ArgumentNullException.ThrowIfNull(product);
@@ -364,6 +393,13 @@ public sealed class StockDocument
             return Result.Failure<StockDocumentLine>(Error.Validation(
                 "StockDocument.QuantityZero",
                 "A line for no quantity would record nothing."));
+        }
+
+        Result batched = EnsureBatchMatches(product, batch);
+
+        if (batched.IsFailure)
+        {
+            return Result.Failure<StockDocumentLine>(batched.Error);
         }
 
         if (!AllowsSignedQuantity && (quantity < 0m || stockQuantity < 0m))
@@ -403,6 +439,7 @@ public sealed class StockDocument
             TenantId,
             Id,
             product.Id,
+            batch?.Id,
             unit.Id,
             quantity,
             stockQuantity,
@@ -492,17 +529,22 @@ public sealed class StockDocument
         // Allowing it would also make a transfer post two movements against the same
         // position, so the second would be valued at an average the first had just
         // changed.
-        List<ProductId> duplicated = _lines
-            .GroupBy(line => line.ProductId)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key)
-            .ToList();
+        //
+        // Twice in two batches is the exception, and the one case where it is not a
+        // mistake at all: an issue of thirty from a batch holding twenty has to draw
+        // the rest from somewhere, and the two lots leave at two costs and carry two
+        // expiry dates. Each moves its own batch position, so neither is valued at
+        // something the other has just changed.
+        bool duplicated = _lines
+            .GroupBy(line => (line.ProductId, line.BatchId))
+            .Any(group => group.Count() > 1);
 
-        if (duplicated.Count > 0)
+        if (duplicated)
         {
             return Result.Failure(Error.BusinessRule(
                 "StockDocument.DuplicateProduct",
-                $"Document '{Number}' has the same product on more than one line."));
+                $"Document '{Number}' has the same product and batch on more than one "
+                + "line."));
         }
 
         Status = StockDocumentStatus.Posted;
@@ -540,6 +582,53 @@ public sealed class StockDocument
         CancellationReason = reason.Trim();
 
         return Result.Success();
+    }
+
+    /// <summary>Checks that the line names a batch exactly when the product needs one.</summary>
+    /// <param name="product">The product on the line.</param>
+    /// <param name="batch">The batch offered for it, if any.</param>
+    /// <returns>Success, or the reason the pairing was refused.</returns>
+    /// <remarks>
+    /// Both directions are refused, and the second matters as much as the first. A
+    /// batch on a product that is not tracked in batches would be recorded, printed,
+    /// and ignored by the position - a number on a document that means nothing to the
+    /// stock it describes.
+    /// </remarks>
+    private Result EnsureBatchMatches(Product product, Batch? batch)
+    {
+        if (product.TracksBatches && batch is null)
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.BatchRequired",
+                $"'{product.Code}' is tracked in batches, so the line must say which "
+                + "batch moved."));
+        }
+
+        if (batch is null)
+        {
+            return Result.Success();
+        }
+
+        if (!product.TracksBatches)
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.BatchNotTracked",
+                $"'{product.Code}' is not tracked in batches, so a batch cannot be "
+                + "given for it."));
+        }
+
+        if (batch.ProductId != product.Id)
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.BatchWrongProduct",
+                $"Batch '{batch.Number}' is a batch of another product."));
+        }
+
+        return batch.FirmId != FirmId
+            ? Result.Failure(Error.Validation(
+                "StockDocument.BatchNotInFirm",
+                $"Batch '{batch.Number}' belongs to another firm."))
+            : Result.Success();
     }
 
     private static string? Trimmed(string? value) =>

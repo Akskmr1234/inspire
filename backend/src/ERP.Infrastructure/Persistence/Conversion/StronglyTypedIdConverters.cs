@@ -284,3 +284,23 @@ public sealed class StockLedgerEntryIdConverter : ValueConverter<StockLedgerEntr
     {
     }
 }
+
+/// <summary>Converts <see cref="BatchId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BatchIdConverter : ValueConverter<BatchId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BatchIdConverter"/> class.</summary>
+    public BatchIdConverter()
+        : base(id => id.Value, value => BatchId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BatchBalanceId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BatchBalanceIdConverter : ValueConverter<BatchBalanceId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BatchBalanceIdConverter"/> class.</summary>
+    public BatchBalanceIdConverter()
+        : base(id => id.Value, value => BatchBalanceId.From(value))
+    {
+    }
+}

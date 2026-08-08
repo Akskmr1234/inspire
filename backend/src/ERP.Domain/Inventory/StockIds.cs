@@ -45,6 +45,34 @@ public readonly record struct StockBalanceId(Guid Value) : IStronglyTypedId<Stoc
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies one batch of one product.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct BatchId(Guid Value) : IStronglyTypedId<BatchId>
+{
+    /// <inheritdoc />
+    public static BatchId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static BatchId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
+/// <summary>Identifies the position of one batch in one warehouse.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct BatchBalanceId(Guid Value) : IStronglyTypedId<BatchBalanceId>
+{
+    /// <inheritdoc />
+    public static BatchBalanceId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static BatchBalanceId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Identifies one movement in the stock ledger.</summary>
 /// <param name="Value">The underlying value.</param>
 public readonly record struct StockLedgerEntryId(Guid Value)

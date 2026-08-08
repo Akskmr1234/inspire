@@ -21,12 +21,30 @@ namespace ERP.Application.Inventory.Stock;
 /// adjustment to value the goods at what the position already says they are worth.
 /// </param>
 /// <param name="Remarks">A line-level remark.</param>
+/// <param name="BatchId">
+/// The batch that moved, chosen from those in stock. Required on a product tracked in
+/// batches unless <paramref name="BatchNumber"/> names it instead.
+/// </param>
+/// <param name="BatchNumber">
+/// The batch by number rather than by identifier - what a storekeeper reads off the
+/// carton. On a document that brings goods in, an unknown number opens that batch, and
+/// no number at all generates the next one for the product.
+/// </param>
+/// <param name="ManufacturedOn">When the goods in the batch were produced.</param>
+/// <param name="ExpiresOn">
+/// When the batch expires. Taken from the product's shelf life when it is omitted and
+/// the manufacturing date is given.
+/// </param>
 public sealed record StockDocumentLineInput(
     Guid ProductId,
     decimal Quantity,
     Guid? UnitId = null,
     decimal Rate = 0m,
-    string? Remarks = null);
+    string? Remarks = null,
+    Guid? BatchId = null,
+    string? BatchNumber = null,
+    DateOnly? ManufacturedOn = null,
+    DateOnly? ExpiresOn = null);
 
 /// <summary>Enters a stock document, and by default posts it.</summary>
 /// <param name="Type">The kind of operation.</param>
@@ -122,6 +140,8 @@ public sealed class CreateStockDocumentCommandValidator
                 .WithMessage("A rate cannot be negative.");
 
             line.RuleFor(l => l.Remarks).MaximumLength(StockDocument.MaximumNarrationLength);
+
+            line.RuleFor(l => l.BatchNumber).MaximumLength(Batch.MaximumNumberLength);
         });
 
         RuleFor(c => c.ReferenceNumber).MaximumLength(StockDocument.MaximumReferenceLength);
@@ -200,6 +220,9 @@ public sealed record GetStockDocumentQuery(Guid StockDocumentId) : IQuery<StockD
 /// <param name="StockUnitCode">The stock unit's code.</param>
 /// <param name="Rate">The rate, on the documents that carry one.</param>
 /// <param name="Remarks">The line remark.</param>
+/// <param name="BatchId">The batch that moved, on a product tracked in batches.</param>
+/// <param name="BatchNumber">That batch's number.</param>
+/// <param name="ExpiresOn">When the batch expires.</param>
 public sealed record StockDocumentLineView(
     Guid Id,
     int LineNumber,
@@ -212,7 +235,10 @@ public sealed record StockDocumentLineView(
     decimal StockQuantity,
     string StockUnitCode,
     decimal Rate,
-    string? Remarks);
+    string? Remarks,
+    Guid? BatchId = null,
+    string? BatchNumber = null,
+    DateOnly? ExpiresOn = null);
 
 /// <summary>One movement a document produced.</summary>
 /// <param name="ProductCode">The product.</param>
@@ -222,6 +248,7 @@ public sealed record StockDocumentLineView(
 /// <param name="Value">The signed value.</param>
 /// <param name="BalanceQuantity">What was on hand afterwards.</param>
 /// <param name="BalanceAverageCost">The average cost afterwards.</param>
+/// <param name="BatchNumber">The batch that moved, where the product is batched.</param>
 public sealed record StockMovementView(
     string ProductCode,
     string WarehouseName,
@@ -229,7 +256,8 @@ public sealed record StockMovementView(
     decimal UnitCost,
     decimal Value,
     decimal BalanceQuantity,
-    decimal BalanceAverageCost);
+    decimal BalanceAverageCost,
+    string? BatchNumber = null);
 
 /// <summary>A stock document in full.</summary>
 /// <param name="Id">The document.</param>

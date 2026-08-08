@@ -203,6 +203,29 @@ Enabled by system setting. When on, a Batch column appears in Purchase, Sales, S
 - **Expiry** — per batch, auto-populated on batch selection.
 - **Returns/adjustments by batch** — purchase return, sales return, stock adjustment, damaged stock, expired-stock removal. Stock identifiable by both Batch No and Expiry Date.
 
+**Built 2026-08-08, with two departures from the prose, both deliberate:**
+
+- **Per product, not per system setting.** The prose turns batch management on for the whole
+  installation. It is built per product instead, on the `TracksBatches` flag the product
+  master already carries: a firm selling both pharmaceuticals and hardware needs lots on the
+  first and would not thank anybody for a batch column on the second. A firm that wants it
+  everywhere sets the flag on every product; a firm that wants it nowhere sets it on none,
+  which is the system-wide switch the prose asked for. Turning the flag on over stock that is
+  already on hand is refused — that stock belongs to no batch, and the position would carry a
+  quantity its batches could never account for.
+
+- **A batch is one lot, wherever it is.** The number, the expiry date and the purchase rate
+  belong to the goods, so they are held once per product; how much of it sits in each godown
+  is held per warehouse, exactly as the product's own position is. The product's position is
+  kept equal to the sum of its batches' positions — same quantity, same value, movement by
+  movement — so the stock valuation and the batch-wise valuation are two views of one number
+  rather than two numbers that drift.
+
+Not yet built: **expired stock is not refused on the way out**. Expired goods leave through an
+issue or a write-off like any other goods, so the position cannot be the thing that refuses
+them; whether a *sale* may draw on an expired lot is a rule for the sales document, and is
+recorded there when that document exists.
+
 ---
 
 ## 11. Document numbering

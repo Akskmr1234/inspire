@@ -90,6 +90,9 @@ export interface StockDocumentLineView {
   readonly stockUnitCode: string;
   readonly rate: number;
   readonly remarks: string | null;
+  readonly batchId: string | null;
+  readonly batchNumber: string | null;
+  readonly expiresOn: string | null;
 }
 
 /** One movement a document produced. */
@@ -101,6 +104,7 @@ export interface StockMovementView {
   readonly value: number;
   readonly balanceQuantity: number;
   readonly balanceAverageCost: number;
+  readonly batchNumber: string | null;
 }
 
 /** A stock document in full. */
@@ -205,6 +209,47 @@ export interface StockLineInput {
   readonly unitId?: string | null;
   readonly rate?: number;
   readonly remarks?: string | null;
+  readonly batchId?: string | null;
+  readonly batchNumber?: string | null;
+  readonly manufacturedOn?: string | null;
+  readonly expiresOn?: string | null;
+}
+
+/** What is held of one batch in one warehouse. */
+export interface BatchStockRow {
+  readonly batchId: string;
+  readonly batchNumber: string;
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productDescription: string;
+  readonly stockUnitCode: string;
+  readonly warehouseId: string;
+  readonly warehouseName: string;
+  readonly quantity: number;
+  readonly unitCost: number;
+  readonly value: number;
+  readonly purchaseRate: number;
+  readonly manufacturedOn: string | null;
+  readonly expiresOn: string | null;
+  readonly daysToExpiry: number | null;
+}
+
+/** The batch-wise stock. */
+export interface BatchStockReport {
+  readonly currency: string;
+  readonly rows: readonly BatchStockRow[];
+  readonly totalValue: number;
+}
+
+/**
+ * Whether a kind of document may put a batch on the books that was not there before.
+ *
+ * The documents that can increase stock. On everything else the screen offers a choice
+ * of what is in stock rather than a box to type into, because a number the server does
+ * not recognise there is a typing mistake rather than a new lot.
+ */
+export function opensBatches(type: number): boolean {
+  return carriesRate(type) || type === StockDocumentType.physicalVerification;
 }
 
 const STOCK = '/inventory/stock';
@@ -328,4 +373,71 @@ export function fetchItemMovement(
   }
 
   return request<readonly ItemMovementRow[]>(`${STOCK}/movement?${query.toString()}`);
+}
+
+/**
+ * Lists the batches of one product that can be picked from.
+ *
+ * What section 10 means by selection on sale: each row carries what is available, what
+ * the lot was bought at, and when it expires — so the screen can offer a choice, or
+ * make it when only one comes back.
+ */
+export function fetchProductBatches(
+  productId: string,
+  warehouseId: string,
+  includeEmpty = false,
+): Promise<readonly BatchStockRow[]> {
+  const query = new URLSearchParams({
+    productId,
+    includeEmpty: String(includeEmpty),
+  });
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  return request<readonly BatchStockRow[]>(`${STOCK}/batches?${query.toString()}`);
+}
+
+/** Reads the batch-wise stock. */
+export function fetchBatchStock(
+  warehouseId: string,
+  categoryId: string,
+  includeZero: boolean,
+): Promise<BatchStockReport> {
+  const query = new URLSearchParams({ includeZero: String(includeZero) });
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  if (categoryId) {
+    query.set('categoryId', categoryId);
+  }
+
+  return request<BatchStockReport>(`${STOCK}/batch-stock?${query.toString()}`);
+}
+
+/** Reads what has expired, and what is about to. */
+export function fetchExpiring(
+  asOn: string,
+  withinDays: number | '',
+  warehouseId: string,
+  categoryId: string,
+): Promise<readonly BatchStockRow[]> {
+  const query = new URLSearchParams({ asOn });
+
+  if (withinDays !== '') {
+    query.set('withinDays', String(withinDays));
+  }
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  if (categoryId) {
+    query.set('categoryId', categoryId);
+  }
+
+  return request<readonly BatchStockRow[]>(`${STOCK}/expiry?${query.toString()}`);
 }

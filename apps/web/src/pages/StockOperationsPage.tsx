@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -12,14 +12,17 @@ import {
   cancelStockDocument,
   carriesRate,
   createStockDocument,
+  fetchProductBatches,
   getStockDocument,
   isCount,
   isTransfer,
   listStockDocuments,
+  opensBatches,
   postStockDocument,
   STOCK_TYPES,
   StockDocumentStatus,
   StockDocumentType,
+  type BatchStockRow,
   type StockDocumentDetail,
   type StockDocumentSummary,
   type StockLineInput,
@@ -291,10 +294,22 @@ interface DraftLine {
   quantity: string;
   rate: string;
   remarks: string;
+  batchId: string;
+  batchNumber: string;
+  expiresOn: string;
 }
 
 function emptyLine(): DraftLine {
-  return { key: crypto.randomUUID(), productId: '', quantity: '', rate: '', remarks: '' };
+  return {
+    key: crypto.randomUUID(),
+    productId: '',
+    quantity: '',
+    rate: '',
+    remarks: '',
+    batchId: '',
+    batchNumber: '',
+    expiresOn: '',
+  };
 }
 
 /** The entry form: a header, a grid of products, and one Save. */
@@ -343,6 +358,16 @@ function StockEntry({
   const transfer = isTransfer(type);
   const counting = isCount(type);
 
+  const batched = (productId: string): boolean =>
+    (products.data ?? []).some(
+      (product) => product.id === productId && product.tracksBatches,
+    );
+
+  // The column appears once a batched product is on the grid rather than always. Most
+  // firms track batches on a handful of products, and a permanently empty column on
+  // every other document would be in the way of the ones they do enter.
+  const anyBatched = lines.some((line) => batched(line.productId));
+
   const update = (key: string, patch: Partial<DraftLine>): void =>
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
@@ -361,6 +386,13 @@ function StockEntry({
             quantity: Number(line.quantity),
             rate: showRate && line.rate.trim() ? Number(line.rate) : 0,
             remarks: line.remarks.trim() || null,
+
+            // One or the other, never both: a batch chosen from stock is identified,
+            // and a batch typed onto a receipt is named. Sending a blank number where
+            // the server expects to generate one would be naming it "".
+            batchId: line.batchId || null,
+            batchNumber: line.batchId ? null : line.batchNumber.trim() || null,
+            expiresOn: line.batchId ? null : line.expiresOn || null,
           }));
 
         if (entered.length === 0 || !warehouseId || (transfer && !destinationId)) {
@@ -482,6 +514,8 @@ function StockEntry({
         <p className="text-xs text-slate-500">{t('stock.adjustmentHint')}</p>
       )}
 
+      {anyBatched && <p className="text-xs text-slate-500">{t('stock.batchHint')}</p>}
+
       <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-slate-100 dark:bg-slate-800">
@@ -493,6 +527,9 @@ function StockEntry({
               {showRate && (
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.rate')}</th>
               )}
+              {anyBatched && (
+                <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+              )}
               <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
               <th />
             </tr>
@@ -503,7 +540,16 @@ function StockEntry({
                 <td className="px-2 py-1">
                   <select
                     value={line.productId}
-                    onChange={(event) => update(line.key, { productId: event.target.value })}
+                    onChange={(event) =>
+                      // The batch goes with the product it belonged to. Keeping it
+                      // would offer a lot of the old product against the new one.
+                      update(line.key, {
+                        productId: event.target.value,
+                        batchId: '',
+                        batchNumber: '',
+                        expiresOn: '',
+                      })
+                    }
                     className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
                   >
                     <option value="">{t('stock.choose')}</option>
@@ -534,6 +580,20 @@ function StockEntry({
                       placeholder={t('stock.ratePlaceholder')}
                       className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-end dark:border-slate-700 dark:bg-slate-900"
                     />
+                  </td>
+                )}
+                {anyBatched && (
+                  <td className="px-2 py-1">
+                    {batched(line.productId) ? (
+                      <BatchCell
+                        line={line}
+                        type={type}
+                        warehouseId={warehouseId}
+                        onChange={(patch) => update(line.key, patch)}
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">{t('stock.batchNone')}</span>
+                    )}
                   </td>
                 )}
                 <td className="px-2 py-1">
@@ -593,6 +653,97 @@ function StockEntry({
 }
 
 /**
+ * The batch a line moves: chosen from stock, or named on the way in.
+ *
+ * Two different questions, so two different controls. Taking goods out means picking
+ * one of the lots that are actually there, with what is left of each and what it cost
+ * shown against it — the choice section 10 asks for, made for the user when only one
+ * lot comes back. Bringing goods in means writing down the number on the carton, or
+ * leaving it blank for the server to generate the next one.
+ */
+function BatchCell({
+  line,
+  type,
+  warehouseId,
+  onChange,
+}: {
+  readonly line: DraftLine;
+  readonly type: number;
+  readonly warehouseId: string;
+  readonly onChange: (patch: Partial<DraftLine>) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const naming = opensBatches(type);
+
+  // Only where a choice has to be made. A receipt names its own lot, so asking the
+  // server what is in stock would be a round trip nobody reads.
+  const batches = useQuery<readonly BatchStockRow[], ApiError>({
+    queryKey: ['product-batches', line.productId, warehouseId],
+    queryFn: () => fetchProductBatches(line.productId, warehouseId),
+    enabled: !naming && Boolean(line.productId && warehouseId),
+  });
+
+  const available = batches.data ?? [];
+
+  // Section 10: one batch in stock is chosen for the user, several are offered. A
+  // picker with one lot on the shelf should not have to tell the system which lot.
+  // Guarded rather than given a dependency list, because the guard is the same
+  // condition either way and a list would have to name a closure that changes on
+  // every render.
+  useEffect(() => {
+    const only = available.length === 1 ? available[0] : undefined;
+
+    if (!naming && !line.batchId && only) {
+      onChange({ batchId: only.batchId });
+    }
+  });
+
+  if (naming) {
+    return (
+      <div className="flex gap-1">
+        <input
+          value={line.batchNumber}
+          onChange={(event) => onChange({ batchNumber: event.target.value })}
+          placeholder={t('stock.batchAuto')}
+          className="w-28 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        />
+        <input
+          type="date"
+          value={line.expiresOn}
+          onChange={(event) => onChange({ expiresOn: event.target.value })}
+          title={t('stock.expiresOn')}
+          className="w-36 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        />
+      </div>
+    );
+  }
+
+  if (batches.isSuccess && available.length === 0) {
+    return <span className="text-xs text-amber-600">{t('stock.noBatchesInStock')}</span>;
+  }
+
+  return (
+    <select
+      value={line.batchId}
+      onChange={(event) => onChange({ batchId: event.target.value })}
+      className="w-56 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+    >
+      <option value="">{t('stock.chooseBatch')}</option>
+      {available.map((batch) => (
+        <option key={batch.batchId} value={batch.batchId}>
+          {batch.batchNumber} —{' '}
+          {t('stock.batchAvailable', {
+            quantity: trim(batch.quantity),
+            rate: trim(batch.unitCost),
+          })}
+          {batch.expiresOn ? ` — ${batch.expiresOn}` : ''}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
  * One document: what it says, and what it did.
  *
  * The movements are shown beside the lines rather than instead of them, because they
@@ -634,6 +785,10 @@ function StockDocumentView({
   }
 
   const document = query.data;
+
+  // Shown only where the document actually moved a batch. A column of empty cells on
+  // every unbatched receipt would say nothing, on every document, forever.
+  const batchedDocument = document.lines.some((line) => line.batchNumber);
 
   return (
     <section className="space-y-4">
@@ -726,6 +881,9 @@ function StockDocumentView({
               <th className="px-3 py-2 text-start font-semibold">{t('stock.unit')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('stock.inStockUnits')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('stock.rate')}</th>
+              {batchedDocument && (
+                <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+              )}
               <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
             </tr>
           </thead>
@@ -743,6 +901,16 @@ function StockDocumentView({
                   {trim(line.stockQuantity)} {line.stockUnitCode}
                 </td>
                 <td className="cell-numeric">{line.rate === 0 ? '' : trim(line.rate)}</td>
+                {batchedDocument && (
+                  <td className="px-3 py-1.5">
+                    {line.batchNumber ?? ''}
+                    {line.expiresOn && (
+                      <span className="ms-2 text-xs text-slate-500">
+                        {t('stock.expiresOn')} {line.expiresOn}
+                      </span>
+                    )}
+                  </td>
+                )}
                 <td className="px-3 py-1.5">{line.remarks ?? ''}</td>
               </tr>
             ))}
@@ -764,6 +932,9 @@ function StockDocumentView({
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.value')}</th>
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.balanceAfter')}</th>
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.averageAfter')}</th>
+                {batchedDocument && (
+                  <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -786,6 +957,9 @@ function StockDocumentView({
                   <td className="cell-numeric">{movement.value.toFixed(2)}</td>
                   <td className="cell-numeric">{trim(movement.balanceQuantity)}</td>
                   <td className="cell-numeric">{trim(movement.balanceAverageCost)}</td>
+                  {batchedDocument && (
+                    <td className="px-3 py-1.5">{movement.batchNumber ?? ''}</td>
+                  )}
                 </tr>
               ))}
             </tbody>

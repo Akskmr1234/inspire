@@ -26,6 +26,13 @@ internal sealed record StockContext(
     IReadOnlyDictionary<ProductId, Product> Products,
     IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units);
 
+/// <summary>A document ready to post, and the batches its lines point at.</summary>
+/// <param name="Document">The draft, with its lines.</param>
+/// <param name="Batches">Every batch the lines name, by identifier.</param>
+internal sealed record StockAssembly(
+    StockDocument Document,
+    IReadOnlyDictionary<BatchId, Batch> Batches);
+
 /// <summary>Handles <see cref="CreateStockDocumentCommand"/>.</summary>
 /// <remarks>
 /// Everything is loaded and checked before anything is built. Discovering a product
@@ -39,6 +46,7 @@ public sealed class CreateStockDocumentCommandHandler
     private readonly IStockDocumentRepository _documents;
     private readonly IInventoryMasterRepository _masters;
     private readonly IProductRepository _products;
+    private readonly IBatchRepository _batches;
     private readonly IFinancialYearRepository _financialYears;
     private readonly INumberingSeriesRepository _numbering;
     private readonly IFirmRepository _firms;
@@ -52,7 +60,9 @@ public sealed class CreateStockDocumentCommandHandler
     /// <param name="documents">The stock document repository.</param>
     /// <param name="masters">The inventory master repository.</param>
     /// <param name="products">The product repository.</param>
+    /// <param name="batches">The batch repository.</param>
     /// <param name="balances">The stock balance repository.</param>
+    /// <param name="batchBalances">The batch position repository.</param>
     /// <param name="ledger">The stock ledger repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="numbering">The numbering-series repository.</param>
@@ -65,7 +75,9 @@ public sealed class CreateStockDocumentCommandHandler
         IStockDocumentRepository documents,
         IInventoryMasterRepository masters,
         IProductRepository products,
+        IBatchRepository batches,
         IStockBalanceRepository balances,
+        IBatchBalanceRepository batchBalances,
         IStockLedgerRepository ledger,
         IFinancialYearRepository financialYears,
         INumberingSeriesRepository numbering,
@@ -78,6 +90,7 @@ public sealed class CreateStockDocumentCommandHandler
         _documents = documents;
         _masters = masters;
         _products = products;
+        _batches = batches;
         _financialYears = financialYears;
         _numbering = numbering;
         _firms = firms;
@@ -85,7 +98,7 @@ public sealed class CreateStockDocumentCommandHandler
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
-        _poster = new StockPoster(balances, ledger);
+        _poster = new StockPoster(balances, batchBalances, ledger);
     }
 
     /// <inheritdoc />
@@ -119,15 +132,16 @@ public sealed class CreateStockDocumentCommandHandler
             return Result.Failure<CreateStockDocumentResponse>(number.Error);
         }
 
-        Result<StockDocument> built = StockLoader.Build(
-            request, _tenantContext.TenantId, firmId, number.Value, context.Value);
+        Result<StockAssembly> built = await StockLoader.BuildAsync(
+            request, _tenantContext.TenantId, firmId, number.Value, context.Value, _batches,
+            cancellationToken);
 
         if (built.IsFailure)
         {
             return Result.Failure<CreateStockDocumentResponse>(built.Error);
         }
 
-        StockDocument document = built.Value;
+        StockDocument document = built.Value.Document;
         IReadOnlyList<StockLedgerEntry> movements = [];
 
         if (request.PostImmediately)
@@ -145,6 +159,7 @@ public sealed class CreateStockDocumentCommandHandler
             Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
                 document,
                 context.Value.Products,
+                built.Value.Batches,
                 context.Value.Firm.BaseCurrency,
                 _clock.UtcNow,
                 cancellationToken);
@@ -231,6 +246,7 @@ public sealed class PostStockDocumentCommandHandler
 {
     private readonly IStockDocumentRepository _documents;
     private readonly IProductRepository _products;
+    private readonly IBatchRepository _batches;
     private readonly IFirmRepository _firms;
     private readonly ITenantContext _tenantContext;
     private readonly ICurrentUser _currentUser;
@@ -241,7 +257,9 @@ public sealed class PostStockDocumentCommandHandler
     /// <summary>Initialises a new instance of the <see cref="PostStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
     /// <param name="products">The product repository.</param>
+    /// <param name="batches">The batch repository.</param>
     /// <param name="balances">The stock balance repository.</param>
+    /// <param name="batchBalances">The batch position repository.</param>
     /// <param name="ledger">The stock ledger repository.</param>
     /// <param name="firms">The firm repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
@@ -251,7 +269,9 @@ public sealed class PostStockDocumentCommandHandler
     public PostStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IProductRepository products,
+        IBatchRepository batches,
         IStockBalanceRepository balances,
+        IBatchBalanceRepository batchBalances,
         IStockLedgerRepository ledger,
         IFirmRepository firms,
         ITenantContext tenantContext,
@@ -261,12 +281,13 @@ public sealed class PostStockDocumentCommandHandler
     {
         _documents = documents;
         _products = products;
+        _batches = batches;
         _firms = firms;
         _tenantContext = tenantContext;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
-        _poster = new StockPoster(balances, ledger);
+        _poster = new StockPoster(balances, batchBalances, ledger);
     }
 
     /// <inheritdoc />
@@ -304,8 +325,11 @@ public sealed class PostStockDocumentCommandHandler
         IReadOnlyDictionary<ProductId, Product> products = await _products.GetManyAsync(
             [.. document.Lines.Select(line => line.ProductId).Distinct()], cancellationToken);
 
+        IReadOnlyDictionary<BatchId, Batch> batches = await BatchResolver.ForDocumentAsync(
+            document, _batches, cancellationToken);
+
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
-            document, products, firm.BaseCurrency, _clock.UtcNow, cancellationToken);
+            document, products, batches, firm.BaseCurrency, _clock.UtcNow, cancellationToken);
 
         if (applied.IsFailure)
         {
@@ -325,6 +349,7 @@ public sealed class CancelStockDocumentCommandHandler
     private readonly IStockDocumentRepository _documents;
     private readonly IStockLedgerRepository _ledger;
     private readonly IProductRepository _products;
+    private readonly IBatchRepository _batches;
     private readonly IFirmRepository _firms;
     private readonly ITenantContext _tenantContext;
     private readonly IClock _clock;
@@ -334,8 +359,10 @@ public sealed class CancelStockDocumentCommandHandler
     /// <summary>Initialises a new instance of the <see cref="CancelStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
     /// <param name="balances">The stock balance repository.</param>
+    /// <param name="batchBalances">The batch position repository.</param>
     /// <param name="ledger">The stock ledger repository.</param>
     /// <param name="products">The product repository.</param>
+    /// <param name="batches">The batch repository.</param>
     /// <param name="firms">The firm repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="clock">The clock.</param>
@@ -343,8 +370,10 @@ public sealed class CancelStockDocumentCommandHandler
     public CancelStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IStockBalanceRepository balances,
+        IBatchBalanceRepository batchBalances,
         IStockLedgerRepository ledger,
         IProductRepository products,
+        IBatchRepository batches,
         IFirmRepository firms,
         ITenantContext tenantContext,
         IClock clock,
@@ -353,11 +382,12 @@ public sealed class CancelStockDocumentCommandHandler
         _documents = documents;
         _ledger = ledger;
         _products = products;
+        _batches = batches;
         _firms = firms;
         _tenantContext = tenantContext;
         _clock = clock;
         _unitOfWork = unitOfWork;
-        _poster = new StockPoster(balances, ledger);
+        _poster = new StockPoster(balances, batchBalances, ledger);
     }
 
     /// <inheritdoc />
@@ -400,8 +430,12 @@ public sealed class CancelStockDocumentCommandHandler
         IReadOnlyDictionary<ProductId, Product> products = await _products.GetManyAsync(
             [.. document.Lines.Select(line => line.ProductId).Distinct()], cancellationToken);
 
+        IReadOnlyDictionary<BatchId, Batch> batches = await BatchResolver.ForDocumentAsync(
+            document, _batches, cancellationToken);
+
         Result reversed = await _poster.ReverseAsync(
-            document, movements, products, firm.BaseCurrency, _clock.UtcNow, cancellationToken);
+            document, movements, products, batches, firm.BaseCurrency, _clock.UtcNow,
+            cancellationToken);
 
         if (reversed.IsFailure)
         {
@@ -593,12 +627,20 @@ internal static class StockLoader
     }
 
     /// <summary>Builds the draft and its lines, converting every quantity to stock units.</summary>
-    internal static Result<StockDocument> Build(
+    /// <returns>The document and every batch it names, or the first refusal.</returns>
+    /// <remarks>
+    /// The batches come back with the document because posting needs them and the
+    /// lines only carry their identifiers. Reading them again from the database would
+    /// also miss the ones this document has just opened, which are not there yet.
+    /// </remarks>
+    internal static async Task<Result<StockAssembly>> BuildAsync(
         CreateStockDocumentCommand request,
         TenantId tenantId,
         FirmId firmId,
         string number,
-        StockContext context)
+        StockContext context,
+        IBatchRepository batches,
+        CancellationToken cancellationToken)
     {
         Result<StockDocument> draft = StockDocument.CreateDraft(
             tenantId, firmId, context.Year, request.Type, number, request.Date,
@@ -606,13 +648,22 @@ internal static class StockLoader
 
         if (draft.IsFailure)
         {
-            return draft;
+            return Result.Failure<StockAssembly>(draft.Error);
         }
 
         StockDocument document = draft.Value;
 
-        foreach (StockDocumentLineInput line in request.Lines)
+        Result<IReadOnlyList<Batch?>> resolved = await BatchResolver.ResolveAsync(
+            document, request, tenantId, context, batches, cancellationToken);
+
+        if (resolved.IsFailure)
         {
+            return Result.Failure<StockAssembly>(resolved.Error);
+        }
+
+        for (int index = 0; index < request.Lines.Count; index++)
+        {
+            StockDocumentLineInput line = request.Lines[index];
             Product product = context.Products[ProductId.From(line.ProductId)];
             UnitOfMeasure stockUnit = context.Units[product.StockUnitId];
 
@@ -628,23 +679,30 @@ internal static class StockLoader
 
             if (stockQuantity.IsFailure)
             {
-                return Result.Failure<StockDocument>(stockQuantity.Error);
+                return Result.Failure<StockAssembly>(stockQuantity.Error);
             }
 
             Result<StockDocumentLine> added = document.AddLine(
-                product, entryUnit, line.Quantity, stockQuantity.Value, line.Rate, line.Remarks);
+                product, entryUnit, line.Quantity, stockQuantity.Value, line.Rate,
+                resolved.Value[index], line.Remarks);
 
             if (added.IsFailure)
             {
-                return Result.Failure<StockDocument>(added.Error);
+                return Result.Failure<StockAssembly>(added.Error);
             }
         }
 
         Result details = document.SetDetails(request.ReferenceNumber, request.Narration);
 
         return details.IsFailure
-            ? Result.Failure<StockDocument>(details.Error)
-            : Result.Success(document);
+            ? Result.Failure<StockAssembly>(details.Error)
+            : Result.Success(new StockAssembly(
+                document,
+                resolved.Value
+                    .Where(batch => batch is not null)
+                    .Select(batch => batch!)
+                    .DistinctBy(batch => batch.Id)
+                    .ToDictionary(batch => batch.Id)));
     }
 
     /// <summary>Resolves a document, refusing one belonging to another firm.</summary>

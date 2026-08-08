@@ -227,6 +227,100 @@ public sealed class StockDocumentTests
     }
 
     [Fact]
+    public void A_batched_product_must_say_which_batch_moved()
+    {
+        // Without it the line would move the product's position and no batch position,
+        // so the two would stop adding up from that document onwards.
+        StockDocument document = Draft(StockDocumentType.MaterialReceipt);
+        UnitOfMeasure each = BaseUnit();
+        Product product = Batched(each);
+
+        document.AddLine(product, each, 1m, 1m, 5m).Error.Code
+            .ShouldBe("StockDocument.BatchRequired");
+
+        Batch batch = Batch.Open(Tenant, Firm, product, "A001").Value;
+
+        document.AddLine(product, each, 1m, 1m, 5m, batch).Value.BatchId
+            .ShouldBe(batch.Id);
+    }
+
+    [Fact]
+    public void A_batch_on_a_product_that_is_not_batched_is_refused()
+    {
+        // Recorded, printed, and ignored by the position is worse than refused: the
+        // number would mean nothing to the stock it appears to describe.
+        StockDocument document = Draft(StockDocumentType.MaterialReceipt);
+        UnitOfMeasure each = BaseUnit();
+        Product batched = Batched(each);
+        Batch batch = Batch.Open(Tenant, Firm, batched, "A001").Value;
+
+        document.AddLine(Stocked(each), each, 1m, 1m, 5m, batch).Error.Code
+            .ShouldBe("StockDocument.BatchNotTracked");
+    }
+
+    [Fact]
+    public void A_batch_of_another_product_cannot_move()
+    {
+        StockDocument document = Draft(StockDocumentType.MaterialReceipt);
+        UnitOfMeasure each = BaseUnit();
+        Product theirs = Batched(each);
+        Batch batch = Batch.Open(Tenant, Firm, theirs, "A001").Value;
+
+        document.AddLine(Batched(each), each, 1m, 1m, 5m, batch).Error.Code
+            .ShouldBe("StockDocument.BatchWrongProduct");
+    }
+
+    [Fact]
+    public void One_product_may_appear_twice_in_two_batches()
+    {
+        // The exception to the duplicate rule, and the case tracking batches exists
+        // for: an issue of thirty from a lot holding twenty draws the rest from
+        // another, and the two leave at two costs carrying two expiry dates.
+        StockDocument document = Draft(StockDocumentType.MaterialIssue);
+        UnitOfMeasure each = BaseUnit();
+        Product product = Batched(each);
+
+        Batch first = Batch.Open(Tenant, Firm, product, "A001").Value;
+        Batch second = Batch.Open(Tenant, Firm, product, "A002").Value;
+
+        document.AddLine(product, each, 20m, 20m, batch: first).IsSuccess.ShouldBeTrue();
+        document.AddLine(product, each, 10m, 10m, batch: second).IsSuccess.ShouldBeTrue();
+
+        document.Post(User, Now).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_same_batch_twice_on_one_document_is_still_refused()
+    {
+        StockDocument document = Draft(StockDocumentType.MaterialIssue);
+        UnitOfMeasure each = BaseUnit();
+        Product product = Batched(each);
+        Batch batch = Batch.Open(Tenant, Firm, product, "A001").Value;
+
+        document.AddLine(product, each, 20m, 20m, batch: batch);
+        document.AddLine(product, each, 10m, 10m, batch: batch);
+
+        document.Post(User, Now).Error.Code.ShouldBe("StockDocument.DuplicateProduct");
+    }
+
+    [Fact]
+    public void Only_the_documents_that_bring_goods_in_may_open_a_batch()
+    {
+        // A transfer or an issue moves goods that are already somewhere, so a batch
+        // number it does not recognise is a typing mistake rather than a new lot.
+        Draft(StockDocumentType.MaterialReceipt).OpensBatches.ShouldBeTrue();
+        Draft(StockDocumentType.StockAdjustment).OpensBatches.ShouldBeTrue();
+        Draft(StockDocumentType.PhysicalVerification).OpensBatches.ShouldBeTrue();
+        Draft(StockDocumentType.MaterialIssue).OpensBatches.ShouldBeFalse();
+        Draft(StockDocumentType.StockTransfer, transfer: true).OpensBatches.ShouldBeFalse();
+
+        // Counting a shelf means reading a number off a carton. Generating one would
+        // file the count against a lot that exists nowhere but here.
+        Draft(StockDocumentType.PhysicalVerification).GeneratesBatchNumbers.ShouldBeFalse();
+        Draft(StockDocumentType.MaterialReceipt).GeneratesBatchNumbers.ShouldBeTrue();
+    }
+
+    [Fact]
     public void A_posted_document_is_closed_to_further_change()
     {
         StockDocument document = Posted();
@@ -282,6 +376,15 @@ public sealed class StockDocumentTests
             Category.CreateRoot(Tenant, Firm, "GEN", "General").Value,
             unit, $"PRO-{Guid.NewGuid():N}"[..12], "A thing", itemType,
             CurrencyCode.Qar).Value;
+
+    private static Product Batched(UnitOfMeasure unit)
+    {
+        Product product = Stocked(unit);
+
+        product.SetTracking(true, false);
+
+        return product;
+    }
 
     private static Result<StockDocument> TryDraft(
         StockDocumentType type,

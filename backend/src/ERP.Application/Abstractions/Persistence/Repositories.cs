@@ -494,9 +494,92 @@ public interface IStockBalanceRepository
         IReadOnlyCollection<ProductId> productIds,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Says whether a product holds stock anywhere in the firm.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="productId">The product.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> if any warehouse holds any of it.</returns>
+    /// <remarks>
+    /// Asked before batch tracking is turned on for a product. Stock that arrived
+    /// before the switch belongs to no batch, and the position would then hold a
+    /// quantity its batches cannot account for - a discrepancy between the stock
+    /// valuation and the batch-wise one that nothing later could resolve.
+    /// </remarks>
+    Task<bool> HasStockAsync(
+        FirmId firmId,
+        ProductId productId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds a position opened by its first movement.</summary>
     /// <param name="balance">The position.</param>
     void Add(StockBalance balance);
+}
+
+/// <summary>Reads and writes batches.</summary>
+public interface IBatchRepository
+{
+    /// <summary>Finds one batch.</summary>
+    /// <param name="id">The batch.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The batch, or <see langword="null"/>.</returns>
+    Task<Batch?> FindAsync(BatchId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Loads several batches at once.</summary>
+    /// <param name="ids">The batches.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The batches that exist, by identifier.</returns>
+    Task<IReadOnlyDictionary<BatchId, Batch>> GetManyAsync(
+        IReadOnlyCollection<BatchId> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the batches of several products by their numbers.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="numbers">The product and batch number of each line that named one.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The batches that exist, by product and number.</returns>
+    /// <remarks>
+    /// One query for the whole document rather than one per line, and keyed by the
+    /// pair because a batch number is only unique within its product: two suppliers
+    /// both numbering their lots <c>001</c> is the ordinary case.
+    /// </remarks>
+    Task<IReadOnlyDictionary<(ProductId Product, string Number), Batch>> GetByNumbersAsync(
+        FirmId firmId,
+        IReadOnlyCollection<(ProductId Product, string Number)> numbers,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads how far the generated numbering of each product has got.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="productIds">The products.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The highest sequence issued per product; missing means none yet.</returns>
+    Task<IReadOnlyDictionary<ProductId, int>> GetHighestAutoSequencesAsync(
+        FirmId firmId,
+        IReadOnlyCollection<ProductId> productIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a batch.</summary>
+    /// <param name="batch">The batch.</param>
+    void Add(Batch batch);
+}
+
+/// <summary>Reads and writes the position of a batch in a warehouse.</summary>
+public interface IBatchBalanceRepository
+{
+    /// <summary>Loads the positions of several batches in one warehouse.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="warehouseId">The warehouse.</param>
+    /// <param name="batchIds">The batches.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The positions that exist, by batch. Missing means never held here.</returns>
+    Task<IReadOnlyDictionary<BatchId, BatchBalance>> GetPositionsAsync(
+        FirmId firmId,
+        WarehouseId warehouseId,
+        IReadOnlyCollection<BatchId> batchIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a position opened by its first movement.</summary>
+    /// <param name="balance">The position.</param>
+    void Add(BatchBalance balance);
 }
 
 /// <summary>Writes and reads back the stock ledger.</summary>

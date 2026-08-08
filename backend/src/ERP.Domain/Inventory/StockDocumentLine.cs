@@ -29,6 +29,7 @@ public sealed class StockDocumentLine : Entity<StockDocumentLineId>, ITenantScop
         TenantId tenantId,
         StockDocumentId documentId,
         ProductId productId,
+        BatchId? batchId,
         UnitOfMeasureId unitId,
         decimal quantity,
         decimal stockQuantity,
@@ -40,6 +41,7 @@ public sealed class StockDocumentLine : Entity<StockDocumentLineId>, ITenantScop
         TenantId = tenantId;
         StockDocumentId = documentId;
         ProductId = productId;
+        BatchId = batchId;
         UnitId = unitId;
         Quantity = quantity;
         StockQuantity = stockQuantity;
@@ -61,6 +63,15 @@ public sealed class StockDocumentLine : Entity<StockDocumentLineId>, ITenantScop
 
     /// <summary>Gets the product that moved.</summary>
     public ProductId ProductId { get; private set; }
+
+    /// <summary>Gets the batch that moved, on a product tracked in batches.</summary>
+    /// <remarks>
+    /// Null exactly when the product is not tracked in batches. One line moves one
+    /// batch, so a sale drawing on two batches is two lines - which is also what the
+    /// customer's delivery note has to say, since the two carry different expiry
+    /// dates.
+    /// </remarks>
+    public BatchId? BatchId { get; private set; }
 
     /// <summary>Gets the unit the quantity was entered in.</summary>
     public UnitOfMeasureId UnitId { get; private set; }

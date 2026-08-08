@@ -229,6 +229,57 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
         return Result.Success(Money.Of(outgoing * AverageCost, Currency));
     }
 
+    /// <summary>Takes goods out at a cost something else has already decided.</summary>
+    /// <param name="quantity">How much went out. Must be positive.</param>
+    /// <param name="unitCost">What those particular goods cost.</param>
+    /// <param name="occurredAtUtc">When the movement was posted.</param>
+    /// <returns>The value taken out, or the reason it was refused.</returns>
+    /// <remarks>
+    /// <para>
+    /// What a batch-tracked issue uses. The average on this position is the average of
+    /// the product across every batch in the warehouse; the goods actually picked came
+    /// out of one batch, at that batch's cost. Removing them at the average would
+    /// leave this position holding a value that no longer equals the sum of its
+    /// batches, and the product valuation and the batch-wise valuation would report
+    /// two different numbers for the same shelf.
+    /// </para>
+    /// <para>
+    /// Removing a batch cheaper than the average pushes the average of what is left
+    /// up, which is correct: what remains really is the more expensive stock.
+    /// </para>
+    /// </remarks>
+    public Result<Money> IssueAt(
+        decimal quantity,
+        decimal unitCost,
+        DateTimeOffset occurredAtUtc)
+    {
+        if (quantity <= 0m)
+        {
+            return Result.Failure<Money>(Error.Validation(
+                "StockBalance.QuantityNotPositive",
+                "An issue must be for a positive quantity."));
+        }
+
+        if (unitCost < 0m)
+        {
+            return Result.Failure<Money>(Error.Validation(
+                "StockBalance.CostNegative",
+                "Goods cannot be issued at a negative cost."));
+        }
+
+        return RemoveAt(
+            quantity,
+            unitCost,
+            occurredAtUtc,
+            outgoing => Error.BusinessRule(
+                "StockBalance.Insufficient",
+                $"Only {Quantity} is on hand, so {outgoing} cannot be issued."),
+            Error.BusinessRule(
+                "StockBalance.IssueBelowZero",
+                "Issuing those goods at what they cost would leave the remaining stock "
+                + "carrying a negative value. Post an adjustment instead."));
+    }
+
     /// <summary>Takes back out goods that came in, at the cost they came in at.</summary>
     /// <param name="quantity">How much to take back. Must be positive.</param>
     /// <param name="unitCost">What that receipt recorded as the cost of one unit.</param>
@@ -263,38 +314,18 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
                 "A reversal must be for a positive quantity."));
         }
 
-        decimal removed = decimal.Round(quantity, QuantityScale, MidpointRounding.AwayFromZero);
-
-        if (removed > Quantity)
-        {
-            return Result.Failure<Money>(Error.BusinessRule(
+        return RemoveAt(
+            quantity,
+            unitCost,
+            occurredAtUtc,
+            removed => Error.BusinessRule(
                 "StockBalance.ReceiptConsumed",
                 $"Only {Quantity} of the {removed} received is still on hand, so the "
-                + "receipt can no longer be reversed. Post an adjustment instead."));
-        }
-
-        decimal remaining = Quantity - removed;
-        decimal remainingValue = (Quantity * AverageCost) - (removed * unitCost);
-
-        if (remainingValue < 0m)
-        {
-            return Result.Failure<Money>(Error.BusinessRule(
+                + "receipt can no longer be reversed. Post an adjustment instead."),
+            Error.BusinessRule(
                 "StockBalance.ReversalBelowZero",
                 "Reversing that receipt would leave the remaining stock carrying a "
                 + "negative value. Post an adjustment instead."));
-        }
-
-        // The average of what is left, not the average as it stood. Removing a lot
-        // that was cheaper than the average pushes the average of the remainder up,
-        // which is exactly what it should do.
-        AverageCost = remaining <= 0m
-            ? AverageCost
-            : decimal.Round(remainingValue / remaining, CostScale, MidpointRounding.AwayFromZero);
-
-        Quantity = remaining;
-        LastMovementAtUtc = occurredAtUtc;
-
-        return Result.Success(Money.Of(removed * unitCost, Currency));
     }
 
     /// <summary>Restates the cost of what is on hand, without moving any goods.</summary>
@@ -322,5 +353,53 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
         LastMovementAtUtc = occurredAtUtc;
 
         return Result.Success(Value - before);
+    }
+
+    /// <summary>Removes a quantity and exactly the value it carried with it.</summary>
+    /// <param name="quantity">How much to remove.</param>
+    /// <param name="unitCost">What those goods were worth, one unit at a time.</param>
+    /// <param name="occurredAtUtc">When the movement was posted.</param>
+    /// <param name="insufficient">The error when there is not that much here.</param>
+    /// <param name="belowZero">The error when the value removed exceeds the value held.</param>
+    /// <returns>The value removed, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Shared by the two operations that take goods out at a cost decided elsewhere -
+    /// undoing a receipt, and issuing from a batch. They differ in what a refusal
+    /// means, which is why the errors are passed in, but the arithmetic is the same
+    /// and two copies of it would eventually be two answers.
+    /// </remarks>
+    private Result<Money> RemoveAt(
+        decimal quantity,
+        decimal unitCost,
+        DateTimeOffset occurredAtUtc,
+        Func<decimal, Error> insufficient,
+        Error belowZero)
+    {
+        decimal removed = decimal.Round(quantity, QuantityScale, MidpointRounding.AwayFromZero);
+
+        if (removed > Quantity)
+        {
+            return Result.Failure<Money>(insufficient(removed));
+        }
+
+        decimal remaining = Quantity - removed;
+        decimal remainingValue = (Quantity * AverageCost) - (removed * unitCost);
+
+        if (remainingValue < 0m)
+        {
+            return Result.Failure<Money>(belowZero);
+        }
+
+        // The average of what is left, not the average as it stood. Removing goods
+        // that were cheaper than the average pushes the average of the remainder up,
+        // which is exactly what it should do.
+        AverageCost = remaining <= 0m
+            ? AverageCost
+            : decimal.Round(remainingValue / remaining, CostScale, MidpointRounding.AwayFromZero);
+
+        Quantity = remaining;
+        LastMovementAtUtc = occurredAtUtc;
+
+        return Result.Success(Money.Of(removed * unitCost, Currency));
     }
 }

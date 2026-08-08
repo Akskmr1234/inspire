@@ -167,6 +167,20 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/item-movement",
                     ViewInventoryReports),
+                new(
+                    "inventory-reports.batch-stock",
+                    "Batch-wise stock",
+                    "المخزون حسب التشغيلة",
+                    "inventory",
+                    "/inventory/batch-stock",
+                    ViewInventoryReports),
+                new(
+                    "inventory-reports.expiry",
+                    "Expiry report",
+                    "تقرير الصلاحية",
+                    "inventory",
+                    "/inventory/expiry",
+                    ViewInventoryReports),
             ]),
 
         new(

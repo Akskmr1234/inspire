@@ -13,9 +13,13 @@ import {
 } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
+  fetchBatchStock,
+  fetchExpiring,
   fetchItemMovement,
   fetchStockLedger,
   fetchStockValuation,
+  type BatchStockReport,
+  type BatchStockRow,
   type ItemMovementRow,
   type StockLedgerReport,
   type StockValuationReport,
@@ -130,6 +134,220 @@ export function StockValuationPage(): React.JSX.Element {
       )}
     </ReportFrame>
   );
+}
+
+/**
+ * The batch-wise stock of section 8.3.
+ *
+ * Its total is the stock valuation's total for the same products, and not by
+ * coincidence: every batch movement moves the product's position by the same quantity
+ * at the same cost, so the two reports are two views of one number.
+ */
+export function BatchStockPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const [warehouseId, setWarehouseId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [includeZero, setIncludeZero] = useState(false);
+
+  const query = useQuery<BatchStockReport, ApiError>({
+    queryKey: ['batch-stock', warehouseId, categoryId, includeZero],
+    queryFn: () => fetchBatchStock(warehouseId, categoryId, includeZero),
+  });
+
+  const controls = (
+    <div className="flex flex-wrap items-end gap-3">
+      <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
+      <CategoryPicker value={categoryId} onChange={setCategoryId} />
+
+      <label className="flex items-center gap-2 pb-1 text-sm">
+        <input
+          type="checkbox"
+          checked={includeZero}
+          onChange={(event) => setIncludeZero(event.target.checked)}
+        />
+        {t('stock.includeZero')}
+      </label>
+    </div>
+  );
+
+  return (
+    <ReportFrame title={t('nav.batchStock')} controls={controls} query={query}>
+      {(report) => (
+        <div className="space-y-4">
+          <p className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium dark:bg-slate-800">
+            {t('stock.totalValue', {
+              value: report.totalValue.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              }),
+              currency: report.currency,
+            })}
+          </p>
+
+          <DataGrid
+            gridKey="batch-stock"
+            rows={report.rows}
+            columns={batchColumns(t)}
+            rowKey={(row) => `${row.batchId}-${row.warehouseId}`}
+            emptyMessage={t('stock.noBatchStock')}
+          />
+        </div>
+      )}
+    </ReportFrame>
+  );
+}
+
+/**
+ * The expiry report of section 8.3.
+ *
+ * Read from what is on a shelf rather than from the batch master. A lot that expired
+ * last year and sold out in full is not something anybody can act on, and listing it
+ * would bury the ones that are still there.
+ */
+export function ExpiryReportPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [asOn, setAsOn] = useState(today);
+  const [withinDays, setWithinDays] = useState<number | ''>('');
+  const [warehouseId, setWarehouseId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+
+  const query = useQuery<readonly BatchStockRow[], ApiError>({
+    queryKey: ['expiry', asOn, withinDays, warehouseId, categoryId],
+    queryFn: () => fetchExpiring(asOn, withinDays, warehouseId, categoryId),
+  });
+
+  const controls = (
+    <div className="flex flex-wrap items-end gap-3">
+      <DateBox label={t('stock.asOn')} value={asOn} onChange={setAsOn} />
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-600 dark:text-slate-400">
+          {t('stock.expiringWithin')}
+        </span>
+        <select
+          value={withinDays}
+          onChange={(event) =>
+            setWithinDays(event.target.value === '' ? '' : Number(event.target.value))
+          }
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        >
+          <option value="">{t('stock.onlyExpired')}</option>
+          {[30, 60, 90, 180, 365].map((days) => (
+            <option key={days} value={days}>
+              {days} {t('stock.days')}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
+      <CategoryPicker value={categoryId} onChange={setCategoryId} />
+    </div>
+  );
+
+  return (
+    <ReportFrame title={t('nav.expiryReport')} controls={controls} query={query}>
+      {(rows) => (
+        <DataGrid
+          gridKey="expiry-report"
+          rows={rows}
+          columns={batchColumns(t, true)}
+          rowKey={(row) => `${row.batchId}-${row.warehouseId}`}
+          emptyMessage={t('stock.nothingExpiring')}
+        />
+      )}
+    </ReportFrame>
+  );
+}
+
+/**
+ * The columns both batch reports show.
+ *
+ * One definition rather than two. The two reports differ in which batches they select
+ * and in whether the days-left column earns its place, not in what a batch is.
+ */
+function batchColumns(
+  t: ReturnType<typeof useTranslation>['t'],
+  expiring = false,
+): readonly GridColumn<BatchStockRow>[] {
+  return [
+    { key: 'batch', header: t('stock.batch'), value: (row) => row.batchNumber },
+    { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
+    {
+      key: 'description',
+      header: t('products.description'),
+      value: (row) => row.productDescription,
+    },
+    { key: 'warehouse', header: t('stock.warehouse'), value: (row) => row.warehouseName },
+    {
+      key: 'quantity',
+      header: t('stock.onHand'),
+      value: (row) => row.quantity,
+      numeric: true,
+      render: (row) => `${trim(row.quantity)} ${row.stockUnitCode}`,
+    },
+    {
+      key: 'unitCost',
+      header: t('stock.unitCost'),
+      value: (row) => row.unitCost,
+      numeric: true,
+      render: (row) => trim(row.unitCost),
+    },
+    {
+      key: 'purchaseRate',
+      header: t('stock.purchaseRate'),
+      value: (row) => row.purchaseRate,
+      numeric: true,
+      render: (row) => trim(row.purchaseRate),
+      hiddenByDefault: !expiring,
+    },
+    {
+      key: 'value',
+      header: t('stock.value'),
+      value: (row) => row.value,
+      numeric: true,
+      render: (row) => row.value.toFixed(2),
+    },
+    {
+      key: 'manufactured',
+      header: t('stock.manufacturedOn'),
+      value: (row) => row.manufacturedOn ?? '',
+      hiddenByDefault: true,
+    },
+    {
+      key: 'expires',
+      header: t('stock.expiresOn'),
+      value: (row) => row.expiresOn ?? '',
+    },
+    {
+      key: 'daysLeft',
+      header: t('stock.daysToExpiry'),
+      value: (row) => row.daysToExpiry ?? Number.MAX_SAFE_INTEGER,
+      numeric: true,
+      // Past its date is the one thing on this report that has to be visible at a
+      // glance, so it is coloured rather than merely negative.
+      render: (row) =>
+        row.daysToExpiry === null ? (
+          ''
+        ) : (
+          <span
+            className={clsx(
+              row.daysToExpiry < 0 && 'font-semibold text-red-700 dark:text-red-300',
+              row.daysToExpiry >= 0 &&
+                row.daysToExpiry <= 30 &&
+                'font-semibold text-amber-700 dark:text-amber-300',
+            )}
+          >
+            {row.daysToExpiry < 0 ? t('stock.expired') : row.daysToExpiry}
+          </span>
+        ),
+      hiddenByDefault: !expiring,
+    },
+  ];
 }
 
 /**

@@ -126,6 +126,13 @@ public sealed class StockDocumentLineConfiguration
             .HasForeignKey(line => line.UnitId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Restricted like the product. A batch a posted document moved cannot be
+        // deleted out from under the movements that name it.
+        builder.HasOne<Batch>()
+            .WithMany()
+            .HasForeignKey(line => line.BatchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder
             .HasIndex(line => new { line.StockDocumentId, line.LineNumber })
             .HasDatabaseName("ix_stock_document_lines_document");
@@ -212,6 +219,7 @@ public sealed class StockLedgerEntryConfiguration : IEntityTypeConfiguration<Sto
         builder.Property(entry => entry.Date).IsRequired();
         builder.Property(entry => entry.DocumentType).HasConversion<int>().IsRequired();
         builder.Property(entry => entry.DocumentNumber).HasMaxLength(50).IsRequired();
+        builder.Property(entry => entry.BatchNumber).HasMaxLength(Batch.MaximumNumberLength);
         builder.Property(entry => entry.PostedAtUtc).IsRequired();
         builder.Property(entry => entry.Narration)
             .HasMaxLength(StockDocument.MaximumNarrationLength);
@@ -248,6 +256,11 @@ public sealed class StockLedgerEntryConfiguration : IEntityTypeConfiguration<Sto
             .HasForeignKey(entry => entry.DocumentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<Batch>()
+            .WithMany()
+            .HasForeignKey(entry => entry.BatchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // The stock ledger report's own query: one product in one warehouse, in the
         // order the movements were posted. Posting order rather than date order,
         // because that is the order the running balance column was computed in and
@@ -266,6 +279,13 @@ public sealed class StockLedgerEntryConfiguration : IEntityTypeConfiguration<Sto
         // finds the cost each was valued at.
         builder.HasIndex(entry => entry.DocumentId)
             .HasDatabaseName("ix_stock_ledger_document");
+
+        // A batch's own movement history: what came in, what went out, and where it
+        // went, which is the trail a recall is traced along.
+        builder
+            .HasIndex(entry => new { entry.FirmId, entry.BatchId, entry.PostedAtUtc })
+            .HasFilter("batch_id IS NOT NULL")
+            .HasDatabaseName("ix_stock_ledger_batch");
 
         builder
             .HasIndex(entry => new { entry.FirmId, entry.Date })

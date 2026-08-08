@@ -43,6 +43,8 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
         FirmId firmId,
         ProductId productId,
         WarehouseId warehouseId,
+        BatchId? batchId,
+        string? batchNumber,
         DateOnly date,
         StockDocumentId documentId,
         StockDocumentType documentType,
@@ -60,6 +62,8 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
         FirmId = firmId;
         ProductId = productId;
         WarehouseId = warehouseId;
+        BatchId = batchId;
+        BatchNumber = batchNumber;
         Date = date;
         DocumentId = documentId;
         DocumentType = documentType;
@@ -87,6 +91,17 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
 
     /// <summary>Gets the warehouse it moved in or out of.</summary>
     public WarehouseId WarehouseId { get; private set; }
+
+    /// <summary>Gets the batch that moved, where the product is tracked in batches.</summary>
+    public BatchId? BatchId { get; private set; }
+
+    /// <summary>Gets the batch number, copied so the ledger reads without a join.</summary>
+    /// <remarks>
+    /// Denormalised for the same reason <see cref="DocumentNumber"/> is: a stock
+    /// ledger showing a batch column should not have to join to a master to print it,
+    /// and the number as it stood is what the movement was recorded against.
+    /// </remarks>
+    public string? BatchNumber { get; private set; }
 
     /// <summary>Gets the document date, which is the date the report reads.</summary>
     public DateOnly Date { get; private set; }
@@ -143,6 +158,7 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
     /// <param name="value">The signed value of the movement.</param>
     /// <param name="postedAtUtc">The instant it was posted.</param>
     /// <param name="narration">The narration to carry.</param>
+    /// <param name="batch">The batch that moved, on a product tracked in batches.</param>
     /// <returns>The entry, or the reason it could not be recorded.</returns>
     /// <remarks>
     /// Takes the balance rather than its two figures, so the running position on the
@@ -158,7 +174,8 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
         decimal unitCost,
         Money value,
         DateTimeOffset postedAtUtc,
-        string? narration = null)
+        string? narration = null,
+        Batch? batch = null)
     {
         ArgumentNullException.ThrowIfNull(balance);
         ArgumentNullException.ThrowIfNull(document);
@@ -176,6 +193,8 @@ public sealed class StockLedgerEntry : AggregateRoot<StockLedgerEntryId>, IFirmS
             balance.FirmId,
             balance.ProductId,
             balance.WarehouseId,
+            batch?.Id,
+            batch?.Number,
             date,
             document.Id,
             document.Type,

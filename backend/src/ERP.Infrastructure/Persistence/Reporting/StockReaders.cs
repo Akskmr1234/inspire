@@ -151,6 +151,7 @@ public sealed class StockDocumentReader : IStockDocumentReader
                         line.Id,
                         line.LineNumber,
                         line.ProductId,
+                        line.BatchId,
                         line.UnitId,
                         line.Quantity,
                         line.StockQuantity,
@@ -189,6 +190,20 @@ public sealed class StockDocumentReader : IStockDocumentReader
 
         var byProduct = products.ToDictionary(product => product.Id);
 
+        List<BatchId> batchIds =
+            [.. document.Lines.Where(line => line.BatchId is not null)
+                .Select(line => line.BatchId!.Value)
+                .Distinct()];
+
+        var batches = batchIds.Count == 0
+            ? []
+            : await _context.Batches
+                .Where(batch => batchIds.Contains(batch.Id))
+                .Select(batch => new { batch.Id, batch.Number, batch.ExpiresOn })
+                .ToListAsync(cancellationToken);
+
+        var byBatch = batches.ToDictionary(batch => batch.Id);
+
         // What the document actually did, alongside what it says. On a cancelled
         // document this holds the reversals beside the originals, which is the whole
         // point of reversing rather than deleting.
@@ -205,6 +220,7 @@ public sealed class StockDocumentReader : IStockDocumentReader
                 Value = entry.Value.Amount,
                 entry.BalanceQuantity,
                 entry.BalanceAverageCost,
+                entry.BatchNumber,
             })
             .ToListAsync(cancellationToken);
 
@@ -241,7 +257,14 @@ public sealed class StockDocumentReader : IStockDocumentReader
                         ? units.GetValueOrDefault(product.StockUnitId, string.Empty)
                         : string.Empty,
                     line.Rate,
-                    line.Remarks)),
+                    line.Remarks,
+                    line.BatchId?.Value,
+                    line.BatchId is { } batchId && byBatch.TryGetValue(batchId, out var batch)
+                        ? batch.Number
+                        : null,
+                    line.BatchId is { } expiring && byBatch.TryGetValue(expiring, out var dated)
+                        ? dated.ExpiresOn
+                        : null)),
             ],
             [
                 .. movements.Select(entry => new StockMovementView(
@@ -253,7 +276,8 @@ public sealed class StockDocumentReader : IStockDocumentReader
                     entry.UnitCost,
                     entry.Value,
                     entry.BalanceQuantity,
-                    entry.BalanceAverageCost)),
+                    entry.BalanceAverageCost,
+                    entry.BatchNumber)),
             ]);
     }
 
