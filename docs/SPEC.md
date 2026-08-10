@@ -408,7 +408,12 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Report menus are regime-filtered: a VAT firm must not be shown GST returns, and vice versa.
 2. **Loyalty rules** — earn rate, redemption value, expiry. Only “configurable settings” is stated.
 3. **Aging buckets** — 0-30/31-60/61-90/90+ assumed. **[ASSUMPTION]**
-4. **Rounding** — currency precision and rounding rule per tax component (a `Round` additional ledger exists, implying document-level rounding).
+4. ~~**Rounding**~~ — **ANSWERED (2026-08-10): round the document total, not the components.**
+   Consequences, now binding:
+   - Tax is computed **per component at full precision** and stored per component on the line, unrounded beyond the engine's own scale. Both the VAT return and the GST return are produced from those figures.
+   - Only the **document total** is rounded to the currency's own precision, once, at the end.
+   - The difference goes to the **`Round Off` additional ledger** the spec already names in §9, so the rounding is visible in the books as a posting rather than hidden inside a total.
+   - No cash rounding to 0.05. If a firm needs it later it is a per-firm setting on the same rounding step, not a change to how tax is computed.
 5. **`COR%`** on the product master — meaning not defined in the document.
 6. ~~**Costing methods**~~ — **ANSWERED (2026-08-06): average costing. FIFO is not required.**
    Consequences, now binding:
@@ -416,7 +421,11 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - `CostingMethod` remains a per-product field, since the prose names Last Purchase Rate beside it, but **Average Rate is the default** and the only method the valuation engine must support for the first release.
    - Batch-wise costing (§10) still holds where batches are enabled: a batch carries its own purchase rate, and profit on a batched item uses that actual rate rather than the running average. The two coexist — the average is the item's position across locations, the batch rate is what a specific unit cost.
    - No FIFO queue is modelled. Nothing should be built that depends on issue order, because reintroducing FIFO later would then be a data migration rather than a new strategy.
-7. **Approval matrix** — which documents require approval, and at what thresholds.
+7. ~~**Approval matrix**~~ — **ANSWERED (2026-08-10): no approvals in the first release.**
+   Consequences, now binding:
+   - Every document posts directly, as they do today. The **workflow engine of §12.9 is deferred**, and the modules that would have waited on it are not blocked.
+   - Nothing is to be built that *assumes* approval-free posting, though: a document's transition to posted stays a single guarded step on the aggregate, so an approval gate can be added in front of it later without reworking the documents themselves.
+   - Permission-based control still applies. "No approval" means no second person signs a document off, not that anybody may post anything.
 8. Whether **Payroll** and **POS** are needed in the first release or genuinely deferred.
    
    **8a. Which accounts a stock movement posts to.** Raised 2026-08-07, while building §8.3.
@@ -428,10 +437,24 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    defaults would put figures in the accounts that nobody asked for and that would be found
    at the first reconciliation.
    
-   What is needed to close it: an account per movement type, and probably per product
-   category, plus the inventory control account each firm posts stock to. Until then,
-   inventory value lives in the stock ledger only, and a trial balance does not include it.
-   This is a **known, deliberate gap**, not an oversight.
+   **ANSWERED (2026-08-10): a per-firm control-account map.** Consequences, now binding:
+   - Each firm names an **inventory control account** — the asset the value of stock sits in —
+     and one **counter-account per movement type**: consumption for a material issue, a loss
+     account for damaged stock and for a shortfall found on a count, opening equity for an
+     opening-stock document, and a variance account for an adjustment.
+   - **Per firm, not per product category.** A category-level map was offered and declined, so
+     the accounts are chosen once per firm rather than per category. Nothing in the design
+     forecloses the finer grain later: the map is a lookup taking a movement, and a category
+     can be added to what it looks up without changing a posting.
+   - A stock document that posts now raises a **balanced journal alongside its movements, in
+     the same transaction** — inventory debited on the way in, credited on the way out, and
+     the counter-account taking the other side. A transfer posts **nothing**: the goods have
+     not changed hands or value, only shelves.
+   - A firm that has not set the map up **cannot post stock**, rather than posting it into
+     nowhere. The refusal names the account that is missing. Seeding gives a new firm sensible
+     defaults from the standard chart, so a fresh installation is not born broken.
+   - Inventory therefore appears in the trial balance and the balance sheet, and the two
+     reconcile against the stock valuation by construction.
 9. ~~**Custom SQL dashboard widgets**~~ — **ANSWERED (2026-08-06): required, all of them.**
    Arbitrary SQL reaching the database from a browser is the largest deliberate attack surface in the platform, so it is built with the guards named when the question was raised rather than without them:
    - **Read-only by construction.** Every custom query runs inside a `READ ONLY` transaction, so a statement that slipped past validation still cannot write.

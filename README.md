@@ -70,7 +70,7 @@ Integration tests need a running Docker daemon.
 >
 > Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
 >
-> What remains open is only the *automatic* route: a per-firm control-account map (cheques in hand, bank charges, dishonour suspense) that would let the system raise the entry itself. That is still a decision for the business, and it is the same decision as open question 8a — which accounts a stock movement posts to.
+> What remains open is only the *automatic* route: a per-firm control-account map (cheques in hand, bank charges, dishonour suspense) that would let the system raise the entry itself. The business has since chosen that route for stock movements (open question 8a, answered 2026-08-10), so the same map is the obvious home for these three accounts when the cheque side is automated.
 
 ---
 
