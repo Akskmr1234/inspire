@@ -57,10 +57,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory — stock movements posted to the nominal ledger | **Done** — 5 API tests; inventory now appears in the trial balance |
 | Accounting — additional-charge matrix (§9), seeded per firm | **Done** — 8 domain tests; Round Off is the only default |
 | Accounting — credit position of a party, read from open bills | **Done** — 4 API tests; warns rather than blocks |
-| Sales, Purchase, Manufacturing, Service modules | Not started |
+| Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain) — 13 tests; persistence and posting are next |
+| Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 926 passing, 0 failing (476 domain + 206 application + 161 API + 20 identity + 63 integration).
+**Test suite:** 939 passing, 0 failing (489 domain + 206 application + 161 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
