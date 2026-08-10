@@ -425,6 +425,14 @@ const en = {
     noBatchStock: 'No batched stock on hand.',
     batchHint:
       'Leave the batch blank on a receipt and the next number is generated for the product. An issue or a transfer has to name a batch that is already in stock.',
+    units: 'Units',
+    unitsPlaceholder: 'One serial number per line',
+    unitsChoose: 'Choose the units going out',
+    unitsNone: 'No units in stock',
+    unitsCounted: '{{count}} of {{needed}}',
+    warrantyUntil: 'Warranty to',
+    serialHint:
+      'A serialised product needs one number for every unit the line moves. A receipt writes down the numbers on the cases; an issue or a transfer picks from the units already in stock.',
   },
   warehouses: {
     branch: 'Branch',
@@ -890,6 +898,14 @@ const ar = {
     noBatchStock: 'لا يوجد مخزون بتشغيلات.',
     batchHint:
       'اترك التشغيلة فارغة في الاستلام ليُولَّد الرقم التالي للمنتج. أما الصرف والتحويل فيجب أن يحددا تشغيلة موجودة بالمخزون.',
+    units: 'الوحدات',
+    unitsPlaceholder: 'رقم تسلسلي واحد في كل سطر',
+    unitsChoose: 'اختر الوحدات الصادرة',
+    unitsNone: 'لا توجد وحدات بالمخزون',
+    unitsCounted: '{{count}} من {{needed}}',
+    warrantyUntil: 'الضمان حتى',
+    serialHint:
+      'المنتج ذو الأرقام التسلسلية يحتاج رقماً لكل وحدة يحركها السطر. الاستلام يسجّل الأرقام المكتوبة على العلب، أما الصرف والتحويل فيختاران من الوحدات الموجودة بالمخزون.',
   },
   warehouses: {
     branch: 'الفرع',

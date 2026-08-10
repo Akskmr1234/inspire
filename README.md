@@ -52,7 +52,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory — product master screens and API | **Done** — 13 API tests, with a three-tab editor |
 | Inventory — stock operations and average costing | **Done** — 34 domain + 19 API tests, with screens and 3 reports |
 | Inventory — batch tracking: per-batch cost, expiry, generated numbers | **Done** — 34 domain + 13 API tests, with a batch column and 2 reports |
-| Inventory — serial numbers: per-unit identity, warranty, selection on sale | **Done** (API) — 12 domain + 8 API tests; the entry screen has no unit column yet |
+| Inventory — serial numbers: per-unit identity, warranty, selection on sale | **Done** — 12 domain + 8 API tests, with a unit column on the entry grid |
 | Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 

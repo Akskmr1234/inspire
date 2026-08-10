@@ -213,6 +213,35 @@ export interface StockLineInput {
   readonly batchNumber?: string | null;
   readonly manufacturedOn?: string | null;
   readonly expiresOn?: string | null;
+  readonly serialNumbers?: readonly string[] | null;
+  readonly warrantyUntil?: string | null;
+}
+
+/** Where a serialised unit stands: the five states of section 12.7. */
+export const SerialStatus = {
+  inStock: 1,
+  issued: 2,
+  returnedToSupplier: 3,
+  returnedFromCustomer: 4,
+  recorded: 5,
+} as const;
+
+/** One serialised unit, as a screen shows it. */
+export interface SerialNumberView {
+  readonly serialNumberId: string;
+  readonly number: string;
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productDescription: string;
+  readonly batchNumber: string | null;
+  readonly status: number;
+  readonly warehouseId: string | null;
+  readonly warehouseName: string | null;
+  readonly unitCost: number;
+  readonly receivedOn: string | null;
+  readonly issuedOn: string | null;
+  readonly warrantyUntil: string | null;
+  readonly isUnderWarranty: boolean;
 }
 
 /** What is held of one batch in one warehouse. */
@@ -416,6 +445,36 @@ export function fetchBatchStock(
   }
 
   return request<BatchStockReport>(`${STOCK}/batch-stock?${query.toString()}`);
+}
+
+/**
+ * Lists the serialised units of one product.
+ *
+ * Section 12.7's selection on sale: the units on the shelf, each with what it cost and
+ * how long it is covered for. A unit that has gone out is not offered again.
+ */
+export function fetchProductSerials(
+  productId: string,
+  warehouseId: string,
+  includeGone = false,
+): Promise<readonly SerialNumberView[]> {
+  const query = new URLSearchParams({
+    productId,
+    includeGone: String(includeGone),
+  });
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  return request<readonly SerialNumberView[]>(`${STOCK}/serials?${query.toString()}`);
+}
+
+/** Finds units by the number on the case, across every product. */
+export function findSerial(number: string): Promise<readonly SerialNumberView[]> {
+  return request<readonly SerialNumberView[]>(
+    `${STOCK}/serials/find?number=${encodeURIComponent(number)}`,
+  );
 }
 
 /** Reads what has expired, and what is about to. */

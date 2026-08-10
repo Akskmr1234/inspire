@@ -13,6 +13,7 @@ import {
   carriesRate,
   createStockDocument,
   fetchProductBatches,
+  fetchProductSerials,
   getStockDocument,
   isCount,
   isTransfer,
@@ -23,6 +24,7 @@ import {
   StockDocumentStatus,
   StockDocumentType,
   type BatchStockRow,
+  type SerialNumberView,
   type StockDocumentDetail,
   type StockDocumentSummary,
   type StockLineInput,
@@ -297,6 +299,8 @@ interface DraftLine {
   batchId: string;
   batchNumber: string;
   expiresOn: string;
+  serialNumbers: string;
+  warrantyUntil: string;
 }
 
 function emptyLine(): DraftLine {
@@ -309,7 +313,23 @@ function emptyLine(): DraftLine {
     batchId: '',
     batchNumber: '',
     expiresOn: '',
+    serialNumbers: '',
+    warrantyUntil: '',
   };
+}
+
+/**
+ * The unit numbers on a line, however they were typed.
+ *
+ * Split on anything that is not part of a number, so a storekeeper can paste a column
+ * out of a spreadsheet, type them separated by commas, or scan them one after another —
+ * and the blanks that leaves between them are dropped rather than sent as empty units.
+ */
+function parseSerials(entered: string): readonly string[] {
+  return entered
+    .split(/[\s,;]+/)
+    .map((number) => number.trim())
+    .filter((number) => number.length > 0);
 }
 
 /** The entry form: a header, a grid of products, and one Save. */
@@ -363,10 +383,17 @@ function StockEntry({
       (product) => product.id === productId && product.tracksBatches,
     );
 
-  // The column appears once a batched product is on the grid rather than always. Most
-  // firms track batches on a handful of products, and a permanently empty column on
-  // every other document would be in the way of the ones they do enter.
+  const serialised = (productId: string): boolean =>
+    (products.data ?? []).some(
+      (product) => product.id === productId && product.tracksSerialNumbers,
+    );
+
+  // The columns appear once a product that needs them is on the grid rather than
+  // always. Most firms track batches and serials on a handful of products, and a
+  // permanently empty column on every other document would be in the way of the ones
+  // they do enter.
   const anyBatched = lines.some((line) => batched(line.productId));
+  const anySerialised = lines.some((line) => serialised(line.productId));
 
   const update = (key: string, patch: Partial<DraftLine>): void =>
     setLines((current) =>
@@ -393,6 +420,14 @@ function StockEntry({
             batchId: line.batchId || null,
             batchNumber: line.batchId ? null : line.batchNumber.trim() || null,
             expiresOn: line.batchId ? null : line.expiresOn || null,
+
+            // Sent only where there are any. An empty array on an unserialised line
+            // would be a claim that the line moves no units, which is different from
+            // a line whose units are not tracked.
+            serialNumbers: parseSerials(line.serialNumbers).length
+              ? parseSerials(line.serialNumbers)
+              : null,
+            warrantyUntil: line.warrantyUntil || null,
           }));
 
         if (entered.length === 0 || !warehouseId || (transfer && !destinationId)) {
@@ -516,6 +551,8 @@ function StockEntry({
 
       {anyBatched && <p className="text-xs text-slate-500">{t('stock.batchHint')}</p>}
 
+      {anySerialised && <p className="text-xs text-slate-500">{t('stock.serialHint')}</p>}
+
       <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-slate-100 dark:bg-slate-800">
@@ -529,6 +566,9 @@ function StockEntry({
               )}
               {anyBatched && (
                 <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+              )}
+              {anySerialised && (
+                <th className="px-3 py-2 text-start font-semibold">{t('stock.units')}</th>
               )}
               <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
               <th />
@@ -548,6 +588,8 @@ function StockEntry({
                         batchId: '',
                         batchNumber: '',
                         expiresOn: '',
+                        serialNumbers: '',
+                        warrantyUntil: '',
                       })
                     }
                     className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
@@ -586,6 +628,20 @@ function StockEntry({
                   <td className="px-2 py-1">
                     {batched(line.productId) ? (
                       <BatchCell
+                        line={line}
+                        type={type}
+                        warehouseId={warehouseId}
+                        onChange={(patch) => update(line.key, patch)}
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">{t('stock.batchNone')}</span>
+                    )}
+                  </td>
+                )}
+                {anySerialised && (
+                  <td className="px-2 py-1">
+                    {serialised(line.productId) ? (
+                      <SerialCell
                         line={line}
                         type={type}
                         warehouseId={warehouseId}
@@ -740,6 +796,111 @@ function BatchCell({
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * The units a line moves: written down on the way in, picked on the way out.
+ *
+ * Both controls are lists rather than one box per unit, because the quantity is not
+ * known when the row is drawn and a storekeeper receiving forty handsets is pasting a
+ * column out of a spreadsheet or scanning them one after another. The count is shown
+ * against what the line needs, so a short list is visible before the server refuses it.
+ */
+function SerialCell({
+  line,
+  type,
+  warehouseId,
+  onChange,
+}: {
+  readonly line: DraftLine;
+  readonly type: number;
+  readonly warehouseId: string;
+  readonly onChange: (patch: Partial<DraftLine>) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const naming = opensBatches(type);
+
+  // Only where a choice has to be made. A receipt names the numbers on the cases in
+  // front of it, so asking the server what is in stock would be a round trip nobody
+  // reads.
+  const units = useQuery<readonly SerialNumberView[], ApiError>({
+    queryKey: ['product-serials', line.productId, warehouseId],
+    queryFn: () => fetchProductSerials(line.productId, warehouseId),
+    enabled: !naming && Boolean(line.productId && warehouseId),
+  });
+
+  const entered = parseSerials(line.serialNumbers).length;
+  const needed = Math.abs(Number(line.quantity) || 0);
+
+  const counter = (
+    <span
+      className={clsx(
+        'text-xs',
+        entered === needed && needed > 0
+          ? 'text-slate-500'
+          : 'text-amber-700 dark:text-amber-300',
+      )}
+    >
+      {t('stock.unitsCounted', { count: entered, needed: trim(needed) })}
+    </span>
+  );
+
+  if (naming) {
+    return (
+      <div className="flex flex-col gap-1">
+        <textarea
+          value={line.serialNumbers}
+          onChange={(event) => onChange({ serialNumbers: event.target.value })}
+          placeholder={t('stock.unitsPlaceholder')}
+          rows={2}
+          className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+        />
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={line.warrantyUntil}
+            onChange={(event) => onChange({ warrantyUntil: event.target.value })}
+            title={t('stock.warrantyUntil')}
+            className="w-36 rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+          />
+          {counter}
+        </div>
+      </div>
+    );
+  }
+
+  const available = units.data ?? [];
+
+  if (units.isSuccess && available.length === 0) {
+    return <span className="text-xs text-amber-600">{t('stock.unitsNone')}</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <select
+        multiple
+        size={Math.min(4, Math.max(2, available.length))}
+        value={parseSerials(line.serialNumbers)}
+        onChange={(event) =>
+          onChange({
+            serialNumbers: [...event.target.selectedOptions]
+              .map((option) => option.value)
+              .join('\n'),
+          })
+        }
+        aria-label={t('stock.unitsChoose')}
+        className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+      >
+        {available.map((unit) => (
+          <option key={unit.serialNumberId} value={unit.number}>
+            {unit.number}
+            {unit.isUnderWarranty ? ' ✓' : ''}
+          </option>
+        ))}
+      </select>
+      {counter}
+    </div>
   );
 }
 
