@@ -89,6 +89,9 @@ public class ErpDbContext : DbContext
     /// </remarks>
     public DbSet<BillAllocation> BillAllocations => Set<BillAllocation>();
 
+    /// <summary>Gets the charges documents may carry: §9's additional-ledger matrix.</summary>
+    public DbSet<AdditionalLedger> AdditionalLedgers => Set<AdditionalLedger>();
+
     /// <summary>Gets the cheque register.</summary>
     public DbSet<Cheque> Cheques => Set<Cheque>();
 
@@ -296,6 +299,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockLedgerEntryIdConverter>();
         configurationBuilder.Properties<BatchId>()
             .HaveConversion<BatchIdConverter>();
+        configurationBuilder.Properties<AdditionalLedgerId>()
+            .HaveConversion<AdditionalLedgerIdConverter>();
         configurationBuilder.Properties<InventoryAccountMapId>()
             .HaveConversion<InventoryAccountMapIdConverter>();
         configurationBuilder.Properties<SerialNumberId>()

@@ -106,3 +106,18 @@ public readonly record struct BillAllocationId(Guid Value) : IStronglyTypedId<Bi
     /// <inheritdoc />
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>Identifies one additional-charge mapping.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct AdditionalLedgerId(Guid Value)
+    : IStronglyTypedId<AdditionalLedgerId>
+{
+    /// <inheritdoc />
+    public static AdditionalLedgerId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static AdditionalLedgerId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}

@@ -490,8 +490,88 @@ public sealed partial class DatabaseSeeder
         }
 
         await SeedInventoryAccountsAsync(firm, cancellationToken);
+        await SeedAdditionalLedgersAsync(firm, cancellationToken);
 
         return added;
+    }
+
+    /// <summary>Maps the charges of section 9 onto the documents that carry them.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <remarks>
+    /// Every charge is mapped, and only <c>Round Off</c> is defaulted - the business's
+    /// answer of 2026-08-10. The others are there to be picked on the documents that
+    /// carry them; loading five zero lines onto every invoice would be five things to
+    /// look past on the ones with no freight, no packing and no discount.
+    /// <para>
+    /// Only where the firm has none. A firm whose administrator has withdrawn a charge
+    /// or reordered them keeps their arrangement.
+    /// </para>
+    /// </remarks>
+    private async Task SeedAdditionalLedgersAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        bool exists = await _context.AdditionalLedgers
+            .AnyAsync(charge => charge.FirmId == firm.Id, cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        Dictionary<string, Ledger> ledgers = await _context.Ledgers
+            .Where(ledger => ledger.FirmId == firm.Id)
+            .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
+
+        // Which charges belong on which documents, and which way each moves the total.
+        // A discount deducts; everything else adds. Round Off adds because the rounding
+        // difference is signed - it is the only one whose direction is decided by the
+        // arithmetic rather than by what the charge means.
+        (string Code, bool IsAddition, bool IsDefault)[] charges =
+        [
+            ("ROUND-OFF", true, true),
+            ("FREIGHT", true, false),
+            ("PACKING", true, false),
+            ("DELIVERY", true, false),
+            ("DISC-ALLOWED", false, false),
+        ];
+
+        ChargeableDocument[] documents =
+        [
+            ChargeableDocument.Sales,
+            ChargeableDocument.SalesOrder,
+            ChargeableDocument.SalesReturn,
+            ChargeableDocument.Purchase,
+            ChargeableDocument.PurchaseOrder,
+            ChargeableDocument.PurchaseReturn,
+        ];
+
+        int order = 0;
+
+        foreach ((string code, bool isAddition, bool isDefault) in charges)
+        {
+            if (!ledgers.TryGetValue(code, out Ledger? ledger))
+            {
+                continue;
+            }
+
+            foreach (ChargeableDocument document in documents)
+            {
+                Result<AdditionalLedger> mapped = AdditionalLedger.Map(
+                    firm.TenantId, firm.Id, document, ledger, isAddition, order);
+
+                if (mapped.IsFailure)
+                {
+                    continue;
+                }
+
+                mapped.Value.SetDefault(isDefault);
+                _context.AdditionalLedgers.Add(mapped.Value);
+            }
+
+            order++;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Points a firm's stock movements at the seeded accounts.</summary>

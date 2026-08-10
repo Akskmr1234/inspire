@@ -324,3 +324,13 @@ public sealed class BatchBalanceIdConverter : ValueConverter<BatchBalanceId, Gui
     {
     }
 }
+
+/// <summary>Converts <see cref="AdditionalLedgerId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class AdditionalLedgerIdConverter : ValueConverter<AdditionalLedgerId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="AdditionalLedgerIdConverter"/> class.</summary>
+    public AdditionalLedgerIdConverter()
+        : base(id => id.Value, value => AdditionalLedgerId.From(value))
+    {
+    }
+}

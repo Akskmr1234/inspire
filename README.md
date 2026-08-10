@@ -55,10 +55,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory — serial numbers: per-unit identity, warranty, selection on sale | **Done** — 12 domain + 8 API tests, with a unit column on the entry grid |
 | Inventory — per-firm account map for stock postings (answer to Q8a) | **Done** — 7 domain tests, seeded per firm |
 | Inventory — stock movements posted to the nominal ledger | **Done** — 5 API tests; inventory now appears in the trial balance |
+| Accounting — additional-charge matrix (§9), seeded per firm | **Done** — 8 domain tests; Round Off is the only default |
 | Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 914 passing, 0 failing (468 domain + 206 application + 157 API + 20 identity + 63 integration).
+**Test suite:** 922 passing, 0 failing (476 domain + 206 application + 157 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
