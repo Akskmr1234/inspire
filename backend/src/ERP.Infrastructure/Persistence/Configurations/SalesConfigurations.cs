@@ -60,6 +60,24 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .HasForeignKey(invoice => invoice.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // What the posting produced. Restricted, all three: a sale whose issue, bill or
+        // journal could be deleted would be a sale claiming to have been accounted for
+        // by something that no longer exists.
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.StockDocumentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Bill>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.BillId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Voucher>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.JournalVoucherId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // The number is what the invoice is called on paper and in a customer's own
         // records, so two of them in one firm would be two documents with one name.
         builder

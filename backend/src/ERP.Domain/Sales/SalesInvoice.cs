@@ -138,6 +138,32 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>Gets why it was cancelled.</summary>
     public string? CancellationReason { get; private set; }
 
+    /// <summary>Gets the issue that took the goods off the shelf.</summary>
+    /// <remarks>
+    /// <para>
+    /// A sale moves stock by raising a stock document of its own - a material issue,
+    /// numbered from its own series - rather than reaching into the positions directly.
+    /// That is a deliberate choice with a visible consequence: every sale leaves two
+    /// documents, and somebody reading a stock ledger sees the issue rather than the
+    /// invoice.
+    /// </para>
+    /// <para>
+    /// The alternative was to let a sales invoice move stock itself, which would mean
+    /// the stock ledger no longer pointing at a single kind of document, and every rule
+    /// the issue already enforces - batch positions, serial transitions, average
+    /// costing, refusing to go negative - either reimplemented here or generalised
+    /// across both. One audit trail for stock, with one kind of document in it, is worth
+    /// more than one document per sale.
+    /// </para>
+    /// </remarks>
+    public StockDocumentId? StockDocumentId { get; private set; }
+
+    /// <summary>Gets the bill this invoice put into the customer's outstanding.</summary>
+    public BillId? BillId { get; private set; }
+
+    /// <summary>Gets the journal it raised in the nominal ledger.</summary>
+    public VoucherId? JournalVoucherId { get; private set; }
+
     /// <summary>Gets the lines.</summary>
     public IReadOnlyList<SalesInvoiceLine> Lines => _lines.AsReadOnly();
 
@@ -537,6 +563,49 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         Status = SalesInvoiceStatus.Posted;
         PostedAtUtc = nowUtc;
         PostedBy = postedBy;
+
+        return Result.Success();
+    }
+
+    /// <summary>Names what the posting produced: the issue, the bill and the journal.</summary>
+    /// <param name="stockDocumentId">The issue that took the goods off the shelf.</param>
+    /// <param name="billId">The bill the customer now owes.</param>
+    /// <param name="journalVoucherId">The journal raised in the nominal ledger.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// All three together, once, by the handler that made them, in the same transaction
+    /// as the posting. Recorded rather than derived because each is what somebody
+    /// reading the invoice afterwards actually wants to reach - the goods, the debt and
+    /// the accounts - and none of the three can be found from the invoice by any other
+    /// route.
+    /// <para>
+    /// An invoice that named one of them twice would be an invoice claiming two issues
+    /// or two debts for one sale, so a second attempt is refused rather than allowed to
+    /// overwrite the first.
+    /// </para>
+    /// </remarks>
+    public Result RecordPosting(
+        StockDocumentId stockDocumentId,
+        BillId billId,
+        VoucherId journalVoucherId)
+    {
+        if (Status != SalesInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotPosted",
+                $"Invoice '{Number}' is {Status}, so it has produced nothing to record."));
+        }
+
+        if (StockDocumentId is not null || BillId is not null || JournalVoucherId is not null)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.AlreadyRecorded",
+                $"Invoice '{Number}' already names what its posting produced."));
+        }
+
+        StockDocumentId = stockDocumentId;
+        BillId = billId;
+        JournalVoucherId = journalVoucherId;
 
         return Result.Success();
     }

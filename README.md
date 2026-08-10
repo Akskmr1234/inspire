@@ -61,7 +61,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 939 passing, 0 failing (489 domain + 206 application + 161 API + 20 identity + 63 integration).
+**Test suite:** 941 passing, 0 failing (491 domain + 206 application + 161 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

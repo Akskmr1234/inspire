@@ -201,6 +201,38 @@ public sealed class SalesInvoiceTests
             .Error.Code.ShouldBe("SalesInvoice.SerialCountMismatch");
     }
 
+    [Fact]
+    public void What_the_posting_produced_is_named_once_and_not_twice()
+    {
+        // The goods, the debt and the accounts: three things somebody reading the
+        // invoice afterwards wants to reach, and none of them findable from it by any
+        // other route.
+        SalesInvoice invoice = Posted();
+
+        StockDocumentId issue = StockDocumentId.NewId();
+        BillId bill = BillId.NewId();
+        VoucherId journal = VoucherId.NewId();
+
+        invoice.RecordPosting(issue, bill, journal).IsSuccess.ShouldBeTrue();
+
+        invoice.StockDocumentId.ShouldBe(issue);
+        invoice.BillId.ShouldBe(bill);
+        invoice.JournalVoucherId.ShouldBe(journal);
+
+        // A second attempt would be an invoice claiming two issues or two debts for one
+        // sale.
+        invoice.RecordPosting(StockDocumentId.NewId(), BillId.NewId(), VoucherId.NewId())
+            .Error.Code.ShouldBe("SalesInvoice.AlreadyRecorded");
+    }
+
+    [Fact]
+    public void A_draft_has_produced_nothing_to_record()
+    {
+        Draft().Value
+            .RecordPosting(StockDocumentId.NewId(), BillId.NewId(), VoucherId.NewId())
+            .Error.Code.ShouldBe("SalesInvoice.NotPosted");
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>Assesses a line the way the application layer will: through the engine.</summary>
