@@ -562,6 +562,22 @@ public interface IBatchRepository
     void Add(Batch batch);
 }
 
+/// <summary>Reads the accounts a firm's stock movements post to.</summary>
+public interface IInventoryAccountMapRepository
+{
+    /// <summary>Finds a firm's map.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The map, or <see langword="null"/> where the firm has none.</returns>
+    Task<InventoryAccountMap?> FindAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a map for a firm that has none.</summary>
+    /// <param name="map">The map.</param>
+    void Add(InventoryAccountMap map);
+}
+
 /// <summary>Reads and writes serialised units.</summary>
 public interface ISerialNumberRepository
 {

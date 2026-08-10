@@ -345,3 +345,24 @@ public sealed class StockLedgerRepository : IStockLedgerRepository
             .ThenBy(entry => entry.Id)
             .ToListAsync(cancellationToken);
 }
+
+/// <summary>Reads the accounts a firm's stock movements post to.</summary>
+public sealed class InventoryAccountMapRepository : IInventoryAccountMapRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="InventoryAccountMapRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public InventoryAccountMapRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<InventoryAccountMap?> FindAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        _context.InventoryAccountMaps
+            .Include(map => map.Accounts)
+            .FirstOrDefaultAsync(map => map.FirmId == firmId, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(InventoryAccountMap map) => _context.InventoryAccountMaps.Add(map);
+}

@@ -100,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<IBatchRepository, BatchRepository>();
         services.AddScoped<IBatchBalanceRepository, BatchBalanceRepository>();
         services.AddScoped<ISerialNumberRepository, SerialNumberRepository>();
+        services.AddScoped<IInventoryAccountMapRepository, InventoryAccountMapRepository>();
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();

@@ -1,3 +1,4 @@
+using ERP.Domain.Accounting;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Primitives;
@@ -157,6 +158,16 @@ public sealed class StockDocument
 
     /// <summary>Gets why the document was cancelled.</summary>
     public string? CancellationReason { get; private set; }
+
+    /// <summary>Gets the journal this document raised in the nominal ledger.</summary>
+    /// <remarks>
+    /// Held so the two sides can be traced to each other: the stock ledger says goods
+    /// moved, the journal says what that did to the accounts, and a reader looking at
+    /// either should be able to reach the other. Null on a document that raised none -
+    /// a draft, or a transfer, which moves goods between shelves without changing whose
+    /// they are or what they are worth.
+    /// </remarks>
+    public VoucherId? JournalVoucherId { get; private set; }
 
     /// <summary>Gets the lines.</summary>
     public IReadOnlyList<StockDocumentLine> Lines => _lines.AsReadOnly();
@@ -567,6 +578,36 @@ public sealed class StockDocument
         Status = StockDocumentStatus.Posted;
         PostedAtUtc = nowUtc;
         PostedBy = postedBy;
+
+        return Result.Success();
+    }
+
+    /// <summary>Names the journal this document raised.</summary>
+    /// <param name="voucherId">The journal voucher.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Recorded by the handler that raised it, in the same transaction as the posting.
+    /// Only a posted document can name one, and only once: a stock document pointing at
+    /// two journals would leave a reader unable to say which of them accounts for the
+    /// goods it moved.
+    /// </remarks>
+    public Result RecordJournal(VoucherId voucherId)
+    {
+        if (Status != StockDocumentStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "StockDocument.NotPosted",
+                $"Document '{Number}' is {Status}, so it has raised no journal."));
+        }
+
+        if (JournalVoucherId is not null)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "StockDocument.AlreadyJournalled",
+                $"Document '{Number}' already names the journal it raised."));
+        }
+
+        JournalVoucherId = voucherId;
 
         return Result.Success();
     }

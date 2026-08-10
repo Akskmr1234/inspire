@@ -249,6 +249,11 @@ Invoice No · Ref No (auto-increment) · Customer · Salesman (from Employee mas
 **Other:** Narration (rich text in the web reference) · file attachments (2 MB) · **barcode scanning** — scanning adds the product; re-scanning the same product increments quantity.
 
 ### 12.2 Document conversion
+
+> **Scoped 2026-08-10: order → invoice → return.** The business raises a sales order,
+> converts it to an invoice, and raises a credit note when goods come back. **Quotation and
+> delivery note are deferred** — the conversion machinery is built to be a chain, so adding
+> either later is a new link rather than a redesign, but neither is built now.
 Load from an existing document: Sales Return Ref No · Quotation Ref No · Order Ref No · Purchase Ref No · Delivery SR No. (`image6`: “Create Invoice From”.)
 
 ### 12.3 Item grid — full column set
@@ -406,7 +411,8 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Place-of-supply comparison (which drives IGST vs CGST+SGST) applies only under the GST regime and must be inert under VAT.
    - Every tax figure is stored per component on the document line, never as a single collapsed `TaxAmount`, so both the VAT return and the GST return can be produced from the same posting.
    - Report menus are regime-filtered: a VAT firm must not be shown GST returns, and vice versa.
-2. **Loyalty rules** — earn rate, redemption value, expiry. Only “configurable settings” is stated.
+2. ~~**Loyalty rules**~~ — **ANSWERED (2026-08-10): not in the first release.**
+   Sales ships without loyalty, and the loyalty-points toggle of §12.8 is left off the print layouts. The feature is designed when somebody can state the earn rate, the redemption value and the expiry; building it on a guess would put a liability on the balance sheet that nobody had agreed to.
 3. **Aging buckets** — 0-30/31-60/61-90/90+ assumed. **[ASSUMPTION]**
 4. ~~**Rounding**~~ — **ANSWERED (2026-08-10): round the document total, not the components.**
    Consequences, now binding:
@@ -414,7 +420,8 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Only the **document total** is rounded to the currency's own precision, once, at the end.
    - The difference goes to the **`Round Off` additional ledger** the spec already names in §9, so the rounding is visible in the books as a posting rather than hidden inside a total.
    - No cash rounding to 0.05. If a firm needs it later it is a per-firm setting on the same rounding step, not a change to how tax is computed.
-5. **`COR%`** on the product master — meaning not defined in the document.
+5. ~~**`COR%`** on the product master~~ — **ANSWERED (2026-08-10): cost of retail — the margin on the retail rate.**
+   A second margin figure kept beside `Profit Percentage`, which applies to the wholesale or default sales rate. Both are held on the product's rate block; neither drives a posting on its own.
 6. ~~**Costing methods**~~ — **ANSWERED (2026-08-06): average costing. FIFO is not required.**
    Consequences, now binding:
    - Stock is valued at **weighted average cost**, recomputed on every receipt into a location.

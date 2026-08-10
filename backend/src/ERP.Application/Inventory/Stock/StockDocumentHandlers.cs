@@ -58,6 +58,7 @@ public sealed class CreateStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="CreateStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
@@ -71,6 +72,8 @@ public sealed class CreateStockDocumentCommandHandler
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="accounts">The inventory account map repository.</param>
+    /// <param name="vouchers">The voucher repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
@@ -86,6 +89,8 @@ public sealed class CreateStockDocumentCommandHandler
         IStockLedgerRepository ledger,
         IFinancialYearRepository financialYears,
         INumberingSeriesRepository numbering,
+        IInventoryAccountMapRepository accounts,
+        IVoucherRepository vouchers,
         IFirmRepository firms,
         ITenantContext tenantContext,
         ICurrentUser currentUser,
@@ -105,6 +110,7 @@ public sealed class CreateStockDocumentCommandHandler
         _clock = clock;
         _unitOfWork = unitOfWork;
         _poster = new StockPoster(balances, batchBalances, ledger);
+        _journal = new StockJournalPoster(accounts, vouchers, numbering, financialYears);
     }
 
     /// <inheritdoc />
@@ -177,6 +183,24 @@ public sealed class CreateStockDocumentCommandHandler
             }
 
             movements = applied.Value;
+
+            // The journal is part of the posting, not a consequence of it. A document
+            // whose accounts nobody has chosen does not post at all, which is the only
+            // arrangement under which the stock ledger and the nominal ledger keep
+            // describing the same firm.
+            Result journalled = await _journal.RaiseAsync(
+                document,
+                movements,
+                context.Value.Firm,
+                branchId,
+                _currentUser.UserId,
+                _clock.UtcNow,
+                cancellationToken);
+
+            if (journalled.IsFailure)
+            {
+                return Result.Failure<CreateStockDocumentResponse>(journalled.Error);
+            }
         }
 
         _documents.Add(document);
@@ -261,6 +285,7 @@ public sealed class PostStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="PostStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
@@ -271,6 +296,10 @@ public sealed class PostStockDocumentCommandHandler
     /// <param name="batchBalances">The batch position repository.</param>
     /// <param name="ledger">The stock ledger repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="numbering">The numbering-series repository.</param>
+    /// <param name="financialYears">The financial-year repository.</param>
+    /// <param name="accounts">The inventory account map repository.</param>
+    /// <param name="vouchers">The voucher repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
@@ -283,6 +312,10 @@ public sealed class PostStockDocumentCommandHandler
         IStockBalanceRepository balances,
         IBatchBalanceRepository batchBalances,
         IStockLedgerRepository ledger,
+        INumberingSeriesRepository numbering,
+        IFinancialYearRepository financialYears,
+        IInventoryAccountMapRepository accounts,
+        IVoucherRepository vouchers,
         IFirmRepository firms,
         ITenantContext tenantContext,
         ICurrentUser currentUser,
@@ -299,6 +332,7 @@ public sealed class PostStockDocumentCommandHandler
         _clock = clock;
         _unitOfWork = unitOfWork;
         _poster = new StockPoster(balances, batchBalances, ledger);
+        _journal = new StockJournalPoster(accounts, vouchers, numbering, financialYears);
     }
 
     /// <inheritdoc />
@@ -351,6 +385,23 @@ public sealed class PostStockDocumentCommandHandler
             return Result.Failure<CreateStockDocumentResponse>(applied.Error);
         }
 
+        if (_tenantContext.BranchId is not { } branchId)
+        {
+            return Result.Failure<CreateStockDocumentResponse>(Error.Forbidden(
+                "StockDocument.NoBranchSelected",
+                "A branch must be selected to post a stock document, because the journal "
+                + "it raises belongs to one."));
+        }
+
+        Result journalled = await _journal.RaiseAsync(
+            document, applied.Value, firm, branchId, _currentUser.UserId, _clock.UtcNow,
+            cancellationToken);
+
+        if (journalled.IsFailure)
+        {
+            return Result.Failure<CreateStockDocumentResponse>(journalled.Error);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(StockLoader.Describe(document, applied.Value));
@@ -371,6 +422,7 @@ public sealed class CancelStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="CancelStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
@@ -381,6 +433,10 @@ public sealed class CancelStockDocumentCommandHandler
     /// <param name="batches">The batch repository.</param>
     /// <param name="serials">The serial-number repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="numbering">The numbering-series repository.</param>
+    /// <param name="financialYears">The financial-year repository.</param>
+    /// <param name="accounts">The inventory account map repository.</param>
+    /// <param name="vouchers">The voucher repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
@@ -392,6 +448,10 @@ public sealed class CancelStockDocumentCommandHandler
         IProductRepository products,
         IBatchRepository batches,
         ISerialNumberRepository serials,
+        INumberingSeriesRepository numbering,
+        IFinancialYearRepository financialYears,
+        IInventoryAccountMapRepository accounts,
+        IVoucherRepository vouchers,
         IFirmRepository firms,
         ITenantContext tenantContext,
         IClock clock,
@@ -407,6 +467,7 @@ public sealed class CancelStockDocumentCommandHandler
         _clock = clock;
         _unitOfWork = unitOfWork;
         _poster = new StockPoster(balances, batchBalances, ledger);
+        _journal = new StockJournalPoster(accounts, vouchers, numbering, financialYears);
     }
 
     /// <inheritdoc />
@@ -462,6 +523,17 @@ public sealed class CancelStockDocumentCommandHandler
         if (reversed.IsFailure)
         {
             return reversed;
+        }
+
+        // The journal goes the way every other cancelled voucher goes: cancelled,
+        // keeping its number and its lines and leaving the balances. A contra would say
+        // the same thing twice and leave a day book with two entries for one mistake.
+        Result withdrawn = await _journal.WithdrawAsync(
+            document, request.Reason, cancellationToken);
+
+        if (withdrawn.IsFailure)
+        {
+            return withdrawn;
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

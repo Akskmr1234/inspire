@@ -1,3 +1,4 @@
+using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,13 @@ public sealed class StockDocumentConfiguration : IEntityTypeConfiguration<StockD
         builder.HasOne<FinancialYear>()
             .WithMany()
             .HasForeignKey(document => document.FinancialYearId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // The journal this document raised. Restricted: a journal that could be deleted
+        // would leave a stock document claiming to have been accounted for by nothing.
+        builder.HasOne<Voucher>()
+            .WithMany()
+            .HasForeignKey(document => document.JournalVoucherId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Both warehouse references restricted. Deleting a warehouse that stock has
