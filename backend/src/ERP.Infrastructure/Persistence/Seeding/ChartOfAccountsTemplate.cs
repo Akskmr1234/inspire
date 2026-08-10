@@ -88,6 +88,7 @@ internal static class ChartOfAccountsTemplate
         new("5900", "STOCK-LOSS", "Stock Written Off", LedgerKind.General),
         new("5900", "STOCK-VARIANCE", "Stock Variance", LedgerKind.General),
         new("3100", "OPENING-STOCK", "Opening Stock Equity", LedgerKind.General),
+        new("5100", "COGS", "Cost of Goods Sold", LedgerKind.General),
     ];
 
     /// <summary>Returns the tax ledgers appropriate to a firm's regime.</summary>

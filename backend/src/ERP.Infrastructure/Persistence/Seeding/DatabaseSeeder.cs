@@ -590,13 +590,12 @@ public sealed partial class DatabaseSeeder
     /// </remarks>
     private async Task SeedInventoryAccountsAsync(Firm firm, CancellationToken cancellationToken)
     {
-        bool exists = await _context.InventoryAccountMaps
-            .AnyAsync(map => map.FirmId == firm.Id, cancellationToken);
-
-        if (exists)
-        {
-            return;
-        }
+        // Loaded rather than merely counted, because seeding fills gaps: a firm whose
+        // map predates a new kind of posting - cost of goods sold, when sales arrived -
+        // would otherwise be unable to post anything until somebody noticed.
+        InventoryAccountMap? map = await _context.InventoryAccountMaps
+            .Include(existing => existing.Accounts)
+            .FirstOrDefaultAsync(existing => existing.FirmId == firm.Id, cancellationToken);
 
         Dictionary<string, Ledger> ledgers = await _context.Ledgers
             .Where(ledger => ledger.FirmId == firm.Id)
@@ -609,19 +608,28 @@ public sealed partial class DatabaseSeeder
             (StockAccount.Loss, "STOCK-LOSS"),
             (StockAccount.OpeningEquity, "OPENING-STOCK"),
             (StockAccount.Variance, "STOCK-VARIANCE"),
+            (StockAccount.CostOfGoodsSold, "COGS"),
         ];
 
-        InventoryAccountMap map = InventoryAccountMap.Create(firm.TenantId, firm.Id);
+        bool isNew = map is null;
+        map ??= InventoryAccountMap.Create(firm.TenantId, firm.Id);
 
         foreach ((StockAccount account, string code) in defaults)
         {
-            if (ledgers.TryGetValue(code, out Ledger? ledger))
+            // Only what is missing. A firm that has repointed one of these at their own
+            // chart keeps their choice; seeding fills gaps, it does not correct people.
+            bool chosen = map.Accounts.Any(entry => entry.Account == account);
+
+            if (!chosen && ledgers.TryGetValue(code, out Ledger? ledger))
             {
                 map.Assign(account, ledger);
             }
         }
 
-        _context.InventoryAccountMaps.Add(map);
+        if (isNew)
+        {
+            _context.InventoryAccountMaps.Add(map);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
     }

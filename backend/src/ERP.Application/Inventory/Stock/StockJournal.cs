@@ -50,6 +50,11 @@ internal static class StockJournal
             StockDocumentType.OpeningStock => StockAccount.OpeningEquity,
             StockDocumentType.MaterialReceipt or StockDocumentType.MaterialIssue =>
                 StockAccount.Consumption,
+
+            // A sale's issue is what the goods cost the firm, which is a different
+            // question from what production consumed - and the difference is the gross
+            // margin, so the two cannot share an account.
+            StockDocumentType.SalesIssue => StockAccount.CostOfGoodsSold,
             StockDocumentType.DamagedStock => StockAccount.Loss,
             StockDocumentType.StockAdjustment => StockAccount.Variance,
             StockDocumentType.PhysicalVerification =>

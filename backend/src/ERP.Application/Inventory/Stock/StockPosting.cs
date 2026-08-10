@@ -92,7 +92,8 @@ internal sealed class StockPoster
                         ReceiveInto(
                             source, document, line, line.StockQuantity, line.Rate, postedAtUtc)),
 
-                StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
+                StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
+                    or StockDocumentType.SalesIssue =>
                     Take(written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc)),
 
                 StockDocumentType.StockTransfer =>
@@ -323,7 +324,8 @@ internal sealed class StockPoster
                 StockDocumentType.StockTransfer =>
                     unit.TransferTo(document.DestinationWarehouseId!.Value, document.Id),
 
-                StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
+                StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
+                    or StockDocumentType.SalesIssue =>
                     unit.Issue(document.Date, document.Id),
 
                 _ when line.StockQuantity < 0m => unit.Issue(document.Date, document.Id),
@@ -371,7 +373,8 @@ internal sealed class StockPoster
                     StockDocumentType.StockTransfer =>
                         unit.TransferTo(document.WarehouseId, document.Id),
 
-                    StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
+                    StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
+                        or StockDocumentType.SalesIssue =>
                         unit.UndoIssue(document.WarehouseId, document.Id),
 
                     _ when line.StockQuantity < 0m =>

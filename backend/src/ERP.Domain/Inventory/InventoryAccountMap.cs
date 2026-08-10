@@ -29,6 +29,14 @@ public enum StockAccount
 
     /// <summary>Where a correction goes: an adjustment, and a surplus found on a count.</summary>
     Variance = 5,
+
+    /// <summary>What goods sold cost. The other side of a sale's stock issue.</summary>
+    /// <remarks>
+    /// Its own account rather than sharing Consumption, which is the business's answer of
+    /// 2026-08-10. Revenue less cost of goods sold is the gross margin; mixing factory
+    /// consumption into it produces a figure that answers no question anybody asked.
+    /// </remarks>
+    CostOfGoodsSold = 6,
 }
 
 /// <summary>
@@ -178,6 +186,7 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.Loss => "written-off goods are charged to",
         StockAccount.OpeningEquity => "opening stock is credited to",
         StockAccount.Variance => "stock corrections are posted to",
+        StockAccount.CostOfGoodsSold => "the cost of goods sold is charged to",
         _ => account.ToString(),
     };
 }

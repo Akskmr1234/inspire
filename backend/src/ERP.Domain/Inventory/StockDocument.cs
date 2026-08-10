@@ -38,6 +38,15 @@ public enum StockDocumentType
 
     /// <summary>A count, where the line quantity is what was found on the shelf.</summary>
     PhysicalVerification = 7,
+
+    /// <summary>Goods leaving because they were sold. Raised by a sales invoice.</summary>
+    /// <remarks>
+    /// Its own kind rather than a material issue with a note on it. The two differ in
+    /// what they cost the firm - one is the cost of goods sold, the other is consumption -
+    /// and a stock ledger that could not tell them apart would leave somebody adding up
+    /// issues by hand to find out what was actually sold.
+    /// </remarks>
+    SalesIssue = 8,
 }
 
 /// <summary>Where a stock document stands in its lifecycle.</summary>

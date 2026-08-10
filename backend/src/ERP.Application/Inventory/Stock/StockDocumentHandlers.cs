@@ -267,6 +267,7 @@ public sealed class CreateStockDocumentCommandHandler
         StockDocumentType.StockAdjustment => "ADJ",
         StockDocumentType.DamagedStock => "DMG",
         StockDocumentType.PhysicalVerification => "PV",
+        StockDocumentType.SalesIssue => "SI",
         _ => "SD",
     };
 }
