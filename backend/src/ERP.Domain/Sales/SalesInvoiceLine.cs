@@ -61,6 +61,7 @@ public readonly record struct SalesInvoiceChargeId(Guid Value)
 public sealed class SalesInvoiceLine : Entity<SalesInvoiceLineId>, ITenantScoped
 {
     private readonly List<SalesInvoiceLineSerial> _serials = [];
+    private readonly List<SalesInvoiceLineTax> _components = [];
 
     internal SalesInvoiceLine(
         SalesInvoiceLineId id,
@@ -88,12 +89,17 @@ public sealed class SalesInvoiceLine : Entity<SalesInvoiceLineId>, ITenantScoped
         Discount = discount;
         TaxableAmount = assessment.TaxableAmount;
         TaxAmount = assessment.TotalTax;
-        Components = [.. assessment.Components];
+        _components.AddRange(assessment.Components.Select(component =>
+            new SalesInvoiceLineTax(
+                tenantId, id, component.Type, component.Rate.Percentage,
+                component.Amount.Amount)));
         LineNumber = lineNumber;
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private SalesInvoiceLine() => Components = [];
+    private SalesInvoiceLine()
+    {
+    }
 
     /// <inheritdoc />
     public TenantId TenantId { get; private set; }
@@ -129,7 +135,7 @@ public sealed class SalesInvoiceLine : Entity<SalesInvoiceLineId>, ITenantScoped
     public Money TaxAmount { get; private set; }
 
     /// <summary>Gets the tax broken down by component, as it was assessed.</summary>
-    public IReadOnlyList<TaxComponentAmount> Components { get; private set; }
+    public IReadOnlyList<SalesInvoiceLineTax> Components => _components.AsReadOnly();
 
     /// <summary>Gets the position of this line on the invoice, from one.</summary>
     public int LineNumber { get; private set; }
@@ -220,4 +226,50 @@ public sealed class SalesInvoiceCharge : Entity<SalesInvoiceChargeId>, ITenantSc
 
     /// <summary>Gets the amount with the sign its direction gives it.</summary>
     public Money SignedAmount => IsAddition ? Amount : Money.Zero(Amount.Currency) - Amount;
+}
+
+/// <summary>One tax head as it was charged on a line.</summary>
+/// <remarks>
+/// A row per head rather than a figure per invoice. That is what makes one posting
+/// produce both a VAT return and a GST return: each return reads the heads it knows
+/// about and ignores the rest, instead of re-deriving them from a total and today's
+/// rates. Held as three plain figures - which head, at what rate, for how much - because
+/// that is what a return asks for, and because the engine's own value objects would put
+/// a currency on every component of every line.
+/// </remarks>
+public sealed class SalesInvoiceLineTax : ITenantScoped
+{
+    internal SalesInvoiceLineTax(
+        TenantId tenantId,
+        SalesInvoiceLineId lineId,
+        TaxComponentType type,
+        decimal percentage,
+        decimal amount)
+    {
+        TenantId = tenantId;
+        SalesInvoiceLineId = lineId;
+        Type = type;
+        Percentage = percentage;
+        Amount = amount;
+    }
+
+    /// <summary>Constructor for EF Core materialisation.</summary>
+    private SalesInvoiceLineTax()
+    {
+    }
+
+    /// <inheritdoc />
+    public TenantId TenantId { get; private set; }
+
+    /// <summary>Gets the line the tax was charged on.</summary>
+    public SalesInvoiceLineId SalesInvoiceLineId { get; private set; }
+
+    /// <summary>Gets the component: VAT, CGST, SGST, IGST, cess.</summary>
+    public TaxComponentType Type { get; private set; }
+
+    /// <summary>Gets the rate it was charged at.</summary>
+    public decimal Percentage { get; private set; }
+
+    /// <summary>Gets what that came to.</summary>
+    public decimal Amount { get; private set; }
 }

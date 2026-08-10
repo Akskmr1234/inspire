@@ -57,7 +57,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Inventory — stock movements posted to the nominal ledger | **Done** — 5 API tests; inventory now appears in the trial balance |
 | Accounting — additional-charge matrix (§9), seeded per firm | **Done** — 8 domain tests; Round Off is the only default |
 | Accounting — credit position of a party, read from open bills | **Done** — 4 API tests; warns rather than blocks |
-| Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain) — 13 tests; persistence and posting are next |
+| Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain + persistence) — 13 tests; the posting is next |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 

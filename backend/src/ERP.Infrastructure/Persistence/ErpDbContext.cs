@@ -6,6 +6,7 @@ using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -88,6 +89,22 @@ public class ErpDbContext : DbContext
     /// <see cref="Bill"/>, which owns the over-allocation rule.
     /// </remarks>
     public DbSet<BillAllocation> BillAllocations => Set<BillAllocation>();
+
+    /// <summary>Gets the sales invoices.</summary>
+    public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
+
+    /// <summary>Gets their lines.</summary>
+    public DbSet<SalesInvoiceLine> SalesInvoiceLines => Set<SalesInvoiceLine>();
+
+    /// <summary>Gets the units those lines sold.</summary>
+    public DbSet<SalesInvoiceLineSerial> SalesInvoiceLineSerials =>
+        Set<SalesInvoiceLineSerial>();
+
+    /// <summary>Gets the charges carried beside the goods.</summary>
+    public DbSet<SalesInvoiceCharge> SalesInvoiceCharges => Set<SalesInvoiceCharge>();
+
+    /// <summary>Gets the tax charged on each line, head by head.</summary>
+    public DbSet<SalesInvoiceLineTax> SalesInvoiceLineTaxes => Set<SalesInvoiceLineTax>();
 
     /// <summary>Gets the charges documents may carry: §9's additional-ledger matrix.</summary>
     public DbSet<AdditionalLedger> AdditionalLedgers => Set<AdditionalLedger>();
@@ -299,6 +316,12 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockLedgerEntryIdConverter>();
         configurationBuilder.Properties<BatchId>()
             .HaveConversion<BatchIdConverter>();
+        configurationBuilder.Properties<SalesInvoiceId>()
+            .HaveConversion<SalesInvoiceIdConverter>();
+        configurationBuilder.Properties<SalesInvoiceLineId>()
+            .HaveConversion<SalesInvoiceLineIdConverter>();
+        configurationBuilder.Properties<SalesInvoiceChargeId>()
+            .HaveConversion<SalesInvoiceChargeIdConverter>();
         configurationBuilder.Properties<AdditionalLedgerId>()
             .HaveConversion<AdditionalLedgerIdConverter>();
         configurationBuilder.Properties<InventoryAccountMapId>()
