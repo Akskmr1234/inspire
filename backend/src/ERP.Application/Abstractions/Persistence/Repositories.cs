@@ -562,6 +562,51 @@ public interface IBatchRepository
     void Add(Batch batch);
 }
 
+/// <summary>Reads and writes serialised units.</summary>
+public interface ISerialNumberRepository
+{
+    /// <summary>Loads several units at once.</summary>
+    /// <param name="ids">The units.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The units that exist, by identifier.</returns>
+    Task<IReadOnlyDictionary<SerialNumberId, SerialNumber>> GetManyAsync(
+        IReadOnlyCollection<SerialNumberId> ids,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the units of several products by their numbers.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="numbers">The product and number of each unit a document names.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The units that exist, by product and number.</returns>
+    /// <remarks>
+    /// Keyed by the pair, because a serial number is unique only within its product:
+    /// two manufacturers numbering their units from 0001 is the ordinary case, and a
+    /// firm selling both would otherwise have one of them shadow the other.
+    /// </remarks>
+    Task<IReadOnlyDictionary<(ProductId Product, string Number), SerialNumber>>
+        GetByNumbersAsync(
+            FirmId firmId,
+            IReadOnlyCollection<(ProductId Product, string Number)> numbers,
+            CancellationToken cancellationToken = default);
+
+    /// <summary>Loads the units a document's lines name.</summary>
+    /// <param name="documentId">The document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The units, by identifier.</returns>
+    /// <remarks>
+    /// Read from the lines rather than from the units, because a unit records only the
+    /// document that moved it last: cancelling one entered six months ago has to find
+    /// the units <em>it</em> moved, not the ones that have moved since.
+    /// </remarks>
+    Task<IReadOnlyDictionary<SerialNumberId, SerialNumber>> ForDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a unit.</summary>
+    /// <param name="serial">The unit.</param>
+    void Add(SerialNumber serial);
+}
+
 /// <summary>Reads and writes the position of a batch in a warehouse.</summary>
 public interface IBatchBalanceRepository
 {

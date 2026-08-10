@@ -146,6 +146,13 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the stock ledger: every movement, written once and never changed.</summary>
     public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
+    /// <summary>Gets the serialised units: one row per physical thing.</summary>
+    public DbSet<SerialNumber> SerialNumbers => Set<SerialNumber>();
+
+    /// <summary>Gets the units each document line names.</summary>
+    public DbSet<StockDocumentLineSerial> StockDocumentLineSerials =>
+        Set<StockDocumentLineSerial>();
+
     /// <summary>Gets the batches goods are held in.</summary>
     /// <remarks>
     /// Per product rather than per warehouse: a batch number, an expiry date and what
@@ -282,6 +289,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockLedgerEntryIdConverter>();
         configurationBuilder.Properties<BatchId>()
             .HaveConversion<BatchIdConverter>();
+        configurationBuilder.Properties<SerialNumberId>()
+            .HaveConversion<SerialNumberIdConverter>();
         configurationBuilder.Properties<BatchBalanceId>()
             .HaveConversion<BatchBalanceIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()

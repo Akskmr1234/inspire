@@ -280,6 +280,28 @@ Sales: available serials listed, user selects; sold serials never reappear.
 Sales return → serial becomes available again. Purchase return → serial removed from stock.
 Serial status: **Available · Sold · Returned to Supplier · Returned from Customer**.
 
+**Built 2026-08-10, against stock documents rather than against sales.** Sales and purchase
+do not exist yet, so units are received, issued, transferred and written off through the
+stock operations of §8.3; the transitions are the ones named above, and the sales document
+will reuse them unchanged when it arrives — a sale is an issue with a customer on it.
+
+- **A fifth state, `Recorded`.** The four above describe where a real unit is. A number
+  written on a draft, or on a document that was posted and then cancelled, is in none of
+  them: the unit is not in stock and never was. Leaving such a unit available would offer a
+  draft's goods for sale; deleting the row on cancellation would lose the trail of a receipt
+  that was posted and reversed.
+- **One number per unit of quantity, and whole quantities only.** A line for three handsets
+  names three IMEIs — no more, because the extra names a unit that did not move, and no
+  fewer, because the shortfall goes untracked for ever.
+- **Warranty is per unit and arrives with the goods.** The Warranty Master the prose names
+  does not exist yet, so the term is entered on the line that receives the units. A unit with
+  no term recorded is *not* under warranty: an unknown term is not a term, and treating a
+  blank as cover would have a service desk giving away repairs.
+- **Serials do not carry the valuation.** What goods are worth stays with the stock position
+  and, where batched, the batch position. The cost held per unit is what that unit came in
+  at, kept so a margin can be measured against the actual machine — a third valuation layer
+  would be a third figure able to disagree with the other two.
+
 ### 12.8 Printing
 Print types: Non-Tax Invoice · Tax Invoice · GST Invoice. Multiple layouts per type.
 Toggles: Company Logo · Barcode · Tax Details · Customer Address · Product Code · Batch Details · Expiry Date · Discount · Salesman · Loyalty Points · Balance Amount.

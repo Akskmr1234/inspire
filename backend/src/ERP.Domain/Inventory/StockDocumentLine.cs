@@ -24,6 +24,8 @@ namespace ERP.Domain.Inventory;
 /// </remarks>
 public sealed class StockDocumentLine : Entity<StockDocumentLineId>, ITenantScoped
 {
+    private readonly List<StockDocumentLineSerial> _serials = [];
+
     internal StockDocumentLine(
         StockDocumentLineId id,
         TenantId tenantId,
@@ -102,7 +104,55 @@ public sealed class StockDocumentLine : Entity<StockDocumentLineId>, ITenantScop
     /// <summary>Gets the line-level remark.</summary>
     public string? Remarks { get; private set; }
 
+    /// <summary>Gets the serialised units this line moves.</summary>
+    /// <remarks>
+    /// Empty unless the product is tracked by serial number, and otherwise exactly as
+    /// long as the quantity: a line for three handsets names three IMEIs. Held against
+    /// the line rather than inferred from the units themselves, because a unit knows
+    /// only which document touched it last, and cancelling a document from six months
+    /// ago has to find the units <em>it</em> moved.
+    /// </remarks>
+    public IReadOnlyList<StockDocumentLineSerial> Serials => _serials.AsReadOnly();
+
+    /// <summary>Names a serialised unit this line moves.</summary>
+    /// <param name="serialId">The unit.</param>
+    internal void AddSerial(SerialNumberId serialId) =>
+        _serials.Add(new StockDocumentLineSerial(TenantId, Id, serialId));
+
     /// <summary>Renumbers the line after one before it was removed.</summary>
     /// <param name="lineNumber">The new position.</param>
     internal void Renumber(int lineNumber) => LineNumber = lineNumber;
+}
+
+/// <summary>One serialised unit named by one document line.</summary>
+/// <remarks>
+/// A join row and nothing more, which is why it carries no identity of its own: the
+/// pair is the key, and a line naming the same unit twice is a mistake the database
+/// should refuse rather than a row it should store.
+/// </remarks>
+public sealed class StockDocumentLineSerial : ITenantScoped
+{
+    internal StockDocumentLineSerial(
+        TenantId tenantId,
+        StockDocumentLineId lineId,
+        SerialNumberId serialNumberId)
+    {
+        TenantId = tenantId;
+        StockDocumentLineId = lineId;
+        SerialNumberId = serialNumberId;
+    }
+
+    /// <summary>Constructor for EF Core materialisation.</summary>
+    private StockDocumentLineSerial()
+    {
+    }
+
+    /// <inheritdoc />
+    public TenantId TenantId { get; private set; }
+
+    /// <summary>Gets the line that names the unit.</summary>
+    public StockDocumentLineId StockDocumentLineId { get; private set; }
+
+    /// <summary>Gets the unit.</summary>
+    public SerialNumberId SerialNumberId { get; private set; }
 }

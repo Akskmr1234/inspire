@@ -46,6 +46,7 @@ internal sealed class StockPoster
     /// <param name="document">The document, already posted.</param>
     /// <param name="products">Every product it names.</param>
     /// <param name="batches">Every batch it names.</param>
+    /// <param name="serials">Every serialised unit it names.</param>
     /// <param name="currency">The firm's base currency.</param>
     /// <param name="postedAtUtc">The instant it was posted.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -60,6 +61,7 @@ internal sealed class StockPoster
         StockDocument document,
         IReadOnlyDictionary<ProductId, Product> products,
         IReadOnlyDictionary<BatchId, Batch> batches,
+        IReadOnlyDictionary<SerialNumberId, SerialNumber> serials,
         CurrencyCode currency,
         DateTimeOffset postedAtUtc,
         CancellationToken cancellationToken)
@@ -114,6 +116,14 @@ internal sealed class StockPoster
                 return Result.Failure<IReadOnlyList<StockLedgerEntry>>(
                     Contextualise(applied.Error, line, products));
             }
+
+            Result moved = MoveUnits(document, line, serials);
+
+            if (moved.IsFailure)
+            {
+                return Result.Failure<IReadOnlyList<StockLedgerEntry>>(
+                    Contextualise(moved.Error, line, products));
+            }
         }
 
         foreach (StockLedgerEntry entry in written)
@@ -129,6 +139,7 @@ internal sealed class StockPoster
     /// <param name="movements">The entries it originally wrote.</param>
     /// <param name="products">Every product it names.</param>
     /// <param name="batches">Every batch it names.</param>
+    /// <param name="serials">Every serialised unit it names.</param>
     /// <param name="currency">The firm's base currency.</param>
     /// <param name="reversedAtUtc">The instant the reversal is posted.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -144,11 +155,19 @@ internal sealed class StockPoster
         IReadOnlyList<StockLedgerEntry> movements,
         IReadOnlyDictionary<ProductId, Product> products,
         IReadOnlyDictionary<BatchId, Batch> batches,
+        IReadOnlyDictionary<SerialNumberId, SerialNumber> serials,
         CurrencyCode currency,
         DateTimeOffset reversedAtUtc,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(batches);
+
+        Result units = RestoreUnits(document, serials);
+
+        if (units.IsFailure)
+        {
+            return units;
+        }
 
         // Newest first. A transfer put goods into the destination after taking them
         // out of the source; undoing it in the same order would try to take them out
@@ -264,6 +283,110 @@ internal sealed class StockPoster
         foreach (StockLedgerEntry contra in contras)
         {
             _ledger.Add(contra);
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>Moves the units a line names, in step with the quantity it moved.</summary>
+    /// <param name="document">The document being posted.</param>
+    /// <param name="line">The line.</param>
+    /// <param name="serials">Every unit the document names.</param>
+    /// <returns>Success, or the first unit that could not move.</returns>
+    /// <remarks>
+    /// A serial has no arithmetic - a unit is one unit - so what happens here is a
+    /// change of state and of place, not a sum. The direction is taken from the same
+    /// document type that decided the quantity, so the two can never disagree about
+    /// which way the goods went.
+    /// <para>
+    /// A receipt of a unit that had already gone out is a customer return rather than a
+    /// new arrival. That distinction is worth keeping: the unit's warranty runs from the
+    /// day it was first received, and treating the return as a fresh receipt would
+    /// restart it.
+    /// </para>
+    /// </remarks>
+    private static Result MoveUnits(
+        StockDocument document,
+        StockDocumentLine line,
+        IReadOnlyDictionary<SerialNumberId, SerialNumber> serials)
+    {
+        foreach (StockDocumentLineSerial named in line.Serials)
+        {
+            if (!serials.TryGetValue(named.SerialNumberId, out SerialNumber? unit))
+            {
+                return Result.Failure(Error.NotFound(
+                    "Serial.NotFound", "A unit this document names no longer exists."));
+            }
+
+            Result moved = document.Type switch
+            {
+                StockDocumentType.StockTransfer =>
+                    unit.TransferTo(document.DestinationWarehouseId!.Value, document.Id),
+
+                StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
+                    unit.Issue(document.Date, document.Id),
+
+                _ when line.StockQuantity < 0m => unit.Issue(document.Date, document.Id),
+
+                _ => unit.Status == SerialStatus.Issued
+                    ? unit.ReturnFromCustomer(document.WarehouseId, document.Date, document.Id)
+                    : unit.TakeIntoStock(document.WarehouseId, document.Date, document.Id),
+            };
+
+            if (moved.IsFailure)
+            {
+                return moved;
+            }
+        }
+
+        return Result.Success();
+    }
+
+    /// <summary>Puts the units a cancelled document moved back where they were.</summary>
+    /// <param name="document">The document being cancelled.</param>
+    /// <param name="serials">Every unit its lines name.</param>
+    /// <returns>Success, or the first unit that could not be put back.</returns>
+    /// <remarks>
+    /// Undone by the document that did it, line by line, rather than by replaying the
+    /// stock ledger: the ledger records quantities and the units are not quantities.
+    /// A receipt's own units go back to being written down but not held; everything
+    /// else returns to the shelf it came from.
+    /// </remarks>
+    private static Result RestoreUnits(
+        StockDocument document,
+        IReadOnlyDictionary<SerialNumberId, SerialNumber> serials)
+    {
+        foreach (StockDocumentLine line in document.Lines)
+        {
+            foreach (StockDocumentLineSerial named in line.Serials)
+            {
+                if (!serials.TryGetValue(named.SerialNumberId, out SerialNumber? unit))
+                {
+                    return Result.Failure(Error.NotFound(
+                        "Serial.NotFound", "A unit this document moved no longer exists."));
+                }
+
+                Result restored = document.Type switch
+                {
+                    StockDocumentType.StockTransfer =>
+                        unit.TransferTo(document.WarehouseId, document.Id),
+
+                    StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock =>
+                        unit.UndoIssue(document.WarehouseId, document.Id),
+
+                    _ when line.StockQuantity < 0m =>
+                        unit.UndoIssue(document.WarehouseId, document.Id),
+
+                    _ => unit.OriginDocumentId == document.Id
+                        ? unit.UndoReceipt(document.Id)
+                        : unit.Issue(document.Date, document.Id),
+                };
+
+                if (restored.IsFailure)
+                {
+                    return restored;
+                }
+            }
         }
 
         return Result.Success();

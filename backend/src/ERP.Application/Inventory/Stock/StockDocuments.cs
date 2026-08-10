@@ -35,6 +35,14 @@ namespace ERP.Application.Inventory.Stock;
 /// When the batch expires. Taken from the product's shelf life when it is omitted and
 /// the manufacturing date is given.
 /// </param>
+/// <param name="SerialNumbers">
+/// The units that moved, on a product tracked by serial number: as many numbers as the
+/// line moves. Numbers a document bringing goods in does not recognise are written
+/// down; on any other document an unrecognised number is refused.
+/// </param>
+/// <param name="WarrantyUntil">
+/// How long the units on this line are covered for, applied to the ones it writes down.
+/// </param>
 public sealed record StockDocumentLineInput(
     Guid ProductId,
     decimal Quantity,
@@ -44,7 +52,9 @@ public sealed record StockDocumentLineInput(
     Guid? BatchId = null,
     string? BatchNumber = null,
     DateOnly? ManufacturedOn = null,
-    DateOnly? ExpiresOn = null);
+    DateOnly? ExpiresOn = null,
+    IReadOnlyList<string>? SerialNumbers = null,
+    DateOnly? WarrantyUntil = null);
 
 /// <summary>Enters a stock document, and by default posts it.</summary>
 /// <param name="Type">The kind of operation.</param>

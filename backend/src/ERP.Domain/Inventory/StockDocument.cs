@@ -343,6 +343,10 @@ public sealed class StockDocument
     /// <param name="stockQuantity">The same quantity converted to the stock unit.</param>
     /// <param name="rate">What one stock unit cost, where the document carries a rate.</param>
     /// <param name="batch">The batch that moved, on a product tracked in batches.</param>
+    /// <param name="serials">
+    /// The units that moved, on a product tracked by serial number. As many as the line
+    /// moves, no more and no fewer.
+    /// </param>
     /// <param name="remarks">A line-level remark.</param>
     /// <returns>The line, or the reason it was refused.</returns>
     /// <remarks>
@@ -359,6 +363,7 @@ public sealed class StockDocument
         decimal stockQuantity,
         decimal rate = 0m,
         Batch? batch = null,
+        IReadOnlyCollection<SerialNumber>? serials = null,
         string? remarks = null)
     {
         ArgumentNullException.ThrowIfNull(product);
@@ -400,6 +405,13 @@ public sealed class StockDocument
         if (batched.IsFailure)
         {
             return Result.Failure<StockDocumentLine>(batched.Error);
+        }
+
+        Result serialised = EnsureSerialsMatch(product, serials, stockQuantity, batch);
+
+        if (serialised.IsFailure)
+        {
+            return Result.Failure<StockDocumentLine>(serialised.Error);
         }
 
         if (!AllowsSignedQuantity && (quantity < 0m || stockQuantity < 0m))
@@ -446,6 +458,11 @@ public sealed class StockDocument
             rate,
             _lines.Count + 1,
             remarks?.Trim());
+
+        foreach (SerialNumber serial in serials ?? [])
+        {
+            line.AddSerial(serial.Id);
+        }
 
         _lines.Add(line);
 
@@ -628,6 +645,89 @@ public sealed class StockDocument
             ? Result.Failure(Error.Validation(
                 "StockDocument.BatchNotInFirm",
                 $"Batch '{batch.Number}' belongs to another firm."))
+            : Result.Success();
+    }
+
+    /// <summary>Checks the units a line names against the quantity it moves.</summary>
+    /// <param name="product">The product on the line.</param>
+    /// <param name="serials">The units offered for it, if any.</param>
+    /// <param name="stockQuantity">The quantity, in the product's stock unit.</param>
+    /// <param name="batch">The batch the line moves, where it has one.</param>
+    /// <returns>Success, or the reason the pairing was refused.</returns>
+    /// <remarks>
+    /// One unit per serial, always. That makes three things true at once and each is
+    /// worth enforcing: a serialised quantity is whole, because half a handset is not a
+    /// thing; the count matches the quantity, because a line for three that names two
+    /// leaves one unit untracked for ever; and no unit appears twice, because the
+    /// second mention would move something that had already moved.
+    /// </remarks>
+    private Result EnsureSerialsMatch(
+        Product product,
+        IReadOnlyCollection<SerialNumber>? serials,
+        decimal stockQuantity,
+        Batch? batch)
+    {
+        int offered = serials?.Count ?? 0;
+
+        if (!product.TracksSerialNumbers)
+        {
+            return offered > 0
+                ? Result.Failure(Error.Validation(
+                    "StockDocument.SerialsNotTracked",
+                    $"'{product.Code}' is not tracked by serial number, so units cannot be "
+                    + "named for it."))
+                : Result.Success();
+        }
+
+        decimal units = Math.Abs(stockQuantity);
+
+        if (units != decimal.Truncate(units))
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.SerialQuantityFractional",
+                $"'{product.Code}' is tracked by serial number, so {stockQuantity} of it "
+                + "is not a quantity that can be identified unit by unit."));
+        }
+
+        if (offered != units)
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.SerialCountMismatch",
+                $"'{product.Code}' moves {units} units on this line, so {units} serial "
+                + $"numbers are needed and {offered} were given."));
+        }
+
+        foreach (SerialNumber serial in serials ?? [])
+        {
+            if (serial.ProductId != product.Id)
+            {
+                return Result.Failure(Error.Validation(
+                    "StockDocument.SerialWrongProduct",
+                    $"Serial '{serial.Number}' is a unit of another product."));
+            }
+
+            if (serial.FirmId != FirmId)
+            {
+                return Result.Failure(Error.Validation(
+                    "StockDocument.SerialNotInFirm",
+                    $"Serial '{serial.Number}' belongs to another firm."));
+            }
+
+            // A unit carries its batch from the day it is received. A line moving it
+            // under a different batch number would put one of the two on the wrong
+            // paperwork, and the expiry date follows the batch.
+            if (batch is not null && serial.BatchId is { } held && held != batch.Id)
+            {
+                return Result.Failure(Error.Validation(
+                    "StockDocument.SerialWrongBatch",
+                    $"Serial '{serial.Number}' belongs to a different batch."));
+            }
+        }
+
+        return serials?.DistinctBy(serial => serial.Id).Count() != offered
+            ? Result.Failure(Error.Validation(
+                "StockDocument.SerialRepeated",
+                "The same unit is named twice on one line."))
             : Result.Success();
     }
 

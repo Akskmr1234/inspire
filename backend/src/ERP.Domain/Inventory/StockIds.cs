@@ -73,6 +73,20 @@ public readonly record struct BatchBalanceId(Guid Value) : IStronglyTypedId<Batc
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies one serialised unit.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct SerialNumberId(Guid Value) : IStronglyTypedId<SerialNumberId>
+{
+    /// <inheritdoc />
+    public static SerialNumberId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static SerialNumberId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Identifies one movement in the stock ledger.</summary>
 /// <param name="Value">The underlying value.</param>
 public readonly record struct StockLedgerEntryId(Guid Value)

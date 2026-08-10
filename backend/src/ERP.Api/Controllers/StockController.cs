@@ -127,7 +127,9 @@ public sealed class StockController : ApiControllerBase
                         line.BatchId,
                         line.BatchNumber,
                         line.ManufacturedOn,
-                        line.ExpiresOn)),
+                        line.ExpiresOn,
+                        line.SerialNumbers,
+                        line.WarrantyUntil)),
                 ],
                 request.DestinationWarehouseId,
                 request.ReferenceNumber,
@@ -357,6 +359,60 @@ public sealed class StockController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Lists the serialised units of one product.</summary>
+    /// <param name="productId">The product.</param>
+    /// <param name="warehouseId">One warehouse. Omit for every one.</param>
+    /// <param name="includeGone">Whether to include units that have left.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The units, by number.</returns>
+    /// <remarks>
+    /// Section 12.7's selection on sale: the units on the shelf, each with what it cost
+    /// and how long it is covered for. A unit that has gone out is not offered again,
+    /// which is the promise that section makes about sold serials.
+    /// </remarks>
+    /// <response code="200">The units.</response>
+    [HttpGet("serials")]
+    [RequiresPermission("inventory", "stock-adjustment", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<SerialNumberView>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetProductSerialsAsync(
+        [FromQuery] Guid productId,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] bool includeGone,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<SerialNumberView>> result = await _sender.Send(
+            new ListProductSerialsQuery(productId, warehouseId, includeGone),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Finds a unit by the number on its case.</summary>
+    /// <param name="number">The serial number, as read off the machine.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Every unit of any product carrying that number.</returns>
+    /// <remarks>
+    /// What a service desk asks with the machine in front of it and no idea which
+    /// product record it belongs to. A number is unique within a product rather than
+    /// within the firm, so two products may share one and both come back - telling
+    /// somebody there are two is more use than picking one for them.
+    /// </remarks>
+    /// <response code="200">The units carrying that number, which may be none.</response>
+    /// <response code="400">No number was given.</response>
+    [HttpGet("serials/find")]
+    [RequiresPermission("inventory", "stock-adjustment", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<SerialNumberView>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> FindSerialAsync(
+        [FromQuery] string number,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<SerialNumberView>> result = await _sender.Send(
+            new FindSerialQuery(number), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Corrects the dates recorded against a batch.</summary>
     /// <param name="id">The batch.</param>
     /// <param name="request">The dates as they should read.</param>
@@ -413,6 +469,12 @@ public sealed class StockController : ApiControllerBase
 /// When the batch expires. Taken from the product's shelf life when omitted and the
 /// manufacturing date is given.
 /// </param>
+/// <param name="SerialNumbers">
+/// The units that moved, on a product tracked by serial number: as many numbers as the
+/// line moves. On a document bringing goods in, numbers the firm does not hold are
+/// written down; on any other document an unknown number is refused.
+/// </param>
+/// <param name="WarrantyUntil">How long the units this line writes down are covered for.</param>
 public sealed record CreateStockDocumentLine(
     [property: JsonRequired] Guid ProductId,
     [property: JsonRequired] decimal Quantity,
@@ -422,7 +484,9 @@ public sealed record CreateStockDocumentLine(
     Guid? BatchId = null,
     string? BatchNumber = null,
     DateOnly? ManufacturedOn = null,
-    DateOnly? ExpiresOn = null);
+    DateOnly? ExpiresOn = null,
+    IReadOnlyList<string>? SerialNumbers = null,
+    DateOnly? WarrantyUntil = null);
 
 /// <summary>Entering a stock document.</summary>
 /// <param name="Type">The kind of operation.</param>

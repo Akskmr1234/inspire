@@ -20,6 +20,7 @@ public sealed class StockDocumentRepository : IStockDocumentRepository
         CancellationToken cancellationToken = default) =>
         _context.StockDocuments
             .Include(document => document.Lines)
+            .ThenInclude(line => line.Serials)
             .FirstOrDefaultAsync(document => document.Id == id, cancellationToken);
 
     /// <inheritdoc />
@@ -188,6 +189,95 @@ public sealed class BatchRepository : IBatchRepository
 
     /// <inheritdoc />
     public void Add(Batch batch) => _context.Batches.Add(batch);
+}
+
+/// <summary>Reads and writes serialised units.</summary>
+public sealed class SerialNumberRepository : ISerialNumberRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="SerialNumberRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public SerialNumberRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<SerialNumberId, SerialNumber>> GetManyAsync(
+        IReadOnlyCollection<SerialNumberId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        if (ids.Count == 0)
+        {
+            return new Dictionary<SerialNumberId, SerialNumber>();
+        }
+
+        List<SerialNumberId> ordered = [.. ids.Distinct().OrderBy(id => id.Value)];
+
+        List<SerialNumber> serials = await _context.SerialNumbers
+            .Where(serial => ordered.Contains(serial.Id))
+            .ToListAsync(cancellationToken);
+
+        return serials.ToDictionary(serial => serial.Id);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<(ProductId Product, string Number), SerialNumber>>
+        GetByNumbersAsync(
+            FirmId firmId,
+            IReadOnlyCollection<(ProductId Product, string Number)> numbers,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(numbers);
+
+        if (numbers.Count == 0)
+        {
+            return new Dictionary<(ProductId, string), SerialNumber>();
+        }
+
+        // Both sides filtered in the database and the pairing matched in memory, as
+        // for batches: an OR of tuple comparisons indexes badly, and the two lists come
+        // from the lines of one document.
+        List<ProductId> productIds = [.. numbers.Select(pair => pair.Product).Distinct()];
+        List<string> serialNumbers = [.. numbers.Select(pair => pair.Number).Distinct()];
+
+        List<SerialNumber> found = await _context.SerialNumbers
+            .Where(serial =>
+                serial.FirmId == firmId
+                && productIds.Contains(serial.ProductId)
+                && serialNumbers.Contains(serial.Number))
+            .ToListAsync(cancellationToken);
+
+        HashSet<(ProductId, string)> wanted = [.. numbers];
+
+        return found
+            .Where(serial => wanted.Contains((serial.ProductId, serial.Number)))
+            .ToDictionary(serial => (serial.ProductId, serial.Number));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<SerialNumberId, SerialNumber>> ForDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default)
+    {
+        List<SerialNumber> serials = await _context.StockDocumentLineSerials
+            .Where(link => _context.StockDocumentLines
+                .Any(line =>
+                    line.Id == link.StockDocumentLineId
+                    && line.StockDocumentId == documentId))
+            .Join(
+                _context.SerialNumbers,
+                link => link.SerialNumberId,
+                serial => serial.Id,
+                (_, serial) => serial)
+            .OrderBy(serial => serial.Id)
+            .ToListAsync(cancellationToken);
+
+        return serials.ToDictionary(serial => serial.Id);
+    }
+
+    /// <inheritdoc />
+    public void Add(SerialNumber serial) => _context.SerialNumbers.Add(serial);
 }
 
 /// <summary>Reads and writes the position of a batch in a warehouse.</summary>

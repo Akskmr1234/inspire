@@ -143,6 +143,15 @@ public sealed class StockDocumentLineConfiguration
         builder.HasIndex(line => line.TenantId)
             .HasDatabaseName("ix_stock_document_lines_tenant");
 
+        builder.HasMany(line => line.Serials)
+            .WithOne()
+            .HasForeignKey(link => link.StockDocumentLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(line => line.Serials)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_serials");
+
         ConfigurationConventions.ApplyAuditConventions(builder);
     }
 }
