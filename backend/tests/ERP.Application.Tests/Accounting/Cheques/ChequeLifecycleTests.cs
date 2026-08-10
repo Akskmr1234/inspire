@@ -191,6 +191,95 @@ public sealed class ChequeLifecycleTests
     }
 
     [Fact]
+    public async Task A_bounce_that_names_its_reversal_owes_nothing_further()
+    {
+        // The other half of the same rule. Nothing here invents a posting, but where
+        // an operator has already written one, the cheque records which it was and
+        // stops reporting a debt to the books that has been paid.
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+        Voucher reversal = fixture.PostedVoucher();
+
+        Result<BouncedChequeResponse> result = await fixture.HandleBounce(
+            new BounceChequeCommand(
+                cheque.Id.Value, "Refer to drawer", Matures, reversal.Id.Value));
+
+        result.Value.LedgerReversalRequired.ShouldBeFalse();
+        cheque.ReversalVoucherId.ShouldBe(reversal.Id);
+    }
+
+    [Fact]
+    public async Task A_reversal_can_be_attached_after_the_bounce_was_recorded()
+    {
+        // The ordinary sequence: the cashier records the return when the bank tells
+        // them, and the accountant writes the journal afterwards.
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        await fixture.HandleBounce(
+            new BounceChequeCommand(cheque.Id.Value, "Insufficient funds", Matures));
+
+        cheque.ReversalVoucherId.ShouldBeNull();
+
+        Voucher reversal = fixture.PostedVoucher();
+
+        Result<ChequeStateResponse> result = await fixture.HandleReversal(
+            new RecordChequeReversalCommand(cheque.Id.Value, reversal.Id.Value));
+
+        result.IsSuccess.ShouldBeTrue();
+        cheque.ReversalVoucherId.ShouldBe(reversal.Id);
+
+        // Named once and not swapped afterwards: a register that pointed at one
+        // reversal on Monday and another on Tuesday could not explain itself.
+        Result<ChequeStateResponse> again = await fixture.HandleReversal(
+            new RecordChequeReversalCommand(cheque.Id.Value, fixture.PostedVoucher().Id.Value));
+
+        again.Error.Code.ShouldBe("Cheque.AlreadyReversed");
+    }
+
+    [Fact]
+    public async Task A_reversal_must_be_posted_and_must_touch_the_party()
+    {
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        // A draft is not in the books, so it accounts for nothing.
+        Result<BouncedChequeResponse> draft = await fixture.HandleBounce(
+            new BounceChequeCommand(
+                cheque.Id.Value, "Refer to drawer", Matures, fixture.DraftVoucher().Id.Value));
+
+        draft.Error.Code.ShouldBe("Cheque.ReversalVoucherNotPosted");
+
+        // A voucher that never touches the customer cannot be undoing their receipt,
+        // whatever its narration says.
+        Result<BouncedChequeResponse> elsewhere = await fixture.HandleBounce(
+            new BounceChequeCommand(
+                cheque.Id.Value,
+                "Refer to drawer",
+                Matures,
+                fixture.PostedVoucherWithoutTheParty().Id.Value));
+
+        elsewhere.Error.Code.ShouldBe("Cheque.ReversalVoucherWrongParty");
+
+        // Refused whole: the cheque did not bounce on the way past either failure.
+        cheque.Status.ShouldBe(ChequeStatus.Deposited);
+        await fixture.UnitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Only_a_bounced_cheque_can_name_a_reversal()
+    {
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        Result<ChequeStateResponse> result = await fixture.HandleReversal(
+            new RecordChequeReversalCommand(
+                cheque.Id.Value, fixture.PostedVoucher().Id.Value));
+
+        result.Error.Code.ShouldBe("Cheque.NotBounced");
+    }
+
+    [Fact]
     public async Task A_bounce_on_a_receipt_that_settled_nothing_reopens_nothing()
     {
         Fixture fixture = new();
@@ -297,6 +386,7 @@ public sealed class ChequeLifecycleTests
         private readonly DepositChequeCommandHandler _deposit;
         private readonly ClearChequeCommandHandler _clear;
         private readonly BounceChequeCommandHandler _bounce;
+        private readonly RecordChequeReversalCommandHandler _reverse;
         private readonly StopChequeCommandHandler _stop;
         private readonly CancelChequeCommandHandler _cancel;
 
@@ -338,7 +428,9 @@ public sealed class ChequeLifecycleTests
 
             _deposit = new DepositChequeCommandHandler(cheques, ledgers, tenant, UnitOfWork);
             _clear = new ClearChequeCommandHandler(cheques, vouchers, tenant, UnitOfWork);
-            _bounce = new BounceChequeCommandHandler(cheques, bills, tenant, UnitOfWork);
+            _bounce = new BounceChequeCommandHandler(cheques, bills, vouchers, tenant, UnitOfWork);
+            _reverse = new RecordChequeReversalCommandHandler(
+                cheques, vouchers, tenant, UnitOfWork);
             _stop = new StopChequeCommandHandler(cheques, tenant, UnitOfWork);
             _cancel = new CancelChequeCommandHandler(cheques, tenant, UnitOfWork);
         }
@@ -418,6 +510,19 @@ public sealed class ChequeLifecycleTests
         /// <summary>Registers an unposted voucher.</summary>
         internal Voucher DraftVoucher() => NewVoucher("BR/2026/0003");
 
+        /// <summary>Registers a posted voucher that never touches the party.</summary>
+        internal Voucher PostedVoucherWithoutTheParty()
+        {
+            Ledger charges = LedgerIn(Firm, "5200", "Bank charges", LedgerKind.General);
+
+            Voucher voucher = NewVoucher($"JV/2026/{_vouchers.Count:0000}");
+            voucher.AddLine(charges.Id, EntrySide.Debit, 25m);
+            voucher.AddLine(Bank.Id, EntrySide.Credit, 25m);
+            voucher.Post(UserId.NewId(), DateTimeOffset.UnixEpoch).IsSuccess.ShouldBeTrue();
+
+            return voucher;
+        }
+
         internal Task<Result<ChequeStateResponse>> Handle(DepositChequeCommand command) =>
             _deposit.Handle(command, TestContext.Current.CancellationToken);
 
@@ -436,6 +541,10 @@ public sealed class ChequeLifecycleTests
         /// </summary>
         internal Task<Result<BouncedChequeResponse>> HandleBounce(BounceChequeCommand command) =>
             _bounce.Handle(command, TestContext.Current.CancellationToken);
+
+        internal Task<Result<ChequeStateResponse>> HandleReversal(
+            RecordChequeReversalCommand command) =>
+            _reverse.Handle(command, TestContext.Current.CancellationToken);
 
         private static Ledger LedgerIn(Firm firm, string code, string name, LedgerKind kind)
         {

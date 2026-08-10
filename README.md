@@ -40,7 +40,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — account group summary, voucher report, transaction summary | **Done** — 23 application + 15 integration tests |
 | Accounting — cash flow statement (direct method) | **Done** — 15 application + 11 integration tests |
 | Deployment — container images for API and web, platform configuration | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
-| Accounting — automatic ledger reversal for a bounced cheque | Not started — see below |
+| Accounting — bounced cheque reversal, by operator-supplied voucher | **Done** — 7 tests; see the note below on what is still not automatic |
 | Dynamic menus — DB-driven tree, permission-filtered, seeded per firm | **Done** — 15 domain + 9 application + 5 API tests |
 | Dynamic menus — administration: add, rename, reorder, regroup, hide, delete | **Done** — 8 API tests, with a screen at `/settings/menu` |
 | Data grid — sort, search, columns, freeze, CSV export, saved layouts | **Done** — 8 API tests; first screen is the chart of accounts |
@@ -56,19 +56,21 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales, Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 875 passing, 0 failing (446 domain + 202 application + 144 API + 20 identity + 63 integration).
+**Test suite:** 882 passing, 0 failing (449 domain + 206 application + 144 API + 20 identity + 63 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
 Integration tests need a running Docker daemon.
 
-> ### A bounced cheque does not yet reverse its ledger postings
+> ### A bounced cheque is reversed by a voucher somebody writes, not by one this system invents
 >
-> When a received cheque bounces, the bills its receipt settled **are** released — automatically, in the same transaction, and listed in the response. The ledger postings are **not** reversed.
+> When a received cheque bounces, the bills its receipt settled **are** released — automatically, in the same transaction, and listed in the response. The ledger postings are **not** raised here, and will not be.
 >
-> This is deliberate rather than overlooked. Which control account a bounced cheque comes back out of, and where the bank's charge for it goes, are a firm's own choice of chart; there is no configuration for either yet, and inventing one would mean posting into somebody's books on a guess. The `POST /cheques/{id}/bounce` response therefore carries `ledgerReversalRequired: true`, so a caller cannot mistake silence for completeness — a reversing journal is still owed.
+> That is deliberate rather than unfinished. Which control account a dishonoured cheque comes back out of, and where the bank's charge for it goes, are a firm's own choice of chart; inventing an answer would mean posting into somebody's books on a guess. So the reversing journal is written by whoever knows the chart, and the cheque records **which** one it was — the second of the two routes this note used to offer, and the same arrangement `clear` already uses for the voucher that posts the bank movement.
 >
-> Closing this needs one of two things, and it is a decision for the business rather than for the code: a per-firm control-account map (cheques in hand, bank charges, dishonour suspense), or an operator-supplied reversing voucher passed with the bounce, the way `clear` already takes the voucher that posts the bank movement.
+> Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
+>
+> What remains open is only the *automatic* route: a per-firm control-account map (cheques in hand, bank charges, dishonour suspense) that would let the system raise the entry itself. That is still a decision for the business, and it is the same decision as open question 8a — which accounts a stock movement posts to.
 
 ---
 

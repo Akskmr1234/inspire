@@ -106,15 +106,17 @@ public sealed class ChequesController : ApiControllerBase
     /// <returns>The cheque's new state and every bill the bounce put back.</returns>
     /// <remarks>
     /// The bills the original receipt settled are released automatically, in the same
-    /// transaction, and listed in the response. The ledger postings are not reversed:
-    /// which control account a bounced cheque comes back out of, and where the bank's
-    /// charge goes, are a firm's own choice of chart. The response returns
-    /// <c>ledgerReversalRequired</c> so a caller cannot mistake silence for
-    /// completeness - a reversing entry is still owed.
+    /// transaction, and listed in the response. The ledger postings are never raised
+    /// here: which control account a bounced cheque comes back out of, and where the
+    /// bank's charge goes, are a firm's own choice of chart. Name
+    /// <c>reversalVoucherId</c> if the reversing journal has already been written, or
+    /// attach it afterwards through <c>POST /cheques/{id}/reversal</c>. Until one is
+    /// named the response returns <c>ledgerReversalRequired: true</c>, so a caller
+    /// cannot mistake silence for completeness.
     /// </remarks>
     /// <response code="200">Bounced, with what was reopened.</response>
-    /// <response code="404">No such cheque in the selected firm.</response>
-    /// <response code="422">It is not with the bank, so it cannot bounce.</response>
+    /// <response code="404">No such cheque, or no such voucher, in the selected firm.</response>
+    /// <response code="422">It is not with the bank, or the voucher cannot reverse it.</response>
     [HttpPost("{id:guid}/bounce")]
     [RequiresPermission("accounting", "cheque", "edit")]
     [ProducesResponseType(typeof(BouncedChequeResponse), StatusCodes.Status200OK)]
@@ -123,13 +125,48 @@ public sealed class ChequesController : ApiControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> BounceAsync(
         Guid id,
-        [FromBody] CloseChequeRequest request,
+        [FromBody] BounceChequeRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         Result<BouncedChequeResponse> result = await _sender.Send(
-            new BounceChequeCommand(id, request.Reason, request.On), cancellationToken);
+            new BounceChequeCommand(id, request.Reason, request.On, request.ReversalVoucherId),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Names the voucher that reversed a bounced cheque's receipt.</summary>
+    /// <param name="id">The cheque.</param>
+    /// <param name="request">The voucher that took the receipt back out.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Where the cheque now stands.</returns>
+    /// <remarks>
+    /// The second half of a bounce, and the reason the first half reports that a
+    /// reversal is owed. The voucher must be posted, belong to this firm, and touch the
+    /// party the cheque came from - otherwise it cannot be the entry that undoes that
+    /// receipt. The amount is deliberately not checked: a reversal usually carries the
+    /// bank's charge alongside the cheque.
+    /// </remarks>
+    /// <response code="200">Recorded.</response>
+    /// <response code="404">No such cheque, or no such voucher, in the selected firm.</response>
+    /// <response code="422">It has not bounced, already names a reversal, or the voucher cannot be one.</response>
+    [HttpPost("{id:guid}/reversal")]
+    [RequiresPermission("accounting", "cheque", "edit")]
+    [ProducesResponseType(typeof(ChequeStateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> RecordReversalAsync(
+        Guid id,
+        [FromBody] RecordChequeReversalRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<ChequeStateResponse> result = await _sender.Send(
+            new RecordChequeReversalCommand(id, request.ReversalVoucherId), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
@@ -229,3 +266,21 @@ public sealed record ClearChequeRequest(
 public sealed record CloseChequeRequest(
     string Reason,
     [property: JsonRequired] DateOnly On);
+
+/// <summary>Recording a cheque being dishonoured.</summary>
+/// <param name="Reason">The bank's reason for returning it. Required.</param>
+/// <param name="On">The date it was returned.</param>
+/// <param name="ReversalVoucherId">
+/// The voucher taking the receipt back out of the books, where one has already been
+/// written. Optional: the bank returns cheques to a cashier and the reversing journal
+/// is usually written afterwards, so it can be attached later.
+/// </param>
+public sealed record BounceChequeRequest(
+    string Reason,
+    [property: JsonRequired] DateOnly On,
+    Guid? ReversalVoucherId = null);
+
+/// <summary>Naming the voucher that reversed a bounced cheque.</summary>
+/// <param name="ReversalVoucherId">The voucher that took the receipt back out.</param>
+public sealed record RecordChequeReversalRequest(
+    [property: JsonRequired] Guid ReversalVoucherId);

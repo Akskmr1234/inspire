@@ -290,6 +290,48 @@ public sealed class ChequeTests
         cheque.Deposit(BankAccount, Matures.AddDays(9)).IsFailure.ShouldBeTrue();
     }
 
+    [Fact]
+    public void A_bounce_may_name_the_voucher_that_reverses_the_receipt()
+    {
+        // The cheque does not raise the reversal - which account a dishonoured receipt
+        // comes back out of is a firm's own choice of chart - but it records which
+        // entry did, so the register can be traced to the books.
+        Cheque cheque = Banked(1000m);
+        VoucherId reversal = VoucherId.NewId();
+
+        cheque.Bounce("Insufficient funds", Matures.AddDays(2), reversal)
+            .IsSuccess.ShouldBeTrue();
+
+        cheque.ReversalVoucherId.ShouldBe(reversal);
+    }
+
+    [Fact]
+    public void A_reversal_may_be_named_after_the_bounce_and_only_once()
+    {
+        // The ordinary sequence: the cashier records the return that morning, and the
+        // journal is written afterwards by somebody who knows the chart.
+        Cheque cheque = Banked(1000m);
+        cheque.Bounce("Refer to drawer", Matures.AddDays(2));
+
+        cheque.ReversalVoucherId.ShouldBeNull();
+
+        VoucherId reversal = VoucherId.NewId();
+        cheque.RecordReversal(reversal).IsSuccess.ShouldBeTrue();
+        cheque.ReversalVoucherId.ShouldBe(reversal);
+
+        // Not swapped afterwards. A wrong voucher is corrected the way any other wrong
+        // posting is - by reversing it in the books, not by rewriting what this says.
+        cheque.RecordReversal(VoucherId.NewId()).Error.Code.ShouldBe("Cheque.AlreadyReversed");
+        cheque.ReversalVoucherId.ShouldBe(reversal);
+    }
+
+    [Fact]
+    public void A_cheque_that_has_not_bounced_has_nothing_to_reverse()
+    {
+        Banked(1000m).RecordReversal(VoucherId.NewId()).Error.Code
+            .ShouldBe("Cheque.NotBounced");
+    }
+
     // ------------------------------------------------------------ stopping
 
     [Fact]

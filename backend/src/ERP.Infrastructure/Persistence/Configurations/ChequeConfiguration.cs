@@ -71,6 +71,14 @@ public sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
             .HasForeignKey(c => c.ClearingVoucherId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The entry that took a dishonoured receipt back out of the books. Restricted
+        // like the other two: a reversal that could be deleted would leave a bounced
+        // cheque claiming to have been accounted for by nothing.
+        builder.HasOne<Voucher>()
+            .WithMany()
+            .HasForeignKey(c => c.ReversalVoucherId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // The PDC report and the PDC calendar both ask the same question - which
         // cheques are still live, and when do they fall due - so both ride this
         // index. Cleared and bounced cheques accumulate for ever and would otherwise

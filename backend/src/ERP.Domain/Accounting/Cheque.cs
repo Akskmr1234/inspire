@@ -138,6 +138,18 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
     /// </remarks>
     public VoucherId? ClearingVoucherId { get; private set; }
 
+    /// <summary>Gets the voucher that reversed the receipt, once it bounced.</summary>
+    /// <remarks>
+    /// Supplied by the operator with the bounce rather than raised here. A dishonoured
+    /// cheque has to come back out of whichever account the firm parked it in - cheques
+    /// in hand, an undeposited-funds account, the customer's own ledger - and the bank's
+    /// charge for it goes somewhere else again. Neither is derivable from anything this
+    /// system holds, so the voucher is written by whoever knows the chart and named
+    /// here, which is the same arrangement <see cref="ClearingVoucherId"/> uses for the
+    /// clearance. Null means the reversal is still owed.
+    /// </remarks>
+    public VoucherId? ReversalVoucherId { get; private set; }
+
     /// <summary>Gets the number printed on the cheque.</summary>
     public string ChequeNumber { get; private set; }
 
@@ -414,6 +426,10 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
     /// <summary>Records the cheque being dishonoured.</summary>
     /// <param name="reason">The bank's reason for returning it.</param>
     /// <param name="bouncedOn">The date it was returned.</param>
+    /// <param name="reversalVoucherId">
+    /// The voucher taking the receipt back out of the books, where the operator has
+    /// written one. Null leaves the reversal owed, and the caller is told so.
+    /// </param>
     /// <returns>Success, or the reason it was refused.</returns>
     /// <remarks>
     /// The reason is required because the bank always gives one and it decides what
@@ -426,7 +442,7 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
     /// is a separate event with its own charges and its own outcome.
     /// </para>
     /// </remarks>
-    public Result Bounce(string reason, DateOnly bouncedOn)
+    public Result Bounce(string reason, DateOnly bouncedOn, VoucherId? reversalVoucherId = null)
     {
         if (Status != ChequeStatus.Deposited)
         {
@@ -445,10 +461,49 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
         Status = ChequeStatus.Bounced;
         ClosedOn = bouncedOn;
         ClosureReason = stated.Value;
+        ReversalVoucherId = reversalVoucherId;
 
         Raise(new ChequeBounced(
             Id, TenantId, FirmId, PartyLedgerId, Direction, ChequeNumber, Amount,
             bouncedOn, stated.Value));
+
+        return Result.Success();
+    }
+
+    /// <summary>Attaches the reversing voucher to a cheque that has already bounced.</summary>
+    /// <param name="reversalVoucherId">The voucher taking the receipt back out.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// The ordinary sequence, in practice. The bank returns a cheque and the cashier
+    /// records it that morning; the reversing journal is written afterwards, by
+    /// somebody who knows which account it comes back out of. Forcing the two into one
+    /// step would mean either holding the bounce until the accountant is free - leaving
+    /// bills settled that are not - or posting on a guess.
+    /// <para>
+    /// Once attached it cannot be swapped. A cheque pointing at one reversal on Monday
+    /// and another on Tuesday is a register that cannot be relied on to explain itself;
+    /// a wrong voucher is corrected the way any other wrong posting is, by reversing it
+    /// in the books rather than by rewriting what this says happened.
+    /// </para>
+    /// </remarks>
+    public Result RecordReversal(VoucherId reversalVoucherId)
+    {
+        if (Status != ChequeStatus.Bounced)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Cheque.NotBounced",
+                $"Cheque '{ChequeNumber}' is {Describe(Status)}, so there is no bounce to "
+                + "reverse."));
+        }
+
+        if (ReversalVoucherId is not null)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Cheque.AlreadyReversed",
+                $"Cheque '{ChequeNumber}' already names the voucher that reversed it."));
+        }
+
+        ReversalVoucherId = reversalVoucherId;
 
         return Result.Success();
     }
