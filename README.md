@@ -14,7 +14,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 
 | Area | State |
 |---|---|
-| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business, 6 now answered |
+| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business, all now answered |
 | Monorepo + solution scaffold (15 projects) | **Done** — builds clean, 0 warnings |
 | Dependency set, security-scanned & licence-audited | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md) |
 | Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests |
@@ -72,7 +72,7 @@ Integration tests need a running Docker daemon.
 >
 > Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
 >
-> What remains open is only the *automatic* route: a per-firm control-account map (cheques in hand, bank charges, dishonour suspense) that would let the system raise the entry itself. The business has since chosen that route for stock movements (open question 8a, answered 2026-08-10), so the same map is the obvious home for these three accounts when the cheque side is automated.
+> The automatic route is no longer open either: the business chose it on 2026-08-10, so cheques in hand, bank charges and dishonour suspense join the per-firm map that stock movements already post through, and a bounce will raise its own reversing journal. **Not yet built** — the map and the stock side are, the cheque side is the next accounting commit. Until it lands, the manual route above is how a bounce reaches the books.
 
 ---
 

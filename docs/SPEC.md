@@ -169,6 +169,11 @@ Reports: Stock Ledger · Stock Valuation · Item Movement · Godown-Wise Stock �
 Driven by a per-firm `TaxRegime`. Tax components are data.
 
 **Modes** (`Mode` field on sales/service documents): `NT` (Non-Tax) · `Tax` · `GST`.
+
+> **Defaulted from the firm's regime (answered 2026-08-10):** a GST firm's documents open in
+> `GST`, a VAT firm's in `Tax`. Nobody is offered a mode that does not apply where they
+> trade, and a non-tax sale is the exception somebody selects deliberately. A default from
+> the *customer* was offered and declined, so no mode field goes on the customer ledger.
 Under GST, if the customer's state differs from the company's state, **IGST applies automatically**; otherwise CGST + SGST.
 
 **Reverse (inclusive) tax** — separate settings for Sales and Purchase:
@@ -448,7 +453,8 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Every document posts directly, as they do today. The **workflow engine of §12.9 is deferred**, and the modules that would have waited on it are not blocked.
    - Nothing is to be built that *assumes* approval-free posting, though: a document's transition to posted stays a single guarded step on the aggregate, so an approval gate can be added in front of it later without reworking the documents themselves.
    - Permission-based control still applies. "No approval" means no second person signs a document off, not that anybody may post anything.
-8. Whether **Payroll** and **POS** are needed in the first release or genuinely deferred.
+8. ~~Whether **Payroll** and **POS** are needed in the first release~~ — **ANSWERED (2026-08-10): both genuinely deferred.**
+   They stay in §17 as future modules the architecture must absorb without change. Nothing is built for either now, and nothing may be built that assumes they never arrive: a till is a sales document with a different screen, and payroll posts journals like anything else.
    
    **8a. Which accounts a stock movement posts to.** Raised 2026-08-07, while building §8.3.
    Stock operations move goods and value, and the stock ledger they write is complete and
@@ -475,6 +481,11 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - A firm that has not set the map up **cannot post stock**, rather than posting it into
      nowhere. The refusal names the account that is missing. Seeding gives a new firm sensible
      defaults from the standard chart, so a fresh installation is not born broken.
+   - **Extended 2026-08-10 to bounced cheques.** The same map gains three more accounts —
+     cheques in hand, bank charges, and dishonour suspense — so a dishonoured cheque raises
+     its own reversing journal automatically instead of waiting for somebody to write one.
+     The operator-supplied route stays: a bounce may still name a journal, and one already
+     named is not overwritten. That closes the last accounting gap the README carried.
    - Inventory therefore appears in the trial balance and the balance sheet, and the two
      reconcile against the stock valuation by construction.
 9. ~~**Custom SQL dashboard widgets**~~ — **ANSWERED (2026-08-06): required, all of them.**
