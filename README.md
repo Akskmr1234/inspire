@@ -14,7 +14,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 
 | Area | State |
 |---|---|
-| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business |
+| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business, 6 now answered |
 | Monorepo + solution scaffold (15 projects) | **Done** — builds clean, 0 warnings |
 | Dependency set, security-scanned & licence-audited | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md) |
 | Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests |

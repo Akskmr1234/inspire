@@ -261,6 +261,20 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 
 **Dynamic column configuration** — visibility *and* order are configurable per role from Settings. Worked examples from the spec: a Cashier sees Barcode/Product/Quantity/Rate/Total; a Manager sees Code/Product/Stock/Quantity/Tax/Net; Store Staff see Product/Quantity/Godown/Batch.
 
+**Scoped 2026-08-10, three answers that bind the sales build:**
+
+- **A line defaults to the retail rate, and may be typed over** subject to permission. Price
+  levels per customer and customer-specific price lists were both offered and declined, so
+  no price-level field goes on the customer ledger and no price-list master is built. The
+  rate block on the product already carries Retail, Wholesale, Other and MRP; the invoice
+  reads one of them and does not choose between them.
+- **Only `Round Off` defaults onto a new invoice.** Delivery, freight, packing, insurance and
+  discount-allowed remain in the additional-ledger matrix of §9 and are added by hand on the
+  documents that carry them, rather than loading onto every invoice at zero.
+- **A credit limit warns rather than blocks.** A customer ledger gains a limit and the
+  invoice reports the exposure it would create, but it still posts. Salespeople keep working
+  and management gets a report; refusing at the counter was offered and declined.
+
 ### 12.4 Product selection
 Search by Product Code, Product Name, or Barcode. Dropdown columns are **configurable per Settings** (Code, Product Name, Stock, Purchase Rate, Sales Rate, Barcode).
 Auto-filled from Product Master: Code, Product Name, Barcode, Default Measurement, Tax %, Retail Rate, MRP, Product Code.
@@ -413,7 +427,8 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Report menus are regime-filtered: a VAT firm must not be shown GST returns, and vice versa.
 2. ~~**Loyalty rules**~~ — **ANSWERED (2026-08-10): not in the first release.**
    Sales ships without loyalty, and the loyalty-points toggle of §12.8 is left off the print layouts. The feature is designed when somebody can state the earn rate, the redemption value and the expiry; building it on a guess would put a liability on the balance sheet that nobody had agreed to.
-3. **Aging buckets** — 0-30/31-60/61-90/90+ assumed. **[ASSUMPTION]**
+3. ~~**Aging buckets**~~ — **ANSWERED (2026-08-10): 0-30 / 31-60 / 61-90 / 90+ confirmed.**
+   The assumption the debtors and creditors reports were built on is the business's actual answer, so it stops being an assumption. The buckets are fixed for every firm; making them configurable was offered and declined, and nothing should be built that reads them from a setting.
 4. ~~**Rounding**~~ — **ANSWERED (2026-08-10): round the document total, not the components.**
    Consequences, now binding:
    - Tax is computed **per component at full precision** and stored per component on the line, unrounded beyond the engine's own scale. Both the VAT return and the GST return are produced from those figures.
