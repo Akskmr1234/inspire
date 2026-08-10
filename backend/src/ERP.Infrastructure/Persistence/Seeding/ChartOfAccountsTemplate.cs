@@ -80,6 +80,14 @@ internal static class ChartOfAccountsTemplate
         new("5900", "DELIVERY", "Delivery Charge", LedgerKind.AdditionalCharge),
         new("5900", "DISC-ALLOWED", "Discount Allowed", LedgerKind.AdditionalCharge),
         new("4900", "DISC-RECEIVED", "Discount Received", LedgerKind.AdditionalCharge),
+
+        // The counter-accounts a stock movement posts to, answering open question 8a.
+        // Seeded so a new firm can post stock on its first day: the map points at these
+        // and an administrator repoints it at their own chart when they have one.
+        new("5200", "CONSUMPTION", "Materials Consumed", LedgerKind.General),
+        new("5900", "STOCK-LOSS", "Stock Written Off", LedgerKind.General),
+        new("5900", "STOCK-VARIANCE", "Stock Variance", LedgerKind.General),
+        new("3100", "OPENING-STOCK", "Opening Stock Equity", LedgerKind.General),
     ];
 
     /// <summary>Returns the tax ledgers appropriate to a firm's regime.</summary>

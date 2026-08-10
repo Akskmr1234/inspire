@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Inventory;
 using ERP.Domain.Platform;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -488,7 +489,61 @@ public sealed partial class DatabaseSeeder
             await _context.SaveChangesAsync(cancellationToken);
         }
 
+        await SeedInventoryAccountsAsync(firm, cancellationToken);
+
         return added;
+    }
+
+    /// <summary>Points a firm's stock movements at the seeded accounts.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <remarks>
+    /// So a fresh installation is not born unable to post stock. The answer to open
+    /// question 8a made the map compulsory - a movement posted into an account nobody
+    /// chose is worse than one refused - and a firm that had to visit a settings screen
+    /// before its first receipt would read as broken rather than as careful.
+    /// <para>
+    /// Only where the firm has no map at all. A firm whose administrator has repointed
+    /// one of these at their own chart keeps their choice: seeding fills gaps, it does
+    /// not correct people.
+    /// </para>
+    /// </remarks>
+    private async Task SeedInventoryAccountsAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        bool exists = await _context.InventoryAccountMaps
+            .AnyAsync(map => map.FirmId == firm.Id, cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        Dictionary<string, Ledger> ledgers = await _context.Ledgers
+            .Where(ledger => ledger.FirmId == firm.Id)
+            .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
+
+        (StockAccount Account, string Code)[] defaults =
+        [
+            (StockAccount.Inventory, "STOCK"),
+            (StockAccount.Consumption, "CONSUMPTION"),
+            (StockAccount.Loss, "STOCK-LOSS"),
+            (StockAccount.OpeningEquity, "OPENING-STOCK"),
+            (StockAccount.Variance, "STOCK-VARIANCE"),
+        ];
+
+        InventoryAccountMap map = InventoryAccountMap.Create(firm.TenantId, firm.Id);
+
+        foreach ((StockAccount account, string code) in defaults)
+        {
+            if (ledgers.TryGetValue(code, out Ledger? ledger))
+            {
+                map.Assign(account, ledger);
+            }
+        }
+
+        _context.InventoryAccountMaps.Add(map);
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Creates any menu entries the firm does not already have.</summary>

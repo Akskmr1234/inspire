@@ -146,6 +146,13 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the stock ledger: every movement, written once and never changed.</summary>
     public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
+    /// <summary>Gets the accounts each firm's stock movements post to.</summary>
+    public DbSet<InventoryAccountMap> InventoryAccountMaps => Set<InventoryAccountMap>();
+
+    /// <summary>Gets the individual account choices those maps hold.</summary>
+    public DbSet<InventoryAccountAssignment> InventoryAccountAssignments =>
+        Set<InventoryAccountAssignment>();
+
     /// <summary>Gets the serialised units: one row per physical thing.</summary>
     public DbSet<SerialNumber> SerialNumbers => Set<SerialNumber>();
 
@@ -289,6 +296,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockLedgerEntryIdConverter>();
         configurationBuilder.Properties<BatchId>()
             .HaveConversion<BatchIdConverter>();
+        configurationBuilder.Properties<InventoryAccountMapId>()
+            .HaveConversion<InventoryAccountMapIdConverter>();
         configurationBuilder.Properties<SerialNumberId>()
             .HaveConversion<SerialNumberIdConverter>();
         configurationBuilder.Properties<BatchBalanceId>()

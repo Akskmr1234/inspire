@@ -73,6 +73,21 @@ public readonly record struct BatchBalanceId(Guid Value) : IStronglyTypedId<Batc
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies one firm's inventory account map.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct InventoryAccountMapId(Guid Value)
+    : IStronglyTypedId<InventoryAccountMapId>
+{
+    /// <inheritdoc />
+    public static InventoryAccountMapId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static InventoryAccountMapId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Identifies one serialised unit.</summary>
 /// <param name="Value">The underlying value.</param>
 public readonly record struct SerialNumberId(Guid Value) : IStronglyTypedId<SerialNumberId>

@@ -295,6 +295,16 @@ public sealed class BatchIdConverter : ValueConverter<BatchId, Guid>
     }
 }
 
+/// <summary>Converts <see cref="InventoryAccountMapId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class InventoryAccountMapIdConverter : ValueConverter<InventoryAccountMapId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="InventoryAccountMapIdConverter"/> class.</summary>
+    public InventoryAccountMapIdConverter()
+        : base(id => id.Value, value => InventoryAccountMapId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="SerialNumberId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class SerialNumberIdConverter : ValueConverter<SerialNumberId, Guid>
 {
