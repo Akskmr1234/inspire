@@ -481,6 +481,15 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - A firm that has not set the map up **cannot post stock**, rather than posting it into
      nowhere. The refusal names the account that is missing. Seeding gives a new firm sensible
      defaults from the standard chart, so a fresh installation is not born broken.
+   - **Extended 2026-08-10 again, for sales.** Revenue is credited to **one sales account per
+     firm**, a seventh kind of posting on the same map - per category and per document type
+     were both offered and declined, so revenue by line of business is a report over the
+     invoice lines rather than a split in the chart. **Output tax is mapped head by head**:
+     a component-to-ledger map per firm, seeded from the chart per regime, so a VAT firm
+     credits Output VAT and a GST firm credits CGST, SGST or IGST as the engine assessed
+     them. Reading ledgers by code convention was declined for the reason that decided it -
+     a firm that renames an account would silently break its own tax postings.
+
    - **Extended 2026-08-10 to bounced cheques.** The same map gains three more accounts —
      cheques in hand, bank charges, and dishonour suspense — so a dishonoured cheque raises
      its own reversing journal automatically instead of waiting for somebody to write one.

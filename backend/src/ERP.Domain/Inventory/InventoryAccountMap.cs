@@ -37,6 +37,14 @@ public enum StockAccount
     /// consumption into it produces a figure that answers no question anybody asked.
     /// </remarks>
     CostOfGoodsSold = 6,
+
+    /// <summary>Where a sale's revenue is credited.</summary>
+    /// <remarks>
+    /// One account per firm, which is the business's answer of 2026-08-10. Per category
+    /// and per document type were both offered and declined, so revenue by line of
+    /// business is a report over the invoice lines rather than a split in the chart.
+    /// </remarks>
+    SalesRevenue = 7,
 }
 
 /// <summary>
@@ -187,6 +195,7 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.OpeningEquity => "opening stock is credited to",
         StockAccount.Variance => "stock corrections are posted to",
         StockAccount.CostOfGoodsSold => "the cost of goods sold is charged to",
+        StockAccount.SalesRevenue => "sales are credited to",
         _ => account.ToString(),
     };
 }
