@@ -121,3 +121,17 @@ public readonly record struct AdditionalLedgerId(Guid Value)
     /// <inheritdoc />
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>Identifies one firm's tax account map.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct TaxAccountMapId(Guid Value) : IStronglyTypedId<TaxAccountMapId>
+{
+    /// <inheritdoc />
+    public static TaxAccountMapId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static TaxAccountMapId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
