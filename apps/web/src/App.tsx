@@ -17,7 +17,9 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { UnitsPage } from '@/pages/UnitsPage';
 import { BrandsPage, CategoriesPage } from '@/pages/CategoriesPage';
 import { WarehousesPage } from '@/pages/WarehousesPage';
+import { CustomersPage } from '@/pages/CustomersPage';
 import { ProductsPage } from '@/pages/ProductsPage';
+import { SalesPage } from '@/pages/SalesPage';
 import { StockOperationsPage } from '@/pages/StockOperationsPage';
 import {
   BatchStockPage,
@@ -88,6 +90,8 @@ export function App(): React.JSX.Element {
         <Route path="/settings/menu" element={<MenuAdministrationPage />} />
         <Route path="/accounting/ledgers" element={<LedgersPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/sales/invoices" element={<SalesPage />} />
+        <Route path="/sales/customers" element={<CustomersPage />} />
         <Route path="/inventory/products" element={<ProductsPage />} />
         <Route path="/inventory/stock" element={<StockOperationsPage />} />
         <Route path="/inventory/valuation" element={<StockValuationPage />} />

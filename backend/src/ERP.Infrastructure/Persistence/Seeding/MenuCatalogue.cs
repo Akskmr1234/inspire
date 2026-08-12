@@ -137,6 +137,37 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/stock",
                     "inventory:stock-adjustment:view"),
+
+                // Invoices and credit notes on one entry, because they are one kind of
+                // document: a screen showing a customer's history wants both, and two
+                // entries would suggest two places to look for the same sale.
+                new(
+                    "transactions.sales",
+                    "Sales invoices",
+                    "فواتير المبيعات",
+                    "sales",
+                    "/sales/invoices",
+                    "sales:invoice:view"),
+            ]),
+
+        new(
+            "sales",
+            "Sales",
+            "المبيعات",
+            "sales",
+            Children:
+            [
+                // The customer master sits under Sales rather than among the accounting
+                // masters, even though a customer is a sub-ledger. It is where somebody
+                // selling looks for it, and the menu follows the work rather than the
+                // storage.
+                new(
+                    "sales.customers",
+                    "Customers",
+                    "العملاء",
+                    "sales",
+                    "/sales/customers",
+                    "sales:customer:view"),
             ]),
 
         new(

@@ -383,6 +383,13 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 >
 > Invoices and returns list together, filtered by kind, because they are one kind of
 > document and a customer's history wants the credit notes among the sales.
+>
+> **The grid pages too, from 2026-08-12.** `DataGrid` gained optional server paging, and in
+> that mode it **withdraws its own sorting and search** rather than leaving them working on
+> the page in hand: a search that quietly looked at fifty rows out of four thousand would
+> answer "no such invoice" about an invoice that exists, which is worse than not offering
+> the box. Column picking, ordering, freezing, saved layouts and CSV export are unaffected;
+> the screen owns the filters, because only the server can apply them to the whole list.
 
 > **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
 > tax engine is asked its question here rather than on the aggregate — the invoice records

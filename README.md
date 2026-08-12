@@ -67,6 +67,9 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — the return document and its journal, with its own contra-revenue account | **Done** — 9 domain tests |
 | Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
 | Sales — a filtered, paged list of documents; first paged list in the API | **Done** — 8 integration + 2 API tests |
+| Sales — screens: document list, entry, posting, cancellation, returns | **Done** — verified end to end in a browser against a real database |
+| Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
+| Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
@@ -99,6 +102,8 @@ Integration tests need a running Docker daemon.
 > ### A sale can be made end to end over HTTP, and one thing it asks of the caller is not yet defaulted
 >
 > `POST /api/v1/sales/customers` creates somebody to bill and finds them again by the number on their phone; `POST /api/v1/sales/invoices` enters a draft; `POST /api/v1/sales/invoices/{id}/post` issues the goods, raises the bill and writes the books; `POST /api/v1/sales/invoices/{id}/cancel` puts all three back. That is the counter flow, and the API suite drives all of it against a real database — a customer created, goods received, an invoice raised, posted, and cancelled, with the trial balance and the customer's outstanding checked at each step.
+>
+> **All of it is now reachable from the app**, at `/sales/invoices` and `/sales/customers`, in English and Arabic. The whole chain was driven through a browser against a real database before this was written: a customer created, goods received, an invoice entered as a draft, posted, and the trial balance afterwards showing the customer debited 315, sales credited 300, output VAT 15, cost of goods sold 75 and stock down 75 — debits equal to credits.
 >
 > **Cancelling is for an invoice that should never have been raised.** Goods a customer actually took away come back as a **sales return** instead — the same two endpoints with `Kind: 2` and the invoice it is against on the body. It puts the goods back at the cost they left at, credits the customer, and settles the bill the sale raised. An invoice the customer has already paid against cannot be cancelled at all; that case is a return.
 >

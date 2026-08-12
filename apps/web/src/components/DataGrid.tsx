@@ -34,14 +34,31 @@ export interface GridColumn<TRow> {
   readonly requiredPermission?: string;
 }
 
+/** Where a server-paged grid stands, and how to ask it for another page. */
+export interface GridPaging {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalCount: number;
+  readonly totalPages: number;
+  readonly onPageChange: (page: number) => void;
+}
+
 /**
  * The data grid.
  *
- * Sorting, searching and column arrangement all happen in the browser. That is the
- * right call for the lists this is used on — a chart of accounts is a few hundred rows
- * — and it makes typing in the search box instant rather than a round trip per
- * keystroke. A list that genuinely outgrows the browser needs server-side paging, and
- * this component is deliberately not pretending to provide it.
+ * Sorting, searching and column arrangement happen in the browser, which is the right
+ * call for the lists this began with — a chart of accounts is a few hundred rows — and
+ * makes typing in the search box instant rather than a round trip per keystroke.
+ *
+ * A list that outgrows the browser passes `paging`, and the grid then draws a pager and
+ * says plainly that it is showing one page of a longer list. Sorting and the search box
+ * are withdrawn in that mode rather than left working on the page in hand: a search that
+ * quietly looked at fifty rows out of four thousand would answer "no such invoice" about
+ * an invoice that exists, which is worse than not offering the box. The screen owns the
+ * filters instead, because only the server can apply them to the whole list.
+ *
+ * Everything else — column picking, ordering, freezing, saved layouts, CSV export of
+ * what is on screen — works the same either way.
  */
 export function DataGrid<TRow>({
   gridKey,
@@ -49,6 +66,7 @@ export function DataGrid<TRow>({
   columns,
   rowKey,
   emptyMessage,
+  paging,
 }: {
   /** Identifies the grid, so a user's arrangement is remembered against it. */
   readonly gridKey: string;
@@ -56,6 +74,8 @@ export function DataGrid<TRow>({
   readonly columns: readonly GridColumn<TRow>[];
   readonly rowKey: (row: TRow) => string;
   readonly emptyMessage?: string;
+  /** Supplied when the server holds the list and this is one page of it. */
+  readonly paging?: GridPaging;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { can } = useSession();
@@ -207,6 +227,13 @@ export function DataGrid<TRow>({
   }, [rows, visible, search, columnSearch, sortKey, sortDescending]);
 
   const toggleSort = (key: string): void => {
+    // Withdrawn while the server holds the list: sorting the page in hand would put
+    // the largest row on screen at the top of fifty and call it the largest of four
+    // thousand.
+    if (paging) {
+      return;
+    }
+
     if (sortKey === key) {
       setSortDescending((previous) => !previous);
     } else {
@@ -297,16 +324,24 @@ export function DataGrid<TRow>({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t('grid.search')}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
-        />
+        {!paging && (
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t('grid.search')}
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          />
+        )}
 
         <span className="text-xs text-slate-500">
-          {t('grid.rowCount', { shown: shown.length, total: rows.length })}
+          {paging
+            ? t('grid.pageOf', {
+                page: paging.page,
+                pages: Math.max(paging.totalPages, 1),
+                total: paging.totalCount,
+              })
+            : t('grid.rowCount', { shown: shown.length, total: rows.length })}
         </span>
 
         <div className="ms-auto flex flex-wrap items-center gap-2">
@@ -385,23 +420,25 @@ export function DataGrid<TRow>({
                 </th>
               ))}
             </tr>
-            <tr>
-              {visible.map((column) => (
-                <th key={column.key} className="px-2 pb-2">
-                  <input
-                    type="search"
-                    value={columnSearch[column.key] ?? ''}
-                    onChange={(event) =>
-                      setColumnSearch((previous) => ({
-                        ...previous,
-                        [column.key]: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs font-normal dark:border-slate-700 dark:bg-slate-900"
-                  />
-                </th>
-              ))}
-            </tr>
+            {!paging && (
+              <tr>
+                {visible.map((column) => (
+                  <th key={column.key} className="px-2 pb-2">
+                    <input
+                      type="search"
+                      value={columnSearch[column.key] ?? ''}
+                      onChange={(event) =>
+                        setColumnSearch((previous) => ({
+                          ...previous,
+                          [column.key]: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs font-normal dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
 
           <tbody>
@@ -439,6 +476,32 @@ export function DataGrid<TRow>({
           </tbody>
         </table>
       </div>
+
+      {paging && paging.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <GridButton
+            onClick={() => paging.onPageChange(paging.page - 1)}
+            disabled={paging.page <= 1}
+          >
+            {t('grid.previousPage')}
+          </GridButton>
+
+          <span className="text-xs text-slate-500">
+            {t('grid.pageOf', {
+              page: paging.page,
+              pages: paging.totalPages,
+              total: paging.totalCount,
+            })}
+          </span>
+
+          <GridButton
+            onClick={() => paging.onPageChange(paging.page + 1)}
+            disabled={paging.page >= paging.totalPages}
+          >
+            {t('grid.nextPage')}
+          </GridButton>
+        </div>
+      )}
     </div>
   );
 }
@@ -446,15 +509,19 @@ export function DataGrid<TRow>({
 function GridButton({
   onClick,
   children,
+  disabled,
 }: {
   readonly onClick: () => void;
   readonly children: React.ReactNode;
+  /** Greyed and inert, so the ends of a pager cannot be walked past. */
+  readonly disabled?: boolean;
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      disabled={disabled}
+      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
     >
       {children}
     </button>
