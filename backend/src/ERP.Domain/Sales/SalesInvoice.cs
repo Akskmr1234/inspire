@@ -208,16 +208,22 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>Gets the rounding difference, which the Round Off ledger takes.</summary>
     /// <remarks>
+    /// <para>
     /// The business's answer of 2026-08-10: tax is computed per component at full
     /// precision, and only the total is rounded, once, at the end. Rounding each
     /// component would make the invoice disagree with the return produced from the same
     /// figures.
+    /// </para>
+    /// <para>
+    /// To the currency's own precision, which is not always two places. A dinar invoice
+    /// has three and rounding it to two would throw away a fils the customer is actually
+    /// billed; a yen invoice has none and rounding it to two would leave fractions of a
+    /// unit that does not subdivide. The difference is kept unrounded on purpose - it is
+    /// the remainder that rounding produced, and rounding it again to the same scale
+    /// would collapse it to nothing.
+    /// </para>
     /// </remarks>
-    public Money RoundingDifference =>
-        Money.Of(
-            decimal.Round(GrossTotal.Amount, 2, MidpointRounding.AwayFromZero)
-                - GrossTotal.Amount,
-            Currency);
+    public Money RoundingDifference => GrossTotal.Rounded() - GrossTotal;
 
     /// <summary>Gets what the customer owes.</summary>
     public Money Total => GrossTotal + RoundingDifference;

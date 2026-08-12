@@ -440,6 +440,19 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
    - Only the **document total** is rounded to the currency's own precision, once, at the end.
    - The difference goes to the **`Round Off` additional ledger** the spec already names in §9, so the rounding is visible in the books as a posting rather than hidden inside a total.
    - No cash rounding to 0.05. If a firm needs it later it is a per-firm setting on the same rounding step, not a change to how tax is computed.
+
+   > **Implementation note, 2026-08-12.** The rounding difference is currently **nil on every
+   > invoice that can be raised**, so `Round Off` is a posting nothing yet produces. The tax
+   > engine returns the taxable amount and the tax already rounded to the currency's own
+   > scale, and a line whose price implies finer precision than that is refused as
+   > inconsistent with its own assessment. The difference is therefore structural rather
+   > than a defect in the rounding step, and it will become reachable the moment either the
+   > engine keeps sub-unit precision or the line check is relaxed. **Tax-inclusive entry is
+   > blocked by the same check** — an inclusive assessment's taxable amount is by definition
+   > not the quantity times the entered rate, so §9's reverse-tax setting cannot be switched
+   > on for sales until the check distinguishes the two modes. Neither is invented here:
+   > both are recorded so whoever builds the sales entry screen meets them as decisions
+   > rather than as surprises.
 5. ~~**`COR%`** on the product master~~ — **ANSWERED (2026-08-10): cost of retail — the margin on the retail rate.**
    A second margin figure kept beside `Profit Percentage`, which applies to the wholesale or default sales rate. Both are held on the product's rate block; neither drives a posting on its own.
 6. ~~**Costing methods**~~ — **ANSWERED (2026-08-06): average costing. FIFO is not required.**
@@ -489,6 +502,16 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
      credits Output VAT and a GST firm credits CGST, SGST or IGST as the engine assessed
      them. Reading ledgers by code convention was declined for the reason that decided it -
      a firm that renames an account would silently break its own tax postings.
+
+   - **Extended 2026-08-12 to rounding.** An eighth kind of posting: the account the
+     rounding difference of Q4 lands in. On the map for the same reason as the tax heads -
+     a firm that renames its Round Off ledger would otherwise break its own postings
+     silently. Section 9 still lists Round Off among the additional ledgers, and it stays
+     there for the charge somebody adds by hand; this is where the difference the system
+     computes goes, which is a different question. A sale's journal therefore debits the
+     customer, credits revenue and each tax head, posts each charge to its own ledger, and
+     puts whatever is left into Round Off - so it balances by construction rather than by
+     arithmetic that happens to agree.
 
    - **Extended 2026-08-10 to bounced cheques.** The same map gains three more accounts —
      cheques in hand, bank charges, and dishonour suspense — so a dishonoured cheque raises

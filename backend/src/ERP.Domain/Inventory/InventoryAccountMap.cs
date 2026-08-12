@@ -45,6 +45,22 @@ public enum StockAccount
     /// business is a report over the invoice lines rather than a split in the chart.
     /// </remarks>
     SalesRevenue = 7,
+
+    /// <summary>Where the difference goes when a document total is rounded.</summary>
+    /// <remarks>
+    /// Named by the answer to the rounding question of 2026-08-10: tax is computed per
+    /// component at full precision, only the total is rounded, and the difference is
+    /// posted rather than hidden inside the total.
+    /// <para>
+    /// On the map rather than found by its code, for the reason that decided the tax
+    /// accounts: a firm that renames or recodes its Round Off ledger would otherwise
+    /// break its own postings silently. Section 9 still lists Round Off among the
+    /// additional ledgers, and it stays there for the charge somebody adds by hand -
+    /// this is where the difference the system computes lands, which is not the same
+    /// question.
+    /// </para>
+    /// </remarks>
+    RoundOff = 8,
 }
 
 /// <summary>
@@ -196,6 +212,7 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.Variance => "stock corrections are posted to",
         StockAccount.CostOfGoodsSold => "the cost of goods sold is charged to",
         StockAccount.SalesRevenue => "sales are credited to",
+        StockAccount.RoundOff => "rounding differences are posted to",
         _ => account.ToString(),
     };
 }

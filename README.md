@@ -59,10 +59,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — credit position of a party, read from open bills | **Done** — 4 API tests; warns rather than blocks |
 | Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain + persistence) — 15 tests |
 | Accounting — per-firm tax account map, head by head, output and input | **Done** — 5 domain + 5 integration tests, seeded per regime |
+| Sales — the journal a posted invoice raises, under either tax regime | **Done** — 11 domain tests; see the note below on rounding |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 951 passing, 0 failing (496 domain + 206 application + 161 API + 20 identity + 68 integration).
+**Test suite:** 964 passing, 0 failing (509 domain + 206 application + 161 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -77,6 +78,16 @@ Integration tests need a running Docker daemon.
 > Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
 >
 > The automatic route is no longer open either: the business chose it on 2026-08-10, so cheques in hand, bank charges and dishonour suspense join the per-firm map that stock movements already post through, and a bounce will raise its own reversing journal. **Not yet built** — the map and the stock side are, the cheque side is the next accounting commit. Until it lands, the manual route above is how a bounce reaches the books.
+
+> ### Round Off is wired up, and nothing yet produces a figure to put in it
+>
+> A sale's journal debits the customer, credits revenue and each tax head, posts each charge to its own ledger, and puts whatever is left over into the firm's `Round Off` account — which is what makes it balance by construction rather than by arithmetic that happens to agree.
+>
+> **That residual is currently always nil.** The tax engine returns both the taxable amount and the tax already rounded to the currency's own scale, and `SalesInvoice.AddLine` refuses a line whose price implies finer precision than its assessment carries. So there is nothing left to round, and `Round Off` is a posting no invoice yet produces. The line stays because the guarantee it provides is the point, and because the day either of those two things changes is the day a journal would otherwise stop balancing.
+>
+> **Tax-inclusive entry is blocked by the same check.** An inclusive assessment's taxable amount is, by definition, not the quantity times the entered rate — so §9's reverse-tax setting cannot be switched on for sales until that check tells the two modes apart. Recorded rather than fixed here: it is a decision about what an invoice line means, and it belongs with the screen that enters one.
+>
+> Separately, the invoice total is now rounded to **its own currency's precision** rather than to two places. A dinar has three, and the previous arithmetic gave away a fils on every Kuwaiti, Bahraini or Omani invoice whose third decimal was not a zero.
 
 ---
 

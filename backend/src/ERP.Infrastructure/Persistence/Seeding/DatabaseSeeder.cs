@@ -611,6 +611,7 @@ public sealed partial class DatabaseSeeder
             (StockAccount.Variance, "STOCK-VARIANCE"),
             (StockAccount.CostOfGoodsSold, "COGS"),
             (StockAccount.SalesRevenue, "SALES"),
+            (StockAccount.RoundOff, "ROUND-OFF"),
         ];
 
         bool isNew = map is null;

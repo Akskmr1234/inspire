@@ -132,21 +132,51 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void The_total_is_rounded_once_and_the_difference_is_kept()
+    public void The_total_is_rounded_once_at_the_end()
     {
-        // The business's answer: tax stays at full precision per component, and only the
-        // total is rounded - the difference going to Round Off rather than being lost.
+        // The business's answer: tax stays per component, and only the total is rounded -
+        // the difference going to Round Off rather than being lost.
         SalesInvoice invoice = Draft().Value;
         UnitOfMeasure each = BaseUnit();
 
-        invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(99.999m, 5.0004m));
+        invoice.AddLine(Stocked(each), each, 3m, 3m, 33.34m, Assessed(100.02m, 5.0004m))
+            .IsSuccess.ShouldBeTrue();
 
-        // Rounded once, at the end, and the difference kept rather than lost: whatever
-        // the engine made of the line, the total is the gross rounded to the currency.
-        invoice.Total.Amount.ShouldBe(
-            decimal.Round(invoice.GrossTotal.Amount, 2, MidpointRounding.AwayFromZero));
+        invoice.Total.ShouldBe(invoice.GrossTotal.Rounded());
         invoice.RoundingDifference.Amount.ShouldBe(
             invoice.Total.Amount - invoice.GrossTotal.Amount);
+    }
+
+    [Fact]
+    public void A_dinar_invoice_is_rounded_to_the_three_places_a_dinar_has()
+    {
+        // Not to two. A Kuwaiti, Bahraini or Omani firm bills in thousandths, and a
+        // total rounded to hundredths quietly gives away a fils on every invoice whose
+        // third decimal is not a zero - in the Gulf market this product is built for.
+        SalesInvoice invoice = Draft(currency: CurrencyCode.FromTrusted("KWD")).Value;
+        UnitOfMeasure each = BaseUnit();
+
+        invoice.AddLine(
+            Stocked(each), each, 1m, 1m, 10.123m,
+            Assessed(10.123m, 0m, CurrencyCode.FromTrusted("KWD"))).IsSuccess.ShouldBeTrue();
+
+        invoice.Total.Amount.ShouldBe(10.123m);
+        invoice.RoundingDifference.Amount.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void A_line_priced_finer_than_its_currency_is_refused_rather_than_quietly_rounded()
+    {
+        // Why the rounding difference is nil on every invoice today: the engine returns
+        // the taxable amount at the currency's scale, and a line whose price implies
+        // more precision than that no longer agrees with it. Refusing is right - the
+        // alternative prints a total its own lines contradict - but it does mean Round
+        // Off is a posting nothing currently produces.
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+
+        invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(99.999m, 5.0004m))
+            .Error.Code.ShouldBe("SalesInvoice.TaxNotForThisLine");
     }
 
     [Fact]
@@ -242,13 +272,19 @@ public sealed class SalesInvoiceTests
     /// is what the invoice is being asked about - rather than as a rate somebody has to
     /// multiply out to check.
     /// </remarks>
-    private static TaxAssessment Assessed(decimal taxable, decimal tax) =>
+    private static TaxAssessment Assessed(
+        decimal taxable,
+        decimal tax,
+        CurrencyCode? currency = null) =>
         TaxCalculator.Calculate(
-            Money.Of(taxable, Qar),
+            Money.Of(taxable, currency ?? Qar),
             TaxRate.FromTrusted(taxable == 0m ? 0m : decimal.Round(tax / taxable * 100m, 6)),
             new TaxContext(TaxRegime.GccVat, DocumentTaxMode.Taxable, false, false));
 
-    private static Result<SalesInvoice> Draft(Ledger? customer = null, Warehouse? warehouse = null) =>
+    private static Result<SalesInvoice> Draft(
+        Ledger? customer = null,
+        Warehouse? warehouse = null,
+        CurrencyCode? currency = null) =>
         SalesInvoice.CreateDraft(
             Tenant,
             Firm,
@@ -259,7 +295,7 @@ public sealed class SalesInvoiceTests
             customer ?? PartyIn(Firm, LedgerKind.Customer),
             warehouse ?? Godown(),
             TaxMode.Tax,
-            Qar);
+            currency ?? Qar);
 
     private static SalesInvoice Posted()
     {
