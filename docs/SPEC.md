@@ -282,6 +282,25 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 > - **Posting is its own step**, separate from entering the invoice. A draft can be corrected;
 >   a posted invoice has moved stock and raised a debt, and is cancelled rather than edited.
 
+> **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
+> tax engine is asked its question here rather than on the aggregate — the invoice records
+> what the engine answered, so a reprint years later shows the tax that was charged rather
+> than the tax today's rates would produce. Decisions now binding:
+>
+> - **The mode defaults from the firm's regime**, per the answer of 2026-08-10: a firm with
+>   a regime opens in `Tax`, a firm with none can only sell without it. A non-tax sale stays
+>   the exception somebody selects deliberately.
+> - **Place of supply decides IGST**, comparing the customer's state with the firm's. A
+>   customer whose state nobody has recorded is treated as an **intra-state** supply — the
+>   safer of the two readings, because it keeps the tax in the state the firm is registered
+>   in, which is recoverable, rather than charging IGST that is not.
+> - **The tax rate is supplied per line.** §12.4 says it defaults from the product master,
+>   and the product master carries no tax rate — so until it does, the caller states it. See
+>   the README note.
+> - **§9's `Default` flag makes a charge appear on the screen, not on the document.** The
+>   command adds only charges somebody entered an amount for, and the only seeded default —
+>   Round Off — is computed by the invoice rather than entered at all.
+
 ### 12.3 Item grid — full column set
 `Code` · `Product ID` · `Product` · `Quantity` · `Rate` · `Total` · `Product Code` · `Godown` · `Measurement` · `Free Quantity` · `Free Measurement` · `Expiry Date` · `Tax Percent` · `Gross` · `Discount Percentage` · `Discount Amount` · `Net` · `Tax` · `Remarks` · `Barcode` · `Batch` · `Detail Description` · `CGST Amount` · `CGST Rate` · `SGST Amount` · `SGST Rate` · `IGST Amount` · `IGST Rate` · `Food Cess` · `ERate` (exchange rate)
 

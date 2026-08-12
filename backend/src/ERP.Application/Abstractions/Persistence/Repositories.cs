@@ -579,6 +579,20 @@ public interface IInventoryAccountMapRepository
     void Add(InventoryAccountMap map);
 }
 
+/// <summary>Reads the charges a firm's documents may carry.</summary>
+public interface IAdditionalLedgerRepository
+{
+    /// <summary>Lists the charges mapped to one kind of document.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="document">The kind of document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The charges, in the order the firm arranged them.</returns>
+    Task<IReadOnlyList<AdditionalLedger>> ListForDocumentAsync(
+        FirmId firmId,
+        ChargeableDocument document,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>Reads and writes sales invoices.</summary>
 public interface ISalesInvoiceRepository
 {

@@ -60,11 +60,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain + persistence) — 15 tests |
 | Accounting — per-firm tax account map, head by head, output and input | **Done** — 5 domain + 5 integration tests, seeded per regime |
 | Sales — the journal a posted invoice raises, under either tax regime | **Done** — 11 domain tests; see the note below on rounding |
-| Sales — posting: goods issued, bill raised, books written, in one transaction | **Done** — 13 application tests; no HTTP endpoint yet |
+| Sales — posting: goods issued, bill raised, books written, in one transaction | **Done** — 13 application tests |
+| Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices`; see the note below on what a sale still needs |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 977 passing, 0 failing (509 domain + 219 application + 161 API + 20 identity + 68 integration).
+**Test suite:** 994 passing, 0 failing (509 domain + 229 application + 168 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -89,6 +90,14 @@ Integration tests need a running Docker daemon.
 > **Tax-inclusive entry is blocked by the same check.** An inclusive assessment's taxable amount is, by definition, not the quantity times the entered rate — so §9's reverse-tax setting cannot be switched on for sales until that check tells the two modes apart. Recorded rather than fixed here: it is a decision about what an invoice line means, and it belongs with the screen that enters one.
 >
 > Separately, the invoice total is now rounded to **its own currency's precision** rather than to two places. A dinar has three, and the previous arithmetic gave away a fils on every Kuwaiti, Bahraini or Omani invoice whose third decimal was not a zero.
+
+> ### A sale can be entered and posted over HTTP, and two things it needs are still missing
+>
+> `POST /api/v1/sales/invoices` enters a draft, `POST /api/v1/sales/invoices/{id}/post` issues the goods, raises the bill and writes the books, and `GET` reads either back. That is the counter flow end to end, and the API suite exercises it against a real database.
+>
+> **There is no customer master.** A sales invoice may only be billed to a ledger of kind `Customer`, the seeded chart contains none, and no endpoint creates one — so the API test arranges its customer through the application's own services. §12.1's mobile-number lookup, privilege card and the rest of the customer master are unbuilt; until they are, a deployment has to create customer ledgers some other way.
+>
+> **The tax rate is supplied per line rather than defaulted from the product.** §12.4 says it comes from the product master, which carries no tax rate at all. The caller states it, and the engine still decides which heads that rate splits into — so a GST firm gets CGST and SGST, or IGST across a state line, from the same figure.
 
 ---
 

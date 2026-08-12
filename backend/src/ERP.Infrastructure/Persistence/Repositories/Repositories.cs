@@ -145,6 +145,26 @@ public sealed class LedgerRepository : ILedgerRepository
     }
 }
 
+/// <summary>The EF Core additional-charge repository.</summary>
+public sealed class AdditionalLedgerRepository : IAdditionalLedgerRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="AdditionalLedgerRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public AdditionalLedgerRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AdditionalLedger>> ListForDocumentAsync(
+        FirmId firmId,
+        ChargeableDocument document,
+        CancellationToken cancellationToken = default) =>
+        await _context.AdditionalLedgers
+            .Where(charge => charge.FirmId == firmId && charge.Document == document)
+            .OrderBy(charge => charge.DisplayOrder)
+            .ToListAsync(cancellationToken);
+}
+
 /// <summary>The EF Core sales invoice repository.</summary>
 public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
 {

@@ -40,22 +40,35 @@ internal sealed class SalesPostingFixture
     private readonly Dictionary<ProductId, StockBalance> _positions = [];
     private readonly Dictionary<string, NumberingSeries> _series = [];
     private readonly PostSalesInvoiceCommandHandler _handler;
+    private readonly CreateSalesInvoiceCommandHandler _creator;
     private SalesInvoice? _invoice;
+    private SalesInvoice? _created;
 
     /// <summary>Initialises a new instance of the <see cref="SalesPostingFixture"/> class.</summary>
     /// <param name="firmSelected">Whether a firm and branch are in scope.</param>
     /// <param name="onHand">How much of the product the warehouse holds.</param>
     /// <param name="unitCost">What one unit of it cost.</param>
     /// <param name="taxAccountAssigned">Whether output VAT has an account.</param>
+    /// <param name="regime">The firm's statutory tax system.</param>
+    /// <param name="firmState">The firm's own state, for the GST place-of-supply test.</param>
+    /// <param name="customerState">The customer's state.</param>
     internal SalesPostingFixture(
         bool firmSelected = true,
         decimal onHand = 100m,
         decimal unitCost = 60m,
-        bool taxAccountAssigned = true)
+        bool taxAccountAssigned = true,
+        TaxRegime regime = TaxRegime.GccVat,
+        string? firmState = null,
+        string? customerState = null)
     {
         Firm = Domain.Tenancy.Firm.Create(
             Tenant, "ACME", "Acme Trading", CurrencyCode.Qar,
-            TaxRegime.GccVat, "Asia/Qatar").Value;
+            regime, regime == TaxRegime.IndiaGst ? "Asia/Kolkata" : "Asia/Qatar").Value;
+
+        if (firmState is not null)
+        {
+            Firm.SetTaxRegistration("REG-1", firmState).IsSuccess.ShouldBeTrue();
+        }
 
         BranchId = SharedKernel.Tenancy.BranchId.NewId();
 
@@ -68,6 +81,7 @@ internal sealed class SalesPostingFixture
         Customer = LedgerIn("1200", "Al Mansoor Trading", LedgerKind.Customer);
         Customer.SetBillWise(true);
         Customer.SetCreditTerms(creditLimit: null, creditDays: 30);
+        Customer.SetTaxDetails("CUST-1", customerState);
 
         Accounts = InventoryAccountMap.Create(Tenant, Firm.Id);
 
@@ -83,9 +97,25 @@ internal sealed class SalesPostingFixture
 
         if (taxAccountAssigned)
         {
-            TaxAccounts.Assign(TaxComponentType.Vat, TaxDirection.Output, OutputVat)
-                .IsSuccess.ShouldBeTrue();
+            // Every head the two regimes can charge, so a test changes the regime
+            // without also having to remember which accounts that implies.
+            foreach (TaxComponentType head in new[]
+            {
+                TaxComponentType.Vat, TaxComponentType.Cgst, TaxComponentType.Sgst,
+                TaxComponentType.Igst, TaxComponentType.Cess,
+            })
+            {
+                Ledger ledger = head == TaxComponentType.Vat
+                    ? OutputVat
+                    : LedgerIn($"23{(int)head}0", $"Output {head}", LedgerKind.Tax);
+
+                TaxLedgers[head] = ledger;
+                TaxAccounts.Assign(head, TaxDirection.Output, ledger).IsSuccess.ShouldBeTrue();
+            }
         }
+
+        Freight = ChargeMapping("FREIGHT", isAddition: true);
+        DiscountAllowed = ChargeMapping("DISC-ALLOWED", isAddition: false);
 
         Unit = UnitOfMeasure.CreateBase(Tenant, Firm.Id, "EACH", "Each").Value;
         _units[Unit.Id] = Unit;
@@ -108,6 +138,8 @@ internal sealed class SalesPostingFixture
         Invoices
             .FindAsync(Arg.Any<SalesInvoiceId>(), Arg.Any<CancellationToken>())
             .Returns(_ => _invoice);
+        Invoices.When(i => i.Add(Arg.Any<SalesInvoice>()))
+            .Do(call => _created = call.Arg<SalesInvoice>());
 
         Documents = Substitute.For<IStockDocumentRepository>();
         Documents.When(d => d.Add(Arg.Any<StockDocument>()))
@@ -195,6 +227,12 @@ internal sealed class SalesPostingFixture
             .FindContainingAsync(Firm.Id, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(FinancialYear);
 
+        Charges = Substitute.For<IAdditionalLedgerRepository>();
+        Charges
+            .ListForDocumentAsync(
+                Arg.Any<FirmId>(), Arg.Any<ChargeableDocument>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<AdditionalLedger>>(_ => [Freight, DiscountAllowed]);
+
         UnitOfWork = Substitute.For<IUnitOfWork>();
 
         ITenantContext tenant = Substitute.For<ITenantContext>();
@@ -213,6 +251,10 @@ internal sealed class SalesPostingFixture
             Invoices, Documents, Masters, Products, Batches, Serials, Balances, BatchBalances,
             StockLedger, AccountMaps, TaxAccountMaps, Ledgers, Bills, Vouchers, Numbering,
             FinancialYears, Firms, tenant, user, clock, UnitOfWork);
+
+        _creator = new CreateSalesInvoiceCommandHandler(
+            Invoices, Masters, Products, Batches, Serials, Charges, Ledgers, Numbering,
+            FinancialYears, Firms, tenant, UnitOfWork);
     }
 
     /// <summary>Gets the firm every posting lands in.</summary>
@@ -247,6 +289,18 @@ internal sealed class SalesPostingFixture
 
     /// <summary>Gets the output VAT account.</summary>
     internal Ledger OutputVat { get; }
+
+    /// <summary>Gets the account each output head posts to.</summary>
+    internal Dictionary<TaxComponentType, Ledger> TaxLedgers { get; } = [];
+
+    /// <summary>Gets a charge that adds to the total.</summary>
+    internal AdditionalLedger Freight { get; }
+
+    /// <summary>Gets a charge that deducts from it.</summary>
+    internal AdditionalLedger DiscountAllowed { get; }
+
+    /// <summary>Gets the additional-charge repository.</summary>
+    internal IAdditionalLedgerRepository Charges { get; }
 
     /// <summary>Gets the sales invoice repository.</summary>
     internal ISalesInvoiceRepository Invoices { get; }
@@ -317,6 +371,10 @@ internal sealed class SalesPostingFixture
     /// <summary>Gets the position of the product this fixture sells.</summary>
     internal StockBalance? Position => _positions.GetValueOrDefault(Product.Id);
 
+    /// <summary>Gets the invoice the create handler last entered.</summary>
+    internal SalesInvoice Created =>
+        _created ?? throw new InvalidOperationException("No invoice has been entered.");
+
     /// <summary>Puts a draft invoice in front of the handler.</summary>
     /// <param name="quantity">How many are sold.</param>
     /// <param name="rate">What one goes for.</param>
@@ -353,6 +411,47 @@ internal sealed class SalesPostingFixture
         return invoice;
     }
 
+    /// <summary>Enters an invoice through the create handler, as a caller would.</summary>
+    /// <param name="quantity">How many are sold.</param>
+    /// <param name="rate">What one goes for.</param>
+    /// <param name="taxPercentage">The rate tax is charged at.</param>
+    /// <param name="charges">Anything carried beside the goods.</param>
+    /// <param name="discount">What comes off the line before tax.</param>
+    /// <param name="unitId">The unit the quantity is in, where it is not the stock unit.</param>
+    /// <returns>What the handler made of it.</returns>
+    /// <remarks>
+    /// The invoice it creates becomes the one <see cref="Post"/> will act on, so a test
+    /// can run the whole flow the way a counter does.
+    /// </remarks>
+    internal async Task<Result<SalesInvoiceResponse>> Create(
+        decimal quantity = 2m,
+        decimal rate = 100m,
+        decimal taxPercentage = 5m,
+        IReadOnlyList<SalesInvoiceChargeInput>? charges = null,
+        decimal discount = 0m,
+        Guid? unitId = null)
+    {
+        Result<SalesInvoiceResponse> result = await _creator.Handle(
+            new CreateSalesInvoiceCommand(
+                InvoiceDate,
+                Customer.Id.Value,
+                Warehouse.Id.Value,
+                [
+                    new SalesInvoiceLineInput(
+                        Product.Id.Value, quantity, rate, taxPercentage,
+                        UnitId: unitId, Discount: discount),
+                ],
+                charges),
+            CancellationToken.None);
+
+        if (result.IsSuccess)
+        {
+            _invoice = _created;
+        }
+
+        return result;
+    }
+
     /// <summary>Runs the handler against whatever draft is in place.</summary>
     /// <param name="creditDays">Terms stated on the command, if any.</param>
     /// <returns>What the handler made of it.</returns>
@@ -374,6 +473,15 @@ internal sealed class SalesPostingFixture
             .SelectMany(journal => journal.Lines)
             .Where(line => line.LedgerId == ledgerId)
             .Sum(line => line.Side == EntrySide.Debit ? line.Amount.Amount : -line.Amount.Amount);
+
+    /// <summary>Maps a charge onto sales documents, as the firm's matrix does.</summary>
+    private AdditionalLedger ChargeMapping(string code, bool isAddition) =>
+        AdditionalLedger.Map(
+            Tenant,
+            Firm.Id,
+            ChargeableDocument.Sales,
+            LedgerIn(code, code, LedgerKind.AdditionalCharge),
+            isAddition).Value;
 
     private Ledger LedgerIn(string code, string name, LedgerKind kind)
     {
