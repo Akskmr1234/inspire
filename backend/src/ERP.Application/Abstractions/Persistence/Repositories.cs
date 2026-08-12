@@ -86,6 +86,57 @@ public interface ILedgerRepository
         FirmId firmId,
         bool activeOnly = true,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists the ledgers of one kind, optionally narrowed by a search term.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="kind">What the ledgers represent.</param>
+    /// <param name="search">Matched against code, name and mobile number.</param>
+    /// <param name="activeOnly">Whether to exclude withdrawn ledgers.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The ledgers, ordered by name.</returns>
+    /// <remarks>
+    /// The mobile number is searched alongside the code and the name because that is
+    /// how a counter finds a customer: section 12.1's lookup is by the number somebody
+    /// reads off a phone, not by an account code nobody at a till has ever seen.
+    /// </remarks>
+    Task<IReadOnlyList<Ledger>> ListByKindAsync(
+        FirmId firmId,
+        LedgerKind kind,
+        string? search = null,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds an account group.</summary>
+    /// <param name="id">The group.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The group, or <see langword="null"/>.</returns>
+    Task<AccountGroup?> FindGroupAsync(
+        AccountGroupId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds an account group by its code within a firm.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The group code.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The group, or <see langword="null"/>.</returns>
+    Task<AccountGroup?> FindGroupByCodeAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Says whether a ledger code is already used in a firm.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The code to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the code is taken.</returns>
+    Task<bool> IsCodeInUseAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a ledger.</summary>
+    /// <param name="ledger">The ledger.</param>
+    void Add(Ledger ledger);
 }
 
 /// <summary>Reads and writes bills.</summary>

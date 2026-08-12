@@ -251,6 +251,31 @@ Invoice No · Ref No (auto-increment) · Customer · Salesman (from Employee mas
 
 **Customer:** mobile-number lookup auto-filling Name, Address 1, Address 2, Phone · Privilege Card No · **Loyalty Points** (earned per configurable rules, redeemable at sale, running balance maintained).
 
+> **Built 2026-08-12: the customer master.** At `/api/v1/sales/customers`, with the
+> mobile-number lookup this section calls for. Decisions now binding:
+>
+> - **A customer is a sub-ledger, not a record beside one.** §7.1 already calls them
+>   sub-ledgers and the rest of the system assumes it: an invoice is billed to a ledger, a
+>   receipt settles against one, the debtors report sums them. A parallel customer record
+>   would be a second thing to keep in step and a second answer to what a customer owes.
+> - **The lookup is one search across code, name and mobile**, not a parameter each,
+>   because it is somebody typing whatever they have into one box while a customer waits.
+> - **Withdrawn, never deleted.** Every past invoice and the debtors report point at a
+>   customer; withdrawing stops new documents naming them and leaves the trail whole.
+> - **The code cannot be changed.** It is what a firm's own records and any imported
+>   history refer to a customer by, and renaming it would leave both pointing at nothing.
+> - **An update changes only the blocks it names.** A screen carrying just an address must
+>   not silently drop the credit terms somebody agreed.
+> - **A customer with no group named lands under the seeded Sundry Debtors code.** That is a
+>   convenience at creation time, and the one place a code is read this way: getting it
+>   wrong misfiles a customer visibly and is fixed by editing them, where a *posting* made
+>   to an account chosen by code is found at a reconciliation months later — which is why
+>   the tax and stock accounts sit on a per-firm map instead. A firm that has reshaped its
+>   chart names the group.
+>
+> **Privilege card and loyalty points are not built** — loyalty was deferred by the business
+> on 2026-08-10 (open question 2), and the privilege card is the same feature's front end.
+
 **Other:** Narration (rich text in the web reference) · file attachments (2 MB) · **barcode scanning** — scanning adds the product; re-scanning the same product increments quantity.
 
 ### 12.2 Document conversion

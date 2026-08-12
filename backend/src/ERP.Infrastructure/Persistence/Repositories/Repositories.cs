@@ -143,6 +143,55 @@ public sealed class LedgerRepository : ILedgerRepository
 
         return [.. rows.Select(x => (x.ledger, x.group))];
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Ledger>> ListByKindAsync(
+        FirmId firmId,
+        LedgerKind kind,
+        string? search = null,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Ledger> query = _context.Ledgers
+            .Where(l => l.FirmId == firmId && l.Kind == kind && (!activeOnly || l.IsActive));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            string term = search.Trim();
+
+            query = query.Where(l =>
+                EF.Functions.ILike(l.Code, $"%{term}%")
+                || EF.Functions.ILike(l.Name, $"%{term}%")
+                || (l.MobileNumber != null && EF.Functions.ILike(l.MobileNumber, $"%{term}%")));
+        }
+
+        return await query.OrderBy(l => l.Name).ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AccountGroup?> FindGroupAsync(
+        AccountGroupId id,
+        CancellationToken cancellationToken = default) =>
+        _context.AccountGroups.FirstOrDefaultAsync(group => group.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<AccountGroup?> FindGroupByCodeAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default) =>
+        _context.AccountGroups.FirstOrDefaultAsync(
+            group => group.FirmId == firmId && group.Code == code, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> IsCodeInUseAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default) =>
+        _context.Ledgers.AnyAsync(
+            l => l.FirmId == firmId && l.Code == code, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Ledger ledger) => _context.Ledgers.Add(ledger);
 }
 
 /// <summary>The EF Core additional-charge repository.</summary>

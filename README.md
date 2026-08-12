@@ -61,11 +61,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — per-firm tax account map, head by head, output and input | **Done** — 5 domain + 5 integration tests, seeded per regime |
 | Sales — the journal a posted invoice raises, under either tax regime | **Done** — 11 domain tests; see the note below on rounding |
 | Sales — posting: goods issued, bill raised, books written, in one transaction | **Done** — 13 application tests |
-| Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices`; see the note below on what a sale still needs |
+| Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices` |
+| Sales — customer master, with §12.1's mobile-number lookup | **Done** — 11 application + 7 API tests, at `/api/v1/sales/customers` |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 994 passing, 0 failing (509 domain + 229 application + 168 API + 20 identity + 68 integration).
+**Test suite:** 1,012 passing, 0 failing (509 domain + 240 application + 175 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -91,13 +92,11 @@ Integration tests need a running Docker daemon.
 >
 > Separately, the invoice total is now rounded to **its own currency's precision** rather than to two places. A dinar has three, and the previous arithmetic gave away a fils on every Kuwaiti, Bahraini or Omani invoice whose third decimal was not a zero.
 
-> ### A sale can be entered and posted over HTTP, and two things it needs are still missing
+> ### A sale can be made end to end over HTTP, and one thing it asks of the caller is not yet defaulted
 >
-> `POST /api/v1/sales/invoices` enters a draft, `POST /api/v1/sales/invoices/{id}/post` issues the goods, raises the bill and writes the books, and `GET` reads either back. That is the counter flow end to end, and the API suite exercises it against a real database.
+> `POST /api/v1/sales/customers` creates somebody to bill and finds them again by the number on their phone; `POST /api/v1/sales/invoices` enters a draft; `POST /api/v1/sales/invoices/{id}/post` issues the goods, raises the bill and writes the books. That is the counter flow, and the API suite drives all of it against a real database — a customer created, goods received, an invoice raised and posted, and the trial balance checked afterwards.
 >
-> **There is no customer master.** A sales invoice may only be billed to a ledger of kind `Customer`, the seeded chart contains none, and no endpoint creates one — so the API test arranges its customer through the application's own services. §12.1's mobile-number lookup, privilege card and the rest of the customer master are unbuilt; until they are, a deployment has to create customer ledgers some other way.
->
-> **The tax rate is supplied per line rather than defaulted from the product.** §12.4 says it comes from the product master, which carries no tax rate at all. The caller states it, and the engine still decides which heads that rate splits into — so a GST firm gets CGST and SGST, or IGST across a state line, from the same figure.
+> **The tax rate is supplied per line rather than defaulted from the product.** §12.4 says it comes from the product master, which carries no tax rate at all. The caller states it, and the engine still decides which heads that rate splits into — so a GST firm gets CGST and SGST, or IGST across a state line, from the same figure. Adding a rate to the product master is a small change to it and a smaller one here; it has not been made because nobody has said whether the rate belongs to the product, its category, or both.
 
 ---
 

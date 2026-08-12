@@ -3,12 +3,7 @@ using System.Net.Http.Json;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Sales;
-using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
-using ERP.Domain.Tenancy;
-using ERP.Infrastructure.Persistence;
-using ERP.SharedKernel.Results;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Tests;
 
@@ -239,7 +234,7 @@ public sealed class SalesEndpointTests
     }
 
     /// <summary>Creates the masters a sale needs, and puts stock on the shelf.</summary>
-    private async Task<SalesFixtures> ArrangeAsync(HttpClient client)
+    private static async Task<SalesFixtures> ArrangeAsync(HttpClient client)
     {
         string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
@@ -283,7 +278,8 @@ public sealed class SalesEndpointTests
 
         received.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        return new SalesFixtures(await CustomerAsync(), warehouseId, productId);
+        return new SalesFixtures(
+            await CustomerEndpointTests.CreateAsync(client), warehouseId, productId);
     }
 
     private static async Task<Guid> CreateMasterAsync(
@@ -297,52 +293,6 @@ public sealed class SalesEndpointTests
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
 
         return await response.Content.ReadFromJsonAsync<Guid>();
-    }
-
-    /// <summary>Creates a customer to bill, which no endpoint yet does.</summary>
-    /// <remarks>
-    /// Arranged through the application's own services because the customer master of
-    /// section 12.1 is not built: the chart seeds no customer, and a sales invoice may
-    /// only be billed to one. Recorded in the README as the gap it is.
-    /// </remarks>
-    private async Task<Guid> CustomerAsync()
-    {
-        Guid customerId = Guid.Empty;
-
-        await _factory.WithServiceAsync<IServiceProvider>(async services =>
-        {
-            ErpDbContext context = (ErpDbContext)services.GetService(typeof(ErpDbContext))!;
-            Application.Abstractions.Tenancy.ITenantContext tenants =
-                (Application.Abstractions.Tenancy.ITenantContext)services.GetService(
-                    typeof(Application.Abstractions.Tenancy.ITenantContext))!;
-
-            Tenant tenant = await context.Tenants.FirstAsync(
-                t => t.Code == ApiFactory.TenantCode);
-
-            using IDisposable scope = tenants.BeginScope(tenant.Id);
-
-            Firm firm = await context.Firms.FirstAsync();
-
-            AccountGroup debtors = await context.AccountGroups.FirstAsync(
-                group => group.FirmId == firm.Id && group.Code == "1200");
-
-            Result<Ledger> created = Ledger.Create(
-                debtors,
-                $"CUST{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
-                "A customer",
-                LedgerKind.Customer,
-                firm.BaseCurrency);
-
-            created.IsSuccess.ShouldBeTrue();
-            created.Value.SetCreditTerms(creditLimit: null, creditDays: 30);
-
-            context.Ledgers.Add(created.Value);
-            await context.SaveChangesAsync();
-
-            customerId = created.Value.Id.Value;
-        });
-
-        return customerId;
     }
 
     private sealed record SalesFixtures(Guid CustomerId, Guid WarehouseId, Guid ProductId);
