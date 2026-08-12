@@ -110,7 +110,7 @@ public sealed class CreateSalesInvoiceCommandHandler
         Context context = loaded.Value;
 
         Result<string> number = await ReserveAsync(
-            firmId, branchId, context.Year, cancellationToken);
+            request.Kind, firmId, branchId, context.Year, cancellationToken);
 
         if (number.IsFailure)
         {
@@ -129,7 +129,9 @@ public sealed class CreateSalesInvoiceCommandHandler
             context.Customer,
             context.Warehouse,
             mode,
-            context.Firm.BaseCurrency);
+            context.Firm.BaseCurrency,
+            request.Kind,
+            request.ReturnsInvoiceId is { } returns ? SalesInvoiceId.From(returns) : null);
 
         if (draft.IsFailure)
         {
@@ -550,20 +552,29 @@ public sealed class CreateSalesInvoiceCommandHandler
         return Result.Success(resolved);
     }
 
-    /// <summary>Takes the next invoice number, creating the series if there is none.</summary>
+    /// <summary>Takes the next number, creating the series if there is none.</summary>
+    /// <remarks>
+    /// A separate series per kind, which is what §11 describes and what a firm expects: a
+    /// credit note is not a gap in the invoice sequence, and an auditor asking why
+    /// SL/2026/0004 does not exist deserves a better answer than "it was a return".
+    /// </remarks>
     private async Task<Result<string>> ReserveAsync(
+        SalesDocumentKind kind,
         FirmId firmId,
         BranchId branchId,
         FinancialYear year,
         CancellationToken cancellationToken)
     {
+        bool isReturn = kind == SalesDocumentKind.Return;
+        string documentType = isReturn ? DocumentTypes.SalesReturn : DocumentTypes.SalesInvoice;
+
         NumberingSeries? series = await _numbering.FindForUpdateAsync(
-            DocumentTypes.SalesInvoice, firmId, branchId, year.Id, cancellationToken);
+            documentType, firmId, branchId, year.Id, cancellationToken);
 
         if (series is null)
         {
             Result<NumberingSeries> created = NumberingSeries.Create(
-                _tenantContext.TenantId, firmId, DocumentTypes.SalesInvoice, branchId, year.Id);
+                _tenantContext.TenantId, firmId, documentType, branchId, year.Id);
 
             if (created.IsFailure)
             {
@@ -572,7 +583,10 @@ public sealed class CreateSalesInvoiceCommandHandler
 
             series = created.Value;
             series.SetFormat(
-                prefix: "SL", suffix: null, separator: "/", financialYearLabel: year.Code);
+                prefix: isReturn ? "SR" : "SL",
+                suffix: null,
+                separator: "/",
+                financialYearLabel: year.Code);
 
             _numbering.Add(series);
         }

@@ -11,6 +11,7 @@ using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
+using ERP.SharedKernel.ValueObjects;
 
 namespace ERP.Application.Sales;
 
@@ -36,6 +37,8 @@ public sealed class PostSalesInvoiceCommandHandler
 {
     private readonly ISalesInvoiceRepository _invoices;
     private readonly IStockDocumentRepository _documents;
+    private readonly IStockLedgerRepository _stockLedger;
+    private readonly IStockBalanceRepository _balances;
     private readonly IInventoryMasterRepository _masters;
     private readonly IProductRepository _products;
     private readonly IBatchRepository _batches;
@@ -102,6 +105,8 @@ public sealed class PostSalesInvoiceCommandHandler
     {
         _invoices = invoices;
         _documents = documents;
+        _stockLedger = ledger;
+        _balances = balances;
         _masters = masters;
         _products = products;
         _batches = batches;
@@ -178,7 +183,8 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(journalled.Error);
         }
 
-        Result<Bill> billed = Raise(invoice, loaded.Value, journalled.Value, request.CreditDays);
+        Result<Bill?> billed = await SettleAsync(
+            invoice, loaded.Value, journalled.Value, request.CreditDays, cancellationToken);
 
         if (billed.IsFailure)
         {
@@ -186,7 +192,7 @@ public sealed class PostSalesInvoiceCommandHandler
         }
 
         Result recorded = invoice.RecordPosting(
-            issued.Value.Id, billed.Value.Id, journalled.Value.Id);
+            issued.Value.Id, billed.Value?.Id, journalled.Value.Id);
 
         if (recorded.IsFailure)
         {
@@ -200,7 +206,7 @@ public sealed class PostSalesInvoiceCommandHandler
             invoice.Number,
             issued.Value.Id.Value,
             issued.Value.Number,
-            billed.Value.Id.Value,
+            billed.Value?.Id.Value,
             journalled.Value.Id.Value,
             invoice.Total.Amount));
     }
@@ -337,9 +343,17 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<StockDocument>(number.Error);
         }
 
+        Result<IReadOnlyDictionary<ProductId, decimal>> costs = await ReturnCostsAsync(
+            invoice, cancellationToken);
+
+        if (costs.IsFailure)
+        {
+            return Result.Failure<StockDocument>(costs.Error);
+        }
+
         Result<StockDocument> built = SalesIssue.Build(
             invoice, context.Warehouse, context.Products, context.Units, context.Batches,
-            context.Serials, context.Year, number.Value);
+            context.Serials, context.Year, number.Value, costs.Value);
 
         if (built.IsFailure)
         {
@@ -415,6 +429,76 @@ public sealed class PostSalesInvoiceCommandHandler
         return raised;
     }
 
+    /// <summary>Works out what returned goods come back onto the shelf at.</summary>
+    /// <remarks>
+    /// The business's answer of 2026-08-12, and it has two halves because the question
+    /// has two answers. Where the return names the invoice it is against, the goods come
+    /// back at the cost they actually left at, read from that sale's own movements - so
+    /// the cost-of-goods-sold reversal matches the original to the fils, however far the
+    /// average has moved since. Where it names none there is no such cost, and the
+    /// current average is used: receiving at the average cannot move the average, so the
+    /// rest of the shelf is left alone.
+    /// <para>
+    /// A product the original sale did not carry falls back to the average too. It is a
+    /// return of something that invoice never sold, which is a mistake worth allowing and
+    /// reporting rather than a reason to refuse goods somebody is holding.
+    /// </para>
+    /// </remarks>
+    private async Task<Result<IReadOnlyDictionary<ProductId, decimal>>> ReturnCostsAsync(
+        SalesInvoice invoice,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<ProductId, decimal> costs = [];
+
+        if (!invoice.IsReturn)
+        {
+            return Result.Success<IReadOnlyDictionary<ProductId, decimal>>(costs);
+        }
+
+        List<ProductId> productIds = [.. invoice.Lines.Select(line => line.ProductId).Distinct()];
+
+        if (invoice.ReturnsInvoiceId is { } originalId)
+        {
+            SalesInvoice? original = await _invoices.FindAsync(originalId, cancellationToken);
+
+            if (original is null || original.FirmId != invoice.FirmId)
+            {
+                return Result.Failure<IReadOnlyDictionary<ProductId, decimal>>(Error.NotFound(
+                    "SalesReturn.InvoiceNotFound",
+                    "The invoice this return is against does not exist in the selected firm."));
+            }
+
+            if (original.StockDocumentId is { } issuedOn)
+            {
+                IReadOnlyList<StockLedgerEntry> movements =
+                    await _stockLedger.ForDocumentAsync(issuedOn, cancellationToken);
+
+                foreach (StockLedgerEntry movement in movements)
+                {
+                    costs[movement.ProductId] = movement.UnitCost;
+                }
+            }
+        }
+
+        List<ProductId> unpriced = [.. productIds.Where(id => !costs.ContainsKey(id))];
+
+        if (unpriced.Count > 0)
+        {
+            IReadOnlyDictionary<ProductId, StockBalance> positions =
+                await _balances.GetPositionsAsync(
+                    invoice.FirmId, invoice.WarehouseId, unpriced, cancellationToken);
+
+            foreach (ProductId id in unpriced)
+            {
+                costs[id] = positions.TryGetValue(id, out StockBalance? position)
+                    ? position.AverageCost
+                    : 0m;
+            }
+        }
+
+        return Result.Success<IReadOnlyDictionary<ProductId, decimal>>(costs);
+    }
+
     /// <summary>Puts what the customer owes into their outstanding.</summary>
     /// <remarks>
     /// Against the journal rather than the invoice, because that is what every other bill
@@ -426,6 +510,95 @@ public sealed class PostSalesInvoiceCommandHandler
     /// what it agreed with a customer.
     /// </para>
     /// </remarks>
+    private async Task<Result<Bill?>> SettleAsync(
+        SalesInvoice invoice,
+        Context context,
+        Voucher journal,
+        int? creditDays,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.IsReturn)
+        {
+            // The allocation happens on the original sale's bill, and the return records
+            // none of its own: a bill is something a document raised, and a return
+            // raises nothing. Which bill it settled is one hop away through the invoice
+            // it names, and recording it here would be a second path to the same fact
+            // and a second answer to "which document raised this bill".
+            Result credited = await CreditAsync(invoice, journal, cancellationToken);
+
+            return credited.IsFailure
+                ? Result.Failure<Bill?>(credited.Error)
+                : Result.Success<Bill?>(null);
+        }
+
+        Result<Bill> raised = Raise(invoice, context, journal, creditDays);
+
+        return raised.IsFailure
+            ? Result.Failure<Bill?>(raised.Error)
+            : Result.Success<Bill?>(raised.Value);
+    }
+
+    /// <summary>Allocates a return's credit against the bill the sale raised.</summary>
+    /// <remarks>
+    /// The business's answer of 2026-08-12. Where the return names an invoice, its credit
+    /// is allocated against that sale's bill exactly as a receipt would be - which is
+    /// what makes the bill-wise reports show the sale as settled by the goods coming
+    /// back rather than as still owing.
+    /// <para>
+    /// Whatever cannot be matched is left as a credit on the customer's account: a return
+    /// naming no invoice, or crediting more than the bill still owes because part of it
+    /// was already paid. The journal has credited the ledger either way, so the customer's
+    /// balance is right immediately; what is missing is only the link to a document, and
+    /// refusing the return over that would turn a bookkeeping detail into somebody
+    /// standing at a counter with goods nobody will take back.
+    /// </para>
+    /// </remarks>
+    private async Task<Result> CreditAsync(
+        SalesInvoice invoice,
+        Voucher journal,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.ReturnsInvoiceId is not { } originalId)
+        {
+            return Result.Success();
+        }
+
+        SalesInvoice? original = await _invoices.FindAsync(originalId, cancellationToken);
+
+        if (original?.BillId is not { } billId)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlyDictionary<BillId, Bill> found = await _bills.GetManyAsync(
+            [billId], cancellationToken);
+
+        if (!found.TryGetValue(billId, out Bill? bill)
+            || bill.Status == BillStatus.Cancelled)
+        {
+            return Result.Success();
+        }
+
+        // Capped at what is still owing rather than refused for exceeding it. A return
+        // worth more than the bill has left to settle is an ordinary thing once a
+        // customer has part-paid, and the excess is a credit on their account.
+        Money allocatable = invoice.Total < bill.OutstandingAmount
+            ? invoice.Total
+            : bill.OutstandingAmount;
+
+        if (!allocatable.IsPositive)
+        {
+            return Result.Success<Bill?>(bill);
+        }
+
+        Result allocated = bill.Allocate(journal.Id, allocatable, invoice.Date);
+
+        return allocated.IsFailure
+            ? Result.Failure<Bill?>(allocated.Error)
+            : Result.Success<Bill?>(bill);
+    }
+
+    /// <summary>Raises the debt a sale creates.</summary>
     private Result<Bill> Raise(
         SalesInvoice invoice,
         Context context,
@@ -458,7 +631,11 @@ public sealed class PostSalesInvoiceCommandHandler
         FinancialYear year,
         CancellationToken cancellationToken)
     {
-        string documentType = DocumentTypes.ForStockDocument(StockDocumentType.SalesIssue);
+        StockDocumentType kind = invoice.IsReturn
+            ? StockDocumentType.SalesReturn
+            : StockDocumentType.SalesIssue;
+
+        string documentType = DocumentTypes.ForStockDocument(kind);
 
         NumberingSeries? series = await _numbering.FindForUpdateAsync(
             documentType, invoice.FirmId, branchId, year.Id, cancellationToken);
@@ -475,7 +652,10 @@ public sealed class PostSalesInvoiceCommandHandler
 
             series = created.Value;
             series.SetFormat(
-                prefix: "SI", suffix: null, separator: "/", financialYearLabel: year.Code);
+                prefix: invoice.IsReturn ? "SR" : "SI",
+                suffix: null,
+                separator: "/",
+                financialYearLabel: year.Code);
 
             _numbering.Add(series);
         }

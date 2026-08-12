@@ -47,6 +47,15 @@ public enum StockDocumentType
     /// issues by hand to find out what was actually sold.
     /// </remarks>
     SalesIssue = 8,
+
+    /// <summary>Goods coming back from a customer. Raised by a sales return.</summary>
+    /// <remarks>
+    /// The mirror of <see cref="SalesIssue"/>, and its own kind for the same reason: what
+    /// comes back from a customer is not the same event as goods arriving from anywhere
+    /// else, and a stock ledger that could not tell them apart would leave somebody
+    /// adding up receipts by hand to find out what was actually returned.
+    /// </remarks>
+    SalesReturn = 9,
 }
 
 /// <summary>Where a stock document stands in its lifecycle.</summary>
@@ -220,7 +229,7 @@ public sealed class StockDocument
     /// </remarks>
     public bool CarriesRate =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-            or StockDocumentType.StockAdjustment;
+            or StockDocumentType.StockAdjustment or StockDocumentType.SalesReturn;
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may put a batch on the
@@ -246,7 +255,15 @@ public sealed class StockDocument
     /// shelf is reading a number off a carton, and generating one for them would file
     /// the count against a batch that exists nowhere but here.
     /// </remarks>
-    public bool GeneratesBatchNumbers => CarriesRate;
+    /// <remarks>
+    /// Not simply the documents that carry a rate, though it was once the same list. A
+    /// sales return carries a cost - the goods have to come back in at something - but it
+    /// may not open a batch: what came back left in a batch that already exists, and a
+    /// new one would mean a customer returned goods from a lot nobody ever received.
+    /// </remarks>
+    public bool GeneratesBatchNumbers =>
+        Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
+            or StockDocumentType.StockAdjustment;
 
     /// <summary>
     /// Gets a value indicating whether a line quantity may be negative.

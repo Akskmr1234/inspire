@@ -64,11 +64,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices` |
 | Sales — customer master, with §12.1's mobile-number lookup | **Done** — 11 application + 7 API tests, at `/api/v1/sales/customers` |
 | Sales — cancelling a posted invoice: goods back, debt withdrawn, books reversed | **Done** — 4 domain + 8 application + 3 API tests |
-| Sales — the return document and its journal, with its own contra-revenue account | **Done** (domain + persistence) — 9 tests; posting one is next |
+| Sales — the return document and its journal, with its own contra-revenue account | **Done** — 9 domain tests |
+| Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,036 passing, 0 failing (522 domain + 248 application + 178 API + 20 identity + 68 integration).
+**Test suite:** 1,047 passing, 0 failing (522 domain + 258 application + 179 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -98,7 +99,7 @@ Integration tests need a running Docker daemon.
 >
 > `POST /api/v1/sales/customers` creates somebody to bill and finds them again by the number on their phone; `POST /api/v1/sales/invoices` enters a draft; `POST /api/v1/sales/invoices/{id}/post` issues the goods, raises the bill and writes the books; `POST /api/v1/sales/invoices/{id}/cancel` puts all three back. That is the counter flow, and the API suite drives all of it against a real database — a customer created, goods received, an invoice raised, posted, and cancelled, with the trial balance and the customer's outstanding checked at each step.
 >
-> **Cancelling is for an invoice that should never have been raised.** Goods a customer actually took away come back as a sales return, which is not built yet. An invoice the customer has already paid against is refused by name: a receipt has to stay where it was made, so that case needs a credit note.
+> **Cancelling is for an invoice that should never have been raised.** Goods a customer actually took away come back as a **sales return** instead — the same two endpoints with `Kind: 2` and the invoice it is against on the body. It puts the goods back at the cost they left at, credits the customer, and settles the bill the sale raised. An invoice the customer has already paid against cannot be cancelled at all; that case is a return.
 >
 > **The tax rate is supplied per line rather than defaulted from the product.** §12.4 says it comes from the product master, which carries no tax rate at all. The caller states it, and the engine still decides which heads that rate splits into — so a GST firm gets CGST and SGST, or IGST across a state line, from the same figure. Adding a rate to the product master is a small change to it and a smaller one here; it has not been made because nobody has said whether the rate belongs to the product, its category, or both.
 

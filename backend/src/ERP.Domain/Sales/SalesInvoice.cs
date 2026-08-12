@@ -641,8 +641,12 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     }
 
     /// <summary>Names what the posting produced: the issue, the bill and the journal.</summary>
-    /// <param name="stockDocumentId">The issue that took the goods off the shelf.</param>
-    /// <param name="billId">The bill the customer now owes.</param>
+    /// <param name="stockDocumentId">The stock document the goods moved on.</param>
+    /// <param name="billId">
+    /// The bill the customer now owes, where one was raised. A return raises none - it
+    /// credits a debt rather than creating one, and where it names no invoice the credit
+    /// sits on the customer's account with no bill to point at.
+    /// </param>
     /// <param name="journalVoucherId">The journal raised in the nominal ledger.</param>
     /// <returns>Success, or the reason it was refused.</returns>
     /// <remarks>
@@ -659,7 +663,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// </remarks>
     public Result RecordPosting(
         StockDocumentId stockDocumentId,
-        BillId billId,
+        BillId? billId,
         VoucherId journalVoucherId)
     {
         if (Status != SalesInvoiceStatus.Posted)

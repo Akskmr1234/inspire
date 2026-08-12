@@ -26,9 +26,12 @@ public sealed record PostSalesInvoiceCommand(Guid SalesInvoiceId, int? CreditDay
 /// <summary>What posting an invoice produced.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
 /// <param name="Number">Its number.</param>
-/// <param name="StockDocumentId">The issue that took the goods off the shelf.</param>
-/// <param name="StockDocumentNumber">That issue's own number.</param>
-/// <param name="BillId">The bill the customer now owes.</param>
+/// <param name="StockDocumentId">The stock document the goods moved on.</param>
+/// <param name="StockDocumentNumber">That document's own number.</param>
+/// <param name="BillId">
+/// The bill the customer now owes. Absent on a return, which credits a debt rather than
+/// creating one.
+/// </param>
 /// <param name="JournalVoucherId">The journal raised in the nominal ledger.</param>
 /// <param name="Total">What the customer owes.</param>
 /// <remarks>
@@ -42,6 +45,6 @@ public sealed record PostSalesInvoiceResponse(
     string Number,
     Guid StockDocumentId,
     string StockDocumentNumber,
-    Guid BillId,
+    Guid? BillId,
     Guid JournalVoucherId,
     decimal Total);

@@ -54,7 +54,12 @@ internal static class StockJournal
             // A sale's issue is what the goods cost the firm, which is a different
             // question from what production consumed - and the difference is the gross
             // margin, so the two cannot share an account.
-            StockDocumentType.SalesIssue => StockAccount.CostOfGoodsSold,
+            // Both halves of a sale's stock movement go to the same account: an issue
+            // charges the cost of what was sold, and a return credits it back. Sending
+            // the return anywhere else would leave the cost of goods sold overstated by
+            // everything that ever came back.
+            StockDocumentType.SalesIssue or StockDocumentType.SalesReturn =>
+                StockAccount.CostOfGoodsSold,
             StockDocumentType.DamagedStock => StockAccount.Loss,
             StockDocumentType.StockAdjustment => StockAccount.Variance,
             StockDocumentType.PhysicalVerification =>

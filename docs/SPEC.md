@@ -349,6 +349,26 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 > customer, debits the returns account and debits each tax head back out of the liability.
 > A journal that balances in one direction balances in the other by construction.
 
+> **Answered 2026-08-12, posting one.** Three more decisions, all put to the business:
+>
+> - **Returned goods come back at the cost they left at**, read from the original sale's
+>   own stock movements, so the cost-of-goods-sold reversal matches to the fils however far
+>   the average has moved since. Where the return names no invoice there is no such cost
+>   and the **current average** is used — receiving at the average cannot move the average,
+>   so the rest of the shelf is left alone.
+> - **Naming the invoice is optional.** Goods turn up without their paperwork, and a
+>   counter that could not record them would turn customers away. Naming it is what lets
+>   the credit find the debt and the goods find their cost.
+> - **The credit is allocated against the sale's bill**, exactly as a receipt would be, and
+>   **capped at what is still owing** rather than refused for exceeding it — a customer who
+>   has part-paid is the ordinary case. Whatever cannot be matched stays as an unallocated
+>   credit on the account: the journal has credited the ledger either way, so the balance is
+>   right immediately, and what is missing is only the link to a document.
+> - **A return raises no bill of its own**, and records none. A bill is something a document
+>   raised; which bill a return settled is one hop away through the invoice it names.
+> - **Its own numbering series**, prefixed `SR`, for the document and for the stock receipt
+>   alike. A credit note is not a gap in the invoice sequence.
+
 > **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
 > tax engine is asked its question here rather than on the aggregate — the invoice records
 > what the engine answered, so a reprint years later shows the tax that was charged rather

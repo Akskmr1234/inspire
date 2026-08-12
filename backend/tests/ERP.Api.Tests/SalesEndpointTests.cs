@@ -212,6 +212,70 @@ public sealed class SalesEndpointTests
     }
 
     [Fact]
+    public async Task A_return_takes_the_goods_back_and_settles_what_was_owed()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        decimal returnsBefore = await ClosingDebitAsync(client, "SALES-RETURN");
+
+        Guid invoiceId = await EnterAsync(client, fixtures, 3m, 100m, 5m);
+
+        (await client.PostAsJsonAsync($"{Invoices}/{invoiceId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(315m);
+
+        // The same endpoints, with the kind and the invoice it is against on the body.
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            Invoices,
+            new
+            {
+                Date = Today,
+                CustomerLedgerId = fixtures.CustomerId,
+                WarehouseId = fixtures.WarehouseId,
+                Kind = 2,
+                ReturnsInvoiceId = invoiceId,
+                Lines = new[]
+                {
+                    new
+                    {
+                        ProductId = fixtures.ProductId,
+                        Quantity = 3m,
+                        Rate = 100m,
+                        TaxPercentage = 5m,
+                    },
+                },
+            });
+
+        created.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+
+        SalesInvoiceResponse credit =
+            (await created.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!;
+
+        credit.Number.ShouldStartWith("SR");
+
+        HttpResponseMessage posted = await client.PostAsJsonAsync(
+            $"{Invoices}/{credit.SalesInvoiceId}/post", new { });
+
+        posted.StatusCode.ShouldBe(
+            HttpStatusCode.OK, await posted.Content.ReadAsStringAsync());
+
+        PostSalesInvoiceResponse result =
+            (await posted.Content.ReadFromJsonAsync<PostSalesInvoiceResponse>())!;
+
+        // A return raises no bill of its own; it settles the one the sale raised.
+        result.BillId.ShouldBeNull();
+        result.StockDocumentNumber.ShouldStartWith("SR");
+
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(0m);
+
+        // And what came back is reportable apart from what went out.
+        (await ClosingDebitAsync(client, "SALES-RETURN")).ShouldBe(returnsBefore + 300m);
+    }
+
+    [Fact]
     public async Task An_invoice_with_no_lines_is_refused_before_it_is_numbered()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

@@ -86,7 +86,8 @@ internal sealed class StockPoster
         {
             Result applied = document.Type switch
             {
-                StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt =>
+                StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
+                    or StockDocumentType.SalesReturn =>
                     Take(
                         written,
                         ReceiveInto(

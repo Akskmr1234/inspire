@@ -460,6 +460,9 @@ public static class DocumentTypes
     /// </remarks>
     public const string SalesIssue = "inventory.sales-issue";
 
+    /// <summary>The receipt that takes a sale's goods back onto the shelf.</summary>
+    public const string SalesReturnReceipt = "inventory.sales-return";
+
     /// <summary>Maps a voucher type onto its document type.</summary>
     /// <param name="type">The voucher type.</param>
     /// <returns>The document-type key.</returns>
@@ -496,6 +499,7 @@ public static class DocumentTypes
         Inventory.StockDocumentType.DamagedStock => DamagedStock,
         Inventory.StockDocumentType.PhysicalVerification => PhysicalVerification,
         Inventory.StockDocumentType.SalesIssue => SalesIssue,
+        Inventory.StockDocumentType.SalesReturn => SalesReturnReceipt,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };

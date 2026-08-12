@@ -42,6 +42,7 @@ internal sealed class SalesPostingFixture
     private readonly PostSalesInvoiceCommandHandler _handler;
     private readonly CreateSalesInvoiceCommandHandler _creator;
     private readonly CancelSalesInvoiceCommandHandler _canceller;
+    private readonly Dictionary<SalesInvoiceId, SalesInvoice> _invoicesById = [];
     private SalesInvoice? _invoice;
     private SalesInvoice? _created;
 
@@ -135,12 +136,19 @@ internal sealed class SalesPostingFixture
             _positions[Product.Id] = position;
         }
 
+        // Looked up by identifier, not just handed back whatever was made last: a return
+        // has to find the invoice it is against, which is a different document from the
+        // one being posted.
         Invoices = Substitute.For<ISalesInvoiceRepository>();
         Invoices
             .FindAsync(Arg.Any<SalesInvoiceId>(), Arg.Any<CancellationToken>())
-            .Returns(_ => _invoice);
+            .Returns(call => _invoicesById.GetValueOrDefault(call.ArgAt<SalesInvoiceId>(0)));
         Invoices.When(i => i.Add(Arg.Any<SalesInvoice>()))
-            .Do(call => _created = call.Arg<SalesInvoice>());
+            .Do(call =>
+            {
+                _created = call.Arg<SalesInvoice>()!;
+                _invoicesById[_created.Id] = _created;
+            });
 
         // The repositories serve back what the handlers put in them, so a cancellation
         // finds the issue, the movements, the bill and the journals that posting made -
@@ -438,7 +446,7 @@ internal sealed class SalesPostingFixture
             invoice.Post(UserId.NewId(), Now).IsSuccess.ShouldBeTrue();
         }
 
-        _invoice = invoice;
+        Holds(invoice);
 
         return invoice;
     }
@@ -461,7 +469,9 @@ internal sealed class SalesPostingFixture
         decimal taxPercentage = 5m,
         IReadOnlyList<SalesInvoiceChargeInput>? charges = null,
         decimal discount = 0m,
-        Guid? unitId = null)
+        Guid? unitId = null,
+        SalesDocumentKind kind = SalesDocumentKind.Invoice,
+        Guid? returnsInvoiceId = null)
     {
         Result<SalesInvoiceResponse> result = await _creator.Handle(
             new CreateSalesInvoiceCommand(
@@ -473,7 +483,9 @@ internal sealed class SalesPostingFixture
                         Product.Id.Value, quantity, rate, taxPercentage,
                         UnitId: unitId, Discount: discount),
                 ],
-                charges),
+                charges,
+                Kind: kind,
+                ReturnsInvoiceId: returnsInvoiceId),
             CancellationToken.None);
 
         if (result.IsSuccess)
@@ -502,9 +514,21 @@ internal sealed class SalesPostingFixture
                 (_invoice?.Id ?? SalesInvoiceId.NewId()).Value, reason),
             CancellationToken.None);
 
-    /// <summary>Replaces the invoice the repository will return.</summary>
+    /// <summary>Replaces the invoice the handlers will act on.</summary>
     /// <param name="invoice">The invoice, or nothing at all.</param>
-    internal void Holds(SalesInvoice? invoice) => _invoice = invoice;
+    /// <remarks>
+    /// Passing nothing leaves the repository unable to find whatever is asked for, which
+    /// is how a document of another firm looks from inside a handler.
+    /// </remarks>
+    internal void Holds(SalesInvoice? invoice)
+    {
+        _invoice = invoice;
+
+        if (invoice is not null)
+        {
+            _invoicesById[invoice.Id] = invoice;
+        }
+    }
 
     /// <summary>What one ledger was debited, net of what it was credited, across all journals.</summary>
     /// <param name="ledgerId">The ledger.</param>

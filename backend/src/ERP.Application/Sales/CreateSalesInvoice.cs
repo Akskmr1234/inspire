@@ -43,6 +43,13 @@ public sealed record SalesInvoiceChargeInput(Guid LedgerId, decimal Amount);
 /// <param name="Mode">The tax mode. Defaults from the firm's regime.</param>
 /// <param name="ReferenceNumber">The customer's own reference.</param>
 /// <param name="Narration">What is printed on the invoice.</param>
+/// <param name="Kind">Whether goods are going out or coming back. A sale unless stated.</param>
+/// <param name="ReturnsInvoiceId">
+/// The invoice a return is against. Optional, which is the business's answer of
+/// 2026-08-12: goods turn up without their paperwork, and a counter that could not record
+/// them would be a counter that turns customers away. Naming it is what lets the credit
+/// find the debt, and what lets the goods come back at the cost they left at.
+/// </param>
 /// <remarks>
 /// A draft, and only a draft. Nothing moves until it is posted, which is a command of its
 /// own - so an invoice can be corrected while it is being typed, and a mistake found at
@@ -56,7 +63,9 @@ public sealed record CreateSalesInvoiceCommand(
     IReadOnlyList<SalesInvoiceChargeInput>? Charges = null,
     TaxMode? Mode = null,
     string? ReferenceNumber = null,
-    string? Narration = null) : ICommand<SalesInvoiceResponse>, ITransactional;
+    string? Narration = null,
+    SalesDocumentKind Kind = SalesDocumentKind.Invoice,
+    Guid? ReturnsInvoiceId = null) : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>An invoice as it now stands.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
