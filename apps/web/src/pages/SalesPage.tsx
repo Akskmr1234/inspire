@@ -9,6 +9,12 @@ import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
+  fetchProductBatches,
+  fetchProductSerials,
+  type BatchStockRow,
+  type SerialNumberView,
+} from '@/lib/stock';
+import {
   cancelSalesInvoice,
   createSalesInvoice,
   getSalesInvoice,
@@ -32,6 +38,10 @@ interface DraftLine {
   rate: string;
   taxPercentage: string;
   discount: string;
+  /** The batch sold, where the product is tracked in batches. */
+  batchNumber: string;
+  /** The units sold, where the product is tracked by serial number. */
+  serialNumbers: readonly string[];
 }
 
 const emptyLine: DraftLine = {
@@ -40,6 +50,8 @@ const emptyLine: DraftLine = {
   rate: '',
   taxPercentage: '0',
   discount: '0',
+  batchNumber: '',
+  serialNumbers: [],
 };
 
 /**
@@ -363,9 +375,9 @@ function EntryDialog({
     return { taxable, tax, total: taxable + tax };
   }, [lines]);
 
-  const change = (index: number, field: keyof DraftLine, value: string): void =>
+  const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
-      previous.map((line, at) => (at === index ? { ...line, [field]: value } : line)),
+      previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
   const save = async (): Promise<void> => {
@@ -380,6 +392,10 @@ function EntryDialog({
           rate: Number(line.rate || 0),
           taxPercentage: Number(line.taxPercentage || 0),
           discount: Number(line.discount || 0),
+          batchNumber: line.batchNumber || null,
+          // Always sent, empty included: the server reads an empty list as "no units
+          // named", and omitting the field would say the same thing less plainly.
+          serialNumbers: line.serialNumbers,
         }));
 
       const header = await createSalesInvoice({
@@ -499,59 +515,17 @@ function EntryDialog({
         </thead>
 
         <tbody>
-          {lines.map((line, index) => {
-            const net = Number(line.quantity) * Number(line.rate) - Number(line.discount || 0);
-
-            return (
-              <tr key={index} className="border-t border-slate-100 dark:border-slate-900">
-                <td className="px-2 py-1">
-                  <Select
-                    value={line.productId}
-                    onChange={(value) => change(index, 'productId', String(value))}
-                    options={[
-                      { value: '', label: t('sales.chooseProduct') },
-                      ...(products.data ?? []).map((product) => ({
-                        value: product.id,
-                        label: `${product.code} — ${product.description}`,
-                      })),
-                    ]}
-                  />
-                </td>
-                <NumberCell
-                  value={line.quantity}
-                  onChange={(value) => change(index, 'quantity', value)}
-                />
-                <NumberCell
-                  value={line.rate}
-                  onChange={(value) => change(index, 'rate', value)}
-                />
-                <NumberCell
-                  value={line.discount}
-                  onChange={(value) => change(index, 'discount', value)}
-                />
-                <NumberCell
-                  value={line.taxPercentage}
-                  onChange={(value) => change(index, 'taxPercentage', value)}
-                />
-                <td className="px-2 py-1 text-end font-mono">
-                  {Number.isFinite(net) ? net.toFixed(2) : '—'}
-                </td>
-                <td className="px-2 py-1 text-end">
-                  {lines.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setLines((previous) => previous.filter((_, at) => at !== index))
-                      }
-                      className="text-xs text-rose-600 hover:underline"
-                    >
-                      {t('sales.removeLine')}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+          {lines.map((line, index) => (
+            <LineRow
+              key={index}
+              line={line}
+              products={products.data ?? []}
+              warehouseId={warehouseId}
+              removable={lines.length > 1}
+              onChange={(patch) => change(index, patch)}
+              onRemove={() => setLines((previous) => previous.filter((_, at) => at !== index))}
+            />
+          ))}
         </tbody>
       </table>
 
@@ -587,6 +561,166 @@ function EntryDialog({
         </DialogButton>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * One line, and whatever the product it names needs beyond a quantity and a rate.
+ *
+ * A row of its own rather than markup in a loop, because a batched product has to ask the
+ * warehouse which batches it holds and a serialised one has to ask which units are on the
+ * shelf — and a hook cannot be called inside a loop. Without these a firm could not sell a
+ * batched or serialised product from this screen at all: the server refuses the line, and
+ * rightly, because a batch nobody named is stock nobody can trace.
+ */
+function LineRow({
+  line,
+  products,
+  warehouseId,
+  removable,
+  onChange,
+  onRemove,
+}: {
+  readonly line: DraftLine;
+  readonly products: readonly ProductSummary[];
+  readonly warehouseId: string;
+  readonly removable: boolean;
+  readonly onChange: (patch: Partial<DraftLine>) => void;
+  readonly onRemove: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const product = products.find((candidate) => candidate.id === line.productId);
+  const net = Number(line.quantity) * Number(line.rate) - Number(line.discount || 0);
+
+  const wanted = Number(line.quantity);
+  const needsBatch = product?.tracksBatches === true;
+  const needsSerials = product?.tracksSerialNumbers === true;
+
+  const batches = useQuery<readonly BatchStockRow[], ApiError>({
+    queryKey: ['sales-line-batches', line.productId, warehouseId],
+    queryFn: () => fetchProductBatches(line.productId, warehouseId),
+    enabled: needsBatch && line.productId !== '' && warehouseId !== '',
+  });
+
+  // Only what is on the shelf in this warehouse. A unit already sold is not one that can
+  // be sold again, and offering it would produce a refusal nobody could act on.
+  const serials = useQuery<readonly SerialNumberView[], ApiError>({
+    queryKey: ['sales-line-serials', line.productId, warehouseId],
+    queryFn: () => fetchProductSerials(line.productId, warehouseId),
+    enabled: needsSerials && line.productId !== '' && warehouseId !== '',
+  });
+
+  const toggleSerial = (number: string): void => {
+    const chosen = new Set(line.serialNumbers);
+
+    if (chosen.has(number)) {
+      chosen.delete(number);
+    } else {
+      chosen.add(number);
+    }
+
+    onChange({ serialNumbers: [...chosen] });
+  };
+
+  return (
+    <>
+      <tr className="border-t border-slate-100 dark:border-slate-900">
+        <td className="px-2 py-1">
+          <Select
+            value={line.productId}
+            onChange={(value) =>
+              // The batch and the units belong to the product that was chosen before,
+              // so they are dropped rather than carried onto a different one.
+              onChange({ productId: String(value), batchNumber: '', serialNumbers: [] })
+            }
+            options={[
+              { value: '', label: t('sales.chooseProduct') },
+              ...products.map((candidate) => ({
+                value: candidate.id,
+                label: `${candidate.code} — ${candidate.description}`,
+              })),
+            ]}
+          />
+        </td>
+        <NumberCell value={line.quantity} onChange={(value) => onChange({ quantity: value })} />
+        <NumberCell value={line.rate} onChange={(value) => onChange({ rate: value })} />
+        <NumberCell value={line.discount} onChange={(value) => onChange({ discount: value })} />
+        <NumberCell
+          value={line.taxPercentage}
+          onChange={(value) => onChange({ taxPercentage: value })}
+        />
+        <td className="px-2 py-1 text-end font-mono">
+          {Number.isFinite(net) ? net.toFixed(2) : '—'}
+        </td>
+        <td className="px-2 py-1 text-end">
+          {removable && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-rose-600 hover:underline"
+            >
+              {t('sales.removeLine')}
+            </button>
+          )}
+        </td>
+      </tr>
+
+      {(needsBatch || needsSerials) && (
+        <tr className="border-t border-dashed border-slate-100 dark:border-slate-900">
+          <td colSpan={7} className="px-2 pb-2">
+            <div className="flex flex-wrap items-start gap-4">
+              {needsBatch && (
+                <Field label={t('sales.batch')}>
+                  <Select
+                    value={line.batchNumber}
+                    onChange={(value) => onChange({ batchNumber: String(value) })}
+                    options={[
+                      { value: '', label: t('sales.chooseBatch') },
+                      ...(batches.data ?? []).map((batch) => ({
+                        value: batch.batchNumber,
+                        label: `${batch.batchNumber} (${batch.quantity})`,
+                      })),
+                    ]}
+                  />
+                </Field>
+              )}
+
+              {needsSerials && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500">
+                    {t('sales.serialsChosen', {
+                      chosen: line.serialNumbers.length,
+                      wanted: Number.isFinite(wanted) ? wanted : 0,
+                    })}
+                  </span>
+
+                  <div className="flex max-h-24 flex-wrap gap-2 overflow-auto">
+                    {(serials.data ?? []).map((unit) => (
+                      <label
+                        key={unit.serialNumberId}
+                        className="flex items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-xs dark:border-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={line.serialNumbers.includes(unit.number)}
+                          onChange={() => toggleSerial(unit.number)}
+                        />
+                        {unit.number}
+                      </label>
+                    ))}
+
+                    {(serials.data ?? []).length === 0 && (
+                      <span className="text-xs text-slate-500">{t('sales.noSerials')}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

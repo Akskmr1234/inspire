@@ -68,6 +68,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
 | Sales — a filtered, paged list of documents; first paged list in the API | **Done** — 8 integration + 2 API tests |
 | Sales — screens: document list, entry, posting, cancellation, returns | **Done** — verified end to end in a browser against a real database |
+| Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
 | Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
 | Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
 | Purchase, Manufacturing, Service modules | Not started |
