@@ -261,6 +261,27 @@ Invoice No · Ref No (auto-increment) · Customer · Salesman (from Employee mas
 > either later is a new link rather than a redesign, but neither is built now.
 Load from an existing document: Sales Return Ref No · Quotation Ref No · Order Ref No · Purchase Ref No · Delivery SR No. (`image6`: “Create Invoice From”.)
 
+> **Built 2026-08-12: what posting an invoice produces.** Four things, in one transaction —
+> the invoice posts, an **issue** takes the goods off the shelf, a **bill** puts the debt
+> into the customer's outstanding, and a **journal** states the sale in the nominal ledger.
+> Any subset of those four is a discrepancy somebody would have to find by hand, so all of
+> them land or none does. Decisions now binding:
+>
+> - The goods leave through an ordinary stock issue rather than by reaching into positions
+>   directly, so average costing, batch positions, serial transitions and the refusal to go
+>   below zero all apply to a sale unchanged. The issue carries **no rate**: stock leaves at
+>   the firm's own average cost, and passing the selling price would turn every sale into a
+>   stock gain equal to its own margin.
+> - The issue draws from a **numbering series of its own** (`inventory.sales-issue`, prefixed
+>   `SI`), so a stock ledger distinguishes goods that went to a customer from goods that went
+>   to a department.
+> - The bill points at the **journal voucher**, which is what every other bill in the system
+>   points at and what the settlement machinery already understands. Credit terms come from
+>   the **customer's ledger** unless the caller states them: a figure typed on one invoice is
+>   an exception, and the ledger is where a firm records what it agreed.
+> - **Posting is its own step**, separate from entering the invoice. A draft can be corrected;
+>   a posted invoice has moved stock and raised a debt, and is cancelled rather than edited.
+
 ### 12.3 Item grid — full column set
 `Code` · `Product ID` · `Product` · `Quantity` · `Rate` · `Total` · `Product Code` · `Godown` · `Measurement` · `Free Quantity` · `Free Measurement` · `Expiry Date` · `Tax Percent` · `Gross` · `Discount Percentage` · `Discount Amount` · `Net` · `Tax` · `Remarks` · `Barcode` · `Batch` · `Detail Description` · `CGST Amount` · `CGST Rate` · `SGST Amount` · `SGST Rate` · `IGST Amount` · `IGST Rate` · `Food Cess` · `ERate` (exchange rate)
 

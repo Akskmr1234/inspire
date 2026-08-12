@@ -60,10 +60,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain + persistence) — 15 tests |
 | Accounting — per-firm tax account map, head by head, output and input | **Done** — 5 domain + 5 integration tests, seeded per regime |
 | Sales — the journal a posted invoice raises, under either tax regime | **Done** — 11 domain tests; see the note below on rounding |
+| Sales — posting: goods issued, bill raised, books written, in one transaction | **Done** — 13 application tests; no HTTP endpoint yet |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 964 passing, 0 failing (509 domain + 206 application + 161 API + 20 identity + 68 integration).
+**Test suite:** 977 passing, 0 failing (509 domain + 219 application + 161 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

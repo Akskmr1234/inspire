@@ -2,6 +2,7 @@ using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 
@@ -576,6 +577,28 @@ public interface IInventoryAccountMapRepository
     /// <summary>Adds a map for a firm that has none.</summary>
     /// <param name="map">The map.</param>
     void Add(InventoryAccountMap map);
+}
+
+/// <summary>Reads and writes sales invoices.</summary>
+public interface ISalesInvoiceRepository
+{
+    /// <summary>Finds an invoice with everything posting it will need.</summary>
+    /// <param name="id">The invoice.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The invoice, or <see langword="null"/> where there is none.</returns>
+    /// <remarks>
+    /// Lines, charges, per-head tax and the units each line sells, all in one load.
+    /// Posting reads every one of them - the lines become a stock issue, the charges and
+    /// the tax become journal lines - and fetching them lazily would be four round trips
+    /// inside a transaction holding stock positions.
+    /// </remarks>
+    Task<SalesInvoice?> FindAsync(
+        SalesInvoiceId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds an invoice.</summary>
+    /// <param name="invoice">The invoice.</param>
+    void Add(SalesInvoice invoice);
 }
 
 /// <summary>Reads the accounts a firm's tax heads post to.</summary>

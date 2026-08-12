@@ -1,4 +1,5 @@
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Accounting.Vouchers;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
@@ -91,8 +92,8 @@ internal sealed class StockJournalPoster
                 $"No financial year covers {document.Date:yyyy-MM-dd}."));
         }
 
-        Result<string> number = await ReserveAsync(
-            document.TenantId, document.FirmId, branchId, year, cancellationToken);
+        Result<string> number = await JournalNumbering.ReserveAsync(
+            _numbering, document.TenantId, document.FirmId, branchId, year, cancellationToken);
 
         if (number.IsFailure)
         {
@@ -161,38 +162,5 @@ internal sealed class StockJournalPoster
         return journal.Status == VoucherStatus.Cancelled
             ? Result.Success()
             : journal.Cancel($"Stock document {document.Number} cancelled: {reason}");
-    }
-
-    /// <summary>Takes the next journal number, creating the series if there is none.</summary>
-    private async Task<Result<string>> ReserveAsync(
-        TenantId tenantId,
-        FirmId firmId,
-        BranchId branchId,
-        FinancialYear year,
-        CancellationToken cancellationToken)
-    {
-        string documentType = DocumentTypes.ForVoucher(VoucherType.Journal);
-
-        NumberingSeries? series = await _numbering.FindForUpdateAsync(
-            documentType, firmId, branchId, year.Id, cancellationToken);
-
-        if (series is null)
-        {
-            Result<NumberingSeries> created = NumberingSeries.Create(
-                tenantId, firmId, documentType, branchId, year.Id);
-
-            if (created.IsFailure)
-            {
-                return Result.Failure<string>(created.Error);
-            }
-
-            series = created.Value;
-            series.SetFormat(
-                prefix: "JV", suffix: null, separator: "/", financialYearLabel: year.Code);
-
-            _numbering.Add(series);
-        }
-
-        return series.Reserve();
     }
 }

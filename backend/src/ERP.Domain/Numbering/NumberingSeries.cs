@@ -452,6 +452,14 @@ public static class DocumentTypes
     /// <summary>A physical stock verification.</summary>
     public const string PhysicalVerification = "inventory.physical-verification";
 
+    /// <summary>The issue that takes a sale's goods off the shelf.</summary>
+    /// <remarks>
+    /// Its own series rather than sharing the material issue's. A sale leaves two
+    /// documents on purpose, and somebody reading a stock ledger should be able to tell
+    /// which issues went to a customer and which went to a department.
+    /// </remarks>
+    public const string SalesIssue = "inventory.sales-issue";
+
     /// <summary>Maps a voucher type onto its document type.</summary>
     /// <param name="type">The voucher type.</param>
     /// <returns>The document-type key.</returns>
@@ -487,6 +495,7 @@ public static class DocumentTypes
         Inventory.StockDocumentType.StockAdjustment => StockAdjustment,
         Inventory.StockDocumentType.DamagedStock => DamagedStock,
         Inventory.StockDocumentType.PhysicalVerification => PhysicalVerification,
+        Inventory.StockDocumentType.SalesIssue => SalesIssue,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };

@@ -5,6 +5,7 @@ using ERP.Application.Platform.Grids;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -142,6 +143,29 @@ public sealed class LedgerRepository : ILedgerRepository
 
         return [.. rows.Select(x => (x.ledger, x.group))];
     }
+}
+
+/// <summary>The EF Core sales invoice repository.</summary>
+public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="SalesInvoiceRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public SalesInvoiceRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<SalesInvoice?> FindAsync(
+        SalesInvoiceId id,
+        CancellationToken cancellationToken = default) =>
+        _context.SalesInvoices
+            .Include(invoice => invoice.Lines).ThenInclude(line => line.Components)
+            .Include(invoice => invoice.Lines).ThenInclude(line => line.Serials)
+            .Include(invoice => invoice.Charges)
+            .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(SalesInvoice invoice) => _context.SalesInvoices.Add(invoice);
 }
 
 /// <summary>The EF Core tax account map repository.</summary>
