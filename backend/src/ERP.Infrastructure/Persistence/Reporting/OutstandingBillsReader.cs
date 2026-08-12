@@ -45,6 +45,11 @@ public sealed class OutstandingBillsReader : IOutstandingBillsReader
             bills = bills.Where(b => b.LedgerId == party);
         }
 
+        // A withdrawn bill is owed by nobody on any date. Unlike a settled one it was
+        // never really due, so there is no reporting date on which it should reappear -
+        // which is why it is excluded outright rather than by the allocation test below.
+        bills = bills.Where(b => b.Status != BillStatus.Cancelled);
+
         // Settled bills are excluded unless something was allocated to them after the
         // reporting date, in which case they were still open on it. For the ordinary
         // case - a report as at today - no such allocation exists, and this collapses

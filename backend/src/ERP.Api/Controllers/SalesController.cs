@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Sales;
 using ERP.Identity.Authorization;
@@ -17,9 +18,9 @@ namespace ERP.Api.Controllers;
 /// left to be looked up.
 /// </para>
 /// <para>
-/// Nothing here deletes. A posted invoice is cancelled - which is not yet built, because
-/// putting back the goods, the debt and the journal is its own piece of work - and a draft
-/// that was never posted is simply never posted.
+/// Nothing here deletes. A posted invoice is cancelled, which puts the goods back on the
+/// shelf, withdraws the debt and takes both journals out of the balances while leaving
+/// every document in place; a draft that was never posted is simply never posted.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -104,7 +105,46 @@ public sealed class SalesController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Cancels a posted invoice, putting back everything posting it moved.</summary>
+    /// <param name="id">The invoice.</param>
+    /// <param name="request">Why it is being cancelled.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">The invoice was cancelled.</response>
+    /// <response code="404">No such invoice in the selected firm.</response>
+    /// <response code="422">The cancellation was refused, and the reason says why.</response>
+    /// <remarks>
+    /// For an invoice that should never have been raised. Goods a customer has actually
+    /// taken away come back as a sales return instead, and an invoice the customer has
+    /// already paid against is refused here by name: a receipt has to stay where it was
+    /// made, so what that situation needs is a credit note.
+    /// </remarks>
+    [HttpPost("{id:guid}/cancel")]
+    [RequiresPermission("sales", "invoice", "delete")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> CancelAsync(
+        Guid id,
+        [FromBody] CancelSalesInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new CancelSalesInvoiceCommand(id, request.Reason), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }
+
+/// <summary>Why an invoice is being cancelled.</summary>
+/// <param name="Reason">
+/// Required, and kept on the invoice. A cancellation nobody explained is one somebody has
+/// to reconstruct from a stock ledger later.
+/// </param>
+public sealed record CancelSalesInvoiceRequest([property: JsonRequired] string Reason);
 
 /// <summary>What may be stated when posting, beyond the invoice itself.</summary>
 /// <param name="CreditDays">

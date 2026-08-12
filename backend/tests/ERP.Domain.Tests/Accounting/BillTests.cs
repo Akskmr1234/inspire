@@ -307,6 +307,59 @@ public sealed class BillTests
         bill.Allocations.ShouldAllBe(a => a.Id != default);
     }
 
+    [Fact]
+    public void A_bill_nobody_has_paid_against_is_withdrawn_with_its_document()
+    {
+        // A cancelled sale leaves a bill that was never really due. It has to stop
+        // counting as a receivable, or the debtors report carries a debt for goods that
+        // came back.
+        Bill bill = Raise(1000m);
+
+        bill.Cancel().IsSuccess.ShouldBeTrue();
+        bill.Status.ShouldBe(BillStatus.Cancelled);
+
+        // Not overdue either, however long it sits there.
+        bill.IsOverdueAt(Raised.AddYears(1)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_bill_somebody_has_paid_against_cannot_be_withdrawn()
+    {
+        // The refusal that sends an operator to the right document. A receipt has to
+        // stay where it was made, so goods that come back after they were paid for are
+        // a credit note, not a cancellation.
+        Bill bill = Raise(1000m);
+
+        bill.Allocate(VoucherId.NewId(), Money.Of(400m, Qar), Raised).IsSuccess.ShouldBeTrue();
+
+        bill.Cancel().Error.Code.ShouldBe("Bill.PartlySettled");
+        bill.Status.ShouldBe(BillStatus.PartiallySettled);
+    }
+
+    [Fact]
+    public void Nothing_can_be_allocated_to_a_withdrawn_bill()
+    {
+        // Otherwise a payment would be hidden inside a cancelled document, where no
+        // report of what the customer owes would ever look for it.
+        Bill bill = Raise(1000m);
+
+        bill.Cancel().IsSuccess.ShouldBeTrue();
+
+        bill.Allocate(VoucherId.NewId(), Money.Of(100m, Qar), Raised)
+            .Error.Code.ShouldBe("Bill.Cancelled");
+    }
+
+    [Fact]
+    public void Withdrawing_a_bill_twice_changes_nothing()
+    {
+        // A cancellation retried after a partial failure must not be a second event.
+        Bill bill = Raise(1000m);
+
+        bill.Cancel().IsSuccess.ShouldBeTrue();
+        bill.Cancel().IsSuccess.ShouldBeTrue();
+        bill.Status.ShouldBe(BillStatus.Cancelled);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private static Result<Bill> TryRaise(

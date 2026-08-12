@@ -240,7 +240,7 @@ public sealed class CustomerTests
                 .Returns<IReadOnlyList<Ledger>>(_ => [.. Added]);
             Ledgers.When(l => l.Add(Arg.Any<Ledger>())).Do(call =>
             {
-                Ledger added = call.Arg<Ledger>();
+                Ledger added = call.Arg<Ledger>()!;
                 Added.Add(added);
                 _ledgers[added.Id] = added;
             });

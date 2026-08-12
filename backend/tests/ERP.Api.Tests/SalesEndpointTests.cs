@@ -136,6 +136,82 @@ public sealed class SalesEndpointTests
     }
 
     [Fact]
+    public async Task Cancelling_a_posted_invoice_puts_the_goods_and_the_books_back()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        decimal salesBefore = await ClosingCreditAsync(client, "SALES");
+        decimal stockBefore = await ClosingDebitAsync(client, "STOCK");
+
+        Guid invoiceId = await EnterAsync(client, fixtures, 3m, 100m, 5m);
+
+        (await client.PostAsJsonAsync($"{Invoices}/{invoiceId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        HttpResponseMessage cancelled = await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel",
+            new { Reason = "Entered against the wrong customer" });
+
+        cancelled.StatusCode.ShouldBe(
+            HttpStatusCode.NoContent, await cancelled.Content.ReadAsStringAsync());
+
+        // Both journals out of the balances, so the accounts stand where they did.
+        (await ClosingCreditAsync(client, "SALES")).ShouldBe(salesBefore);
+        (await ClosingDebitAsync(client, "STOCK")).ShouldBe(stockBefore);
+
+        SalesInvoiceDetail detail =
+            (await client.GetFromJsonAsync<SalesInvoiceDetail>($"{Invoices}/{invoiceId}"))!;
+
+        detail.Header.Status.ShouldBe(Domain.Sales.SalesInvoiceStatus.Cancelled);
+
+        // And it still names what it produced, because the documents are all still there.
+        detail.StockDocumentId.ShouldNotBeNull();
+        detail.BillId.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task A_cancelled_sale_stops_showing_in_what_the_customer_owes()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        Guid invoiceId = await EnterAsync(client, fixtures, 2m, 100m, 5m);
+
+        (await client.PostAsJsonAsync($"{Invoices}/{invoiceId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        decimal owedAfterPosting = await OutstandingAsync(client, fixtures.CustomerId);
+
+        owedAfterPosting.ShouldBe(210m);
+
+        (await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel", new { Reason = "Raised in error" }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // The debtors figure and the credit position read the same bills, so withdrawing
+        // one takes it out of both at once.
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task A_draft_cannot_be_cancelled_and_a_reason_is_required()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        Guid invoiceId = await EnterAsync(client, fixtures, 1m, 10m);
+
+        (await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel", new { Reason = "Nothing happened yet" }))
+            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        (await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel", new { Reason = string.Empty }))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task An_invoice_with_no_lines_is_refused_before_it_is_numbered()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
@@ -214,6 +290,15 @@ public sealed class SalesEndpointTests
             HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
 
         return (await created.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!.SalesInvoiceId;
+    }
+
+    /// <summary>What a customer owes, read the way the credit screen reads it.</summary>
+    private static async Task<decimal> OutstandingAsync(HttpClient client, Guid customerId)
+    {
+        CreditStatus status = (await client.GetFromJsonAsync<CreditStatus>(
+            $"/api/v1/accounting/ledgers/{customerId}/credit-status"))!;
+
+        return status.Outstanding;
     }
 
     private static async Task<decimal> ClosingDebitAsync(HttpClient client, string code) =>

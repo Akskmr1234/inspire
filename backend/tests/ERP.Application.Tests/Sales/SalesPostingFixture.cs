@@ -41,6 +41,7 @@ internal sealed class SalesPostingFixture
     private readonly Dictionary<string, NumberingSeries> _series = [];
     private readonly PostSalesInvoiceCommandHandler _handler;
     private readonly CreateSalesInvoiceCommandHandler _creator;
+    private readonly CancelSalesInvoiceCommandHandler _canceller;
     private SalesInvoice? _invoice;
     private SalesInvoice? _created;
 
@@ -141,9 +142,16 @@ internal sealed class SalesPostingFixture
         Invoices.When(i => i.Add(Arg.Any<SalesInvoice>()))
             .Do(call => _created = call.Arg<SalesInvoice>());
 
+        // The repositories serve back what the handlers put in them, so a cancellation
+        // finds the issue, the movements, the bill and the journals that posting made -
+        // which is the only way to exercise the two halves against each other.
         Documents = Substitute.For<IStockDocumentRepository>();
         Documents.When(d => d.Add(Arg.Any<StockDocument>()))
             .Do(call => Issued.Add(call.Arg<StockDocument>()!));
+        Documents
+            .FindAsync(Arg.Any<StockDocumentId>(), Arg.Any<CancellationToken>())
+            .Returns(call => Issued.Find(
+                document => document.Id == call.ArgAt<StockDocumentId>(0)));
 
         Masters = Substitute.For<IInventoryMasterRepository>();
         Masters.FindWarehouseAsync(Warehouse.Id, Arg.Any<CancellationToken>()).Returns(Warehouse);
@@ -167,6 +175,9 @@ internal sealed class SalesPostingFixture
             .GetManyAsync(
                 Arg.Any<IReadOnlyCollection<SerialNumberId>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<SerialNumberId, SerialNumber>());
+        Serials
+            .ForDocumentAsync(Arg.Any<StockDocumentId>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<SerialNumberId, SerialNumber>());
 
         Balances = Substitute.For<IStockBalanceRepository>();
         Balances
@@ -185,6 +196,13 @@ internal sealed class SalesPostingFixture
         StockLedger = Substitute.For<IStockLedgerRepository>();
         StockLedger.When(l => l.Add(Arg.Any<StockLedgerEntry>()))
             .Do(call => Movements.Add(call.Arg<StockLedgerEntry>()!));
+        StockLedger
+            .ForDocumentAsync(Arg.Any<StockDocumentId>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<StockLedgerEntry>>(call =>
+            [
+                .. Movements.Where(entry =>
+                    entry.DocumentId == call.ArgAt<StockDocumentId>(0)),
+            ]);
 
         AccountMaps = Substitute.For<IInventoryAccountMapRepository>();
         AccountMaps.FindAsync(Firm.Id, Arg.Any<CancellationToken>()).Returns(Accounts);
@@ -199,10 +217,19 @@ internal sealed class SalesPostingFixture
 
         Bills = Substitute.For<IBillRepository>();
         Bills.When(b => b.Add(Arg.Any<Bill>())).Do(call => Raised.Add(call.Arg<Bill>()!));
+        Bills
+            .GetManyAsync(Arg.Any<IEnumerable<BillId>>(), Arg.Any<CancellationToken>())
+            .Returns(call => Raised
+                .Where(bill => call.Arg<IEnumerable<BillId>>()!.Contains(bill.Id))
+                .ToDictionary(bill => bill.Id));
 
         Vouchers = Substitute.For<IVoucherRepository>();
         Vouchers.When(v => v.Add(Arg.Any<Voucher>()))
             .Do(call => Journals.Add(call.Arg<Voucher>()!));
+        Vouchers
+            .FindAsync(Arg.Any<VoucherId>(), Arg.Any<CancellationToken>())
+            .Returns(call => Journals.Find(
+                journal => journal.Id == call.ArgAt<VoucherId>(0)));
 
         // Nothing until the handler creates it, which is what a firm's first sale
         // actually meets - and the only path on which the prefix is ever set.
@@ -255,6 +282,11 @@ internal sealed class SalesPostingFixture
         _creator = new CreateSalesInvoiceCommandHandler(
             Invoices, Masters, Products, Batches, Serials, Charges, Ledgers, Numbering,
             FinancialYears, Firms, tenant, UnitOfWork);
+
+        _canceller = new CancelSalesInvoiceCommandHandler(
+            Invoices, Documents, StockLedger, Products, Batches, Serials, Balances,
+            BatchBalances, AccountMaps, Numbering, FinancialYears, Bills, Vouchers, Firms,
+            tenant, clock, UnitOfWork);
     }
 
     /// <summary>Gets the firm every posting lands in.</summary>
@@ -459,6 +491,15 @@ internal sealed class SalesPostingFixture
         _handler.Handle(
             new PostSalesInvoiceCommand(
                 (_invoice?.Id ?? SalesInvoiceId.NewId()).Value, creditDays),
+            CancellationToken.None);
+
+    /// <summary>Cancels whatever invoice is in place.</summary>
+    /// <param name="reason">Why.</param>
+    /// <returns>What the handler made of it.</returns>
+    internal Task<Result> Cancel(string reason = "Entered against the wrong customer") =>
+        _canceller.Handle(
+            new CancelSalesInvoiceCommand(
+                (_invoice?.Id ?? SalesInvoiceId.NewId()).Value, reason),
             CancellationToken.None);
 
     /// <summary>Replaces the invoice the repository will return.</summary>

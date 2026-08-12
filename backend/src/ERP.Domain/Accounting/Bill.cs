@@ -27,6 +27,17 @@ public enum BillStatus
 
     /// <summary>Fully settled. Nothing further may be allocated.</summary>
     Settled = 3,
+
+    /// <summary>
+    /// Withdrawn along with the document that raised it, and owed by nobody.
+    /// </summary>
+    /// <remarks>
+    /// A cancelled sale leaves a bill that was never really due, and it has to stop
+    /// counting as a receivable - otherwise the debtors report, the aging analysis and
+    /// the customer's credit position all carry a debt for goods that came back. The row
+    /// stays, because a bill that vanished would take the trail of a mistake with it.
+    /// </remarks>
+    Cancelled = 4,
 }
 
 /// <summary>
@@ -210,7 +221,7 @@ public sealed class Bill : AggregateRoot<BillId>, IFirmScoped, IAuditable
     /// <param name="asAt">The date to assess.</param>
     /// <returns><see langword="true"/> when outstanding and past its due date.</returns>
     public bool IsOverdueAt(DateOnly asAt) =>
-        Status != BillStatus.Settled && asAt > DueDate;
+        Status is not (BillStatus.Settled or BillStatus.Cancelled) && asAt > DueDate;
 
     /// <summary>
     /// Returns how many days past due the bill is, or zero when not yet due.
@@ -246,6 +257,16 @@ public sealed class Bill : AggregateRoot<BillId>, IFirmScoped, IAuditable
             return Result.Failure(Error.BusinessRule(
                 "Bill.AlreadySettled",
                 $"Bill '{BillNumber}' is fully settled and cannot take further allocations."));
+        }
+
+        // A receipt against a withdrawn bill is money allocated to a debt that does not
+        // exist. It belongs on whatever the customer actually owes, and pointing it here
+        // would hide a payment inside a cancelled document.
+        if (Status == BillStatus.Cancelled)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Bill.Cancelled",
+                $"Bill '{BillNumber}' was withdrawn with the document that raised it."));
         }
 
         if (amount.Currency != OriginalAmount.Currency)
@@ -310,6 +331,44 @@ public sealed class Bill : AggregateRoot<BillId>, IFirmScoped, IAuditable
         UpdateStatus();
 
         return released;
+    }
+
+    /// <summary>Withdraws the bill along with the document that raised it.</summary>
+    /// <returns>Success, or the reason it cannot be withdrawn.</returns>
+    /// <remarks>
+    /// <para>
+    /// Refused once anything has been allocated against it. A customer who has paid, in
+    /// part or in full, against an invoice has a payment that has to go somewhere, and
+    /// withdrawing the debt underneath it would leave a receipt allocated to nothing. The
+    /// document for goods that came back after they were paid for is a credit note, which
+    /// leaves both the invoice and the receipt standing and states the return as its own
+    /// event.
+    /// </para>
+    /// <para>
+    /// The row stays and the status changes, like every other withdrawal in this system.
+    /// A bill that vanished would take with it the trail of a mistake somebody may have
+    /// to explain.
+    /// </para>
+    /// </remarks>
+    public Result Cancel()
+    {
+        if (Status == BillStatus.Cancelled)
+        {
+            return Result.Success();
+        }
+
+        if (!SettledAmount.IsZero)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Bill.PartlySettled",
+                $"Bill '{BillNumber}' has {SettledAmount} allocated against it and cannot "
+                + "be withdrawn. Raise a credit note instead, which leaves the payment "
+                + "where it was made."));
+        }
+
+        Status = BillStatus.Cancelled;
+
+        return Result.Success();
     }
 
     private void UpdateStatus()

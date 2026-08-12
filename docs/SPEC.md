@@ -307,6 +307,27 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 > - **Posting is its own step**, separate from entering the invoice. A draft can be corrected;
 >   a posted invoice has moved stock and raised a debt, and is cancelled rather than edited.
 
+> **Built 2026-08-12: cancelling one.** The mirror of posting, in one transaction: the goods
+> go back on the shelf, the debt leaves the customer's outstanding, and both journals leave
+> the balances. Decisions now binding:
+>
+> - **Cancelling is for an invoice that should never have been raised.** Goods a customer
+>   actually took away come back as a **sales return**, which is a document of its own. The
+>   difference is whether anything really happened, and a stock ledger that cannot tell the
+>   two apart is one nobody can reconcile against a shelf.
+> - **An invoice the customer has paid against cannot be cancelled**, in part or in full. A
+>   receipt has to stay where it was made; withdrawing the debt underneath it would leave a
+>   payment allocated to nothing. That case is a **credit note**, and the refusal says so.
+> - **The bill is withdrawn, not deleted** — a fourth status on it. It stops counting as a
+>   receivable everywhere at once, because the debtors report, the aging analysis, the
+>   customer's credit position and the dashboard all read the same reader.
+> - **Both journals are cancelled rather than reversed by contras**, which is how every
+>   other cancelled voucher here behaves: the number and the lines stay, the balances do
+>   not. A contra would say the same thing twice and leave a day book with two entries for
+>   one mistake.
+> - **The goods go back at what they left at**, not at today's average, so a cancellation
+>   cannot restate the value of everything else on the shelf.
+
 > **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
 > tax engine is asked its question here rather than on the aggregate — the invoice records
 > what the engine answered, so a reprint years later shows the tax that was charged rather
