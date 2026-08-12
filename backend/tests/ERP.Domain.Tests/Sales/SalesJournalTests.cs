@@ -132,6 +132,79 @@ public sealed class SalesJournalTests
     }
 
     [Fact]
+    public void A_return_runs_the_same_journal_with_every_side_swapped()
+    {
+        // Goods coming back credit the customer what they no longer owe, take the goods
+        // off revenue, and put the tax back out of the liability. The same arithmetic,
+        // which is why it is one piece of code and not two.
+        Books books = Books.ForVat();
+        SalesInvoice credit = books.Sell(taxable: 1_000m, tax: 50m, kind: SalesDocumentKind.Return);
+
+        Voucher journal = books.Raise(credit).Value;
+
+        Credit(journal, credit.CustomerLedgerId).ShouldBe(1_050m);
+        Debit(journal, books.AccountFor(StockAccount.SalesReturn)).ShouldBe(1_000m);
+        Debit(journal, books.TaxLedger(TaxComponentType.Vat)).ShouldBe(50m);
+
+        Balances(journal).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_return_goes_to_its_own_account_rather_than_back_to_sales()
+    {
+        // The business's answer of 2026-08-12. Net revenue is the same either way; what
+        // differs is whether the gross figure and the returns stay separately
+        // answerable, which is what §12.10's Sales Return Report asks for.
+        Books books = Books.ForVat();
+        SalesInvoice credit = books.Sell(1_000m, 50m, kind: SalesDocumentKind.Return);
+
+        Voucher journal = books.Raise(credit).Value;
+
+        Posted(journal, books.AccountFor(StockAccount.SalesRevenue)).ShouldBe(0m);
+        Posted(journal, books.AccountFor(StockAccount.SalesReturn)).ShouldBe(1_000m);
+    }
+
+    [Fact]
+    public void A_GST_return_takes_each_head_back_out_of_the_liability()
+    {
+        Books books = Books.ForGst();
+        SalesInvoice credit = books.Sell(1_000m, 180m, kind: SalesDocumentKind.Return);
+
+        Voucher journal = books.Raise(credit).Value;
+
+        Debit(journal, books.TaxLedger(TaxComponentType.Cgst)).ShouldBe(90m);
+        Debit(journal, books.TaxLedger(TaxComponentType.Sgst)).ShouldBe(90m);
+        Credit(journal, credit.CustomerLedgerId).ShouldBe(1_180m);
+    }
+
+    [Fact]
+    public void A_charge_on_a_return_swaps_with_everything_else()
+    {
+        // Freight on a credit note is freight the firm is giving back, so it runs the
+        // other way too. Anything else would leave the journal unbalanced by twice it.
+        Books books = Books.ForVat();
+        AdditionalLedger freight = Books.Charge("FREIGHT", isAddition: true);
+
+        SalesInvoice credit = books.Sell(
+            1_000m, 50m, charges: [(freight, 30m)], kind: SalesDocumentKind.Return);
+
+        Voucher journal = books.Raise(credit).Value;
+
+        Debit(journal, freight.LedgerId).ShouldBe(30m);
+        Credit(journal, credit.CustomerLedgerId).ShouldBe(1_080m);
+        Balances(journal).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_firm_that_has_not_chosen_a_returns_account_cannot_post_one()
+    {
+        Books books = Books.ForVat(assignRevenue: false);
+        SalesInvoice credit = books.Sell(1_000m, 50m, kind: SalesDocumentKind.Return);
+
+        books.Raise(credit).Error.Code.ShouldBe("InventoryAccounts.NotConfigured");
+    }
+
+    [Fact]
     public void A_head_with_no_account_stops_the_sale_and_names_the_head()
     {
         // The refusal the map exists for. A firm charging a tax it has nowhere to post is
@@ -239,7 +312,12 @@ public sealed class SalesJournalTests
                 Ledger ledger = LedgerNamed($"{account}", LedgerKind.General);
                 _ledgers[account] = ledger;
 
-                if (account != StockAccount.SalesRevenue || assignRevenue)
+                // Both revenue accounts together: a firm that has not said where sales
+                // go has not said where returns come back from either.
+                bool isRevenue = account
+                    is StockAccount.SalesRevenue or StockAccount.SalesReturn;
+
+                if (!isRevenue || assignRevenue)
                 {
                     Accounts.Assign(account, ledger).IsSuccess.ShouldBeTrue();
                 }
@@ -281,7 +359,9 @@ public sealed class SalesJournalTests
         public Result<Voucher> Raise(SalesInvoice invoice) =>
             SalesJournal.Raise(invoice, Accounts, TaxAccounts, Firm, Year, "JV/2026/0001");
 
-        public SalesInvoice Draft(CurrencyCode? currency = null) =>
+        public SalesInvoice Draft(
+            CurrencyCode? currency = null,
+            SalesDocumentKind kind = SalesDocumentKind.Invoice) =>
             SalesInvoice.CreateDraft(
                 Tenant,
                 FirmKey,
@@ -292,16 +372,18 @@ public sealed class SalesJournalTests
                 Customer(),
                 Warehouse.Create(Tenant, FirmKey, "MAIN", "Main store").Value,
                 TaxMode.Tax,
-                currency ?? Qar).Value;
+                currency ?? Qar,
+                kind).Value;
 
         /// <summary>Raises and posts an invoice for one line assessed as stated.</summary>
         public SalesInvoice Sell(
             decimal taxable,
             decimal tax,
             IReadOnlyList<(AdditionalLedger Charge, decimal Amount)>? charges = null,
-            CurrencyCode? currency = null)
+            CurrencyCode? currency = null,
+            SalesDocumentKind kind = SalesDocumentKind.Invoice)
         {
-            SalesInvoice invoice = Draft(currency);
+            SalesInvoice invoice = Draft(currency, kind);
             UnitOfMeasure each = UnitOfMeasure.CreateBase(Tenant, FirmKey, "EACH", "Each").Value;
 
             invoice.AddLine(

@@ -263,6 +263,58 @@ public sealed class SalesInvoiceTests
             .Error.Code.ShouldBe("SalesInvoice.NotPosted");
     }
 
+    [Fact]
+    public void A_document_is_a_sale_unless_it_says_otherwise()
+    {
+        // The default matters: every caller that predates returns, and every row that
+        // predates the column, means an invoice.
+        Draft().Value.Kind.ShouldBe(SalesDocumentKind.Invoice);
+        Draft().Value.IsReturn.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Only_a_return_may_name_the_invoice_it_is_against()
+    {
+        // An invoice claiming to return another invoice is confused about what it is,
+        // and the confusion would reach the accounts - the posting reads the kind to
+        // decide which way the goods and the money move.
+        SalesInvoice sale = Posted();
+
+        Draft(kind: SalesDocumentKind.Invoice, returns: sale.Id)
+            .Error.Code.ShouldBe("SalesInvoice.NotAReturn");
+
+        Draft(kind: SalesDocumentKind.Return, returns: sale.Id).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_return_need_not_name_an_invoice_at_all()
+    {
+        // Goods come back without their paperwork often enough that refusing would
+        // leave a counter unable to record what is physically in front of them.
+        SalesInvoice credit = Draft(kind: SalesDocumentKind.Return).Value;
+
+        credit.IsReturn.ShouldBeTrue();
+        credit.ReturnsInvoiceId.ShouldBeNull();
+    }
+
+    [Fact]
+    public void A_return_carries_positive_quantities_like_any_other_document()
+    {
+        // The kind decides the direction, not the sign of the line. A negative quantity
+        // would be a second spelling of the same fact, and every report would have to
+        // normalise before it could sum.
+        SalesInvoice credit = Draft(kind: SalesDocumentKind.Return).Value;
+        UnitOfMeasure each = BaseUnit();
+
+        credit.AddLine(Stocked(each), each, -2m, -2m, 100m, Assessed(200m, 10m))
+            .Error.Code.ShouldBe("SalesInvoice.QuantityNotPositive");
+
+        credit.AddLine(Stocked(each), each, 2m, 2m, 100m, Assessed(200m, 10m))
+            .IsSuccess.ShouldBeTrue();
+
+        credit.Total.Amount.ShouldBe(210m);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>Assesses a line the way the application layer will: through the engine.</summary>
@@ -284,7 +336,9 @@ public sealed class SalesInvoiceTests
     private static Result<SalesInvoice> Draft(
         Ledger? customer = null,
         Warehouse? warehouse = null,
-        CurrencyCode? currency = null) =>
+        CurrencyCode? currency = null,
+        SalesDocumentKind kind = SalesDocumentKind.Invoice,
+        SalesInvoiceId? returns = null) =>
         SalesInvoice.CreateDraft(
             Tenant,
             Firm,
@@ -295,7 +349,9 @@ public sealed class SalesInvoiceTests
             customer ?? PartyIn(Firm, LedgerKind.Customer),
             warehouse ?? Godown(),
             TaxMode.Tax,
-            currency ?? Qar);
+            currency ?? Qar,
+            kind,
+            returns);
 
     private static SalesInvoice Posted()
     {

@@ -81,23 +81,33 @@ public static class SalesJournal
         }
 
         Voucher journal = draft.Value;
-        string narration = $"Sales invoice {invoice.Number}";
 
-        // What the customer owes, which is the invoice total: the one figure on the
-        // document that was rounded, and the one the bill will be raised for.
+        string narration = invoice.IsReturn
+            ? $"Sales return {invoice.Number}"
+            : $"Sales invoice {invoice.Number}";
+
+        // A return is the same journal with every side swapped, which is what it is: the
+        // customer is credited what they no longer owe, the goods come off revenue, and
+        // the tax comes back out of the liability. Expressing it as a sign keeps one
+        // piece of arithmetic instead of two that could drift apart, and a journal that
+        // balances in one direction balances in the other by construction.
+        decimal sign = invoice.IsReturn ? -1m : 1m;
+
+        // What the customer owes, which is the document total: the one figure that was
+        // rounded, and the one the bill or the credit will be raised for.
         Result debited = AddLine(
-            journal, invoice.CustomerLedgerId, invoice.Total.Amount, narration);
+            journal, invoice.CustomerLedgerId, sign * invoice.Total.Amount, narration);
 
         if (debited.IsFailure)
         {
             return Result.Failure<Voucher>(debited.Error);
         }
 
-        // Everything credited is accumulated as it is posted, so what is left over at
-        // the end is exactly the rounding - see below.
+        // Everything on the other side is accumulated as it is posted, so what is left
+        // over at the end is exactly the rounding - see below.
         decimal credited = 0m;
 
-        Result<decimal> revenue = AddRevenue(journal, invoice, accounts, narration);
+        Result<decimal> revenue = AddRevenue(journal, invoice, accounts, sign, narration);
 
         if (revenue.IsFailure)
         {
@@ -106,7 +116,7 @@ public static class SalesJournal
 
         credited += revenue.Value;
 
-        Result<decimal> tax = AddTax(journal, invoice, taxAccounts, narration);
+        Result<decimal> tax = AddTax(journal, invoice, taxAccounts, sign, narration);
 
         if (tax.IsFailure)
         {
@@ -115,7 +125,7 @@ public static class SalesJournal
 
         credited += tax.Value;
 
-        Result<decimal> charges = AddCharges(journal, invoice, narration);
+        Result<decimal> charges = AddCharges(journal, invoice, sign, narration);
 
         if (charges.IsFailure)
         {
@@ -125,7 +135,7 @@ public static class SalesJournal
         credited += charges.Value;
 
         Result rounded = AddRoundOff(
-            journal, invoice, accounts, invoice.Total.Amount - credited, narration);
+            journal, invoice, accounts, (sign * invoice.Total.Amount) - credited, narration);
 
         return rounded.IsFailure ? Result.Failure<Voucher>(rounded.Error) : Result.Success(journal);
     }
@@ -165,22 +175,30 @@ public static class SalesJournal
                 + "exchange rate, which an invoice does not yet carry."));
     }
 
-    /// <summary>Credits the goods to the firm's sales account.</summary>
-    /// <returns>What was credited, so the caller can find the rounding.</returns>
+    /// <summary>Credits the goods to the firm's sales account, or takes them back off it.</summary>
+    /// <returns>What was posted, so the caller can find the rounding.</returns>
+    /// <remarks>
+    /// A return goes to its own contra-revenue account rather than back to sales, which
+    /// is the business's answer of 2026-08-12: net revenue is the same either way, and
+    /// what differs is whether the gross figure and the returns are still separately
+    /// answerable from the chart afterwards.
+    /// </remarks>
     private static Result<decimal> AddRevenue(
         Voucher journal,
         SalesInvoice invoice,
         InventoryAccountMap accounts,
+        decimal sign,
         string narration)
     {
-        Result<LedgerId> sales = accounts.For(StockAccount.SalesRevenue);
+        Result<LedgerId> sales = accounts.For(
+            invoice.IsReturn ? StockAccount.SalesReturn : StockAccount.SalesRevenue);
 
         if (sales.IsFailure)
         {
             return Result.Failure<decimal>(sales.Error);
         }
 
-        decimal amount = Money.Of(invoice.Taxable.Amount, invoice.Currency).Amount;
+        decimal amount = sign * Money.Of(invoice.Taxable.Amount, invoice.Currency).Amount;
         Result posted = AddLine(journal, sales.Value, -amount, narration);
 
         return posted.IsFailure ? Result.Failure<decimal>(posted.Error) : Result.Success(amount);
@@ -196,6 +214,7 @@ public static class SalesJournal
         Voucher journal,
         SalesInvoice invoice,
         TaxAccountMap taxAccounts,
+        decimal sign,
         string narration)
     {
         Dictionary<TaxComponentType, decimal> byHead = [];
@@ -213,7 +232,7 @@ public static class SalesJournal
 
         foreach ((TaxComponentType head, decimal raw) in byHead.OrderBy(pair => pair.Key))
         {
-            decimal amount = Money.Of(raw, invoice.Currency).Amount;
+            decimal amount = sign * Money.Of(raw, invoice.Currency).Amount;
 
             // A head assessed at nothing needs no account. A zero-rated line is a real
             // thing - exports, exempt goods - and refusing the invoice because nobody
@@ -253,6 +272,7 @@ public static class SalesJournal
     private static Result<decimal> AddCharges(
         Voucher journal,
         SalesInvoice invoice,
+        decimal sign,
         string narration)
     {
         decimal credited = 0m;
@@ -261,8 +281,9 @@ public static class SalesJournal
         {
             // An addition is money the customer pays on top, so it is credited; a
             // deduction is a discount the firm gives away, so it is debited. The sign
-            // the charge already carries says which.
-            decimal amount = charge.SignedAmount.Amount;
+            // the charge already carries says which, and the document's own sign says
+            // whether the whole thing runs forwards or backwards.
+            decimal amount = sign * charge.SignedAmount.Amount;
             Result posted = AddLine(journal, charge.LedgerId, -amount, narration);
 
             if (posted.IsFailure)

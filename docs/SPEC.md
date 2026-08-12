@@ -328,6 +328,27 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 > - **The goods go back at what they left at**, not at today's average, so a cancellation
 >   cannot restate the value of everything else on the shelf.
 
+> **Answered 2026-08-12: a return is the same document, running the other way.** Two
+> decisions, both taken deliberately rather than inherited:
+>
+> - **One document type with a kind, not two aggregates.** An invoice and a credit note
+>   have the same shape — lines, tax per component, charges, a rounded total — and differ
+>   only in which way the goods and the money move. §12.9's chain reads as links of one
+>   kind of document, and keeping them together keeps the tax recording, the line checks
+>   and the rounding in one place. A return may name the invoice it is against; an invoice
+>   may not. **Amounts stay positive on both** — the kind decides the direction, because a
+>   negative quantity is a second spelling of the same fact that every report would then
+>   have to normalise before it could sum.
+> - **Returns post to their own contra-revenue account**, a ninth kind of posting on the
+>   per-firm map, seeded as `SALES-RETURN` under Income. Net revenue is the same as
+>   debiting sales directly; what differs is whether "what did we sell" and "what came
+>   back" stay separately answerable from the chart, and §12.10's Sales Return Report is
+>   somebody asking for exactly that.
+>
+> The journal is one piece of arithmetic with a sign, not two: a return credits the
+> customer, debits the returns account and debits each tax head back out of the liability.
+> A journal that balances in one direction balances in the other by construction.
+
 > **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
 > tax engine is asked its question here rather than on the aggregate — the invoice records
 > what the engine answered, so a reprint years later shows the tax that was charged rather

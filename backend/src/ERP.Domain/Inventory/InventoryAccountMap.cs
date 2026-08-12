@@ -61,6 +61,17 @@ public enum StockAccount
     /// </para>
     /// </remarks>
     RoundOff = 8,
+
+    /// <summary>Where the revenue of goods that came back is reversed to.</summary>
+    /// <remarks>
+    /// Its own contra-revenue account rather than a debit straight back to sales, which
+    /// is the business's answer of 2026-08-12. Net revenue is the same either way; what
+    /// differs is whether "what did we sell" and "what came back" can still be answered
+    /// separately afterwards, and §12.10's Sales Return Report is somebody asking for
+    /// exactly that. Netting them into one account makes the gross figure unanswerable
+    /// from the chart.
+    /// </remarks>
+    SalesReturn = 9,
 }
 
 /// <summary>
@@ -213,6 +224,7 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.CostOfGoodsSold => "the cost of goods sold is charged to",
         StockAccount.SalesRevenue => "sales are credited to",
         StockAccount.RoundOff => "rounding differences are posted to",
+        StockAccount.SalesReturn => "returned goods are credited back from",
         _ => account.ToString(),
     };
 }

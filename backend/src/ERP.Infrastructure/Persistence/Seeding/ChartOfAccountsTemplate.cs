@@ -68,6 +68,11 @@ internal static class ChartOfAccountsTemplate
         new("1300", "STOCK", "Stock in Hand", LedgerKind.General),
         new("3100", "CAPITAL", "Capital Account", LedgerKind.General),
         new("4100", "SALES", "Sales Account", LedgerKind.General),
+
+        // Contra-revenue: what came back, kept apart from what went out so both stay
+        // reportable. Under Income rather than Expenses because a return is a reduction
+        // of sales, and putting it among the expenses would overstate both figures.
+        new("4100", "SALES-RETURN", "Sales Returns", LedgerKind.General),
         new("4200", "SERVICE-INC", "Service Income", LedgerKind.General),
         new("5100", "PURCHASE", "Purchase Account", LedgerKind.General),
 

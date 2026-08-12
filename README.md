@@ -64,10 +64,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices` |
 | Sales — customer master, with §12.1's mobile-number lookup | **Done** — 11 application + 7 API tests, at `/api/v1/sales/customers` |
 | Sales — cancelling a posted invoice: goods back, debt withdrawn, books reversed | **Done** — 4 domain + 8 application + 3 API tests |
+| Sales — the return document and its journal, with its own contra-revenue account | **Done** (domain + persistence) — 9 tests; posting one is next |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,027 passing, 0 failing (513 domain + 248 application + 178 API + 20 identity + 68 integration).
+**Test suite:** 1,036 passing, 0 failing (522 domain + 248 application + 178 API + 20 identity + 68 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 

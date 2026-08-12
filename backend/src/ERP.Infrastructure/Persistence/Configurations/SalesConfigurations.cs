@@ -23,6 +23,20 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         builder.Property(invoice => invoice.Date).IsRequired();
         builder.Property(invoice => invoice.Mode).HasConversion<int>().IsRequired();
         builder.Property(invoice => invoice.Status).HasConversion<int>().IsRequired();
+        builder.Property(invoice => invoice.Kind).HasConversion<int>().IsRequired();
+
+        builder.Ignore(invoice => invoice.IsReturn);
+
+        // A return points at the invoice it is against, and nothing may delete that
+        // invoice out from under it - the link is how the credit finds the debt.
+        builder.HasOne<SalesInvoice>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReturnsInvoiceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(invoice => invoice.ReturnsInvoiceId)
+            .HasDatabaseName("ix_sales_invoices_returns_invoice")
+            .HasFilter("returns_invoice_id IS NOT NULL");
 
         builder.Property(invoice => invoice.Currency)
             .HasMaxLength(3).IsFixedLength().IsRequired();

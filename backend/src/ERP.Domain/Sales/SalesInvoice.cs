@@ -10,6 +10,32 @@ using ERP.SharedKernel.ValueObjects;
 
 namespace ERP.Domain.Sales;
 
+/// <summary>Which way a sales document runs.</summary>
+/// <remarks>
+/// <para>
+/// One document type rather than two aggregates, which is the business's answer of
+/// 2026-08-12. An invoice and a credit note have the same shape - lines, tax per
+/// component, charges, a rounded total - and differ only in which way the goods and the
+/// money move, so §12.9's chain reads as links of one kind of document rather than as
+/// separate species. Keeping them together keeps the tax recording, the line checks and
+/// the rounding in one place; two aggregates would be two copies to hold in step.
+/// </para>
+/// <para>
+/// Amounts stay positive on both. A return of three handsets is a line for three, and it
+/// is the kind that decides whether they are leaving or coming back - because a negative
+/// quantity on a line is a spelling of the same fact that every report would then have to
+/// normalise before it could sum.
+/// </para>
+/// </remarks>
+public enum SalesDocumentKind
+{
+    /// <summary>Goods going out, and a debt raised for them.</summary>
+    Invoice = 1,
+
+    /// <summary>Goods coming back, and a credit against what the customer owes.</summary>
+    Return = 2,
+}
+
 /// <summary>Where a sales invoice stands in its lifecycle.</summary>
 public enum SalesInvoiceStatus
 {
@@ -61,24 +87,28 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         FirmId firmId,
         BranchId branchId,
         FinancialYearId financialYearId,
+        SalesDocumentKind kind,
         string number,
         DateOnly date,
         LedgerId customerLedgerId,
         WarehouseId warehouseId,
         TaxMode mode,
-        CurrencyCode currency)
+        CurrencyCode currency,
+        SalesInvoiceId? returnsInvoiceId)
         : base(id)
     {
         TenantId = tenantId;
         FirmId = firmId;
         BranchId = branchId;
         FinancialYearId = financialYearId;
+        Kind = kind;
         Number = number;
         Date = date;
         CustomerLedgerId = customerLedgerId;
         WarehouseId = warehouseId;
         Mode = mode;
         Currency = currency;
+        ReturnsInvoiceId = returnsInvoiceId;
         Status = SalesInvoiceStatus.Draft;
     }
 
@@ -96,6 +126,21 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>Gets the financial year it falls in.</summary>
     public FinancialYearId FinancialYearId { get; private set; }
+
+    /// <summary>Gets which way this document runs: a sale, or goods coming back.</summary>
+    public SalesDocumentKind Kind { get; private set; }
+
+    /// <summary>Gets whether this document gives goods back rather than selling them.</summary>
+    public bool IsReturn => Kind == SalesDocumentKind.Return;
+
+    /// <summary>Gets the invoice this return is against, where it names one.</summary>
+    /// <remarks>
+    /// Optional, because goods come back without their paperwork often enough that
+    /// refusing the return would leave a counter unable to record what is physically in
+    /// front of them. Where it is named, it is what lets the credit be allocated against
+    /// the debt the sale raised rather than left floating on the customer's account.
+    /// </remarks>
+    public SalesInvoiceId? ReturnsInvoiceId { get; private set; }
 
     /// <summary>Gets the invoice number.</summary>
     public string Number { get; private set; }
@@ -228,7 +273,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>Gets what the customer owes.</summary>
     public Money Total => GrossTotal + RoundingDifference;
 
-    /// <summary>Starts a draft invoice.</summary>
+    /// <summary>Starts a draft sales document.</summary>
     /// <param name="tenantId">The owning tenant.</param>
     /// <param name="firmId">The owning firm.</param>
     /// <param name="branchId">The branch raising it.</param>
@@ -239,6 +284,8 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <param name="warehouse">The warehouse the goods leave.</param>
     /// <param name="mode">The tax mode, defaulted from the firm's regime.</param>
     /// <param name="currency">The currency it is stated in.</param>
+    /// <param name="kind">Whether goods are going out or coming back.</param>
+    /// <param name="returnsInvoiceId">The invoice a return is against, where it names one.</param>
     /// <returns>The draft, or the reason it was refused.</returns>
     public static Result<SalesInvoice> CreateDraft(
         TenantId tenantId,
@@ -250,7 +297,9 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         Ledger customer,
         Warehouse warehouse,
         TaxMode mode,
-        CurrencyCode currency)
+        CurrencyCode currency,
+        SalesDocumentKind kind = SalesDocumentKind.Invoice,
+        SalesInvoiceId? returnsInvoiceId = null)
     {
         ArgumentNullException.ThrowIfNull(financialYear);
         ArgumentNullException.ThrowIfNull(customer);
@@ -266,6 +315,22 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         {
             return Result.Failure<SalesInvoice>(Error.Validation(
                 "SalesInvoice.UnknownMode", $"'{mode}' is not a recognised tax mode."));
+        }
+
+        if (!Enum.IsDefined(kind))
+        {
+            return Result.Failure<SalesInvoice>(Error.Validation(
+                "SalesInvoice.UnknownKind", $"'{kind}' is not a kind of sales document."));
+        }
+
+        // An invoice that says which invoice it returns is a document confused about
+        // what it is, and the confusion would reach the accounts: the posting reads the
+        // kind to decide which way the goods and the money move.
+        if (kind == SalesDocumentKind.Invoice && returnsInvoiceId is not null)
+        {
+            return Result.Failure<SalesInvoice>(Error.Validation(
+                "SalesInvoice.NotAReturn",
+                "Only a return may name the invoice it is against."));
         }
 
         // Billed to somebody who is not a customer. A sale to a bank account or an
@@ -309,12 +374,14 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 firmId,
                 branchId,
                 financialYear.Id,
+                kind,
                 number.Trim(),
                 date,
                 customer.Id,
                 warehouse.Id,
                 mode,
-                currency));
+                currency,
+                returnsInvoiceId));
     }
 
     /// <summary>Adds a line to a draft invoice.</summary>
