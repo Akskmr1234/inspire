@@ -66,10 +66,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — cancelling a posted invoice: goods back, debt withdrawn, books reversed | **Done** — 4 domain + 8 application + 3 API tests |
 | Sales — the return document and its journal, with its own contra-revenue account | **Done** — 9 domain tests |
 | Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
+| Sales — a filtered, paged list of documents; first paged list in the API | **Done** — 8 integration + 2 API tests |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,047 passing, 0 failing (522 domain + 258 application + 179 API + 20 identity + 68 integration).
+**Test suite:** 1,057 passing, 0 failing (522 domain + 258 application + 181 API + 20 identity + 76 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -209,6 +210,8 @@ Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 **Financial years are arbitrary date ranges.** The legacy system's year runs 01-10-2021 to 31-12-2026. Nothing may assume a 12-month period or a particular start month.
 
 **The tax engine is jurisdiction-pluggable.** The screenshots show Qatari Riyal with VAT reports *and* Indian CGST/SGST/IGST ledgers. Tax components are data, selected by a per-firm regime — not hardcoded.
+
+**Lists are paged from the sales list onwards.** `PagedResult<T>` — items, page, size, a counted total, and a 200-row ceiling — is the shape every list built after 2026-08-12 takes. The earlier ones (chart of accounts, stock documents) are unpaged and stay that way: one is small, the other is bounded by its date range, and retrofitting paging into them would change a contract screens already depend on.
 
 **Configuration must never require a redeploy.** Menus, permissions, grid columns, dashboards, print layouts, numbering series, and workflow transitions are all rows in the database. If a feature would need a code change to reconfigure, it is not finished.
 

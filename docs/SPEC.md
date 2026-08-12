@@ -369,6 +369,21 @@ Load from an existing document: Sales Return Ref No · Quotation Ref No · Order
 > - **Its own numbering series**, prefixed `SR`, for the document and for the stock receipt
 >   alike. A credit note is not a gap in the invoice sequence.
 
+> **Answered 2026-08-12: lists are paged, starting with sales.** Every list built before
+> this one is unpaged — the chart of accounts because it is a few hundred rows, a stock
+> document list because its date range bounds it. Sales is the first that grows without
+> limit, so `PagedResult<T>` is introduced here as **the shape every later list takes**:
+> the §12.10 reports, purchase, service. Page and size on the query, a **counted** total in
+> the response so a client can show "page 3 of 40", and a **hard ceiling of 200 rows** —
+> without one, a client asking for a page of a million would be requesting the whole table
+> with extra steps and paging would have bought nothing. The older unpaged lists stay as
+> they are until somebody has a reason to change them; retrofitting paging into them later
+> changes a contract screens already depend on, and doing it now would change several at
+> once for no present need.
+>
+> Invoices and returns list together, filtered by kind, because they are one kind of
+> document and a customer's history wants the credit notes among the sales.
+
 > **Built 2026-08-12: entering one.** `POST /api/v1/sales/invoices` takes a draft, and the
 > tax engine is asked its question here rather than on the aggregate — the invoice records
 > what the engine answered, so a reprint years later shows the tax that was charged rather

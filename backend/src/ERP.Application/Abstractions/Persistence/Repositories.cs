@@ -1,3 +1,4 @@
+using ERP.Application.Sales;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
@@ -628,6 +629,44 @@ public interface IInventoryAccountMapRepository
     /// <summary>Adds a map for a firm that has none.</summary>
     /// <param name="map">The map.</param>
     void Add(InventoryAccountMap map);
+}
+
+/// <summary>What a sales list is narrowed by.</summary>
+/// <param name="From">The earliest document date, or no lower bound.</param>
+/// <param name="To">The latest, or no upper bound.</param>
+/// <param name="Kind">Invoices or returns, or both.</param>
+/// <param name="Status">One lifecycle state, or all.</param>
+/// <param name="CustomerLedgerId">One customer, or all.</param>
+/// <param name="Search">Matched against the document number and the customer's reference.</param>
+public sealed record SalesInvoiceFilter(
+    DateOnly? From = null,
+    DateOnly? To = null,
+    SalesDocumentKind? Kind = null,
+    SalesInvoiceStatus? Status = null,
+    LedgerId? CustomerLedgerId = null,
+    string? Search = null);
+
+/// <summary>Reads sales documents for a list.</summary>
+/// <remarks>
+/// Its own reader rather than the repository, because listing and posting want different
+/// things: a posting loads one document whole, and a list wants a page of many with their
+/// customers' names attached and nothing else.
+/// </remarks>
+public interface ISalesInvoiceReader
+{
+    /// <summary>Reads one page of the documents a filter matches, newest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="filter">What to narrow by.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The page, and how many rows the filter matched in total.</returns>
+    Task<PagedResult<SalesInvoiceSummary>> ListAsync(
+        FirmId firmId,
+        SalesInvoiceFilter filter,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads the charges a firm's documents may carry.</summary>

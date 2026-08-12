@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using ERP.Application.Abstractions;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Sales;
@@ -292,6 +293,51 @@ public sealed class SalesEndpointTests
             });
 
         created.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task The_list_pages_and_filters_what_a_firm_has_raised()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        for (int i = 0; i < 3; i++)
+        {
+            await EnterAsync(client, fixtures, 1m, 100m, 5m);
+        }
+
+        // Narrowed to this customer, because the suite shares one database and other
+        // tests have raised their own.
+        PagedResult<SalesInvoiceSummary> page =
+            (await client.GetFromJsonAsync<PagedResult<SalesInvoiceSummary>>(
+                $"{Invoices}?customerLedgerId={fixtures.CustomerId}&page=1&pageSize=2"))!;
+
+        page.Items.Count.ShouldBe(2);
+        page.TotalCount.ShouldBe(3);
+        page.TotalPages.ShouldBe(2);
+        page.HasMore.ShouldBeTrue();
+
+        page.Items[0].CustomerName.ShouldBe("Al Mansoor Trading");
+        page.Items[0].Total.ShouldBe(105m);
+
+        PagedResult<SalesInvoiceSummary> second =
+            (await client.GetFromJsonAsync<PagedResult<SalesInvoiceSummary>>(
+                $"{Invoices}?customerLedgerId={fixtures.CustomerId}&page=2&pageSize=2"))!;
+
+        second.Items.ShouldHaveSingleItem();
+        second.HasMore.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_page_larger_than_the_endpoint_will_serve_is_refused()
+    {
+        // The ceiling is what makes paging worth having: without it a client could ask
+        // for the whole table with extra steps.
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+
+        HttpResponseMessage response = await client.GetAsync($"{Invoices}?pageSize=5000");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]

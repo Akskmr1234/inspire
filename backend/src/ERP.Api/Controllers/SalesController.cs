@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
+using ERP.Application.Abstractions;
 using ERP.Application.Sales;
+using ERP.Domain.Sales;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -35,6 +37,57 @@ public sealed class SalesController : ApiControllerBase
     /// <summary>Initialises a new instance of the <see cref="SalesController"/> class.</summary>
     /// <param name="sender">The request dispatcher.</param>
     public SalesController(ISender sender) => _sender = sender;
+
+    /// <summary>Lists sales documents, newest first.</summary>
+    /// <param name="from">The earliest document date. Omit for no lower bound.</param>
+    /// <param name="to">The latest. Omit for no upper bound.</param>
+    /// <param name="kind">Invoices or returns. Omit for both.</param>
+    /// <param name="status">One lifecycle state. Omit for all.</param>
+    /// <param name="customerLedgerId">One customer. Omit for all.</param>
+    /// <param name="search">Matched against the number and the customer's reference.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds, up to 200.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One page, and how many rows the filter matched.</returns>
+    /// <response code="200">The page.</response>
+    /// <response code="400">The paging or the date range was refused.</response>
+    /// <remarks>
+    /// Paged, unlike the older lists in this API. A chart of accounts is a few hundred
+    /// rows and a stock document list is bounded by its dates, but a busy shop raises
+    /// thousands of invoices a month - so this is the shape the lists that follow will
+    /// take. Returns appear among the invoices unless the kind narrows them out, because
+    /// they are the same kind of document and a customer's history wants both.
+    /// </remarks>
+    [HttpGet]
+    [RequiresPermission("sales", "invoice", "view")]
+    [ProducesResponseType(
+        typeof(PagedResult<SalesInvoiceSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ListAsync(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] SalesDocumentKind? kind,
+        [FromQuery] SalesInvoiceStatus? status,
+        [FromQuery] Guid? customerLedgerId,
+        [FromQuery] string? search,
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        CancellationToken cancellationToken)
+    {
+        Result<PagedResult<SalesInvoiceSummary>> result = await _sender.Send(
+            new ListSalesInvoicesQuery(
+                from,
+                to,
+                kind,
+                status,
+                customerLedgerId,
+                search,
+                page <= 0 ? 1 : page,
+                pageSize <= 0 ? 50 : pageSize),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 
     /// <summary>Reads one invoice, with its lines and what posting it produced.</summary>
     /// <param name="id">The invoice.</param>
