@@ -144,6 +144,27 @@ public sealed class LedgerRepository : ILedgerRepository
     }
 }
 
+/// <summary>The EF Core tax account map repository.</summary>
+public sealed class TaxAccountMapRepository : ITaxAccountMapRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="TaxAccountMapRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public TaxAccountMapRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<TaxAccountMap?> FindAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        _context.TaxAccountMaps
+            .Include(map => map.Accounts)
+            .FirstOrDefaultAsync(map => map.FirmId == firmId, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(TaxAccountMap map) => _context.TaxAccountMaps.Add(map);
+}
+
 /// <summary>The EF Core bill repository.</summary>
 public sealed class BillRepository : IBillRepository
 {

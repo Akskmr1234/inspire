@@ -490,6 +490,7 @@ public sealed partial class DatabaseSeeder
         }
 
         await SeedInventoryAccountsAsync(firm, cancellationToken);
+        await SeedTaxAccountsAsync(firm, cancellationToken);
         await SeedAdditionalLedgersAsync(firm, cancellationToken);
 
         return added;
@@ -634,6 +635,99 @@ public sealed partial class DatabaseSeeder
 
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>Points a firm's tax heads at the tax ledgers seeded for its regime.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <remarks>
+    /// Per regime, because that is what makes the map answerable at all: a VAT firm has
+    /// two heads and a GST firm has eight, and the chart seeded for each carries exactly
+    /// the ledgers its own heads post to. Asking a Qatar firm where its CGST goes would
+    /// be asking about a tax it does not pay.
+    /// <para>
+    /// Food cess and CST are deliberately left unassigned. Neither is seeded a ledger by
+    /// either regime's chart, so a firm that charges one chooses the account itself -
+    /// and until it does, the first document charging that head is refused by name,
+    /// which is the behaviour the map was built for.
+    /// </para>
+    /// <para>
+    /// Gap-filling, like the inventory map: a firm whose accountant has repointed output
+    /// VAT at their own ledger keeps that choice, and a firm whose map predates a head
+    /// gains only the head it was missing.
+    /// </para>
+    /// </remarks>
+    private async Task SeedTaxAccountsAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        TaxAccountMap? map = await _context.TaxAccountMaps
+            .Include(existing => existing.Accounts)
+            .FirstOrDefaultAsync(existing => existing.FirmId == firm.Id, cancellationToken);
+
+        Dictionary<string, Ledger> ledgers = await _context.Ledgers
+            .Where(ledger => ledger.FirmId == firm.Id)
+            .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
+
+        (TaxComponentType Component, TaxDirection Direction, string Code)[] defaults =
+            DefaultTaxAccountsFor(firm.TaxRegime);
+
+        if (defaults.Length == 0)
+        {
+            return;
+        }
+
+        bool isNew = map is null;
+        map ??= TaxAccountMap.Create(firm.TenantId, firm.Id);
+
+        foreach ((TaxComponentType component, TaxDirection direction, string code) in defaults)
+        {
+            bool chosen = map.Accounts.Any(entry =>
+                entry.Component == component && entry.Direction == direction);
+
+            if (!chosen && ledgers.TryGetValue(code, out Ledger? ledger))
+            {
+                map.Assign(component, direction, ledger);
+            }
+        }
+
+        if (isNew)
+        {
+            _context.TaxAccountMaps.Add(map);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>The heads a regime charges, and the seeded ledger each one posts to.</summary>
+    /// <param name="regime">The firm's statutory tax system.</param>
+    /// <returns>The head, direction and ledger code of each default.</returns>
+    /// <remarks>
+    /// The codes are the ones <see cref="ChartOfAccountsTemplate.TaxLedgersFor"/> seeds
+    /// for the same regime. They are read here only to choose a default at seeding time;
+    /// a posting reads the map, never a code, so a firm that renames or recodes one of
+    /// these afterwards keeps posting to the account it chose.
+    /// </remarks>
+    private static (TaxComponentType Component, TaxDirection Direction, string Code)[]
+        DefaultTaxAccountsFor(TaxRegime regime) => regime switch
+        {
+            TaxRegime.GccVat =>
+            [
+                (TaxComponentType.Vat, TaxDirection.Output, "VAT-OUTPUT"),
+                (TaxComponentType.Vat, TaxDirection.Input, "VAT-INPUT"),
+            ],
+
+            TaxRegime.IndiaGst =>
+            [
+                (TaxComponentType.Cgst, TaxDirection.Output, "CGST-OUTPUT"),
+                (TaxComponentType.Sgst, TaxDirection.Output, "SGST-OUTPUT"),
+                (TaxComponentType.Igst, TaxDirection.Output, "IGST-OUTPUT"),
+                (TaxComponentType.Cess, TaxDirection.Output, "CESS-OUTPUT"),
+                (TaxComponentType.Cgst, TaxDirection.Input, "CGST-INPUT"),
+                (TaxComponentType.Sgst, TaxDirection.Input, "SGST-INPUT"),
+                (TaxComponentType.Igst, TaxDirection.Input, "IGST-INPUT"),
+                (TaxComponentType.Cess, TaxDirection.Input, "CESS-INPUT"),
+            ],
+
+            _ => [],
+        };
 
     /// <summary>Creates any menu entries the firm does not already have.</summary>
     /// <param name="firm">The firm the menu belongs to.</param>

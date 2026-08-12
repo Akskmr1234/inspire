@@ -578,6 +578,22 @@ public interface IInventoryAccountMapRepository
     void Add(InventoryAccountMap map);
 }
 
+/// <summary>Reads the accounts a firm's tax heads post to.</summary>
+public interface ITaxAccountMapRepository
+{
+    /// <summary>Finds a firm's map.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The map, or <see langword="null"/> where the firm has none.</returns>
+    Task<TaxAccountMap?> FindAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a map for a firm that has none.</summary>
+    /// <param name="map">The map.</param>
+    void Add(TaxAccountMap map);
+}
+
 /// <summary>Reads and writes serialised units.</summary>
 public interface ISerialNumberRepository
 {

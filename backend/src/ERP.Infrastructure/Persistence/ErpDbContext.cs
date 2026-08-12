@@ -109,6 +109,12 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the charges documents may carry: §9's additional-ledger matrix.</summary>
     public DbSet<AdditionalLedger> AdditionalLedgers => Set<AdditionalLedger>();
 
+    /// <summary>Gets the accounts each firm's tax heads post to, in each direction.</summary>
+    public DbSet<TaxAccountMap> TaxAccountMaps => Set<TaxAccountMap>();
+
+    /// <summary>Gets the individual head-to-ledger choices those maps hold.</summary>
+    public DbSet<TaxAccountAssignment> TaxAccountAssignments => Set<TaxAccountAssignment>();
+
     /// <summary>Gets the cheque register.</summary>
     public DbSet<Cheque> Cheques => Set<Cheque>();
 
@@ -326,6 +332,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<AdditionalLedgerIdConverter>();
         configurationBuilder.Properties<InventoryAccountMapId>()
             .HaveConversion<InventoryAccountMapIdConverter>();
+        configurationBuilder.Properties<TaxAccountMapId>()
+            .HaveConversion<TaxAccountMapIdConverter>();
         configurationBuilder.Properties<SerialNumberId>()
             .HaveConversion<SerialNumberIdConverter>();
         configurationBuilder.Properties<BatchBalanceId>()

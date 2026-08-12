@@ -336,6 +336,16 @@ public sealed class AdditionalLedgerIdConverter : ValueConverter<AdditionalLedge
     }
 }
 
+/// <summary>Converts <see cref="TaxAccountMapId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class TaxAccountMapIdConverter : ValueConverter<TaxAccountMapId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="TaxAccountMapIdConverter"/> class.</summary>
+    public TaxAccountMapIdConverter()
+        : base(id => id.Value, value => TaxAccountMapId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="SalesInvoiceId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class SalesInvoiceIdConverter : ValueConverter<SalesInvoiceId, Guid>
 {
