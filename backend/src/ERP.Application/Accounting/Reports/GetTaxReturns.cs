@@ -1,6 +1,7 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Taxation;
 using ERP.SharedKernel.Results;
@@ -92,24 +93,44 @@ public sealed record OutputTaxReport(
     IReadOnlyList<TaxHeadTotal> Totals,
     IReadOnlyList<OutputTaxRow> Rows);
 
-/// <summary>One posting to an input tax account.</summary>
-/// <param name="VoucherId">The voucher.</param>
-/// <param name="Number">Its number.</param>
-/// <param name="Date">Its date.</param>
-/// <param name="Component">The head the account is mapped to.</param>
-/// <param name="LedgerCode">The account posted to.</param>
-/// <param name="LedgerName">Its name.</param>
-/// <param name="TaxAmount">
-/// What was recovered. A debit adds, a credit takes back - a reversal is a credit.
+/// <summary>One head of input tax, from a purchase or from a hand-written journal.</summary>
+/// <param name="DocumentId">The purchase document, or the voucher where there is none.</param>
+/// <param name="Number">The firm's own number for it.</param>
+/// <param name="Kind">
+/// Whether goods were bought or sent back. Absent where no purchase document produced the
+/// row - a journal somebody wrote straight into a tax account has no direction of its own.
 /// </param>
-/// <param name="Narration">Whatever the line said.</param>
+/// <param name="Date">Its date.</param>
+/// <param name="SupplierCode">The supplier's account code, where one is known.</param>
+/// <param name="SupplierName">Their name.</param>
+/// <param name="TaxRegistrationNumber">Their VAT number or GSTIN, where recorded.</param>
+/// <param name="SupplierInvoiceNumber">
+/// The number on their own tax invoice, which is what a reclaim is made against and what
+/// both regimes' returns report the line under.
+/// </param>
+/// <param name="Component">The head charged.</param>
+/// <param name="Percentage">The rate it was charged at. Nought on a hand-written entry.</param>
+/// <param name="TaxableAmount">
+/// The value the head was charged on, stated against each head so a supply carrying both
+/// CGST and SGST reports its base twice here - the totals count it once. Absent where
+/// nothing knows it, which is every row a journal produced.
+/// </param>
+/// <param name="TaxAmount">
+/// What was recovered. Negative on a return, and on a hand-written credit.
+/// </param>
+/// <param name="Narration">Whatever the journal line said, where it was one.</param>
 public sealed record InputTaxRow(
-    Guid VoucherId,
+    Guid DocumentId,
     string Number,
+    PurchaseDocumentKind? Kind,
     DateOnly Date,
+    string SupplierCode,
+    string SupplierName,
+    string? TaxRegistrationNumber,
+    string? SupplierInvoiceNumber,
     TaxComponentType Component,
-    string LedgerCode,
-    string LedgerName,
+    decimal Percentage,
+    decimal? TaxableAmount,
     decimal TaxAmount,
     string? Narration);
 
@@ -118,19 +139,28 @@ public sealed record InputTaxRow(
 /// <param name="To">The last.</param>
 /// <param name="Regime">The firm's statutory tax system.</param>
 /// <param name="Currency">The currency the figures are in.</param>
+/// <param name="TaxablePurchases">
+/// What was bought, net of returns and counted once however many heads it carried. Only
+/// what a purchase document accounts for: a journal somebody wrote into a tax account
+/// contributes tax without a base, and adding a guess for it would be a figure on a
+/// statutory return that no document supports.
+/// </param>
+/// <param name="ZeroRatedPurchases">Purchases that carried no tax at all.</param>
 /// <param name="Totals">The tax by head.</param>
-/// <param name="Rows">The postings behind those totals.</param>
+/// <param name="Rows">The documents and postings behind those totals.</param>
 /// <remarks>
-/// No taxable value accompanies these. A ledger posting records the tax and not the
-/// purchase it was charged on, and until there are purchase documents there is nothing
-/// that knows the base - stated plainly rather than filled with a figure derived from the
-/// rate, which would be a guess printed on a statutory return.
+/// Built from purchase documents, the way the output side is built from sales ones, plus
+/// any posting to an input account that no purchase document produced. The second half
+/// matters: input tax booked by hand is still input tax, and dropping it from the listing
+/// while it sits in the ledger would make the return understate what is reclaimable.
 /// </remarks>
 public sealed record InputTaxReport(
     DateOnly From,
     DateOnly To,
     TaxRegime Regime,
     string Currency,
+    decimal TaxablePurchases,
+    decimal ZeroRatedPurchases,
     IReadOnlyList<TaxHeadTotal> Totals,
     IReadOnlyList<InputTaxRow> Rows);
 
@@ -140,7 +170,7 @@ public sealed record InputTaxReport(
 /// <param name="InputTax">What was incurred, from the postings.</param>
 /// <param name="NetPayable">The difference. Negative means the state owes the firm.</param>
 /// <param name="OutputTaxPosted">
-/// The same head's movement on its own ledger over the period.
+/// The same head's movement on its own output ledger over the period.
 /// </param>
 /// <param name="Difference">
 /// What the ledger says less what the documents say. Anything other than zero means
@@ -149,13 +179,22 @@ public sealed record InputTaxReport(
 /// it. Surfaced rather than reconciled silently, because only a person can say which of
 /// the two is right.
 /// </param>
+/// <param name="InputTaxPosted">The same, on the input ledger.</param>
+/// <param name="InputDifference">
+/// The input side's version of the same check, and it should always be nought: the input
+/// listing counts hand-written postings as well as purchases, so anything left over is
+/// tax on a ledger the return cannot see at all - an account mapped to a head after the
+/// postings were made, most likely.
+/// </param>
 public sealed record TaxSummaryLine(
     TaxComponentType Component,
     decimal OutputTax,
     decimal InputTax,
     decimal NetPayable,
     decimal OutputTaxPosted,
-    decimal Difference);
+    decimal Difference,
+    decimal InputTaxPosted,
+    decimal InputDifference);
 
 /// <summary>What a firm owes the state for a period.</summary>
 /// <param name="From">The first day counted.</param>
@@ -164,6 +203,8 @@ public sealed record TaxSummaryLine(
 /// <param name="Currency">The currency the figures are in.</param>
 /// <param name="TaxableSupplies">What was supplied, net of returns.</param>
 /// <param name="ZeroRatedSupplies">Supplies that carried no tax.</param>
+/// <param name="TaxablePurchases">What was bought, net of returns.</param>
+/// <param name="ZeroRatedPurchases">Purchases that carried no tax.</param>
 /// <param name="Lines">One line per head the firm's regime uses.</param>
 /// <param name="NetPayable">The total owed, or reclaimable where negative.</param>
 /// <param name="IsReconciled">
@@ -177,6 +218,8 @@ public sealed record TaxSummaryReport(
     string Currency,
     decimal TaxableSupplies,
     decimal ZeroRatedSupplies,
+    decimal TaxablePurchases,
+    decimal ZeroRatedPurchases,
     IReadOnlyList<TaxSummaryLine> Lines,
     decimal NetPayable,
     bool IsReconciled);

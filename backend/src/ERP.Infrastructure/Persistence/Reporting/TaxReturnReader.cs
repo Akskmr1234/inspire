@@ -1,6 +1,7 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Accounting.Reports;
 using ERP.Domain.Accounting;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -79,11 +80,17 @@ public sealed class TaxReturnReader : ITaxReturnReader
         IReadOnlyList<InputTaxRow> rows = await InputRowsAsync(
             firmId, from, to, cancellationToken);
 
+        // Counted once per line, however many heads that line carried - the same trap the
+        // output side avoids, and the same fix.
+        var bases = await PurchasedByLineAsync(firmId, from, to, cancellationToken);
+
         return new InputTaxReport(
             from,
             to,
             firm?.TaxRegime ?? TaxRegime.None,
             firm?.BaseCurrency.Code ?? string.Empty,
+            bases.Where(line => line.Taxed).Sum(line => line.Amount),
+            bases.Where(line => !line.Taxed).Sum(line => line.Amount),
             Totals(rows.Select(row => (row.Component, row.TaxAmount))),
             rows);
     }
@@ -98,10 +105,13 @@ public sealed class TaxReturnReader : ITaxReturnReader
         OutputTaxReport output = await ReadOutputAsync(firmId, from, to, cancellationToken);
         InputTaxReport input = await ReadInputAsync(firmId, from, to, cancellationToken);
 
-        // What the output accounts themselves moved by, so a journal somebody wrote
-        // straight into a tax account is not silently left out of the return.
-        IReadOnlyDictionary<TaxComponentType, decimal> posted = await PostedByHeadAsync(
+        // What the tax accounts themselves moved by, so a journal somebody wrote straight
+        // into one is not silently left out of the return.
+        IReadOnlyDictionary<TaxComponentType, decimal> postedOut = await PostedByHeadAsync(
             firmId, from, to, TaxDirection.Output, cancellationToken);
+
+        IReadOnlyDictionary<TaxComponentType, decimal> postedIn = await PostedByHeadAsync(
+            firmId, from, to, TaxDirection.Input, cancellationToken);
 
         Dictionary<TaxComponentType, decimal> outputs = output.Totals
             .ToDictionary(total => total.Component, total => total.TaxAmount);
@@ -113,7 +123,8 @@ public sealed class TaxReturnReader : ITaxReturnReader
         [
             .. outputs.Keys
                 .Concat(inputs.Keys)
-                .Concat(posted.Keys)
+                .Concat(postedOut.Keys)
+                .Concat(postedIn.Keys)
                 .Distinct()
                 .OrderBy(head => head),
         ];
@@ -124,15 +135,18 @@ public sealed class TaxReturnReader : ITaxReturnReader
         {
             decimal charged = outputs.GetValueOrDefault(head);
             decimal recovered = inputs.GetValueOrDefault(head);
-            decimal onLedger = posted.GetValueOrDefault(head);
+            decimal chargedOnLedger = postedOut.GetValueOrDefault(head);
+            decimal recoveredOnLedger = postedIn.GetValueOrDefault(head);
 
             lines.Add(new TaxSummaryLine(
                 head,
                 charged,
                 recovered,
                 charged - recovered,
-                onLedger,
-                onLedger - charged));
+                chargedOnLedger,
+                chargedOnLedger - charged,
+                recoveredOnLedger,
+                recoveredOnLedger - recovered));
         }
 
         return new TaxSummaryReport(
@@ -142,9 +156,11 @@ public sealed class TaxReturnReader : ITaxReturnReader
             output.Currency,
             output.TaxableSupplies,
             output.ZeroRatedSupplies,
+            input.TaxablePurchases,
+            input.ZeroRatedPurchases,
             lines,
             lines.Sum(line => line.NetPayable),
-            lines.TrueForAll(line => line.Difference == 0m));
+            lines.TrueForAll(line => line.Difference == 0m && line.InputDifference == 0m));
     }
 
     /// <summary>Sums a set of amounts by head, dropping heads that came to nothing.</summary>
@@ -256,8 +272,128 @@ public sealed class TaxReturnReader : ITaxReturnReader
         ];
     }
 
-    /// <summary>Reads every posting to an account the firm maps to an input head.</summary>
+    /// <summary>Reads the input tax of a period: the purchases, and anything booked by hand.</summary>
+    /// <remarks>
+    /// Two sources, and the second is the interesting one. A purchase document knows the
+    /// rate and the value the tax was charged on, so it produces the rows a return actually
+    /// wants. A journal somebody wrote straight into an input account knows only the money -
+    /// but it is still input tax sitting in the ledger, and leaving it out would make the
+    /// return understate what is reclaimable. So the postings a purchase's own journal made
+    /// are excluded by identity and everything else is listed, baseless and labelled so.
+    /// </remarks>
     private async Task<IReadOnlyList<InputTaxRow>> InputRowsAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        List<InputTaxRow> rows = [.. await PurchaseRowsAsync(firmId, from, to, cancellationToken)];
+
+        rows.AddRange(await UnexplainedPostingsAsync(firmId, from, to, cancellationToken));
+
+        return
+        [
+            .. rows
+                .OrderBy(row => row.Date)
+                .ThenBy(row => row.Number, StringComparer.Ordinal)
+                .ThenBy(row => row.Component),
+        ];
+    }
+
+    /// <summary>Reads every head charged on every posted purchase in the period.</summary>
+    private async Task<IReadOnlyList<InputTaxRow>> PurchaseRowsAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        DateOnly start = from;
+        DateOnly end = to;
+
+        var rows = await (
+            from invoice in _context.PurchaseInvoices
+            join line in _context.PurchaseInvoiceLines
+                on invoice.Id equals line.PurchaseInvoiceId
+            join component in _context.PurchaseInvoiceLineTaxes
+                on line.Id equals component.PurchaseInvoiceLineId
+            join supplier in _context.Ledgers on invoice.SupplierLedgerId equals supplier.Id
+            where invoice.FirmId == firmId
+                && !invoice.IsDeleted
+                && invoice.Status == PurchaseInvoiceStatus.Posted
+                && invoice.Date >= start
+                && invoice.Date <= end
+            select new
+            {
+                invoice.Id,
+                invoice.Number,
+                invoice.Kind,
+                invoice.Date,
+                invoice.SupplierInvoiceNumber,
+                SupplierCode = supplier.Code,
+                SupplierName = supplier.Name,
+                supplier.TaxRegistrationNumber,
+                component.Type,
+                component.Percentage,
+                Taxable = line.TaxableAmount.Amount,
+                Tax = component.Amount,
+            }).ToListAsync(cancellationToken);
+
+        return
+        [
+            .. rows.Select(row => new InputTaxRow(
+                row.Id.Value,
+                row.Number,
+                row.Kind,
+                row.Date,
+                row.SupplierCode,
+                row.SupplierName,
+                row.TaxRegistrationNumber,
+                row.SupplierInvoiceNumber,
+                row.Type,
+                row.Percentage,
+                Sign(row.Kind) * row.Taxable,
+                Sign(row.Kind) * row.Tax,
+                Narration: null)),
+        ];
+    }
+
+    /// <summary>Reads what each posted purchase line was charged on, once per line.</summary>
+    private async Task<IReadOnlyList<(decimal Amount, bool Taxed)>> PurchasedByLineAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        DateOnly start = from;
+        DateOnly end = to;
+
+        var lines = await (
+            from invoice in _context.PurchaseInvoices
+            join line in _context.PurchaseInvoiceLines
+                on invoice.Id equals line.PurchaseInvoiceId
+            where invoice.FirmId == firmId
+                && !invoice.IsDeleted
+                && invoice.Status == PurchaseInvoiceStatus.Posted
+                && invoice.Date >= start
+                && invoice.Date <= end
+            select new
+            {
+                invoice.Kind,
+                Taxable = line.TaxableAmount.Amount,
+                Tax = line.TaxAmount.Amount,
+            }).ToListAsync(cancellationToken);
+
+        return [.. lines.Select(line => (Sign(line.Kind) * line.Taxable, line.Tax != 0m))];
+    }
+
+    /// <summary>Reads input tax that reached the ledger by some route other than a purchase.</summary>
+    /// <remarks>
+    /// Identified by the voucher rather than by the amount: every posted purchase names the
+    /// journal it raised, so excluding those leaves exactly the entries somebody wrote by
+    /// hand. Matching on figures instead would drop a hand-written entry that happened to
+    /// equal a purchase's tax, which is not a coincidence a return should be built on.
+    /// </remarks>
+    private async Task<IReadOnlyList<InputTaxRow>> UnexplainedPostingsAsync(
         FirmId firmId,
         DateOnly from,
         DateOnly to,
@@ -276,6 +412,14 @@ public sealed class TaxReturnReader : ITaxReturnReader
         DateOnly start = from;
         DateOnly end = to;
 
+        List<VoucherId> raisedByPurchases = await _context.PurchaseInvoices
+            .Where(invoice =>
+                invoice.FirmId == firmId
+                && !invoice.IsDeleted
+                && invoice.JournalVoucherId != null)
+            .Select(invoice => invoice.JournalVoucherId!.Value)
+            .ToListAsync(cancellationToken);
+
         var postings = await (
             from voucher in _context.Vouchers
             join line in _context.VoucherLines on voucher.Id equals line.VoucherId
@@ -286,13 +430,13 @@ public sealed class TaxReturnReader : ITaxReturnReader
                 && voucher.Date >= start
                 && voucher.Date <= end
                 && ledgerIds.Contains(line.LedgerId)
+                && !raisedByPurchases.Contains(voucher.Id)
             select new
             {
                 voucher.Id,
                 voucher.Number,
                 voucher.Date,
                 line.LedgerId,
-                LedgerCode = ledger.Code,
                 LedgerName = ledger.Name,
                 line.Side,
                 Amount = line.Amount.Amount,
@@ -301,19 +445,21 @@ public sealed class TaxReturnReader : ITaxReturnReader
 
         return
         [
-            .. postings
-                .OrderBy(posting => posting.Date)
-                .ThenBy(posting => posting.Number, StringComparer.Ordinal)
-                .Select(posting => new InputTaxRow(
-                    posting.Id.Value,
-                    posting.Number,
-                    posting.Date,
-                    accounts[posting.LedgerId],
-                    posting.LedgerCode,
-                    posting.LedgerName,
-                    // A debit is tax the firm may recover; a credit gives it back.
-                    posting.Side == EntrySide.Debit ? posting.Amount : -posting.Amount,
-                    posting.Narration)),
+            .. postings.Select(posting => new InputTaxRow(
+                posting.Id.Value,
+                posting.Number,
+                Kind: null,
+                posting.Date,
+                SupplierCode: string.Empty,
+                posting.LedgerName,
+                TaxRegistrationNumber: null,
+                SupplierInvoiceNumber: null,
+                accounts[posting.LedgerId],
+                Percentage: 0m,
+                TaxableAmount: null,
+                // A debit is tax the firm may recover; a credit gives it back.
+                posting.Side == EntrySide.Debit ? posting.Amount : -posting.Amount,
+                posting.Narration)),
         ];
     }
 
@@ -397,4 +543,8 @@ public sealed class TaxReturnReader : ITaxReturnReader
     /// <summary>Which way a document runs: a return reduces what is owed.</summary>
     private static decimal Sign(SalesDocumentKind kind) =>
         kind == SalesDocumentKind.Return ? -1m : 1m;
+
+    /// <summary>The same, for a purchase: goods going back reduce what is reclaimable.</summary>
+    private static decimal Sign(PurchaseDocumentKind kind) =>
+        kind == PurchaseDocumentKind.Return ? -1m : 1m;
 }

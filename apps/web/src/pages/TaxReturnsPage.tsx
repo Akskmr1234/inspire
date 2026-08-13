@@ -164,9 +164,11 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
         {data.isReconciled ? t('tax.reconciled') : t('tax.notReconciled')}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Figure label={t('tax.taxableSupplies')} value={data.taxableSupplies} />
         <Figure label={t('tax.zeroRated')} value={data.zeroRatedSupplies} />
+        <Figure label={t('tax.taxablePurchases')} value={data.taxablePurchases} />
+        <Figure label={t('tax.zeroRatedPurchases')} value={data.zeroRatedPurchases} />
         <Figure label={t('tax.netPayable')} value={data.netPayable} emphasis />
       </div>
 
@@ -180,13 +182,15 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
               <th className="px-3 py-2 text-end font-semibold">{t('tax.netPayable')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.onLedger')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.difference')}</th>
+              <th className="px-3 py-2 text-end font-semibold">{t('tax.inputOnLedger')}</th>
+              <th className="px-3 py-2 text-end font-semibold">{t('tax.inputDifference')}</th>
             </tr>
           </thead>
 
           <tbody>
             {data.lines.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
                   {t('tax.nothingCharged')}
                 </td>
               </tr>
@@ -216,6 +220,17 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
                     )}
                   >
                     {moneyAlways(line.difference)}
+                  </td>
+                  <td className="px-3 py-1.5 text-end font-mono text-slate-500">
+                    {moneyAlways(line.inputTaxPosted)}
+                  </td>
+                  <td
+                    className={clsx(
+                      'px-3 py-1.5 text-end font-mono',
+                      line.inputDifference !== 0 && 'text-red-700 dark:text-red-400',
+                    )}
+                  >
+                    {moneyAlways(line.inputDifference)}
                   </td>
                 </tr>
               ))
@@ -290,21 +305,32 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
 
   return (
     <div className="space-y-3">
-      {/* Said once, plainly, where somebody reading the column would otherwise wonder
-          why it is missing. */}
-      <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-        {t('tax.inputHint')}
-      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Figure label={t('tax.taxablePurchases')} value={report.taxablePurchases} />
+        <Figure label={t('tax.zeroRatedPurchases')} value={report.zeroRatedPurchases} />
+      </div>
+
+      {/* Only where there is one, and only about the rows it applies to: a listing built
+          from purchases carries its base, and a hand-written journal cannot. */}
+      {report.rows.some((row) => row.taxableAmount === null) && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          {t('tax.inputHint')}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-slate-100 dark:bg-slate-800">
             <tr>
-              <th className="px-3 py-2 text-start font-semibold">{t('tax.voucher')}</th>
+              <th className="px-3 py-2 text-start font-semibold">{t('tax.document')}</th>
               <th className="px-3 py-2 text-start font-semibold">{t('sales.date')}</th>
-              <th className="px-3 py-2 text-start font-semibold">{t('tax.account')}</th>
+              <th className="px-3 py-2 text-start font-semibold">{t('purchase.supplier')}</th>
+              <th className="px-3 py-2 text-start font-semibold">
+                {t('purchase.supplierInvoice')}
+              </th>
               <th className="px-3 py-2 text-start font-semibold">{t('tax.head')}</th>
-              <th className="px-3 py-2 text-start font-semibold">{t('tax.narration')}</th>
+              <th className="px-3 py-2 text-end font-semibold">{t('tax.rate')}</th>
+              <th className="px-3 py-2 text-end font-semibold">{t('tax.taxableValue')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.tax')}</th>
             </tr>
           </thead>
@@ -312,23 +338,33 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
           <tbody>
             {report.rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
                   {t('tax.noInput')}
                 </td>
               </tr>
             ) : (
               report.rows.map((row, index) => (
                 <tr
-                  key={`${row.voucherId}-${index}`}
+                  key={`${row.documentId}-${row.component}-${index}`}
                   className="border-t border-slate-100 dark:border-slate-900"
                 >
                   <td className="px-3 py-1.5">{row.number}</td>
                   <td className="px-3 py-1.5">{row.date}</td>
                   <td className="px-3 py-1.5">
-                    {row.ledgerCode} {row.ledgerName}
+                    {/* A journal has no supplier; what it has is whatever the line said,
+                        which is the only context that row carries. */}
+                    {row.kind === null
+                      ? (row.narration ?? t('tax.byJournal'))
+                      : row.supplierName}
                   </td>
+                  <td className="px-3 py-1.5">{row.supplierInvoiceNumber ?? '—'}</td>
                   <td className="px-3 py-1.5">{componentName(row.component)}</td>
-                  <td className="px-3 py-1.5 text-slate-500">{row.narration ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-end font-mono">
+                    {row.kind === null ? '—' : `${row.percentage}%`}
+                  </td>
+                  <td className="px-3 py-1.5 text-end font-mono">
+                    {row.taxableAmount === null ? '—' : moneyAlways(row.taxableAmount)}
+                  </td>
                   <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.taxAmount)}</td>
                 </tr>
               ))

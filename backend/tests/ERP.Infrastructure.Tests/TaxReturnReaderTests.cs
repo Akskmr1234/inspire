@@ -1,6 +1,7 @@
 using ERP.Application.Accounting.Reports;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -8,6 +9,7 @@ using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Reporting;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Tests;
 
@@ -143,19 +145,140 @@ public sealed class TaxReturnReaderTests
     }
 
     [Fact]
-    public async Task Input_tax_is_read_from_postings_to_the_mapped_accounts()
+    public async Task Input_tax_is_read_from_the_purchases_that_were_charged_it()
     {
+        // What the report gained when purchase documents arrived: a base. A ledger
+        // posting knows the money and nothing else, and a return has to state what the
+        // tax was charged on.
         Books books = await Books.CreateAsync(_fixture, TaxRegime.GccVat);
 
-        await books.PostToInputAsync("JV/0001", new DateOnly(2026, 6, 5), 120m);
+        await books.BuyAsync(
+            "PU/0001", new DateOnly(2026, 6, 5), taxable: 2_000m, tax: 100m,
+            supplierInvoiceNumber: "GW-4471");
 
         InputTaxReport report = await books.InputAsync();
 
         InputTaxRow row = report.Rows.ShouldHaveSingleItem();
 
+        row.Number.ShouldBe("PU/0001");
+        row.Kind.ShouldBe(PurchaseDocumentKind.Invoice);
         row.Component.ShouldBe(TaxComponentType.Vat);
-        row.TaxAmount.ShouldBe(120m);
-        report.Totals.ShouldHaveSingleItem().TaxAmount.ShouldBe(120m);
+        row.TaxAmount.ShouldBe(100m);
+        row.TaxableAmount.ShouldBe(2_000m);
+
+        // Reported against the supplier's own tax invoice, which is what a reclaim is
+        // made against.
+        row.SupplierInvoiceNumber.ShouldBe("GW-4471");
+        row.SupplierName.ShouldBe("Gulf Wholesale");
+        row.TaxRegistrationNumber.ShouldBe("VAT-8891");
+
+        report.TaxablePurchases.ShouldBe(2_000m);
+        report.Totals.ShouldHaveSingleItem().TaxAmount.ShouldBe(100m);
+    }
+
+    [Fact]
+    public async Task A_purchase_carrying_two_heads_is_counted_once_in_the_purchases()
+    {
+        // The same trap the output side has, on the other side of the return. A GST
+        // purchase carries CGST and SGST on one base; adding the base per head would
+        // report twice the purchases the firm actually made, and every tax figure on the
+        // return would still be right.
+        Books books = await Books.CreateAsync(_fixture, TaxRegime.IndiaGst);
+
+        await books.BuyAsync(
+            "PU/0001", new DateOnly(2026, 6, 5), 1_000m, 180m,
+            heads: [TaxComponentType.Cgst, TaxComponentType.Sgst]);
+
+        InputTaxReport report = await books.InputAsync();
+
+        report.Rows.Count.ShouldBe(2);
+        report.TaxablePurchases.ShouldBe(1_000m);
+        report.Totals.Sum(total => total.TaxAmount).ShouldBe(180m);
+    }
+
+    [Fact]
+    public async Task A_debit_note_reduces_what_is_reclaimable()
+    {
+        Books books = await Books.CreateAsync(_fixture, TaxRegime.GccVat);
+
+        await books.BuyAsync("PU/0001", new DateOnly(2026, 6, 5), 2_000m, 100m);
+        await books.BuyAsync(
+            "PR/0001", new DateOnly(2026, 6, 20), 500m, 25m,
+            kind: PurchaseDocumentKind.Return);
+
+        InputTaxReport report = await books.InputAsync();
+
+        report.TaxablePurchases.ShouldBe(1_500m);
+        report.Totals.ShouldHaveSingleItem().TaxAmount.ShouldBe(75m);
+    }
+
+    [Fact]
+    public async Task Only_posted_purchases_reach_a_return()
+    {
+        Books books = await Books.CreateAsync(_fixture, TaxRegime.GccVat);
+
+        await books.BuyAsync(
+            "PU/0001", new DateOnly(2026, 6, 5), 1_000m, 50m,
+            status: PurchaseInvoiceStatus.Draft);
+
+        await books.BuyAsync(
+            "PU/0002", new DateOnly(2026, 6, 6), 1_000m, 50m,
+            status: PurchaseInvoiceStatus.Cancelled);
+
+        InputTaxReport report = await books.InputAsync();
+
+        report.Rows.ShouldBeEmpty();
+        report.TaxablePurchases.ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task Input_tax_booked_by_hand_is_still_listed_and_says_it_has_no_base()
+    {
+        // The half that could not simply be replaced. A journal into an input account is
+        // still input tax in the ledger, and dropping it from the listing would make the
+        // return understate what is reclaimable - so it is reported with the base absent
+        // rather than filled with a guess.
+        Books books = await Books.CreateAsync(_fixture, TaxRegime.GccVat);
+
+        await books.BuyAsync("PU/0001", new DateOnly(2026, 6, 5), 2_000m, 100m);
+        await books.PostToInputAsync("JV/0001", new DateOnly(2026, 6, 12), 30m);
+
+        InputTaxReport report = await books.InputAsync();
+
+        report.Rows.Count.ShouldBe(2);
+
+        InputTaxRow byHand = report.Rows.Single(row => row.Number == "JV/0001");
+
+        byHand.Kind.ShouldBeNull();
+        byHand.TaxableAmount.ShouldBeNull();
+        byHand.TaxAmount.ShouldBe(30m);
+
+        // The tax counts; the base is only what the documents account for.
+        report.Totals.ShouldHaveSingleItem().TaxAmount.ShouldBe(130m);
+        report.TaxablePurchases.ShouldBe(2_000m);
+    }
+
+    [Fact]
+    public async Task A_purchase_journal_is_not_counted_twice()
+    {
+        // The purchase's own journal debits the input account, and the document reports
+        // the same tax. Reading both without excluding one would double every reclaim
+        // the firm makes.
+        Books books = await Books.CreateAsync(_fixture, TaxRegime.GccVat);
+
+        await books.BuyAsync("PU/0001", new DateOnly(2026, 6, 5), 2_000m, 100m);
+        await books.RaiseJournalForAsync("PU/0001", new DateOnly(2026, 6, 5), 100m);
+
+        InputTaxReport report = await books.InputAsync();
+
+        report.Rows.ShouldHaveSingleItem().Number.ShouldBe("PU/0001");
+        report.Totals.ShouldHaveSingleItem().TaxAmount.ShouldBe(100m);
+
+        // And the ledger agrees with the documents, so the summary is content.
+        TaxSummaryReport summary = await books.SummaryAsync();
+
+        summary.Lines.ShouldHaveSingleItem().InputTaxPosted.ShouldBe(100m);
+        summary.Lines[0].InputDifference.ShouldBe(0m);
     }
 
     [Fact]
@@ -239,6 +362,8 @@ public sealed class TaxReturnReaderTests
 
         private Ledger Customer { get; set; } = null!;
 
+        private Ledger Supplier { get; set; } = null!;
+
         private Warehouse Store { get; set; } = null!;
 
         private Product Product { get; set; } = null!;
@@ -274,6 +399,20 @@ public sealed class TaxReturnReaderTests
                 debtors, "2000", "Al Mansoor", LedgerKind.Customer, CurrencyCode.Qar).Value;
 
             context.Ledgers.Add(books.Customer);
+
+            AccountGroup creditors = AccountGroup.CreateRoot(
+                books._tenantId, books.FirmId, "SC", "Sundry Creditors",
+                AccountNature.Liability).Value;
+
+            context.AccountGroups.Add(creditors);
+
+            books.Supplier = Ledger.Create(
+                creditors, "3000", "Gulf Wholesale", LedgerKind.Supplier,
+                CurrencyCode.Qar).Value;
+
+            books.Supplier.SetTaxDetails("VAT-8891", regime == TaxRegime.IndiaGst ? "KL" : null);
+
+            context.Ledgers.Add(books.Supplier);
 
             TaxAccountMap map = TaxAccountMap.Create(books._tenantId, books.FirmId);
 
@@ -368,6 +507,85 @@ public sealed class TaxReturnReaderTests
             }
 
             context.SalesInvoices.Add(document);
+
+            await context.SaveChangesAsync();
+        }
+
+        /// <summary>Files a purchase document charging the heads named.</summary>
+        internal async Task BuyAsync(
+            string number,
+            DateOnly date,
+            decimal taxable,
+            decimal tax,
+            PurchaseDocumentKind kind = PurchaseDocumentKind.Invoice,
+            PurchaseInvoiceStatus status = PurchaseInvoiceStatus.Posted,
+            IReadOnlyList<TaxComponentType>? heads = null,
+            string? supplierInvoiceNumber = null)
+        {
+            await using ErpDbContext context = CreateContext();
+
+            PurchaseInvoice document = PurchaseInvoice.CreateDraft(
+                _tenantId, FirmId, BranchId.NewId(), Year, number, date,
+                Supplier, Store, TaxMode.Tax, CurrencyCode.Qar, kind).Value;
+
+            document.AddLine(
+                Product, Unit, 1m, 1m, taxable,
+                Assessed(taxable, tax, heads ?? [TaxComponentType.Vat]))
+                .IsSuccess.ShouldBeTrue();
+
+            document.SetSupplierDocument(supplierInvoiceNumber, null, null)
+                .IsSuccess.ShouldBeTrue();
+
+            if (status != PurchaseInvoiceStatus.Draft)
+            {
+                document.Post(UserId.NewId(), DateTimeOffset.UtcNow).IsSuccess.ShouldBeTrue();
+            }
+
+            if (status == PurchaseInvoiceStatus.Cancelled)
+            {
+                document.Cancel("Entered in error").IsSuccess.ShouldBeTrue();
+            }
+
+            context.PurchaseInvoices.Add(document);
+
+            await context.SaveChangesAsync();
+        }
+
+        /// <summary>Raises the journal a purchase's posting would have raised, and links it.</summary>
+        /// <remarks>
+        /// What the posting handler does, done by hand so the reader can be shown a
+        /// purchase whose tax is in the ledger as well as on the document. The receipt is
+        /// a draft rather than a posted one: nothing here reads it, and the row exists
+        /// only so the document has something real to point at.
+        /// </remarks>
+        internal async Task RaiseJournalForAsync(string number, DateOnly date, decimal tax)
+        {
+            await using ErpDbContext context = CreateContext();
+
+            PurchaseInvoice document = await context.PurchaseInvoices
+                .Include(invoice => invoice.Lines)
+                .SingleAsync(invoice => invoice.Number == number);
+
+            StockDocument receipt = StockDocument.CreateDraft(
+                _tenantId, FirmId, Year, StockDocumentType.PurchaseReceipt,
+                $"PR/{number}", date, Store).Value;
+
+            context.StockDocuments.Add(receipt);
+
+            Voucher journal = Voucher.CreateDraft(
+                _tenantId, FirmId, BranchId.NewId(), Year, VoucherType.Journal,
+                $"JV/{number}", date, CurrencyCode.Qar, CurrencyCode.Qar).Value;
+
+            journal.AddLine(_input[TaxComponentType.Vat].Id, EntrySide.Debit, tax, "Input tax")
+                .IsSuccess.ShouldBeTrue();
+            journal.AddLine(Supplier.Id, EntrySide.Credit, tax, "Input tax")
+                .IsSuccess.ShouldBeTrue();
+
+            journal.Post(UserId.NewId(), DateTimeOffset.UtcNow).IsSuccess.ShouldBeTrue();
+
+            context.Vouchers.Add(journal);
+
+            document.RecordPosting(receipt.Id, null, journal.Id).IsSuccess.ShouldBeTrue();
 
             await context.SaveChangesAsync();
         }

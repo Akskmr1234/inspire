@@ -71,7 +71,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
 | Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
 | Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
-| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** — 11 integration + 5 API tests |
+| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** — 16 integration + 7 API tests; the input side reads purchase documents |
 | Accounting — the returns screen, one for both regimes | **Done** — verified in a browser, English and Arabic |
 | Purchase — invoice aggregate: lines, input tax per component, charges, rounding | **Done** (domain + persistence) — 26 domain tests |
 | Purchase — the journal a posted purchase raises, through a goods-received account | **Done** — 21 domain tests; see the note below |
@@ -84,7 +84,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,138 passing, 0 failing (567 domain + 261 application + 203 API + 20 identity + 87 integration).
+**Test suite:** 1,145 passing, 0 failing (567 domain + 261 application + 205 API + 20 identity + 92 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -105,7 +105,11 @@ Integration tests need a running Docker daemon.
 >
 > `GET /api/v1/accounting/reports/{output-tax,input-tax,tax-summary}` produce §7.3's three reports, and one set of endpoints serves both regimes: a Qatar firm is answered in VAT, an Indian firm in CGST, SGST, IGST and cess. Only posted documents count; credit notes net off the period they fall in; the taxable value is counted **once per line**, so a GST supply carrying two heads is not reported as twice the sales.
 >
-> **The input side reports tax without a base.** A posted purchase now produces input tax, and it lands in the accounts this report reads — but the report is built from ledger postings, and a posting records the tax rather than the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. Reading it from the purchase documents, the way the output side already reads the sales ones, is the next change here.
+> **The input side now has a base**, read from the purchase documents the way the output side reads the sales ones: the supplier, their own tax invoice number, the rate, and the value the tax was charged on. Counted once per line, so a GST purchase carrying CGST and SGST reports its base once and its tax twice — the same trap the output side avoids and the same fix. A debit note reduces the period it falls in.
+>
+> **Tax booked by hand is still listed, and says it has no base.** Replacing the ledger-posting route outright would have been the tidy change and the wrong one: a journal written into an input account is still input tax sitting in the ledger, and dropping it from the listing while it stays in the accounts would make the return understate what is reclaimable. So both are read — the postings a purchase's own journal made are excluded by identity, and whatever is left is listed with the base absent rather than filled with a figure derived from the rate. The screen says which rows those are.
+>
+> **The summary reconciles both directions now.** `InputDifference` should always be nought, because the input listing counts hand-written postings as well as purchases; anything left over is tax on a ledger the return cannot see at all — an account mapped to a head after the postings were made, most likely.
 >
 > **The summary reconciles itself against the ledger.** Each head shows what the documents charged beside what that head's account actually moved by. `isReconciled: false` means output tax reached the books by some route other than a sales document, and a return built from the documents alone would understate it. It is surfaced, not corrected — only a person can say which figure is right.
 >

@@ -76,14 +76,22 @@ export interface OutputTaxReport {
   readonly rows: readonly OutputTaxRow[];
 }
 
-/** One posting to an input tax account. */
+/** One head of input tax, from a purchase or from a hand-written journal. */
 export interface InputTaxRow {
-  readonly voucherId: string;
+  readonly documentId: string;
   readonly number: string;
+  /** Absent where no purchase document produced the row. */
+  readonly kind: number | null;
   readonly date: string;
+  readonly supplierCode: string;
+  readonly supplierName: string;
+  readonly taxRegistrationNumber: string | null;
+  /** What a reclaim is made against, and what a return reports the line under. */
+  readonly supplierInvoiceNumber: string | null;
   readonly component: number;
-  readonly ledgerCode: string;
-  readonly ledgerName: string;
+  readonly percentage: number;
+  /** Absent where nothing knows it — every row a journal produced. */
+  readonly taxableAmount: number | null;
   readonly taxAmount: number;
   readonly narration: string | null;
 }
@@ -94,6 +102,8 @@ export interface InputTaxReport {
   readonly to: string;
   readonly regime: number;
   readonly currency: string;
+  readonly taxablePurchases: number;
+  readonly zeroRatedPurchases: number;
   readonly totals: readonly TaxHeadTotal[];
   readonly rows: readonly InputTaxRow[];
 }
@@ -106,6 +116,8 @@ export interface TaxSummaryLine {
   readonly netPayable: number;
   readonly outputTaxPosted: number;
   readonly difference: number;
+  readonly inputTaxPosted: number;
+  readonly inputDifference: number;
 }
 
 /** What the firm owes the state for a period. */
@@ -116,6 +128,8 @@ export interface TaxSummaryReport {
   readonly currency: string;
   readonly taxableSupplies: number;
   readonly zeroRatedSupplies: number;
+  readonly taxablePurchases: number;
+  readonly zeroRatedPurchases: number;
   readonly lines: readonly TaxSummaryLine[];
   readonly netPayable: number;
   /**

@@ -19,9 +19,9 @@ services:
     container_name: erp-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: inspire_erp
+      POSTGRES_DB: postgres
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_local_dev_only
+      POSTGRES_PASSWORD: postgres
       # Deterministic collation, so an ORDER BY behaves the same on every
       # developer's machine and in CI.
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
@@ -35,7 +35,7 @@ services:
     healthcheck:
       # The API and the migration job both wait on this, so it must test the
       # specific database rather than merely that the process is listening.
-      test: ["CMD-SHELL", "pg_isready -U postgres -d inspire_erp"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -78,7 +78,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__Postgres: >-
-        Host=postgres;Port=5432;Database=inspire_erp;Username=erp_app;Password=erp_local_dev_only
+        Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres
       ConnectionStrings__Redis: redis:6379
       # Local-only signing key. A deployed environment must supply this from a
       # secret store - anyone holding it can mint a token for any user in any

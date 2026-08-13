@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Purchase;
 using ERP.Application.Sales;
 using ERP.Domain.Inventory;
+using ERP.Domain.Purchase;
 using ERP.Domain.Taxation;
 
 namespace ERP.Api.Tests;
@@ -75,19 +77,73 @@ public sealed class TaxReturnEndpointTests
     }
 
     [Fact]
-    public async Task The_input_side_is_empty_until_something_posts_to_it()
+    public async Task A_posted_purchase_reaches_the_input_tax_return_with_its_base()
     {
-        // Nothing produces input tax yet but a journal somebody writes: no purchase
-        // module exists. Stated plainly rather than filled with a derived figure.
+        // What the return gained when purchases arrived. The whole chain through the real
+        // host: a supplier, a purchase, a posting, and the reclaim reported against the
+        // supplier's own tax invoice with the value it was charged on.
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
 
+        string reference = $"GW-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+        await BuyAsync(client, quantity: 4m, rate: 25m, taxPercentage: 5m, reference);
+
+        InputTaxReport report = await InputAsync(client);
+
+        InputTaxRow row = report.Rows.Single(
+            candidate => candidate.SupplierInvoiceNumber == reference);
+
+        row.Kind.ShouldBe(PurchaseDocumentKind.Invoice);
+        row.Component.ShouldBe(TaxComponentType.Vat);
+        row.Percentage.ShouldBe(5m);
+        row.TaxableAmount.ShouldBe(100m);
+        row.TaxAmount.ShouldBe(5m);
+
+        report.TaxablePurchases.ShouldBeGreaterThanOrEqualTo(100m);
+    }
+
+    [Fact]
+    public async Task The_purchase_journal_is_not_counted_beside_the_purchase()
+    {
+        // Posting a purchase debits the input account and records the document, so the
+        // return could see the same tax twice. It sees it once, and the summary agrees
+        // with the ledger.
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+
+        string reference = $"GW-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+        await BuyAsync(client, 4m, 25m, 5m, reference);
+
+        InputTaxReport report = await InputAsync(client);
+
+        report.Rows.Count(row => row.SupplierInvoiceNumber == reference).ShouldBe(1);
+
+        TaxSummaryReport summary = await client.GetFromJsonAsync<TaxSummaryReport>(
+            $"{Reports}/tax-summary?from={Today.AddDays(-1):yyyy-MM-dd}&to={Today:yyyy-MM-dd}")
+            ?? throw new InvalidOperationException("No report.");
+
+        TaxSummaryLine line = summary.Lines.Single(
+            candidate => candidate.Component == TaxComponentType.Vat);
+
+        line.InputDifference.ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task The_input_side_is_empty_until_something_is_bought()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+
+        // A day nothing happened on, so the listing has nothing to state.
+        DateOnly quiet = Today.AddYears(-1);
+
         InputTaxReport report = await client.GetFromJsonAsync<InputTaxReport>(
-            $"{Reports}/input-tax?from={Today.AddDays(-1):yyyy-MM-dd}&to={Today:yyyy-MM-dd}")
+            $"{Reports}/input-tax?from={quiet:yyyy-MM-dd}&to={quiet:yyyy-MM-dd}")
             ?? throw new InvalidOperationException("No report.");
 
         report.Regime.ShouldBe(TaxRegime.GccVat);
         report.Rows.ShouldBeEmpty();
         report.Totals.ShouldBeEmpty();
+        report.TaxablePurchases.ShouldBe(0m);
     }
 
     [Fact]
@@ -193,6 +249,89 @@ public sealed class TaxReturnEndpointTests
 
         HttpResponseMessage posted = await client.PostAsJsonAsync(
             $"{Invoices}/{draft.SalesInvoiceId}/post", new { });
+
+        posted.StatusCode.ShouldBe(
+            HttpStatusCode.OK, await posted.Content.ReadAsStringAsync());
+    }
+
+    private static async Task<InputTaxReport> InputAsync(HttpClient client) =>
+        await client.GetFromJsonAsync<InputTaxReport>(
+            $"{Reports}/input-tax?from={Today.AddDays(-1):yyyy-MM-dd}&to={Today:yyyy-MM-dd}")
+        ?? throw new InvalidOperationException("No report.");
+
+    /// <summary>Buys something and posts it, so there is a reclaim for the return to state.</summary>
+    private static async Task BuyAsync(
+        HttpClient client,
+        decimal quantity,
+        decimal rate,
+        decimal taxPercentage,
+        string supplierInvoiceNumber)
+    {
+        string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+
+        Guid categoryId = await CreateAsync(
+            client, "categories", new { Code = $"ICAT{suffix}", Name = $"Input {suffix}" });
+
+        Guid unitId = await CreateAsync(
+            client, "units", new { Code = $"IEA{suffix}", Name = "Each" });
+
+        Guid warehouseId = await CreateAsync(
+            client, "warehouses", new { Code = $"IWH{suffix}", Name = "Input store" });
+
+        HttpResponseMessage product = await client.PostAsJsonAsync(
+            $"{Inventory}/products",
+            new
+            {
+                Code = $"INP{suffix}",
+                Description = "A thing bought",
+                CategoryId = categoryId,
+                StockUnitId = unitId,
+                ItemType = 1,
+            });
+
+        product.StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        Guid productId = await product.Content.ReadFromJsonAsync<Guid>();
+
+        HttpResponseMessage supplier = await client.PostAsJsonAsync(
+            "/api/v1/purchase/suppliers",
+            new { Code = $"ISUP{suffix}", Name = $"Supplier {suffix}" });
+
+        supplier.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await supplier.Content.ReadAsStringAsync());
+
+        Guid supplierId =
+            (await supplier.Content.ReadFromJsonAsync<SupplierResponse>())!.SupplierId;
+
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            "/api/v1/purchase/invoices",
+            new
+            {
+                Date = Today,
+                SupplierLedgerId = supplierId,
+                WarehouseId = warehouseId,
+                SupplierInvoiceNumber = supplierInvoiceNumber,
+                Lines = new[]
+                {
+                    new
+                    {
+                        ProductId = productId,
+                        Quantity = quantity,
+                        Rate = rate,
+                        TaxPercentage = taxPercentage,
+                    },
+                },
+            });
+
+        created.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+
+        Guid purchaseId =
+            (await created.Content.ReadFromJsonAsync<PurchaseInvoiceResponse>())!
+            .PurchaseInvoiceId;
+
+        HttpResponseMessage posted = await client.PostAsJsonAsync(
+            $"/api/v1/purchase/invoices/{purchaseId}/post", new { });
 
         posted.StatusCode.ShouldBe(
             HttpStatusCode.OK, await posted.Content.ReadAsStringAsync());
