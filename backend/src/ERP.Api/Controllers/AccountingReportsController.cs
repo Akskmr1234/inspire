@@ -649,4 +649,97 @@ public sealed class AccountingReportsController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Lists the output tax charged over a period, document by document.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The heads charged, with the documents behind them.</returns>
+    /// <response code="200">The report.</response>
+    /// <response code="400">The period is invalid.</response>
+    /// <remarks>
+    /// §7.3's Output Tax report, and it answers in whichever heads the firm's own regime
+    /// uses: a Qatar firm sees VAT, an Indian firm sees CGST, SGST, IGST and cess. There
+    /// is no separate GST endpoint, because the shape of a return is the same question
+    /// asked of a different set of heads — one route that reports what a firm actually
+    /// charges cannot show anybody a tax they do not pay.
+    /// <para>
+    /// Only posted documents count, and returns are netted off. The taxable value is
+    /// counted once per line even where a supply carried two heads, so a GST firm's
+    /// supplies are not reported at twice what it sold.
+    /// </para>
+    /// </remarks>
+    [HttpGet("output-tax")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(OutputTaxReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetOutputTaxAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        Result<OutputTaxReport> result = await _sender.Send(
+            new GetOutputTaxQuery(from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Lists the input tax incurred over a period, posting by posting.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The heads recovered, with the postings behind them.</returns>
+    /// <response code="200">The report.</response>
+    /// <response code="400">The period is invalid.</response>
+    /// <remarks>
+    /// Read from postings to the input accounts the firm's tax map names. No taxable
+    /// value accompanies them: a ledger posting records the tax and not the purchase it
+    /// was charged on, and until purchase documents exist nothing knows the base. Left
+    /// absent rather than derived from the rate, which would put a guess on a statutory
+    /// return.
+    /// </remarks>
+    [HttpGet("input-tax")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(InputTaxReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetInputTaxAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        Result<InputTaxReport> result = await _sender.Send(
+            new GetInputTaxQuery(from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>States what the firm owes for a period, head by head.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Output less input per head, and the net payable.</returns>
+    /// <response code="200">The return, with a reconciliation check.</response>
+    /// <response code="400">The period is invalid.</response>
+    /// <remarks>
+    /// §7.3's VAT Summary. Each line carries what the documents charged and what the
+    /// head's own ledger moved by, and <c>isReconciled</c> says whether the two agree
+    /// everywhere. A difference is not an error: it means output tax reached the books by
+    /// some route other than a sales document — a journal somebody wrote by hand — and a
+    /// return built from the documents alone would understate it. Surfaced rather than
+    /// reconciled silently, because only a person can say which figure is right.
+    /// </remarks>
+    [HttpGet("tax-summary")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(TaxSummaryReport), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetTaxSummaryAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        Result<TaxSummaryReport> result = await _sender.Send(
+            new GetTaxSummaryQuery(from, to), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 }

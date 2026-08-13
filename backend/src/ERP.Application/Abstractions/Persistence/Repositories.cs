@@ -1,3 +1,4 @@
+using ERP.Application.Accounting.Reports;
 using ERP.Application.Sales;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
@@ -629,6 +630,53 @@ public interface IInventoryAccountMapRepository
     /// <summary>Adds a map for a firm that has none.</summary>
     /// <param name="map">The map.</param>
     void Add(InventoryAccountMap map);
+}
+
+/// <summary>Reads the figures a statutory tax return is built from.</summary>
+/// <remarks>
+/// The two halves come from different places on purpose, which is the business's answer of
+/// 2026-08-12: output tax from the sales documents, because a return states supplies by
+/// rate and only a document line knows the rate and the value it was charged on; input tax
+/// from postings to the accounts the firm's tax map names, because nothing else produces
+/// it yet and purchase will land in the same accounts when it arrives.
+/// </remarks>
+public interface ITaxReturnReader
+{
+    /// <summary>Reads the output tax charged over a period.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="from">The first day counted.</param>
+    /// <param name="to">The last.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The report.</returns>
+    Task<OutputTaxReport> ReadOutputAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the input tax incurred over a period.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="from">The first day counted.</param>
+    /// <param name="to">The last.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The report.</returns>
+    Task<InputTaxReport> ReadInputAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads what the firm owes the state for a period.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="from">The first day counted.</param>
+    /// <param name="to">The last.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The report.</returns>
+    Task<TaxSummaryReport> ReadSummaryAsync(
+        FirmId firmId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>What a sales list is narrowed by.</summary>

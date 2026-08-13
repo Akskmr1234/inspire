@@ -71,10 +71,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
 | Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
 | Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
+| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** (API) — 11 integration + 5 API tests; no screen yet |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,057 passing, 0 failing (522 domain + 258 application + 181 API + 20 identity + 76 integration).
+**Test suite:** 1,073 passing, 0 failing (522 domain + 258 application + 186 API + 20 identity + 87 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -89,6 +90,16 @@ Integration tests need a running Docker daemon.
 > Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
 >
 > The automatic route is no longer open either: the business chose it on 2026-08-10, so cheques in hand, bank charges and dishonour suspense join the per-firm map that stock movements already post through, and a bounce will raise its own reversing journal. **Not yet built** — the map and the stock side are, the cheque side is the next accounting commit. Until it lands, the manual route above is how a bounce reaches the books.
+
+> ### The returns can be filed on, and the input side has no taxable value to state
+>
+> `GET /api/v1/accounting/reports/{output-tax,input-tax,tax-summary}` produce §7.3's three reports, and one set of endpoints serves both regimes: a Qatar firm is answered in VAT, an Indian firm in CGST, SGST, IGST and cess. Only posted documents count; credit notes net off the period they fall in; the taxable value is counted **once per line**, so a GST supply carrying two heads is not reported as twice the sales.
+>
+> **The input side reports tax without a base.** Nothing produces input tax yet but a journal somebody writes by hand — there is no purchase module — and a ledger posting records the tax, not the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. When purchase lands it posts to the same accounts and the figures keep working; the base arrives with the documents.
+>
+> **The summary reconciles itself against the ledger.** Each head shows what the documents charged beside what that head's account actually moved by. `isReconciled: false` means output tax reached the books by some route other than a sales document, and a return built from the documents alone would understate it. It is surfaced, not corrected — only a person can say which figure is right.
+>
+> **No screen yet.** These are reachable over HTTP but not from the app.
 
 > ### Round Off is wired up, and nothing yet produces a figure to put in it
 >

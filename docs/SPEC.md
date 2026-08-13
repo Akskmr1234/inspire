@@ -129,6 +129,31 @@ Cash Receipt · Bank Receipt · Cash Payment · Bank Payment · Journal · Contr
 ### 7.3 Reports
 From the prose: Ledger, Day Book, Cash Book, Bank Book, Trial Balance, P&L, Balance Sheet, Customer/Supplier Outstanding, Aging Analysis, Cash Flow.
 
+> **Built 2026-08-12: the VAT and GST returns.** Output Tax, Input Tax and the Summary, at
+> `/api/v1/accounting/reports/{output-tax,input-tax,tax-summary}`. Decisions now binding:
+>
+> - **One set of endpoints for both regimes**, answering in whichever heads the firm's own
+>   regime uses. Q1 required report menus to be regime-filtered so a VAT firm is never shown
+>   a GST return; a report that states what a firm actually charges cannot show anybody a
+>   tax they do not pay, so there is nothing to filter and no second route to keep in step.
+> - **Output tax comes from the sales documents**, because a return states supplies *by
+>   rate* and only a document line knows the rate and the value it was charged on. Only
+>   posted documents count; credit notes net off the period they fall in.
+> - **The taxable value is counted once per line, not once per head.** A GST supply carries
+>   CGST and SGST on the same base, and summing the base per head would report twice the
+>   sales the firm made — with every tax figure still correct, which is what makes it hard
+>   to notice.
+> - **Input tax comes from postings to the mapped input accounts** (answer of 2026-08-12).
+>   Right today for hand-written journals, and unchanged when purchase arrives, since
+>   purchase posts to the same accounts. **No taxable value accompanies it**: a ledger
+>   posting records the tax and not the purchase it was charged on, and deriving a base
+>   from the rate would put a guess on a statutory return.
+> - **The summary reconciles itself.** Each head carries what the documents charged *and*
+>   what that head's ledger moved by, with `isReconciled` saying whether they agree
+>   everywhere. A difference means output tax reached the books by some route other than a
+>   sales document, and a return built from documents alone would understate it — surfaced
+>   rather than reconciled silently, because only a person can say which figure is right.
+
 Complete list observed in the web reference (`image3`) — **this is the delivery target**:
 
 Debtors Report · Debtors Report (Age Wise) · Creditors Report · Creditors Report (Age Wise) · Ledgers (GL) · Voucher Report · Statement of Accounts · Account Group Report · Account Group Consolidated Report · **VAT Reports** (Input Tax, Output Tax, VAT Summary) · Final Accounts · Bill Wise Pending – Purchase · Bill Wise Pending – Sales · Bill Wise Pending – Service Invoices · PDC Report · Day Book · Cash Book · Bank Book · Transaction Summary · Salesman/Executive Wise Payment Collection · Over Due Sales Invoice · Over Due Service Invoice · Over Due Purchase Invoice · PDC Calendar · Forex Transactions · Chart of Accounts · Purchase (Fixed Assets) · Cheque Register · Custom
