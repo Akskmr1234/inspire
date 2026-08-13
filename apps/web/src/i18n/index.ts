@@ -550,6 +550,8 @@ const en = {
     close: 'Close',
     saveDraft: 'Save draft',
     post: 'Post',
+    cancelDocument: 'Cancel document',
+    cancelReason: 'Reason',
     product: 'Product',
     quantity: 'Quantity',
     rate: 'Cost',
@@ -572,6 +574,8 @@ const en = {
     serialsHint: 'One number per line',
     savedNotice: 'Saved as {{number}}. Nothing has moved until it is posted.',
     postedNotice: '{{number}} posted. Goods received on {{stock}}; total {{total}}.',
+    cancelledNotice:
+      'Cancelled. The goods, the debt and the books are back where they were.',
     postedProduced:
       'Posting produced a receipt, a journal, and — for a purchase — a bill the supplier is owed.',
     supplierInvoiceHint:
@@ -1196,6 +1200,8 @@ const ar = {
     close: 'إغلاق',
     saveDraft: 'حفظ كمسودة',
     post: 'ترحيل',
+    cancelDocument: 'إلغاء المستند',
+    cancelReason: 'السبب',
     product: 'الصنف',
     quantity: 'الكمية',
     rate: 'التكلفة',
@@ -1218,6 +1224,7 @@ const ar = {
     serialsHint: 'رقم واحد في كل سطر',
     savedNotice: 'حُفظ برقم {{number}}. لا شيء يتحرك قبل الترحيل.',
     postedNotice: 'تم ترحيل {{number}}. استلمت البضاعة بالمستند {{stock}}؛ الإجمالي {{total}}.',
+    cancelledNotice: 'تم الإلغاء. عادت البضاعة والمديونية والقيود كما كانت.',
     postedProduced: 'أنتج الترحيل مستند استلام وقيداً — وفاتورة مستحقة للمورد في حالة الشراء.',
     supplierInvoiceHint:
       'ضريبة المدخلات تُسترد مقابل فاتورة المورد الضريبية، فرقمها وتاريخها هما ما يرد في الإقرار. ولا يُقبل الرقم نفسه مرتين لنفس المورد.',

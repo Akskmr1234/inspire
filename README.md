@@ -79,11 +79,12 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase — entering a purchase, and the API for both | **Done** — 8 API tests, at `/api/v1/purchase/invoices` |
 | Purchase — supplier master | **Done** — 3 API tests, at `/api/v1/purchase/suppliers` |
 | Purchase — a filtered, paged list of documents | **Done** — the same shape the sales list takes |
-| Purchase — screens: document list, entry, posting; supplier master | **Done** — verified end to end in a browser against a real database |
+| Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests |
+| Purchase — screens: document list, entry, posting, cancellation; supplier master | **Done** — verified end to end in a browser against a real database |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,132 passing, 0 failing (567 domain + 261 application + 197 API + 20 identity + 87 integration).
+**Test suite:** 1,138 passing, 0 failing (567 domain + 261 application + 203 API + 20 identity + 87 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -122,7 +123,13 @@ Integration tests need a running Docker daemon.
 >
 > **The entry screen types batches rather than choosing them**, which is where it stops looking like the sales one. A sale offers the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is keyed off the carton and an expiry date sits beside it. Serial numbers are keyed the same way, one per line, and the count is shown against the quantity so a short list is visible before the server refuses it.
 >
-> **Cancellation is the one thing missing.** There is none on the server yet, so there is no button for it; the sales side has it and this will take the same shape.
+> **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
+
+> ### A cancelled credit note used to leave the sale it settled looking paid
+>
+> Found on 2026-08-13 while building the purchase side's mirror of it, and fixed in both. A return raises no bill of its own — it allocates against the bill of the document it names. Cancelling one cancelled its journal, which took the party's ledger back, but nothing removed the allocation: the original sale went on reading as settled by a credit note that no longer existed, and the debtors report understated what was owed. `Bill.ReleaseAllocationsFrom` already existed for exactly this and had one caller, the bounced cheque.
+>
+> The two cancellations now do the same thing, which is the point of them being mirrors — and the reason the purchase side was worth writing as a mirror rather than as a variation.
 
 > ### Two journals in one posting used to fight over the same numbering series
 >

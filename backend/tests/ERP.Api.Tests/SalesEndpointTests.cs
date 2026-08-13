@@ -277,6 +277,64 @@ public sealed class SalesEndpointTests
     }
 
     [Fact]
+    public async Task Cancelling_a_return_puts_back_what_it_settled_against_the_sale()
+    {
+        // The allocation is a fact about a bill, and cancelling the credit note's journal
+        // does not remove it. Left behind, the sale would read as settled by a credit note
+        // that no longer exists and the debtors report would understate what is owed.
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        SalesFixtures fixtures = await ArrangeAsync(client);
+
+        Guid invoiceId = await EnterAsync(client, fixtures, 3m, 100m, 0m);
+
+        (await client.PostAsJsonAsync($"{Invoices}/{invoiceId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(300m);
+
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            Invoices,
+            new
+            {
+                Date = Today,
+                CustomerLedgerId = fixtures.CustomerId,
+                WarehouseId = fixtures.WarehouseId,
+                Kind = 2,
+                ReturnsInvoiceId = invoiceId,
+                Lines = new[]
+                {
+                    new
+                    {
+                        ProductId = fixtures.ProductId,
+                        Quantity = 1m,
+                        Rate = 100m,
+                        TaxPercentage = 0m,
+                    },
+                },
+            });
+
+        created.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+
+        Guid creditId =
+            (await created.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!.SalesInvoiceId;
+
+        (await client.PostAsJsonAsync($"{Invoices}/{creditId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(200m);
+
+        HttpResponseMessage cancelled = await client.PostAsJsonAsync(
+            $"{Invoices}/{creditId}/cancel", new { Reason = "The customer kept them" });
+
+        cancelled.StatusCode.ShouldBe(
+            HttpStatusCode.NoContent, await cancelled.Content.ReadAsStringAsync());
+
+        // The whole debt again, because the credit note is gone.
+        (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(300m);
+    }
+
+    [Fact]
     public async Task An_invoice_with_no_lines_is_refused_before_it_is_numbered()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

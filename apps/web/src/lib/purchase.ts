@@ -188,6 +188,14 @@ export async function createPurchaseInvoice(input: {
   });
 }
 
+/** Cancels a posted document, putting back everything posting it moved. */
+export async function cancelPurchaseInvoice(id: string, reason: string): Promise<void> {
+  await request<void>(`/purchase/invoices/${id}/cancel`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
 /** Posts a draft: the goods arrive, the debt is raised or debited, the books follow. */
 export async function postPurchaseInvoice(
   id: string,

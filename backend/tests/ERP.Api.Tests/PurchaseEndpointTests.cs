@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Purchase;
+using ERP.Domain.Inventory;
 using ERP.Domain.Purchase;
 
 namespace ERP.Api.Tests;
@@ -266,6 +267,158 @@ public sealed class PurchaseEndpointTests
     }
 
     [Fact]
+    public async Task Cancelling_a_posted_purchase_takes_the_goods_and_the_books_back()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        PurchaseFixtures fixtures = await ArrangeAsync(client);
+
+        decimal stockBefore = await ClosingDebitAsync(client, "STOCK");
+        decimal inputTaxBefore = await ClosingDebitAsync(client, "VAT-INPUT");
+
+        Guid purchaseId = await EnterAsync(client, fixtures, 4m, 25m, 5m);
+
+        (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        HttpResponseMessage cancelled = await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel",
+            new { Reason = "Entered against the wrong supplier" });
+
+        cancelled.StatusCode.ShouldBe(
+            HttpStatusCode.NoContent, await cancelled.Content.ReadAsStringAsync());
+
+        // Both journals out of the balances, so the accounts stand where they did.
+        (await ClosingDebitAsync(client, "STOCK")).ShouldBe(stockBefore);
+        (await ClosingDebitAsync(client, "VAT-INPUT")).ShouldBe(inputTaxBefore);
+
+        PurchaseInvoiceDetail detail =
+            (await client.GetFromJsonAsync<PurchaseInvoiceDetail>(
+                $"{Purchases}/{purchaseId}"))!;
+
+        detail.Header.Status.ShouldBe(PurchaseInvoiceStatus.Cancelled);
+
+        // And it still names what it produced, because the documents are all still there.
+        detail.StockDocumentId.ShouldNotBeNull();
+        detail.BillId.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task A_cancelled_purchase_stops_showing_in_what_the_firm_owes()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        PurchaseFixtures fixtures = await ArrangeAsync(client);
+
+        Guid purchaseId = await EnterAsync(client, fixtures, 4m, 25m, 5m);
+
+        (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await OutstandingAsync(client, fixtures.SupplierId)).ShouldBe(105m);
+
+        (await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Entered twice" }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // The creditors figure and the credit position read the same bills, so
+        // withdrawing one takes it out of both at once.
+        (await OutstandingAsync(client, fixtures.SupplierId)).ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task A_purchase_whose_goods_have_gone_cannot_be_cancelled()
+    {
+        // Where this differs from cancelling a sale, and the reason is physical: taking a
+        // receipt back removes stock from a shelf, and a purchase whose goods have since
+        // been sold has nothing left to remove. What the firm has is a return or a
+        // write-off, not a cancellation.
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        PurchaseFixtures fixtures = await ArrangeAsync(client);
+
+        Guid purchaseId = await EnterAsync(client, fixtures, 4m, 25m, 0m);
+
+        (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Issued to a department, which is the simplest way for the goods to leave.
+        HttpResponseMessage issued = await client.PostAsJsonAsync(
+            $"{Inventory}/stock/documents",
+            new
+            {
+                Type = (int)StockDocumentType.MaterialIssue,
+                Date = Today,
+                WarehouseId = fixtures.WarehouseId,
+                Lines = new[] { new { ProductId = fixtures.ProductId, Quantity = 4m } },
+            });
+
+        issued.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await issued.Content.ReadAsStringAsync());
+
+        HttpResponseMessage cancelled = await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Too late" });
+
+        cancelled.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        // And the purchase is still posted, so the books still say what happened.
+        PurchaseInvoiceDetail detail =
+            (await client.GetFromJsonAsync<PurchaseInvoiceDetail>(
+                $"{Purchases}/{purchaseId}"))!;
+
+        detail.Header.Status.ShouldBe(PurchaseInvoiceStatus.Posted);
+    }
+
+    [Fact]
+    public async Task A_draft_cannot_be_cancelled_and_a_reason_is_required()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        PurchaseFixtures fixtures = await ArrangeAsync(client);
+
+        Guid purchaseId = await EnterAsync(client, fixtures, 1m, 10m);
+
+        // A draft has moved nothing, so there is nothing to put back.
+        (await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Changed my mind" }))
+            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        // A cancellation nobody explained is one somebody has to reconstruct later.
+        (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/cancel", new { Reason = " " }))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_return_puts_back_what_it_set_against_the_purchase()
+    {
+        // The allocation is a fact about a bill, and cancelling the return's journal does
+        // not remove it. Left behind, the purchase would read as settled by a debit note
+        // that no longer exists and the creditors report would understate what is owed.
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        PurchaseFixtures fixtures = await ArrangeAsync(client);
+
+        Guid purchaseId = await EnterAsync(client, fixtures, 4m, 25m, 0m);
+
+        (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await OutstandingAsync(client, fixtures.SupplierId)).ShouldBe(100m);
+
+        Guid returnId = await EnterReturnAsync(client, fixtures, purchaseId, 2m, 25m);
+
+        (await client.PostAsJsonAsync($"{Purchases}/{returnId}/post", new { }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Half the goods went back, so half the debt is settled.
+        (await OutstandingAsync(client, fixtures.SupplierId)).ShouldBe(50m);
+
+        HttpResponseMessage cancelled = await client.PostAsJsonAsync(
+            $"{Purchases}/{returnId}/cancel", new { Reason = "The lorry came back" });
+
+        cancelled.StatusCode.ShouldBe(
+            HttpStatusCode.NoContent, await cancelled.Content.ReadAsStringAsync());
+
+        // The whole debt again, because the debit note is gone.
+        (await OutstandingAsync(client, fixtures.SupplierId)).ShouldBe(100m);
+    }
+
+    [Fact]
     public async Task A_purchase_billed_by_somebody_who_is_not_a_supplier_is_refused()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
@@ -339,6 +492,42 @@ public sealed class PurchaseEndpointTests
     {
         HttpResponseMessage created = await client.PostAsJsonAsync(
             Purchases, Purchase(fixtures, quantity, rate, taxPercentage));
+
+        created.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+
+        return (await created.Content.ReadFromJsonAsync<PurchaseInvoiceResponse>())!
+            .PurchaseInvoiceId;
+    }
+
+    /// <summary>Enters a return against a posted purchase.</summary>
+    private static async Task<Guid> EnterReturnAsync(
+        HttpClient client,
+        PurchaseFixtures fixtures,
+        Guid against,
+        decimal quantity,
+        decimal rate)
+    {
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            Purchases,
+            new
+            {
+                Date = Today,
+                SupplierLedgerId = fixtures.SupplierId,
+                WarehouseId = fixtures.WarehouseId,
+                Kind = (int)PurchaseDocumentKind.Return,
+                ReturnsInvoiceId = against,
+                Lines = new[]
+                {
+                    new
+                    {
+                        ProductId = fixtures.ProductId,
+                        Quantity = quantity,
+                        Rate = rate,
+                        TaxPercentage = 0m,
+                    },
+                },
+            });
 
         created.StatusCode.ShouldBe(
             HttpStatusCode.Created, await created.Content.ReadAsStringAsync());

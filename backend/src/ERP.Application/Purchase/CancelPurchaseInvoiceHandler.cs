@@ -4,60 +4,68 @@ using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Inventory.Stock;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
-using ERP.Domain.Sales;
+using ERP.Domain.Purchase;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
+using ERP.SharedKernel.ValueObjects;
 using FluentValidation;
 
-namespace ERP.Application.Sales;
+namespace ERP.Application.Purchase;
 
-/// <summary>Cancels a posted invoice, putting back everything posting it moved.</summary>
-/// <param name="SalesInvoiceId">The invoice.</param>
-/// <param name="Reason">Why. Required, and kept on the invoice.</param>
+/// <summary>Cancels a posted purchase, putting back everything posting it moved.</summary>
+/// <param name="PurchaseInvoiceId">The document.</param>
+/// <param name="Reason">Why. Required, and kept on the document.</param>
 /// <remarks>
-/// For an invoice that should never have been raised. Goods a customer has actually taken
-/// away come back as a sales return instead, which is a document of its own - the
-/// difference being whether anything really happened, and a stock ledger that cannot tell
-/// the two apart is one nobody can reconcile against a shelf.
+/// For a purchase that should never have been entered - the supplier's invoice keyed
+/// twice, or against the wrong supplier. Goods the firm has accepted and is sending back
+/// go on a purchase return instead, which is a document of its own: the difference is
+/// whether anything really happened, and a stock ledger that cannot tell the two apart is
+/// one nobody can reconcile against a shelf.
 /// </remarks>
-public sealed record CancelSalesInvoiceCommand(Guid SalesInvoiceId, string Reason)
+public sealed record CancelPurchaseInvoiceCommand(Guid PurchaseInvoiceId, string Reason)
     : ICommand, ITransactional;
 
-/// <summary>Validates <see cref="CancelSalesInvoiceCommand"/>.</summary>
-public sealed class CancelSalesInvoiceCommandValidator
-    : AbstractValidator<CancelSalesInvoiceCommand>
+/// <summary>Validates <see cref="CancelPurchaseInvoiceCommand"/>.</summary>
+public sealed class CancelPurchaseInvoiceCommandValidator
+    : AbstractValidator<CancelPurchaseInvoiceCommand>
 {
-    /// <summary>Initialises a new instance of the <see cref="CancelSalesInvoiceCommandValidator"/> class.</summary>
-    public CancelSalesInvoiceCommandValidator()
+    /// <summary>Initialises a new instance of the <see cref="CancelPurchaseInvoiceCommandValidator"/> class.</summary>
+    public CancelPurchaseInvoiceCommandValidator()
     {
-        RuleFor(c => c.SalesInvoiceId).NotEqual(Guid.Empty);
+        RuleFor(c => c.PurchaseInvoiceId).NotEqual(Guid.Empty);
 
         RuleFor(c => c.Reason)
-            .NotEmpty().WithMessage("A reason is required when cancelling an invoice.")
+            .NotEmpty().WithMessage("A reason is required when cancelling a purchase.")
             .MaximumLength(500);
     }
 }
 
-/// <summary>Handles <see cref="CancelSalesInvoiceCommand"/>.</summary>
+/// <summary>Handles <see cref="CancelPurchaseInvoiceCommand"/>.</summary>
 /// <remarks>
 /// <para>
-/// The mirror of posting, and the same rule: one transaction, or nothing. An invoice whose
-/// goods went back on the shelf but whose bill stayed outstanding would be a debt for
-/// stock the firm still holds, and nobody would find it until a customer disputed it.
+/// The mirror of posting, and the same rule: one transaction, or nothing. A purchase whose
+/// goods came off the shelf but whose bill stayed outstanding would be a debt for stock the
+/// firm no longer holds.
 /// </para>
 /// <para>
-/// Both journals are cancelled rather than reversed by contras. A voucher's own
-/// cancellation already keeps its number and its lines and takes it out of the balances,
-/// which is how every other cancelled voucher here behaves; a contra would say the same
-/// thing twice and leave a day book with two entries for one mistake.
+/// It can fail where a sale's cancellation cannot, and the reason is worth knowing: taking
+/// a receipt back removes goods from a shelf, and if they have since been sold or issued
+/// there is nothing left to remove. The stock document's own reversal refuses that, which
+/// is the right answer - what the firm has is a purchase whose goods are gone, and that is
+/// a return or a write-off rather than a cancellation.
+/// </para>
+/// <para>
+/// Both journals are cancelled rather than reversed by contras, as on the sales side: a
+/// voucher's own cancellation keeps its number and its lines and takes it out of the
+/// balances, and a contra would say the same thing twice.
 /// </para>
 /// </remarks>
-public sealed class CancelSalesInvoiceCommandHandler
-    : ICommandHandler<CancelSalesInvoiceCommand>
+public sealed class CancelPurchaseInvoiceCommandHandler
+    : ICommandHandler<CancelPurchaseInvoiceCommand>
 {
-    private readonly ISalesInvoiceRepository _invoices;
+    private readonly IPurchaseInvoiceRepository _invoices;
     private readonly IStockDocumentRepository _documents;
     private readonly IStockLedgerRepository _stockLedger;
     private readonly IProductRepository _products;
@@ -72,8 +80,8 @@ public sealed class CancelSalesInvoiceCommandHandler
     private readonly StockPoster _poster;
     private readonly StockJournalPoster _stockJournal;
 
-    /// <summary>Initialises a new instance of the <see cref="CancelSalesInvoiceCommandHandler"/> class.</summary>
-    /// <param name="invoices">The sales invoice repository.</param>
+    /// <summary>Initialises a new instance of the <see cref="CancelPurchaseInvoiceCommandHandler"/> class.</summary>
+    /// <param name="invoices">The purchase invoice repository.</param>
     /// <param name="documents">The stock document repository.</param>
     /// <param name="stockLedger">The stock ledger repository.</param>
     /// <param name="products">The product repository.</param>
@@ -90,8 +98,8 @@ public sealed class CancelSalesInvoiceCommandHandler
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
-    public CancelSalesInvoiceCommandHandler(
-        ISalesInvoiceRepository invoices,
+    public CancelPurchaseInvoiceCommandHandler(
+        IPurchaseInvoiceRepository invoices,
         IStockDocumentRepository documents,
         IStockLedgerRepository stockLedger,
         IProductRepository products,
@@ -127,7 +135,7 @@ public sealed class CancelSalesInvoiceCommandHandler
 
     /// <inheritdoc />
     public async Task<Result> Handle(
-        CancelSalesInvoiceCommand request,
+        CancelPurchaseInvoiceCommand request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -135,17 +143,18 @@ public sealed class CancelSalesInvoiceCommandHandler
         if (_tenantContext.FirmId is not { } firmId)
         {
             return Result.Failure(Error.Forbidden(
-                "SalesInvoice.NoFirmSelected",
-                "A firm must be selected to cancel an invoice."));
+                "PurchaseInvoice.NoFirmSelected",
+                "A firm must be selected to cancel a purchase."));
         }
 
-        SalesInvoice? invoice = await _invoices.FindAsync(
-            SalesInvoiceId.From(request.SalesInvoiceId), cancellationToken);
+        PurchaseInvoice? invoice = await _invoices.FindAsync(
+            PurchaseInvoiceId.From(request.PurchaseInvoiceId), cancellationToken);
 
         if (invoice is null || invoice.FirmId != firmId)
         {
             return Result.Failure(Error.NotFound(
-                "SalesInvoice.NotFound", "That invoice does not exist in the selected firm."));
+                "PurchaseInvoice.NotFound",
+                "That purchase does not exist in the selected firm."));
         }
 
         Firm? firm = await _firms.FindAsync(firmId, cancellationToken);
@@ -156,10 +165,10 @@ public sealed class CancelSalesInvoiceCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        // Every refusal has its say before anything is touched. The transaction would
-        // roll back a half-done cancellation anyway, but an aggregate left cancelled in
-        // memory after a refusal is a trap for whatever reads it next - and the check
-        // that matters most here, whether the customer has already paid, is a read.
+        // Every refusal has its say before anything is touched. The transaction would roll
+        // back a half-done cancellation anyway, but an aggregate left cancelled in memory
+        // after a refusal is a trap for whatever reads it next - and the check that
+        // matters most here, whether the firm has already paid, is a read.
         Result<Bill?> bill = await FindBillAsync(invoice, cancellationToken);
 
         if (bill.IsFailure)
@@ -172,8 +181,8 @@ public sealed class CancelSalesInvoiceCommandHandler
             return Result.Failure(Error.BusinessRule(
                 "Bill.PartlySettled",
                 $"Bill '{outstanding.BillNumber}' has {outstanding.SettledAmount} allocated "
-                + "against it and cannot be withdrawn. Raise a credit note instead, which "
-                + "leaves the payment where it was made."));
+                + "against it and cannot be withdrawn. Raise a purchase return instead, "
+                + "which leaves the payment where it was made."));
         }
 
         Result cancelled = invoice.Cancel(request.Reason);
@@ -190,18 +199,18 @@ public sealed class CancelSalesInvoiceCommandHandler
             return withdrawn;
         }
 
-        Result released = await ReleaseCreditAsync(invoice, cancellationToken);
+        Result released = await ReleaseDebitAsync(invoice, cancellationToken);
 
         if (released.IsFailure)
         {
             return released;
         }
 
-        Result returned = await ReturnGoodsAsync(invoice, firm, request.Reason, cancellationToken);
+        Result taken = await TakeGoodsBackAsync(invoice, firm, request.Reason, cancellationToken);
 
-        if (returned.IsFailure)
+        if (taken.IsFailure)
         {
-            return returned;
+            return taken;
         }
 
         Result reversed = await CancelJournalAsync(invoice, request.Reason, cancellationToken);
@@ -216,9 +225,9 @@ public sealed class CancelSalesInvoiceCommandHandler
         return Result.Success();
     }
 
-    /// <summary>Finds the debt the invoice raised, if it raised one.</summary>
+    /// <summary>Finds the debt the purchase raised, if it raised one.</summary>
     private async Task<Result<Bill?>> FindBillAsync(
-        SalesInvoice invoice,
+        PurchaseInvoice invoice,
         CancellationToken cancellationToken)
     {
         if (invoice.BillId is not { } billId)
@@ -232,24 +241,20 @@ public sealed class CancelSalesInvoiceCommandHandler
         return found.TryGetValue(billId, out Bill? bill)
             ? Result.Success<Bill?>(bill)
             : Result.Failure<Bill?>(Error.NotFound(
-                "SalesInvoice.BillMissing",
-                $"The bill invoice '{invoice.Number}' raised no longer exists."));
+                "PurchaseInvoice.BillMissing",
+                $"The bill purchase '{invoice.Number}' raised no longer exists."));
     }
 
-    /// <summary>Puts back what a cancelled return had set against the sale's bill.</summary>
+    /// <summary>Puts back what a cancelled return had set against the purchase's bill.</summary>
     /// <remarks>
-    /// A return raises no bill of its own - it allocates a credit against the bill of the
-    /// sale it names. Cancelling the journal takes the customer's ledger back, but the
+    /// A return raises no bill of its own - it allocates a debit against the bill of the
+    /// purchase it names. Cancelling the journal takes the supplier's ledger back, but the
     /// allocation is a fact about a bill and nothing else removes it: left behind, the
-    /// sale would read as settled by a credit note that no longer exists, and the debtors
-    /// report would understate what is owed.
-    /// <para>
-    /// Missing until 2026-08-13, and found while building the purchase side's mirror of
-    /// it. The two now do the same thing, which is the point of them being mirrors.
-    /// </para>
+    /// purchase would read as settled by a debit note that no longer exists, and the
+    /// creditors report would understate what the firm owes.
     /// </remarks>
-    private async Task<Result> ReleaseCreditAsync(
-        SalesInvoice invoice,
+    private async Task<Result> ReleaseDebitAsync(
+        PurchaseInvoice invoice,
         CancellationToken cancellationToken)
     {
         if (!invoice.IsReturn
@@ -259,7 +264,7 @@ public sealed class CancelSalesInvoiceCommandHandler
             return Result.Success();
         }
 
-        SalesInvoice? original = await _invoices.FindAsync(originalId, cancellationToken);
+        PurchaseInvoice? original = await _invoices.FindAsync(originalId, cancellationToken);
 
         if (original?.BillId is not { } billId)
         {
@@ -277,15 +282,15 @@ public sealed class CancelSalesInvoiceCommandHandler
         return Result.Success();
     }
 
-    /// <summary>Puts the goods back on the shelf, at what they left at.</summary>
+    /// <summary>Takes the goods back off the shelf, at what they arrived at.</summary>
     /// <remarks>
     /// Through the stock document's own cancellation, so the reversal is valued at the
-    /// cost each movement was made at rather than at today's average - which is what
-    /// keeps a cancellation from quietly restating the value of everything else on the
-    /// shelf. The issue's journal goes with it.
+    /// cost each movement was made at rather than at today's average - which is what keeps
+    /// a cancellation from quietly restating the value of everything else on the shelf.
+    /// The receipt's journal goes with it.
     /// </remarks>
-    private async Task<Result> ReturnGoodsAsync(
-        SalesInvoice invoice,
+    private async Task<Result> TakeGoodsBackAsync(
+        PurchaseInvoice invoice,
         Firm firm,
         string reason,
         CancellationToken cancellationToken)
@@ -300,11 +305,11 @@ public sealed class CancelSalesInvoiceCommandHandler
         if (document is null)
         {
             return Result.Failure(Error.NotFound(
-                "SalesInvoice.IssueMissing",
-                $"The issue invoice '{invoice.Number}' raised no longer exists."));
+                "PurchaseInvoice.ReceiptMissing",
+                $"The receipt purchase '{invoice.Number}' raised no longer exists."));
         }
 
-        Result cancelled = document.Cancel($"Sales invoice {invoice.Number} cancelled: {reason}");
+        Result cancelled = document.Cancel($"Purchase {invoice.Number} cancelled: {reason}");
 
         if (cancelled.IsFailure)
         {
@@ -332,9 +337,9 @@ public sealed class CancelSalesInvoiceCommandHandler
             : await _stockJournal.WithdrawAsync(document, reason, cancellationToken);
     }
 
-    /// <summary>Takes the sale back out of the nominal ledger.</summary>
+    /// <summary>Takes the purchase back out of the nominal ledger.</summary>
     private async Task<Result> CancelJournalAsync(
-        SalesInvoice invoice,
+        PurchaseInvoice invoice,
         string reason,
         CancellationToken cancellationToken)
     {
@@ -348,12 +353,12 @@ public sealed class CancelSalesInvoiceCommandHandler
         if (journal is null)
         {
             return Result.Failure(Error.NotFound(
-                "SalesInvoice.JournalMissing",
-                $"The journal invoice '{invoice.Number}' raised no longer exists."));
+                "PurchaseInvoice.JournalMissing",
+                $"The journal purchase '{invoice.Number}' raised no longer exists."));
         }
 
         return journal.Status == VoucherStatus.Cancelled
             ? Result.Success()
-            : journal.Cancel($"Sales invoice {invoice.Number} cancelled: {reason}");
+            : journal.Cancel($"Purchase {invoice.Number} cancelled: {reason}");
     }
 }

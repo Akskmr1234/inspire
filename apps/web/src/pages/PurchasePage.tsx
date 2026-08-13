@@ -10,6 +10,7 @@ import { listProducts, type ProductSummary } from '@/lib/products';
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import type { PagedResult } from '@/lib/sales';
 import {
+  cancelPurchaseInvoice,
   createPurchaseInvoice,
   getPurchaseInvoice,
   isPurchaseReturn,
@@ -71,7 +72,10 @@ function splitSerials(entered: string): readonly string[] {
  * while somebody keys it off the supplier's invoice; posting receives the stock, raises
  * the debt and writes the books in one transaction.
  *
- * There is no cancellation on this screen because there is none on the server yet.
+ * Cancelling is for a purchase that should never have been entered. Goods the firm has
+ * accepted and is sending back go on a purchase return instead — and a cancellation can
+ * be refused because the goods are already gone, which is the server's answer to say
+ * rather than this screen's to predict.
  */
 export function PurchasePage(): React.JSX.Element {
   const { t } = useTranslation();
@@ -293,6 +297,14 @@ export function PurchasePage(): React.JSX.Element {
                 stock: posted.stockDocumentNumber,
                 total: posted.total.toFixed(2),
               });
+            })
+          }
+          onCancel={(id, reason) =>
+            run(async () => {
+              await cancelPurchaseInvoice(id, reason);
+              setViewing(null);
+
+              return t('purchase.cancelledNotice');
             })
           }
         />
@@ -717,13 +729,16 @@ function DocumentDialog({
   busy,
   onClose,
   onPost,
+  onCancel,
 }: {
   readonly id: string;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
+  readonly onCancel: (id: string, reason: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const [reason, setReason] = useState('');
 
   const query = useQuery<PurchaseInvoiceDetail, ApiError>({
     queryKey: ['purchase-invoice', id],
@@ -793,6 +808,24 @@ function DocumentDialog({
             <div className="flex justify-end">
               <DialogButton primary disabled={busy} onClick={() => onPost(id)}>
                 {t('purchase.post')}
+              </DialogButton>
+            </div>
+          )}
+
+          {document.header.status === PurchaseInvoiceStatus.posted && (
+            <div className="flex flex-wrap items-end justify-end gap-2">
+              <Field label={t('purchase.cancelReason')}>
+                <input
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                />
+              </Field>
+              <DialogButton
+                disabled={busy || reason.trim() === ''}
+                onClick={() => onCancel(id, reason.trim())}
+              >
+                {t('purchase.cancelDocument')}
               </DialogButton>
             </div>
           )}

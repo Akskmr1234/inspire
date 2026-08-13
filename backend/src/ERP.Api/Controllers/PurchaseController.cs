@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Purchase;
@@ -19,8 +20,9 @@ namespace ERP.Api.Controllers;
 /// stock, raises the debt and writes the books in one transaction.
 /// </para>
 /// <para>
-/// No cancellation yet. It is the next piece of work rather than a decision - the sales
-/// side has it, and this will take the same shape.
+/// Nothing here deletes. A posted purchase is cancelled, which takes the goods back off
+/// the shelf, withdraws the debt and takes both journals out of the balances while leaving
+/// every document in place; a draft that was never posted is simply never posted.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -144,7 +146,51 @@ public sealed class PurchaseController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Cancels a posted purchase, putting back everything posting it moved.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="request">Why it is being cancelled.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">The purchase was cancelled.</response>
+    /// <response code="404">No such purchase in the selected firm.</response>
+    /// <response code="422">The cancellation was refused, and the reason says why.</response>
+    /// <remarks>
+    /// For a purchase that should never have been entered. Goods the firm has accepted and
+    /// is sending back go on a purchase return instead, and a purchase the firm has
+    /// already paid against is refused here by name: a payment has to stay where it was
+    /// made, so what that situation needs is a debit note.
+    /// <para>
+    /// It can also be refused because the goods are gone. Taking a receipt back removes
+    /// stock from a shelf, and a purchase whose goods have since been sold has nothing
+    /// left to remove.
+    /// </para>
+    /// </remarks>
+    [HttpPost("{id:guid}/cancel")]
+    [RequiresPermission("purchase", "invoice", "delete")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> CancelAsync(
+        Guid id,
+        [FromBody] CancelPurchaseInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new CancelPurchaseInvoiceCommand(id, request.Reason), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }
+
+/// <summary>Why a purchase is being cancelled.</summary>
+/// <param name="Reason">
+/// Required, and kept on the document. A cancellation nobody explained is one somebody has
+/// to reconstruct from a stock ledger later.
+/// </param>
+public sealed record CancelPurchaseInvoiceRequest([property: JsonRequired] string Reason);
 
 /// <summary>What may be stated when posting, beyond the document itself.</summary>
 /// <param name="CreditDays">
