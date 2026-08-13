@@ -256,6 +256,18 @@ public static class MenuCatalogue
                     "accounting",
                     "/accounting/cash-flow",
                     ViewReports),
+
+                // One entry, not one per regime. Open question 1 asked for report menus
+                // filtered by regime so a VAT firm is never shown a GST return; the
+                // report answers in whichever heads the firm actually charges, so there
+                // is nothing left to filter and no second entry to keep in step.
+                new(
+                    "accounts-reports.tax-returns",
+                    "VAT / GST returns",
+                    "الإقرارات الضريبية",
+                    "accounting",
+                    "/accounting/tax-returns",
+                    ViewReports),
                 new(
                     "accounts-reports.day-book",
                     "Day book",

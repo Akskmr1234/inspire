@@ -20,6 +20,7 @@ import { WarehousesPage } from '@/pages/WarehousesPage';
 import { CustomersPage } from '@/pages/CustomersPage';
 import { ProductsPage } from '@/pages/ProductsPage';
 import { SalesPage } from '@/pages/SalesPage';
+import { TaxReturnsPage } from '@/pages/TaxReturnsPage';
 import { StockOperationsPage } from '@/pages/StockOperationsPage';
 import {
   BatchStockPage,
@@ -87,6 +88,7 @@ export function App(): React.JSX.Element {
         <Route path="/accounting/cash-book" element={<CashBankBookPage book="cash-book" />} />
         <Route path="/accounting/bank-book" element={<CashBankBookPage book="bank-book" />} />
         <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
+        <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
         <Route path="/settings/menu" element={<MenuAdministrationPage />} />
         <Route path="/accounting/ledgers" element={<LedgersPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />

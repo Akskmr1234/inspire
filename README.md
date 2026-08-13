@@ -71,7 +71,8 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
 | Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
 | Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
-| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** (API) — 11 integration + 5 API tests; no screen yet |
+| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** — 11 integration + 5 API tests |
+| Accounting — the returns screen, one for both regimes | **Done** — verified in a browser, English and Arabic |
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
@@ -99,7 +100,7 @@ Integration tests need a running Docker daemon.
 >
 > **The summary reconciles itself against the ledger.** Each head shows what the documents charged beside what that head's account actually moved by. `isReconciled: false` means output tax reached the books by some route other than a sales document, and a return built from the documents alone would understate it. It is surfaced, not corrected — only a person can say which figure is right.
 >
-> **No screen yet.** These are reachable over HTTP but not from the app.
+> **The screen is at `/accounting/tax-returns`**, one page for both regimes with the summary and the two listings behind a tab each. One menu entry, not one per regime: Q1 asked for report menus filtered by regime so a VAT firm never sees a GST return, and a report that answers in the heads a firm actually charges leaves nothing to filter.
 
 > ### Round Off is wired up, and nothing yet produces a figure to put in it
 >
