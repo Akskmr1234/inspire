@@ -75,11 +75,14 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — the returns screen, one for both regimes | **Done** — verified in a browser, English and Arabic |
 | Purchase — invoice aggregate: lines, input tax per component, charges, rounding | **Done** (domain + persistence) — 26 domain tests |
 | Purchase — the journal a posted purchase raises, through a goods-received account | **Done** — 21 domain tests; see the note below |
-| Purchase — posting, API and screens; supplier master | Not started |
+| Purchase — posting: goods received, bill raised, books written, in one transaction | **Done** — driven end to end in the API suite |
+| Purchase — entering a purchase, and the API for both | **Done** — 8 API tests, at `/api/v1/purchase/invoices` |
+| Purchase — supplier master | **Done** — 3 API tests, at `/api/v1/purchase/suppliers` |
+| Purchase — screens | Not started |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,121 passing, 0 failing (567 domain + 261 application + 186 API + 20 identity + 87 integration).
+**Test suite:** 1,132 passing, 0 failing (567 domain + 261 application + 197 API + 20 identity + 87 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -100,13 +103,29 @@ Integration tests need a running Docker daemon.
 >
 > `GET /api/v1/accounting/reports/{output-tax,input-tax,tax-summary}` produce §7.3's three reports, and one set of endpoints serves both regimes: a Qatar firm is answered in VAT, an Indian firm in CGST, SGST, IGST and cess. Only posted documents count; credit notes net off the period they fall in; the taxable value is counted **once per line**, so a GST supply carrying two heads is not reported as twice the sales.
 >
-> **The input side reports tax without a base.** Nothing produces input tax yet but a journal somebody writes by hand — the purchase document exists but nothing posts one — and a ledger posting records the tax, not the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. `PurchaseJournal` already posts to the accounts this report reads, so the figures keep working the day something drives it; the base arrives with the documents.
+> **The input side reports tax without a base.** A posted purchase now produces input tax, and it lands in the accounts this report reads — but the report is built from ledger postings, and a posting records the tax rather than the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. Reading it from the purchase documents, the way the output side already reads the sales ones, is the next change here.
 >
 > **The summary reconciles itself against the ledger.** Each head shows what the documents charged beside what that head's account actually moved by. `isReconciled: false` means output tax reached the books by some route other than a sales document, and a return built from the documents alone would understate it. It is surfaced, not corrected — only a person can say which figure is right.
 >
 > **The screen is at `/accounting/tax-returns`**, one page for both regimes with the summary and the two listings behind a tab each. One menu entry, not one per regime: Q1 asked for report menus filtered by regime so a VAT firm never sees a GST return, and a report that answers in the heads a firm actually charges leaves nothing to filter.
 
-> ### A purchase has a document and a journal, and nothing to drive them yet
+> ### A purchase can be made end to end over HTTP, and the goods wait in a clearing account
+>
+> `POST /api/v1/purchase/suppliers` creates somebody to buy from; `POST /api/v1/purchase/invoices` enters a draft; `POST /api/v1/purchase/invoices/{id}/post` receives the goods, raises the bill and writes the books. The API suite drives all of it against a real database — a supplier created, a purchase entered, posted, and the trial balance afterwards showing stock up 100, input VAT 5, the supplier owed 105, and `Goods Received Not Invoiced` back at nothing.
+>
+> **The same supplier invoice twice is refused by name**, not by a unique index. Keying it twice is reclaiming its input tax twice, which is caught by an assessor rather than by a reader of the creditors report; the handler asks first and answers `409`, and the index stays as the backstop.
+>
+> **A batched purchase opens the batch.** This is where a purchase stops looking like a sale: the batch number is what the supplier printed on the carton and does not exist in the register until the receipt posts. The line carries it as text, and the receipt opens the batch, records what it cost, and puts the goods in it — through the same section 10 machinery a material receipt already uses, rather than a second implementation of it.
+>
+> **No list endpoint yet, and no cancellation.** Both are the next piece of work rather than decisions; the sales side has them and this will take the same shape. There are no screens either — the module is reachable over HTTP and not yet from the app.
+
+> ### Two journals in one posting used to fight over the same numbering series
+>
+> Found by the first purchase ever posted in a fresh firm. Posting one raises two journals — the receipt's, which moves inventory, and the invoice's, which moves the supplier — and both take their number from the firm's journal series. Where that series did not exist yet, neither reservation could see the other's row, because the first had only been added to the change tracker and not written. Both created it, and the save failed on `ix_numbering_series_scope` with a message about an index.
+>
+> It was never a purchase problem. The first sale posted in a firm whose stock had arrived by some route that raised no journal would have hit it in exactly the same way; the existing tests missed it because their fixtures receive stock first, which creates the series and saves it. `FindForUpdateAsync` now reads the change tracker as well as the database, so the second reservation takes a number from the series the first one opened.
+
+> ### The purchase document and its journal
 >
 > §13's document exists as its own aggregate — its own tables, its own numbering, invoice and return in one type as the sales side has — and `PurchaseJournal` turns a posted one into what it did to the accounts. The document is deliberately a mirror of `SalesInvoice` rather than a direction flag on it, which is roughly seven hundred lines of shape said twice. The two read the same at a distance and diverge in every detail that matters: a sale selects goods that exist and a purchase brings goods into existence, a sale is numbered by the firm and a purchase carries the supplier's number as well, a sale credits revenue and a purchase debits a clearing account. Sharing them would have produced one type where half the fields are always null.
 >
@@ -116,9 +135,7 @@ Integration tests need a running Docker daemon.
 >
 > **Freight on a purchase is charged, not capitalised.** Landed costing — spreading a carriage charge across the units it carried — is a separate thing the specification does not ask for yet, and doing it halfway would put a figure into stock valuation no report could explain.
 >
-> **Nothing drives any of it yet.** There is no posting handler, no endpoint, no screen, and no supplier master: a purchase cannot be entered today except from a test. That is the next piece of work, and it is the same shape as the sales one — receipt raised, bill raised, journal written, in one transaction.
->
-> **A supplier's invoice number is unique per supplier**, enforced in the database as well as read by the return. Entering the same supplier invoice twice is input tax reclaimed twice, which is the expensive kind of duplicate: it is caught by an assessor rather than by a reader of the creditors report.
+> **Freight is charged, not capitalised, and a purchase return leaves at the average.** Goods going back to a supplier are valued the way every other issue is - at what the position says they cost - so a return whose agreed price has drifted from the average leaves that difference in the clearing account. It is a purchase price variance, and it is left visible there rather than swept into an account nobody asked for.
 
 > ### Round Off is wired up, and nothing yet produces a figure to put in it
 >

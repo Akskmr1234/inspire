@@ -56,6 +56,25 @@ public enum StockDocumentType
     /// adding up receipts by hand to find out what was actually returned.
     /// </remarks>
     SalesReturn = 9,
+
+    /// <summary>Goods arriving because they were bought. Raised by a purchase invoice.</summary>
+    /// <remarks>
+    /// Its own kind rather than a material receipt with a note on it, for the reason a
+    /// sale's issue is its own kind: what arrives from a supplier is not the same event as
+    /// goods coming back from a department, and the two post to different accounts. A
+    /// receipt credits consumption; a purchase credits the clearing account the invoice
+    /// will debit back.
+    /// </remarks>
+    PurchaseReceipt = 10,
+
+    /// <summary>Goods going back to a supplier. Raised by a purchase return.</summary>
+    /// <remarks>
+    /// The mirror of <see cref="PurchaseReceipt"/>, and its own kind for the same reason:
+    /// a stock ledger that could not tell goods rejected by the storekeeper from goods
+    /// issued to production would leave somebody adding up issues by hand to find out what
+    /// actually went back.
+    /// </remarks>
+    PurchaseReturn = 11,
 }
 
 /// <summary>Where a stock document stands in its lifecycle.</summary>
@@ -229,7 +248,8 @@ public sealed class StockDocument
     /// </remarks>
     public bool CarriesRate =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-            or StockDocumentType.StockAdjustment or StockDocumentType.SalesReturn;
+            or StockDocumentType.StockAdjustment or StockDocumentType.SalesReturn
+            or StockDocumentType.PurchaseReceipt;
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may put a batch on the
@@ -243,7 +263,8 @@ public sealed class StockDocument
     /// </remarks>
     public bool OpensBatches =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-            or StockDocumentType.StockAdjustment or StockDocumentType.PhysicalVerification;
+            or StockDocumentType.StockAdjustment or StockDocumentType.PhysicalVerification
+            or StockDocumentType.PurchaseReceipt;
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may invent the batch
@@ -263,7 +284,7 @@ public sealed class StockDocument
     /// </remarks>
     public bool GeneratesBatchNumbers =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-            or StockDocumentType.StockAdjustment;
+            or StockDocumentType.StockAdjustment or StockDocumentType.PurchaseReceipt;
 
     /// <summary>
     /// Gets a value indicating whether a line quantity may be negative.

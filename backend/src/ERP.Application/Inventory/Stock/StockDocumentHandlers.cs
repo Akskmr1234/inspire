@@ -268,6 +268,9 @@ public sealed class CreateStockDocumentCommandHandler
         StockDocumentType.DamagedStock => "DMG",
         StockDocumentType.PhysicalVerification => "PV",
         StockDocumentType.SalesIssue => "SI",
+        StockDocumentType.SalesReturn => "SR",
+        StockDocumentType.PurchaseReceipt => "PR",
+        StockDocumentType.PurchaseReturn => "PRN",
         _ => "SD",
     };
 }

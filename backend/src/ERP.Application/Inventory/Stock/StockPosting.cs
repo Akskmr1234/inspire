@@ -87,14 +87,14 @@ internal sealed class StockPoster
             Result applied = document.Type switch
             {
                 StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-                    or StockDocumentType.SalesReturn =>
+                    or StockDocumentType.SalesReturn or StockDocumentType.PurchaseReceipt =>
                     Take(
                         written,
                         ReceiveInto(
                             source, document, line, line.StockQuantity, line.Rate, postedAtUtc)),
 
                 StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
-                    or StockDocumentType.SalesIssue =>
+                    or StockDocumentType.SalesIssue or StockDocumentType.PurchaseReturn =>
                     Take(written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc)),
 
                 StockDocumentType.StockTransfer =>
@@ -326,7 +326,7 @@ internal sealed class StockPoster
                     unit.TransferTo(document.DestinationWarehouseId!.Value, document.Id),
 
                 StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
-                    or StockDocumentType.SalesIssue =>
+                    or StockDocumentType.SalesIssue or StockDocumentType.PurchaseReturn =>
                     unit.Issue(document.Date, document.Id),
 
                 _ when line.StockQuantity < 0m => unit.Issue(document.Date, document.Id),
@@ -375,7 +375,7 @@ internal sealed class StockPoster
                         unit.TransferTo(document.WarehouseId, document.Id),
 
                     StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
-                        or StockDocumentType.SalesIssue =>
+                        or StockDocumentType.SalesIssue or StockDocumentType.PurchaseReturn =>
                         unit.UndoIssue(document.WarehouseId, document.Id),
 
                     _ when line.StockQuantity < 0m =>

@@ -60,6 +60,13 @@ internal static class StockJournal
             // everything that ever came back.
             StockDocumentType.SalesIssue or StockDocumentType.SalesReturn =>
                 StockAccount.CostOfGoodsSold,
+
+            // Both halves of a purchase's stock movement go to the clearing account the
+            // invoice settles against: the receipt credits what arrived, the invoice
+            // debits it back, and the account is empty once both have landed. A return
+            // debits it again on the way out.
+            StockDocumentType.PurchaseReceipt or StockDocumentType.PurchaseReturn =>
+                StockAccount.GoodsReceived,
             StockDocumentType.DamagedStock => StockAccount.Loss,
             StockDocumentType.StockAdjustment => StockAccount.Variance,
             StockDocumentType.PhysicalVerification =>

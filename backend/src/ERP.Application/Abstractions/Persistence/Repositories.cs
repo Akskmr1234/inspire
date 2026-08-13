@@ -773,6 +773,24 @@ public interface IPurchaseInvoiceRepository
     /// <summary>Adds a purchase.</summary>
     /// <param name="invoice">The purchase.</param>
     void Add(PurchaseInvoice invoice);
+
+    /// <summary>Asks whether a supplier's own invoice number has already been entered.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="supplierLedgerId">The supplier.</param>
+    /// <param name="supplierInvoiceNumber">The number printed on their invoice.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> where that supplier's invoice is already on file.</returns>
+    /// <remarks>
+    /// Asked before the document is built, so the commonest mistake in a purchase ledger -
+    /// keying the same supplier invoice twice - is reported as itself. The unique index
+    /// behind it stays as the backstop, but an index violation reaches an operator as a
+    /// message about an index.
+    /// </remarks>
+    Task<bool> IsSupplierInvoiceNumberInUseAsync(
+        FirmId firmId,
+        LedgerId supplierLedgerId,
+        string supplierInvoiceNumber,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads the accounts a firm's tax heads post to.</summary>

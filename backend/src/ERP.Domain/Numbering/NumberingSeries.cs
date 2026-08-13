@@ -463,6 +463,17 @@ public static class DocumentTypes
     /// <summary>The receipt that takes a sale's goods back onto the shelf.</summary>
     public const string SalesReturnReceipt = "inventory.sales-return";
 
+    /// <summary>The receipt that puts a purchase's goods on the shelf.</summary>
+    /// <remarks>
+    /// Its own series rather than sharing the material receipt's, for the reason the
+    /// sales issue has one: somebody reading a stock ledger should be able to tell goods
+    /// that came from a supplier from goods that came back from a department.
+    /// </remarks>
+    public const string PurchaseReceipt = "inventory.purchase-receipt";
+
+    /// <summary>The issue that takes a purchase's goods back off the shelf.</summary>
+    public const string PurchaseReturnIssue = "inventory.purchase-return";
+
     /// <summary>Maps a voucher type onto its document type.</summary>
     /// <param name="type">The voucher type.</param>
     /// <returns>The document-type key.</returns>
@@ -500,6 +511,8 @@ public static class DocumentTypes
         Inventory.StockDocumentType.PhysicalVerification => PhysicalVerification,
         Inventory.StockDocumentType.SalesIssue => SalesIssue,
         Inventory.StockDocumentType.SalesReturn => SalesReturnReceipt,
+        Inventory.StockDocumentType.PurchaseReceipt => PurchaseReceipt,
+        Inventory.StockDocumentType.PurchaseReturn => PurchaseReturnIssue,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };

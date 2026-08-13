@@ -259,6 +259,19 @@ public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
 
     /// <inheritdoc />
     public void Add(PurchaseInvoice invoice) => _context.PurchaseInvoices.Add(invoice);
+
+    /// <inheritdoc />
+    public Task<bool> IsSupplierInvoiceNumberInUseAsync(
+        FirmId firmId,
+        LedgerId supplierLedgerId,
+        string supplierInvoiceNumber,
+        CancellationToken cancellationToken = default) =>
+        _context.PurchaseInvoices.AnyAsync(
+            invoice =>
+                invoice.FirmId == firmId
+                && invoice.SupplierLedgerId == supplierLedgerId
+                && invoice.SupplierInvoiceNumber == supplierInvoiceNumber,
+            cancellationToken);
 }
 
 /// <summary>The EF Core tax account map repository.</summary>
@@ -455,6 +468,16 @@ public sealed class NumberingSeriesRepository : INumberingSeriesRepository
     /// precedence in SQL would need a CASE ranking that reads far worse for no
     /// measurable gain at this size.
     /// </para>
+    /// <para>
+    /// A series this transaction has created but not yet saved counts as found. One
+    /// posting can reserve two numbers from the same sequence - a purchase raises a
+    /// journal for its stock and another for the invoice, both from the firm's journal
+    /// series - and on the first document of a firm's life neither reservation would see
+    /// the other's row. Both would create the series, and the save would fail on a unique
+    /// index with a message about an index rather than about numbering. Reading the change
+    /// tracker first is what makes the second reservation take a number from the first's
+    /// series instead of opening a rival one.
+    /// </para>
     /// </remarks>
     public async Task<NumberingSeries?> FindForUpdateAsync(
         string documentType,
@@ -471,6 +494,17 @@ public sealed class NumberingSeriesRepository : INumberingSeriesRepository
                 && (s.BranchId == null || s.BranchId == branchId)
                 && (s.FinancialYearId == null || s.FinancialYearId == financialYearId))
             .ToListAsync(cancellationToken);
+
+        // Anything this transaction has added is already tracked, and a query cannot see
+        // it because it has not been written yet.
+        candidates.AddRange(_context.NumberingSeries.Local
+            .Where(s =>
+                !candidates.Contains(s)
+                && string.Equals(s.DocumentType, documentType, StringComparison.Ordinal)
+                && s.FirmId == firmId
+                && s.IsActive
+                && (s.BranchId is null || s.BranchId == branchId)
+                && (s.FinancialYearId is null || s.FinancialYearId == financialYearId)));
 
         return candidates
             .OrderByDescending(s => s.BranchId is not null)

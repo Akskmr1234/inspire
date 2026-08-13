@@ -148,6 +148,16 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/invoices",
                     "sales:invoice:view"),
+
+                // Purchases and debit notes on one entry, for the reason sales are on one:
+                // they are one kind of document, and a supplier's history wants both.
+                new(
+                    "transactions.purchase",
+                    "Purchases",
+                    "المشتريات",
+                    "purchase",
+                    "/purchase/invoices",
+                    "purchase:invoice:view"),
             ]),
 
         new(
@@ -168,6 +178,24 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/customers",
                     "sales:customer:view"),
+            ]),
+
+        new(
+            "purchase",
+            "Purchase",
+            "المشتريات",
+            "purchase",
+            Children:
+            [
+                // Beside the customer master and for the same reason: a supplier is a
+                // sub-ledger, but this is where somebody buying looks for it.
+                new(
+                    "purchase.suppliers",
+                    "Suppliers",
+                    "الموردون",
+                    "purchase",
+                    "/purchase/suppliers",
+                    "purchase:supplier:view"),
             ]),
 
         new(
