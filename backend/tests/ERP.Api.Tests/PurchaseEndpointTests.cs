@@ -8,7 +8,7 @@ using ERP.Domain.Purchase;
 
 namespace ERP.Api.Tests;
 
-/// <summary>Tests the purchase endpoints of section 13, end to end.</summary>
+/// <summary>Tests the purchase endpoints end to end.</summary>
 /// <remarks>
 /// The whole buying flow through the real host: a supplier is created, a purchase is
 /// entered, and posting it receives the stock, raises the debt and moves the books. What

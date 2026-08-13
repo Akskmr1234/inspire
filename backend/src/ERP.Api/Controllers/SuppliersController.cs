@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
-/// <summary>The supplier master of section 13.</summary>
+/// <summary>The supplier master, the peer of §12.1's customers.</summary>
 /// <remarks>
 /// <para>
 /// A supplier is a sub-ledger, as a customer is: a purchase is billed by one, a payment

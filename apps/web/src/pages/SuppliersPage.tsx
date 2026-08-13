@@ -10,7 +10,9 @@ import {
 } from '@/lib/suppliers';
 
 /**
- * The supplier master of section 13.
+ * The supplier master. A peer of the customer master of §12.1, which is what it is
+ * modelled on: both are sub-ledgers, and both are reached from the work rather than
+ * from the chart of accounts.
  *
  * A supplier is a sub-ledger rather than a record beside one, which is why this screen
  * lives under purchase and not under the chart of accounts: a purchase is billed by a

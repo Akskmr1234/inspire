@@ -44,7 +44,10 @@ public enum PurchaseInvoiceStatus
 /// </summary>
 /// <remarks>
 /// <para>
-/// Section 13, and the mirror of <see cref="Sales.SalesInvoice"/>. Its own aggregate
+/// The mirror of <see cref="Sales.SalesInvoice"/>. The specification gives purchase no
+/// section of its own - it appears throughout §7, §9, §10 and §12 as the counterpart of
+/// sales, and §18's open questions never separated them - so this follows the sales
+/// module's shape wherever the two are one thing pointed two ways. Its own aggregate
 /// rather than a direction flag on the sales one, which is the business's answer of
 /// 2026-08-13: the two documents read the same at a distance and diverge in every detail
 /// that matters - a sale selects goods that exist and a purchase brings goods into

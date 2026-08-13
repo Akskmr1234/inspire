@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ERP.Api.Controllers;
 
-/// <summary>The purchases of section 13.</summary>
+/// <summary>Purchases, and the debit notes that send goods back.</summary>
 /// <remarks>
 /// <para>
 /// The mirror of <see cref="SalesController"/>. Entering and posting are separate

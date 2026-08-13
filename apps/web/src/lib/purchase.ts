@@ -2,7 +2,9 @@ import { request } from '@/lib/api';
 import type { PagedResult } from '@/lib/sales';
 
 /**
- * The purchase documents of section 13.
+ * The purchase documents. The specification gives purchase no section of its own —
+ * it appears throughout §7, §9, §10 and §12 as the mirror of sales — so this follows
+ * the sales module’s shape wherever the two are the same thing pointed two ways.
  *
  * A purchase and a debit note are one kind of document running in opposite directions,
  * which is why there is one set of endpoints and one screen rather than two of each. The
