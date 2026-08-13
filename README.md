@@ -78,7 +78,8 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase — posting: goods received, bill raised, books written, in one transaction | **Done** — driven end to end in the API suite |
 | Purchase — entering a purchase, and the API for both | **Done** — 8 API tests, at `/api/v1/purchase/invoices` |
 | Purchase — supplier master | **Done** — 3 API tests, at `/api/v1/purchase/suppliers` |
-| Purchase — screens | Not started |
+| Purchase — a filtered, paged list of documents | **Done** — the same shape the sales list takes |
+| Purchase — screens: document list, entry, posting; supplier master | **Done** — verified end to end in a browser against a real database |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
@@ -117,7 +118,11 @@ Integration tests need a running Docker daemon.
 >
 > **A batched purchase opens the batch.** This is where a purchase stops looking like a sale: the batch number is what the supplier printed on the carton and does not exist in the register until the receipt posts. The line carries it as text, and the receipt opens the batch, records what it cost, and puts the goods in it — through the same section 10 machinery a material receipt already uses, rather than a second implementation of it.
 >
-> **No list endpoint yet, and no cancellation.** Both are the next piece of work rather than decisions; the sales side has them and this will take the same shape. There are no screens either — the module is reachable over HTTP and not yet from the app.
+> **All of it is now reachable from the app**, at `/purchase/invoices` and `/purchase/suppliers`, in English and Arabic. The whole chain was driven through a browser against a real database before this was written: a supplier created on its own screen, a purchase of four widgets at 25 entered as a draft, posted, and the trial balance afterwards showing stock 100, input VAT 5, the supplier owed 105 — and `Goods Received Not Invoiced` at nothing, which is the model's own claim about itself.
+>
+> **The entry screen types batches rather than choosing them**, which is where it stops looking like the sales one. A sale offers the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is keyed off the carton and an expiry date sits beside it. Serial numbers are keyed the same way, one per line, and the count is shown against the quantity so a short list is visible before the server refuses it.
+>
+> **Cancellation is the one thing missing.** There is none on the server yet, so there is no button for it; the sales side has it and this will take the same shape.
 
 > ### Two journals in one posting used to fight over the same numbering series
 >

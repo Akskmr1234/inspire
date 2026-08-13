@@ -1,4 +1,5 @@
 using ERP.Application.Accounting.Reports;
+using ERP.Application.Purchase;
 using ERP.Application.Sales;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
@@ -713,6 +714,48 @@ public interface ISalesInvoiceReader
     Task<PagedResult<SalesInvoiceSummary>> ListAsync(
         FirmId firmId,
         SalesInvoiceFilter filter,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>What a purchase list is narrowed by.</summary>
+/// <param name="From">The earliest document date, or no lower bound.</param>
+/// <param name="To">The latest, or no upper bound.</param>
+/// <param name="Kind">Purchases or returns, or both.</param>
+/// <param name="Status">One lifecycle state, or all.</param>
+/// <param name="SupplierLedgerId">One supplier, or all.</param>
+/// <param name="Search">
+/// Matched against the firm's own number and the supplier's invoice number. Both, because
+/// somebody looking a purchase up is as likely to be holding the supplier's document as
+/// the firm's own entry.
+/// </param>
+public sealed record PurchaseInvoiceFilter(
+    DateOnly? From = null,
+    DateOnly? To = null,
+    PurchaseDocumentKind? Kind = null,
+    PurchaseInvoiceStatus? Status = null,
+    LedgerId? SupplierLedgerId = null,
+    string? Search = null);
+
+/// <summary>Reads purchase documents for a list.</summary>
+/// <remarks>
+/// Its own reader rather than the repository, for the reason the sales one has its own:
+/// posting loads one document whole, and a list wants a page of many with their suppliers'
+/// names attached and nothing else.
+/// </remarks>
+public interface IPurchaseInvoiceReader
+{
+    /// <summary>Reads one page of the documents a filter matches, newest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="filter">What to narrow by.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The page, and how many rows the filter matched in total.</returns>
+    Task<PagedResult<PurchaseInvoiceSummary>> ListAsync(
+        FirmId firmId,
+        PurchaseInvoiceFilter filter,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);

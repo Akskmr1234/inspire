@@ -1,5 +1,7 @@
 using Asp.Versioning;
+using ERP.Application.Abstractions;
 using ERP.Application.Purchase;
+using ERP.Domain.Purchase;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -17,8 +19,8 @@ namespace ERP.Api.Controllers;
 /// stock, raises the debt and writes the books in one transaction.
 /// </para>
 /// <para>
-/// No list endpoint yet, and no cancellation. Both are the next piece of work rather than
-/// decisions - the sales side has them, and this will take the same shape.
+/// No cancellation yet. It is the next piece of work rather than a decision - the sales
+/// side has it, and this will take the same shape.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -33,6 +35,50 @@ public sealed class PurchaseController : ApiControllerBase
     /// <summary>Initialises a new instance of the <see cref="PurchaseController"/> class.</summary>
     /// <param name="sender">The request dispatcher.</param>
     public PurchaseController(ISender sender) => _sender = sender;
+
+    /// <summary>Lists purchase documents, newest first.</summary>
+    /// <param name="from">The earliest document date. Omit for no lower bound.</param>
+    /// <param name="to">The latest. Omit for no upper bound.</param>
+    /// <param name="kind">Purchases or returns. Omit for both.</param>
+    /// <param name="status">One lifecycle state. Omit for all.</param>
+    /// <param name="supplierLedgerId">One supplier. Omit for all.</param>
+    /// <param name="search">Matched against both numbers: the firm's and the supplier's.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds, up to 200.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One page, and how many rows the filter matched.</returns>
+    /// <response code="200">The page.</response>
+    /// <response code="400">The paging or the date range was refused.</response>
+    [HttpGet]
+    [RequiresPermission("purchase", "invoice", "view")]
+    [ProducesResponseType(
+        typeof(PagedResult<PurchaseInvoiceSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ListAsync(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] PurchaseDocumentKind? kind,
+        [FromQuery] PurchaseInvoiceStatus? status,
+        [FromQuery] Guid? supplierLedgerId,
+        [FromQuery] string? search,
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        CancellationToken cancellationToken)
+    {
+        Result<PagedResult<PurchaseInvoiceSummary>> result = await _sender.Send(
+            new ListPurchaseInvoicesQuery(
+                from,
+                to,
+                kind,
+                status,
+                supplierLedgerId,
+                search,
+                page <= 0 ? 1 : page,
+                pageSize <= 0 ? 50 : pageSize),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 
     /// <summary>Reads one purchase, with its lines and what posting it produced.</summary>
     /// <param name="id">The document.</param>

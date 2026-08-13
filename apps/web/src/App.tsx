@@ -20,6 +20,8 @@ import { WarehousesPage } from '@/pages/WarehousesPage';
 import { CustomersPage } from '@/pages/CustomersPage';
 import { ProductsPage } from '@/pages/ProductsPage';
 import { SalesPage } from '@/pages/SalesPage';
+import { PurchasePage } from '@/pages/PurchasePage';
+import { SuppliersPage } from '@/pages/SuppliersPage';
 import { TaxReturnsPage } from '@/pages/TaxReturnsPage';
 import { StockOperationsPage } from '@/pages/StockOperationsPage';
 import {
@@ -94,6 +96,8 @@ export function App(): React.JSX.Element {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/sales/invoices" element={<SalesPage />} />
         <Route path="/sales/customers" element={<CustomersPage />} />
+        <Route path="/purchase/invoices" element={<PurchasePage />} />
+        <Route path="/purchase/suppliers" element={<SuppliersPage />} />
         <Route path="/inventory/products" element={<ProductsPage />} />
         <Route path="/inventory/stock" element={<StockOperationsPage />} />
         <Route path="/inventory/valuation" element={<StockValuationPage />} />
