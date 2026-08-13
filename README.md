@@ -79,7 +79,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase — entering a purchase, and the API for both | **Done** — 8 API tests, at `/api/v1/purchase/invoices` |
 | Purchase — supplier master | **Done** — 3 API tests, at `/api/v1/purchase/suppliers` |
 | Purchase — a filtered, paged list of documents | **Done** — the same shape the sales list takes |
-| Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests |
+| Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests, driven through the screen in both languages |
 | Purchase — screens: document list, entry, posting, cancellation; supplier master | **Done** — verified end to end in a browser against a real database |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
@@ -122,6 +122,8 @@ Integration tests need a running Docker daemon.
 > **All of it is now reachable from the app**, at `/purchase/invoices` and `/purchase/suppliers`, in English and Arabic. The whole chain was driven through a browser against a real database before this was written: a supplier created on its own screen, a purchase of four widgets at 25 entered as a draft, posted, and the trial balance afterwards showing stock 100, input VAT 5, the supplier owed 105 — and `Goods Received Not Invoiced` at nothing, which is the model's own claim about itself.
 >
 > **The entry screen types batches rather than choosing them**, which is where it stops looking like the sales one. A sale offers the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is keyed off the carton and an expiry date sits beside it. Serial numbers are keyed the same way, one per line, and the count is shown against the quantity so a short list is visible before the server refuses it.
+>
+> **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: *"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."* The document stayed posted and the books were untouched, which is the transaction doing its job.
 >
 > **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
 
