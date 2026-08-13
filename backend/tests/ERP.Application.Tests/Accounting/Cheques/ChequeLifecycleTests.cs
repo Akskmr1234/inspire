@@ -2,8 +2,11 @@ using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Cheques;
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
+using ERP.Domain.Numbering;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
+using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -176,18 +179,78 @@ public sealed class ChequeLifecycleTests
     }
 
     [Fact]
-    public async Task A_bounce_says_plainly_that_a_reversing_entry_is_still_owed()
+    public async Task A_bounce_writes_its_own_reversing_journal()
     {
-        // The ledger postings are not reversed automatically: which control account
-        // a bounced cheque comes back out of is a firm's own choice of chart. The
-        // response has to say so, or silence reads as completeness.
+        // The business's answer of 2026-08-10, and the reason this test no longer says
+        // a reversal is owed: which accounts a dishonour posts to stopped being a
+        // question the moment they named them, so a bounce that left the books alone
+        // stopped being caution and became an unfinished job.
         Fixture fixture = new();
         Cheque cheque = fixture.BankedReceived(500m);
 
         Result<BouncedChequeResponse> result = await fixture.HandleBounce(
             new BounceChequeCommand(cheque.Id.Value, "Refer to drawer", Matures));
 
-        result.Value.LedgerReversalRequired.ShouldBeTrue();
+        result.Value.LedgerReversalRequired.ShouldBeFalse();
+        cheque.ReversalVoucherId.ShouldNotBeNull();
+
+        Voucher journal = fixture.Posted.ShouldHaveSingleItem();
+
+        journal.Status.ShouldBe(VoucherStatus.Posted);
+        Fixture.Debited(journal, fixture.Customer.Id).ShouldBe(500m);
+        Fixture.Credited(journal, fixture.ChequesInHand!.Id).ShouldBe(500m);
+    }
+
+    [Fact]
+    public async Task The_bank_s_charge_is_posted_with_the_bounce_when_one_is_stated()
+    {
+        // One posting for the whole event. The fee usually arrives on the same advice
+        // as the return, and splitting it into a second journal is how it gets missed.
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        await fixture.HandleBounce(
+            new BounceChequeCommand(
+                cheque.Id.Value, "Refer to drawer", Matures, BankCharge: 25m));
+
+        Voucher journal = fixture.Posted.ShouldHaveSingleItem();
+
+        Fixture.Debited(journal, fixture.BankCharges!.Id).ShouldBe(25m);
+        Fixture.Credited(journal, fixture.Bank.Id).ShouldBe(25m);
+
+        // And it still balances with both movements on it.
+        Fixture.Balances(journal).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_bounce_with_no_charge_stated_posts_only_the_cheque()
+    {
+        Fixture fixture = new();
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        await fixture.HandleBounce(
+            new BounceChequeCommand(cheque.Id.Value, "Refer to drawer", Matures));
+
+        Voucher journal = fixture.Posted.ShouldHaveSingleItem();
+
+        journal.Lines.Count.ShouldBe(2);
+        Fixture.Debited(journal, fixture.BankCharges!.Id).ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task A_firm_that_has_not_chosen_the_accounts_cannot_bounce_a_cheque()
+    {
+        // The same refusal stock postings give, and for the same reason: a dishonour
+        // posted into an account nobody chose is found at a reconciliation months
+        // later, where one refused is found now by somebody who can fix it.
+        Fixture fixture = new(accountsConfigured: false);
+        Cheque cheque = fixture.BankedReceived(500m);
+
+        Result<BouncedChequeResponse> result = await fixture.HandleBounce(
+            new BounceChequeCommand(cheque.Id.Value, "Refer to drawer", Matures));
+
+        result.Error.Code.ShouldBe("InventoryAccounts.NotConfigured");
+        cheque.Status.ShouldBe(ChequeStatus.Deposited);
     }
 
     [Fact]
@@ -209,15 +272,15 @@ public sealed class ChequeLifecycleTests
     }
 
     [Fact]
-    public async Task A_reversal_can_be_attached_after_the_bounce_was_recorded()
+    public async Task A_reversal_can_be_attached_to_a_bounce_that_has_none()
     {
-        // The ordinary sequence: the cashier records the return when the bank tells
-        // them, and the accountant writes the journal afterwards.
+        // Still reachable, and still worth having: a cheque bounced before the journal
+        // was raised automatically has no reversal named, and this is how somebody
+        // points it at the entry they wrote by hand at the time. A bounce recorded
+        // today names its own, so this is the older rows' route rather than the
+        // ordinary one it used to be.
         Fixture fixture = new();
-        Cheque cheque = fixture.BankedReceived(500m);
-
-        await fixture.HandleBounce(
-            new BounceChequeCommand(cheque.Id.Value, "Insufficient funds", Matures));
+        Cheque cheque = fixture.BankedBouncedWithoutReversal(500m);
 
         cheque.ReversalVoucherId.ShouldBeNull();
 
@@ -390,11 +453,17 @@ public sealed class ChequeLifecycleTests
         private readonly StopChequeCommandHandler _stop;
         private readonly CancelChequeCommandHandler _cancel;
 
-        internal Fixture(bool firmSelected = true)
+        internal Fixture(bool firmSelected = true, bool accountsConfigured = true)
         {
             Firm = Domain.Tenancy.Firm.Create(
                 TenantId.NewId(), "ACME", "Acme Trading", CurrencyCode.Qar,
                 TaxRegime.GccVat, "Asia/Qatar").Value;
+
+            BranchId = SharedKernel.Tenancy.BranchId.NewId();
+
+            Year = FinancialYear.Create(
+                Firm.TenantId, Firm.Id, "2026",
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), []).Value;
 
             Customer = LedgerIn(Firm, "2000", "Al Mansoor", LedgerKind.Customer);
             Bank = LedgerIn(Firm, "1100", "Bank current", LedgerKind.Bank);
@@ -413,6 +482,8 @@ public sealed class ChequeLifecycleTests
             vouchers
                 .FindAsync(Arg.Any<VoucherId>(), Arg.Any<CancellationToken>())
                 .Returns(call => _vouchers.GetValueOrDefault(call.Arg<VoucherId>()));
+            vouchers.When(v => v.Add(Arg.Any<Voucher>()))
+                .Do(call => Posted.Add(call.Arg<Voucher>()!));
 
             IBillRepository bills = Substitute.For<IBillRepository>();
             bills
@@ -425,10 +496,58 @@ public sealed class ChequeLifecycleTests
             tenant.IsResolved.Returns(true);
             tenant.TenantId.Returns(Firm.TenantId);
             tenant.FirmId.Returns(firmSelected ? Firm.Id : null);
+            tenant.BranchId.Returns(firmSelected ? BranchId : null);
+
+            // The accounts a bounce now posts through. Assigned unless a test asks for a
+            // firm that has not chosen them, which is one of the refusals worth having.
+            Accounts = InventoryAccountMap.Create(Firm.TenantId, Firm.Id);
+
+            if (accountsConfigured)
+            {
+                ChequesInHand = LedgerIn(Firm, "1120", "Cheques in Hand", LedgerKind.General);
+                BankCharges = LedgerIn(Firm, "5910", "Bank Charges", LedgerKind.General);
+
+                Accounts.Assign(StockAccount.ChequesInHand, ChequesInHand).IsSuccess
+                    .ShouldBeTrue();
+                Accounts.Assign(StockAccount.BankCharges, BankCharges).IsSuccess.ShouldBeTrue();
+            }
+
+            IInventoryAccountMapRepository accounts =
+                Substitute.For<IInventoryAccountMapRepository>();
+
+            accounts.FindAsync(Firm.Id, Arg.Any<CancellationToken>()).Returns(Accounts);
+
+            INumberingSeriesRepository numbering = Substitute.For<INumberingSeriesRepository>();
+            numbering
+                .FindForUpdateAsync(
+                    Arg.Any<string>(), Arg.Any<FirmId>(), Arg.Any<BranchId>(),
+                    Arg.Any<FinancialYearId>(), Arg.Any<CancellationToken>())
+                .Returns((NumberingSeries?)null);
+            numbering.When(n => n.Add(Arg.Any<NumberingSeries>()))
+                .Do(call => Series.Add(call.Arg<NumberingSeries>()!));
+
+            IFinancialYearRepository financialYears =
+                Substitute.For<IFinancialYearRepository>();
+
+            financialYears
+                .FindContainingAsync(
+                    Arg.Any<FirmId>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+                .Returns(Year);
+
+            IFirmRepository firms = Substitute.For<IFirmRepository>();
+            firms.FindAsync(Firm.Id, Arg.Any<CancellationToken>()).Returns(Firm);
+
+            ICurrentUser user = Substitute.For<ICurrentUser>();
+            user.UserId.Returns(UserId.NewId());
+
+            IClock clock = Substitute.For<IClock>();
+            clock.UtcNow.Returns(new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero));
 
             _deposit = new DepositChequeCommandHandler(cheques, ledgers, tenant, UnitOfWork);
             _clear = new ClearChequeCommandHandler(cheques, vouchers, tenant, UnitOfWork);
-            _bounce = new BounceChequeCommandHandler(cheques, bills, vouchers, tenant, UnitOfWork);
+            _bounce = new BounceChequeCommandHandler(
+                cheques, bills, vouchers, accounts, numbering, financialYears, firms, tenant,
+                user, clock, UnitOfWork);
             _reverse = new RecordChequeReversalCommandHandler(
                 cheques, vouchers, tenant, UnitOfWork);
             _stop = new StopChequeCommandHandler(cheques, tenant, UnitOfWork);
@@ -436,6 +555,25 @@ public sealed class ChequeLifecycleTests
         }
 
         internal Firm Firm { get; }
+
+        internal BranchId BranchId { get; }
+
+        internal FinancialYear Year { get; }
+
+        /// <summary>Gets the firm's account map, as a bounce reads it.</summary>
+        internal InventoryAccountMap Accounts { get; }
+
+        /// <summary>Gets the account a cheque waits in, where the firm has chosen one.</summary>
+        internal Ledger? ChequesInHand { get; }
+
+        /// <summary>Gets the account the bank's charges land in.</summary>
+        internal Ledger? BankCharges { get; }
+
+        /// <summary>Gets the numbering series the bounce created for its journal.</summary>
+        internal List<NumberingSeries> Series { get; } = [];
+
+        /// <summary>Gets the journals the handlers posted, in order.</summary>
+        internal List<Voucher> Posted { get; } = [];
 
         internal Ledger Customer { get; }
 
@@ -463,6 +601,40 @@ public sealed class ChequeLifecycleTests
 
             return cheque;
         }
+
+        /// <summary>A cheque already bounced without a reversal, as older rows are.</summary>
+        /// <remarks>
+        /// Bounced on the aggregate rather than through the handler, because the handler
+        /// now always writes a journal - and this is precisely the state that predates
+        /// it: a dishonour recorded when the books were still somebody else's job.
+        /// </remarks>
+        internal Cheque BankedBouncedWithoutReversal(decimal amount)
+        {
+            Cheque cheque = BankedReceived(amount);
+
+            cheque.Bounce("Insufficient funds", Matures).IsSuccess.ShouldBeTrue();
+
+            return cheque;
+        }
+
+        /// <summary>What one ledger was debited on a journal.</summary>
+        internal static decimal Debited(Voucher journal, LedgerId ledgerId) =>
+            journal.Lines
+                .Where(line => line.LedgerId == ledgerId && line.Side == EntrySide.Debit)
+                .Sum(line => line.Amount.Amount);
+
+        /// <summary>What one ledger was credited.</summary>
+        internal static decimal Credited(Voucher journal, LedgerId ledgerId) =>
+            journal.Lines
+                .Where(line => line.LedgerId == ledgerId && line.Side == EntrySide.Credit)
+                .Sum(line => line.Amount.Amount);
+
+        /// <summary>Whether a journal's two sides agree.</summary>
+        internal static bool Balances(Voucher journal) =>
+            journal.Lines.Where(line => line.Side == EntrySide.Debit)
+                .Sum(line => line.Amount.Amount)
+            == journal.Lines.Where(line => line.Side == EntrySide.Credit)
+                .Sum(line => line.Amount.Amount);
 
         /// <summary>Registers a cheque belonging to a sibling firm of the same tenant.</summary>
         internal Cheque ChequeInAnotherFirm(decimal amount) => Register(Cheque.Record(

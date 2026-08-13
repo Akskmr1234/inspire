@@ -65,6 +65,11 @@ internal static class ChartOfAccountsTemplate
     [
         new("1110", "CASH", "Cash in Hand", LedgerKind.Cash),
         new("1110", "BANK", "Bank Account", LedgerKind.Bank),
+
+        // Where a cheque waits between being taken in and clearing. An asset beside
+        // cash and bank, because that is what it is: money the firm holds a claim to
+        // but cannot yet spend.
+        new("1110", "CHEQUES-IN-HAND", "Cheques in Hand", LedgerKind.General),
         new("1300", "STOCK", "Stock in Hand", LedgerKind.General),
         new("3100", "CAPITAL", "Capital Account", LedgerKind.General),
         new("4100", "SALES", "Sales Account", LedgerKind.General),
@@ -84,6 +89,9 @@ internal static class ChartOfAccountsTemplate
         new("5200", "PACKING", "Packing Charge", LedgerKind.AdditionalCharge),
         new("5900", "DELIVERY", "Delivery Charge", LedgerKind.AdditionalCharge),
         new("5900", "DISC-ALLOWED", "Discount Allowed", LedgerKind.AdditionalCharge),
+
+        // What the bank charges for a dishonoured cheque, kept where a firm can see it.
+        new("5900", "BANK-CHARGES", "Bank Charges", LedgerKind.General),
         new("4900", "DISC-RECEIVED", "Discount Received", LedgerKind.AdditionalCharge),
 
         // The counter-accounts a stock movement posts to, answering open question 8a.

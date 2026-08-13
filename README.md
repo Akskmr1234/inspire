@@ -40,7 +40,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Accounting — account group summary, voucher report, transaction summary | **Done** — 23 application + 15 integration tests |
 | Accounting — cash flow statement (direct method) | **Done** — 15 application + 11 integration tests |
 | Deployment — container images for API and web, platform configuration | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
-| Accounting — bounced cheque reversal, by operator-supplied voucher | **Done** — 7 tests; see the note below on what is still not automatic |
+| Accounting — bounced cheque reversal, raised automatically or supplied | **Done** — 11 tests; the journal is written by the bounce itself |
 | Dynamic menus — DB-driven tree, permission-filtered, seeded per firm | **Done** — 15 domain + 9 application + 5 API tests |
 | Dynamic menus — administration: add, rename, reorder, regroup, hide, delete | **Done** — 8 API tests, with a screen at `/settings/menu` |
 | Data grid — sort, search, columns, freeze, CSV export, saved layouts | **Done** — 8 API tests; first screen is the chart of accounts |
@@ -76,21 +76,22 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase, Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,073 passing, 0 failing (522 domain + 258 application + 186 API + 20 identity + 87 integration).
+**Test suite:** 1,076 passing, 0 failing (522 domain + 261 application + 186 API + 20 identity + 87 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
 Integration tests need a running Docker daemon.
 
-> ### A bounced cheque is reversed by a voucher somebody writes, not by one this system invents
+> ### A bounced cheque now reverses itself, and an operator may still write the entry instead
 >
-> When a received cheque bounces, the bills its receipt settled **are** released — automatically, in the same transaction, and listed in the response. The ledger postings are **not** raised here, and will not be.
+> When a received cheque bounces, three things happen in one transaction: the bills its receipt settled are released, the cheque is marked dishonoured, and a reversing journal is raised — the party debited again, `Cheques in Hand` credited. Where the bank's charge is stated on the bounce, the same journal debits `Bank Charges` and credits the account the cheque was deposited to, so the whole event reaches the books at once rather than in two pieces of which the second is easily forgotten.
 >
-> That is deliberate rather than unfinished. Which control account a dishonoured cheque comes back out of, and where the bank's charge for it goes, are a firm's own choice of chart; inventing an answer would mean posting into somebody's books on a guess. So the reversing journal is written by whoever knows the chart, and the cheque records **which** one it was — the second of the two routes this note used to offer, and the same arrangement `clear` already uses for the voucher that posts the bank movement.
+> This was deliberately left manual until 2026-08-10, on the grounds that which control account a dishonour comes out of is a firm's own choice of chart. The business then made that choice, and the accounts joined the per-firm map that stock and sales already post through — at which point leaving it manual stopped being caution and became an unfinished job.
 >
-> Two ways to supply it: `reversalVoucherId` on `POST /cheques/{id}/bounce`, or `POST /cheques/{id}/reversal` afterwards — which is the ordinary sequence, since the bank returns cheques to a cashier and the journal is written later by somebody else. The voucher must be posted, in the same firm, and must touch the party the cheque came from; the amount is deliberately not checked, because a reversal usually carries the bank's charge alongside the cheque. Until one is named, the bounce response still returns `ledgerReversalRequired: true`, so silence is never mistaken for completeness.
+> **The operator's route is untouched.** `reversalVoucherId` on `POST /cheques/{id}/bounce` still names an entry somebody has already written, and where it is given nothing is raised: a second journal appearing beside a hand-written one helps nobody. `POST /cheques/{id}/reversal` also still exists, for cheques bounced before this landed and left with no reversal named.
 >
-> The automatic route is no longer open either: the business chose it on 2026-08-10, so cheques in hand, bank charges and dishonour suspense join the per-firm map that stock movements already post through, and a bounce will raise its own reversing journal. **Not yet built** — the map and the stock side are, the cheque side is the next accounting commit. Until it lands, the manual route above is how a bounce reaches the books.
+> **`dishonourSuspense` is not among the accounts**, though the business named it. A cheque can only bounce from *deposited* — paid in, not yet cleared — so the money is still in cheques in hand and the reversal is simply the receipt backwards. There is no moment where it sits in neither place, and an account that would only ever hold zero is one more line on a trial balance to wonder about. If a firm's own receipt posting moves cheques somewhere else on deposit, that is the case suspense would serve, and it can be added then.
+
 
 > ### The returns can be filed on, and the input side has no taxable value to state
 >

@@ -72,6 +72,21 @@ public enum StockAccount
     /// from the chart.
     /// </remarks>
     SalesReturn = 9,
+
+    /// <summary>Where a cheque sits between being taken in and clearing.</summary>
+    /// <remarks>
+    /// A receipt moves the debt here, and clearing moves it to the bank. A cheque that
+    /// bounces never gets that far, so the reversal credits this account and puts the
+    /// debt back on the party.
+    /// </remarks>
+    ChequesInHand = 10,
+
+    /// <summary>What the bank charges for handling a dishonoured cheque.</summary>
+    /// <remarks>
+    /// Its own account rather than netted against the bank, because a firm that cannot
+    /// see what its bank charged it cannot argue about it.
+    /// </remarks>
+    BankCharges = 11,
 }
 
 /// <summary>
@@ -225,6 +240,8 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.SalesRevenue => "sales are credited to",
         StockAccount.RoundOff => "rounding differences are posted to",
         StockAccount.SalesReturn => "returned goods are credited back from",
+        StockAccount.ChequesInHand => "cheques taken in are held in",
+        StockAccount.BankCharges => "the bank's charges are posted to",
         _ => account.ToString(),
     };
 }

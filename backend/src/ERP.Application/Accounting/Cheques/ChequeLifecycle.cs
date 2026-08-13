@@ -2,6 +2,9 @@ using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
+using ERP.Domain.Tenancy;
+using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -42,15 +45,23 @@ public sealed record ClearChequeCommand(
 /// <param name="BouncedOn">The date it was returned.</param>
 /// <param name="ReversalVoucherId">
 /// The voucher taking the receipt back out of the books, where one has already been
-/// written. Optional, because the bank returns cheques to a cashier and the reversing
-/// journal is usually written afterwards by somebody else; attach it later with
-/// <see cref="RecordChequeReversalCommand"/>.
+/// written. Optional, and where none is named the bounce now writes its own: the party
+/// is debited again and cheques in hand is credited, in the same transaction. A voucher
+/// named here is honoured and never overwritten, which is the route the business kept
+/// open when it asked for the automatic one.
+/// </param>
+/// <param name="BankCharge">
+/// What the bank charged for the dishonour, if anything. Where stated, the journal also
+/// debits bank charges and credits the account the cheque was deposited to - so the whole
+/// event reaches the books at once rather than in two pieces, the second easily forgotten.
+/// Ignored when the caller names its own reversal voucher, which already says what it says.
 /// </param>
 public sealed record BounceChequeCommand(
     Guid ChequeId,
     string Reason,
     DateOnly BouncedOn,
-    Guid? ReversalVoucherId = null) : ICommand<BouncedChequeResponse>, ITransactional;
+    Guid? ReversalVoucherId = null,
+    decimal BankCharge = 0m) : ICommand<BouncedChequeResponse>, ITransactional;
 
 /// <summary>Names the voucher that reversed a bounced cheque's receipt.</summary>
 /// <param name="ChequeId">The cheque.</param>
@@ -475,27 +486,49 @@ public sealed class BounceChequeCommandHandler
     private readonly IChequeRepository _cheques;
     private readonly IBillRepository _bills;
     private readonly IVoucherRepository _vouchers;
+    private readonly IFirmRepository _firms;
+    private readonly IInventoryAccountMapRepository _accounts;
     private readonly ITenantContext _tenantContext;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ChequeReversalPoster _reversal;
 
     /// <summary>Initialises a new instance of the <see cref="BounceChequeCommandHandler"/> class.</summary>
     /// <param name="cheques">The cheque repository.</param>
     /// <param name="bills">The bill repository.</param>
     /// <param name="vouchers">The voucher repository.</param>
+    /// <param name="accounts">The per-firm account map repository.</param>
+    /// <param name="numbering">The numbering-series repository.</param>
+    /// <param name="financialYears">The financial-year repository.</param>
+    /// <param name="firms">The firm repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="currentUser">The acting user.</param>
+    /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public BounceChequeCommandHandler(
         IChequeRepository cheques,
         IBillRepository bills,
         IVoucherRepository vouchers,
+        IInventoryAccountMapRepository accounts,
+        INumberingSeriesRepository numbering,
+        IFinancialYearRepository financialYears,
+        IFirmRepository firms,
         ITenantContext tenantContext,
+        ICurrentUser currentUser,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         _cheques = cheques;
         _bills = bills;
         _vouchers = vouchers;
+        _firms = firms;
         _tenantContext = tenantContext;
+        _currentUser = currentUser;
+        _clock = clock;
         _unitOfWork = unitOfWork;
+        _accounts = accounts;
+        _reversal = new ChequeReversalPoster(vouchers, numbering, financialYears);
     }
 
     /// <inheritdoc />
@@ -532,11 +565,43 @@ public sealed class BounceChequeCommandHandler
             reversal = resolved.Value.Id;
         }
 
+        // Everything the journal will need is loaded and checked before the cheque is
+        // touched, so a firm that has not chosen its accounts is refused with the cheque
+        // still deposited rather than bounced by a call that then fails.
+        ReversalContext? context = null;
+
+        if (reversal is null)
+        {
+            Result<ReversalContext> loaded = await LoadReversalContextAsync(
+                cheque, request.BankCharge, cancellationToken);
+
+            if (loaded.IsFailure)
+            {
+                return Result.Failure<BouncedChequeResponse>(loaded.Error);
+            }
+
+            context = loaded.Value;
+        }
+
         Result bounced = cheque.Bounce(request.Reason, request.BouncedOn, reversal);
 
         if (bounced.IsFailure)
         {
             return Result.Failure<BouncedChequeResponse>(bounced.Error);
+        }
+
+        // Raised only where the operator named none. Somebody who has written the entry
+        // themselves does not want a second one appearing beside it, and the business
+        // kept that route open when it asked for this one.
+        if (context is { } ready)
+        {
+            Result raised = await RaiseReversalAsync(
+                cheque, ready, request.BankCharge, cancellationToken);
+
+            if (raised.IsFailure)
+            {
+                return Result.Failure<BouncedChequeResponse>(raised.Error);
+            }
         }
 
         IReadOnlyList<ReopenedBill> reopened = await ReleaseSettlementsAsync(
@@ -556,6 +621,61 @@ public sealed class BounceChequeCommandHandler
             reopened,
             total,
             LedgerReversalRequired: cheque.ReversalVoucherId is null));
+    }
+
+    /// <summary>Everything the reversing journal needs, loaded before anything moves.</summary>
+    private sealed record ReversalContext(Firm Firm, InventoryAccountMap Map, BranchId BranchId);
+
+    /// <summary>Loads and checks what the journal will need, changing nothing.</summary>
+    private async Task<Result<ReversalContext>> LoadReversalContextAsync(
+        Cheque cheque,
+        decimal bankCharge,
+        CancellationToken cancellationToken)
+    {
+        if (_tenantContext.BranchId is not { } branchId)
+        {
+            return Result.Failure<ReversalContext>(Error.Forbidden(
+                "Cheque.NoBranchSelected",
+                "A branch must be selected to bounce a cheque, because the journal it "
+                + "raises belongs to one."));
+        }
+
+        Firm? firm = await _firms.FindAsync(cheque.FirmId, cancellationToken);
+
+        if (firm is null)
+        {
+            return Result.Failure<ReversalContext>(Error.NotFound(
+                "Firm.NotFound", "The selected firm no longer exists."));
+        }
+
+        InventoryAccountMap? map = await _accounts.FindAsync(cheque.FirmId, cancellationToken);
+
+        Result ready = ChequeReversalPoster.EnsureReady(map, bankCharge);
+
+        return ready.IsFailure
+            ? Result.Failure<ReversalContext>(ready.Error)
+            : Result.Success(new ReversalContext(firm, map!, branchId));
+    }
+
+    /// <summary>Writes the journal the bounce owes, and records it on the cheque.</summary>
+    /// <remarks>
+    /// In the same transaction as the bounce itself, so a dishonour cannot reach the
+    /// register without reaching the books - which is the whole point of the business
+    /// having answered this rather than leaving it to a note in a response.
+    /// </remarks>
+    private async Task<Result> RaiseReversalAsync(
+        Cheque cheque,
+        ReversalContext context,
+        decimal bankCharge,
+        CancellationToken cancellationToken)
+    {
+        Result<Voucher> journal = await _reversal.RaiseAsync(
+            cheque, context.Firm, context.Map, context.BranchId, bankCharge,
+            _currentUser.UserId, _clock.UtcNow, cancellationToken);
+
+        return journal.IsFailure
+            ? Result.Failure(journal.Error)
+            : cheque.RecordReversal(journal.Value.Id);
     }
 
     /// <summary>Puts back the bills the bounced cheque's receipt had settled.</summary>

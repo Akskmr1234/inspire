@@ -692,6 +692,17 @@ POS (retail billing, barcode, cash counter) · HR & Payroll (employees, attendan
      its own reversing journal automatically instead of waiting for somebody to write one.
      The operator-supplied route stays: a bounce may still name a journal, and one already
      named is not overwritten. That closes the last accounting gap the README carried.
+
+     **Built 2026-08-13, with two of the three accounts.** A bounce now debits the party
+     and credits cheques in hand, in the same transaction as the dishonour, and posts the
+     bank's charge where the caller states one — debiting bank charges and crediting the
+     account the cheque was deposited to, which the cheque already knows. **Dishonour
+     suspense is not used**: a cheque can only bounce from *deposited*, so the money is
+     still in cheques in hand and the reversal is simply the receipt backwards. There is
+     no moment where it sits in neither account, and one that would only ever hold zero is
+     a line on the trial balance for somebody to wonder about. It becomes necessary only
+     if a firm's own receipt posting moves cheques elsewhere on deposit, and can be added
+     then.
    - Inventory therefore appears in the trial balance and the balance sheet, and the two
      reconcile against the stock valuation by construction.
 9. ~~**Custom SQL dashboard widgets**~~ — **ANSWERED (2026-08-06): required, all of them.**
