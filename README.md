@@ -73,10 +73,13 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
 | Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** — 11 integration + 5 API tests |
 | Accounting — the returns screen, one for both regimes | **Done** — verified in a browser, English and Arabic |
-| Purchase, Manufacturing, Service modules | Not started |
+| Purchase — invoice aggregate: lines, input tax per component, charges, rounding | **Done** (domain + persistence) — 26 domain tests |
+| Purchase — the journal a posted purchase raises, through a goods-received account | **Done** — 21 domain tests; see the note below |
+| Purchase — posting, API and screens; supplier master | Not started |
+| Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,076 passing, 0 failing (522 domain + 261 application + 186 API + 20 identity + 87 integration).
+**Test suite:** 1,121 passing, 0 failing (567 domain + 261 application + 186 API + 20 identity + 87 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -97,11 +100,25 @@ Integration tests need a running Docker daemon.
 >
 > `GET /api/v1/accounting/reports/{output-tax,input-tax,tax-summary}` produce §7.3's three reports, and one set of endpoints serves both regimes: a Qatar firm is answered in VAT, an Indian firm in CGST, SGST, IGST and cess. Only posted documents count; credit notes net off the period they fall in; the taxable value is counted **once per line**, so a GST supply carrying two heads is not reported as twice the sales.
 >
-> **The input side reports tax without a base.** Nothing produces input tax yet but a journal somebody writes by hand — there is no purchase module — and a ledger posting records the tax, not the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. When purchase lands it posts to the same accounts and the figures keep working; the base arrives with the documents.
+> **The input side reports tax without a base.** Nothing produces input tax yet but a journal somebody writes by hand — the purchase document exists but nothing posts one — and a ledger posting records the tax, not the purchase it was charged on. The taxable value is left absent rather than derived from the rate, which would put a guess on a statutory return. `PurchaseJournal` already posts to the accounts this report reads, so the figures keep working the day something drives it; the base arrives with the documents.
 >
 > **The summary reconciles itself against the ledger.** Each head shows what the documents charged beside what that head's account actually moved by. `isReconciled: false` means output tax reached the books by some route other than a sales document, and a return built from the documents alone would understate it. It is surfaced, not corrected — only a person can say which figure is right.
 >
 > **The screen is at `/accounting/tax-returns`**, one page for both regimes with the summary and the two listings behind a tab each. One menu entry, not one per regime: Q1 asked for report menus filtered by regime so a VAT firm never sees a GST return, and a report that answers in the heads a firm actually charges leaves nothing to filter.
+
+> ### A purchase has a document and a journal, and nothing to drive them yet
+>
+> §13's document exists as its own aggregate — its own tables, its own numbering, invoice and return in one type as the sales side has — and `PurchaseJournal` turns a posted one into what it did to the accounts. The document is deliberately a mirror of `SalesInvoice` rather than a direction flag on it, which is roughly seven hundred lines of shape said twice. The two read the same at a distance and diverge in every detail that matters: a sale selects goods that exist and a purchase brings goods into existence, a sale is numbered by the firm and a purchase carries the supplier's number as well, a sale credits revenue and a purchase debits a clearing account. Sharing them would have produced one type where half the fields are always null.
+>
+> **The goods sit in `Goods Received Not Invoiced` between arriving and being billed.** The receipt debits inventory and credits that account; the invoice debits it back, debits input tax head by head, and credits the supplier. The two halves cancel, so a firm that receives and invoices everything ends the period with nothing in it — and whatever *is* in it is exactly the goods received and not yet invoiced, which is a figure an accountant otherwise rebuilds from delivery notes at a year end. It is a current liability, not a suspense account, because that is what it is.
+>
+> **A purchase return needs no contra account**, which is where the mirror stops. A sales return has one because gross sales and returns are both figures somebody reports; a purchase return credits back the same clearing account it debited, because netting that account to zero is the whole point of it.
+>
+> **Freight on a purchase is charged, not capitalised.** Landed costing — spreading a carriage charge across the units it carried — is a separate thing the specification does not ask for yet, and doing it halfway would put a figure into stock valuation no report could explain.
+>
+> **Nothing drives any of it yet.** There is no posting handler, no endpoint, no screen, and no supplier master: a purchase cannot be entered today except from a test. That is the next piece of work, and it is the same shape as the sales one — receipt raised, bill raised, journal written, in one transaction.
+>
+> **A supplier's invoice number is unique per supplier**, enforced in the database as well as read by the return. Entering the same supplier invoice twice is input tax reclaimed twice, which is the expensive kind of duplicate: it is caught by an assessor rather than by a reader of the creditors report.
 
 > ### Round Off is wired up, and nothing yet produces a figure to put in it
 >

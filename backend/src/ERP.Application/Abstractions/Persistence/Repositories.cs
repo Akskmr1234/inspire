@@ -4,6 +4,7 @@ using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
@@ -751,6 +752,27 @@ public interface ISalesInvoiceRepository
     /// <summary>Adds an invoice.</summary>
     /// <param name="invoice">The invoice.</param>
     void Add(SalesInvoice invoice);
+}
+
+/// <summary>Reads and writes purchase invoices.</summary>
+public interface IPurchaseInvoiceRepository
+{
+    /// <summary>Finds a purchase with everything posting it will need.</summary>
+    /// <param name="id">The purchase.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The purchase, or <see langword="null"/> where there is none.</returns>
+    /// <remarks>
+    /// Lines, charges, per-head tax and the units each line brings in, all in one load,
+    /// for the reason a sale's are: posting reads every one of them, and fetching them
+    /// lazily would be four round trips inside a transaction holding stock positions.
+    /// </remarks>
+    Task<PurchaseInvoice?> FindAsync(
+        PurchaseInvoiceId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a purchase.</summary>
+    /// <param name="invoice">The purchase.</param>
+    void Add(PurchaseInvoice invoice);
 }
 
 /// <summary>Reads the accounts a firm's tax heads post to.</summary>

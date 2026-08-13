@@ -5,6 +5,7 @@ using ERP.Application.Platform.Grids;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
@@ -235,6 +236,29 @@ public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
 
     /// <inheritdoc />
     public void Add(SalesInvoice invoice) => _context.SalesInvoices.Add(invoice);
+}
+
+/// <summary>The EF Core purchase invoice repository.</summary>
+public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="PurchaseInvoiceRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public PurchaseInvoiceRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<PurchaseInvoice?> FindAsync(
+        PurchaseInvoiceId id,
+        CancellationToken cancellationToken = default) =>
+        _context.PurchaseInvoices
+            .Include(invoice => invoice.Lines).ThenInclude(line => line.Components)
+            .Include(invoice => invoice.Lines).ThenInclude(line => line.Serials)
+            .Include(invoice => invoice.Charges)
+            .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(PurchaseInvoice invoice) => _context.PurchaseInvoices.Add(invoice);
 }
 
 /// <summary>The EF Core tax account map repository.</summary>

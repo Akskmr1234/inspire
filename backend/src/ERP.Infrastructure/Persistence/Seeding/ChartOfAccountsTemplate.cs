@@ -102,6 +102,13 @@ internal static class ChartOfAccountsTemplate
         new("5900", "STOCK-VARIANCE", "Stock Variance", LedgerKind.General),
         new("3100", "OPENING-STOCK", "Opening Stock Equity", LedgerKind.General),
         new("5100", "COGS", "Cost of Goods Sold", LedgerKind.General),
+
+        // Where goods sit between arriving and being invoiced. A current liability
+        // rather than a suspense account, because that is what it is: goods the firm
+        // has and has not yet been billed for is money it owes somebody. What is left
+        // in it at a year end is the accrual an accountant would otherwise have built
+        // by hand out of delivery notes.
+        new("2100", "GOODS-RECEIVED", "Goods Received Not Invoiced", LedgerKind.General),
     ];
 
     /// <summary>Returns the tax ledgers appropriate to a firm's regime.</summary>

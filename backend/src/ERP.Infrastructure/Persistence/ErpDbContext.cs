@@ -6,6 +6,7 @@ using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
@@ -105,6 +106,24 @@ public class ErpDbContext : DbContext
 
     /// <summary>Gets the tax charged on each line, head by head.</summary>
     public DbSet<SalesInvoiceLineTax> SalesInvoiceLineTaxes => Set<SalesInvoiceLineTax>();
+
+    /// <summary>Gets the purchase invoices.</summary>
+    public DbSet<PurchaseInvoice> PurchaseInvoices => Set<PurchaseInvoice>();
+
+    /// <summary>Gets their lines.</summary>
+    public DbSet<PurchaseInvoiceLine> PurchaseInvoiceLines => Set<PurchaseInvoiceLine>();
+
+    /// <summary>Gets the units those lines brought in.</summary>
+    public DbSet<PurchaseInvoiceLineSerial> PurchaseInvoiceLineSerials =>
+        Set<PurchaseInvoiceLineSerial>();
+
+    /// <summary>Gets the charges carried beside the goods.</summary>
+    public DbSet<PurchaseInvoiceCharge> PurchaseInvoiceCharges =>
+        Set<PurchaseInvoiceCharge>();
+
+    /// <summary>Gets the input tax charged on each line, head by head.</summary>
+    public DbSet<PurchaseInvoiceLineTax> PurchaseInvoiceLineTaxes =>
+        Set<PurchaseInvoiceLineTax>();
 
     /// <summary>Gets the charges documents may carry: §9's additional-ledger matrix.</summary>
     public DbSet<AdditionalLedger> AdditionalLedgers => Set<AdditionalLedger>();
@@ -328,6 +347,12 @@ public class ErpDbContext : DbContext
             .HaveConversion<SalesInvoiceLineIdConverter>();
         configurationBuilder.Properties<SalesInvoiceChargeId>()
             .HaveConversion<SalesInvoiceChargeIdConverter>();
+        configurationBuilder.Properties<PurchaseInvoiceId>()
+            .HaveConversion<PurchaseInvoiceIdConverter>();
+        configurationBuilder.Properties<PurchaseInvoiceLineId>()
+            .HaveConversion<PurchaseInvoiceLineIdConverter>();
+        configurationBuilder.Properties<PurchaseInvoiceChargeId>()
+            .HaveConversion<PurchaseInvoiceChargeIdConverter>();
         configurationBuilder.Properties<AdditionalLedgerId>()
             .HaveConversion<AdditionalLedgerIdConverter>();
         configurationBuilder.Properties<InventoryAccountMapId>()

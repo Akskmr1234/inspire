@@ -87,6 +87,24 @@ public enum StockAccount
     /// see what its bank charged it cannot argue about it.
     /// </remarks>
     BankCharges = 11,
+
+    /// <summary>Where goods sit between arriving and being invoiced.</summary>
+    /// <remarks>
+    /// <para>
+    /// The business's answer of 2026-08-13. A delivery and the invoice for it turn up on
+    /// different days, and something has to hold the goods in between: the receipt debits
+    /// inventory and credits this account, and the invoice debits it back and credits the
+    /// supplier. The two halves cancel, so a firm that receives and invoices everything
+    /// ends the year with nothing here.
+    /// </para>
+    /// <para>
+    /// Which makes the balance worth reading rather than worth hiding. What is left in it
+    /// is exactly the goods received and not yet invoiced - a figure an accountant
+    /// otherwise reconstructs from delivery notes at year end, and a figure that is
+    /// accrued into creditors when the accounts are drawn up.
+    /// </para>
+    /// </remarks>
+    GoodsReceived = 12,
 }
 
 /// <summary>
@@ -242,6 +260,7 @@ public sealed class InventoryAccountMap : AggregateRoot<InventoryAccountMapId>, 
         StockAccount.SalesReturn => "returned goods are credited back from",
         StockAccount.ChequesInHand => "cheques taken in are held in",
         StockAccount.BankCharges => "the bank's charges are posted to",
+        StockAccount.GoodsReceived => "goods received but not yet invoiced are held in",
         _ => account.ToString(),
     };
 }

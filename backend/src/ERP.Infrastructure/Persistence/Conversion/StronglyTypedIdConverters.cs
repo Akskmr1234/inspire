@@ -2,6 +2,7 @@ using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.Platform;
+using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
@@ -372,6 +373,37 @@ public sealed class SalesInvoiceChargeIdConverter : ValueConverter<SalesInvoiceC
     /// <summary>Initialises a new instance of the <see cref="SalesInvoiceChargeIdConverter"/> class.</summary>
     public SalesInvoiceChargeIdConverter()
         : base(id => id.Value, value => SalesInvoiceChargeId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="PurchaseInvoiceId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PurchaseInvoiceIdConverter : ValueConverter<PurchaseInvoiceId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PurchaseInvoiceIdConverter"/> class.</summary>
+    public PurchaseInvoiceIdConverter()
+        : base(id => id.Value, value => PurchaseInvoiceId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="PurchaseInvoiceLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PurchaseInvoiceLineIdConverter : ValueConverter<PurchaseInvoiceLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PurchaseInvoiceLineIdConverter"/> class.</summary>
+    public PurchaseInvoiceLineIdConverter()
+        : base(id => id.Value, value => PurchaseInvoiceLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="PurchaseInvoiceChargeId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PurchaseInvoiceChargeIdConverter
+    : ValueConverter<PurchaseInvoiceChargeId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PurchaseInvoiceChargeIdConverter"/> class.</summary>
+    public PurchaseInvoiceChargeIdConverter()
+        : base(id => id.Value, value => PurchaseInvoiceChargeId.From(value))
     {
     }
 }

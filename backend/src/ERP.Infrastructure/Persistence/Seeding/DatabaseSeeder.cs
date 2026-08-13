@@ -615,6 +615,7 @@ public sealed partial class DatabaseSeeder
             (StockAccount.SalesReturn, "SALES-RETURN"),
             (StockAccount.ChequesInHand, "CHEQUES-IN-HAND"),
             (StockAccount.BankCharges, "BANK-CHARGES"),
+            (StockAccount.GoodsReceived, "GOODS-RECEIVED"),
         ];
 
         bool isNew = map is null;
