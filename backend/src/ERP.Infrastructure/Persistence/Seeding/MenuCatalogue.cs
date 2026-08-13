@@ -141,6 +141,16 @@ public static class MenuCatalogue
                 // Invoices and credit notes on one entry, because they are one kind of
                 // document: a screen showing a customer's history wants both, and two
                 // entries would suggest two places to look for the same sale.
+                // Before the invoices, because that is the order the work happens in:
+                // an order is taken, then filled.
+                new(
+                    "transactions.sales-orders",
+                    "Sales orders",
+                    "أوامر البيع",
+                    "sales",
+                    "/sales/orders",
+                    "sales:order:view"),
+
                 new(
                     "transactions.sales",
                     "Sales invoices",

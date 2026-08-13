@@ -377,6 +377,36 @@ public sealed class SalesInvoiceChargeIdConverter : ValueConverter<SalesInvoiceC
     }
 }
 
+/// <summary>Converts <see cref="SalesOrderId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class SalesOrderIdConverter : ValueConverter<SalesOrderId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="SalesOrderIdConverter"/> class.</summary>
+    public SalesOrderIdConverter()
+        : base(id => id.Value, value => SalesOrderId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="SalesOrderLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class SalesOrderLineIdConverter : ValueConverter<SalesOrderLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="SalesOrderLineIdConverter"/> class.</summary>
+    public SalesOrderLineIdConverter()
+        : base(id => id.Value, value => SalesOrderLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="SalesOrderChargeId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class SalesOrderChargeIdConverter : ValueConverter<SalesOrderChargeId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="SalesOrderChargeIdConverter"/> class.</summary>
+    public SalesOrderChargeIdConverter()
+        : base(id => id.Value, value => SalesOrderChargeId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="PurchaseInvoiceId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class PurchaseInvoiceIdConverter : ValueConverter<PurchaseInvoiceId, Guid>
 {

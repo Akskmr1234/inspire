@@ -58,6 +58,7 @@ public sealed class CancelSalesInvoiceCommandHandler
     : ICommandHandler<CancelSalesInvoiceCommand>
 {
     private readonly ISalesInvoiceRepository _invoices;
+    private readonly ISalesOrderRepository _orders;
     private readonly IStockDocumentRepository _documents;
     private readonly IStockLedgerRepository _stockLedger;
     private readonly IProductRepository _products;
@@ -74,6 +75,7 @@ public sealed class CancelSalesInvoiceCommandHandler
 
     /// <summary>Initialises a new instance of the <see cref="CancelSalesInvoiceCommandHandler"/> class.</summary>
     /// <param name="invoices">The sales invoice repository.</param>
+    /// <param name="orders">The sales order repository.</param>
     /// <param name="documents">The stock document repository.</param>
     /// <param name="stockLedger">The stock ledger repository.</param>
     /// <param name="products">The product repository.</param>
@@ -92,6 +94,7 @@ public sealed class CancelSalesInvoiceCommandHandler
     /// <param name="unitOfWork">The unit of work.</param>
     public CancelSalesInvoiceCommandHandler(
         ISalesInvoiceRepository invoices,
+        ISalesOrderRepository orders,
         IStockDocumentRepository documents,
         IStockLedgerRepository stockLedger,
         IProductRepository products,
@@ -110,6 +113,7 @@ public sealed class CancelSalesInvoiceCommandHandler
         IUnitOfWork unitOfWork)
     {
         _invoices = invoices;
+        _orders = orders;
         _documents = documents;
         _stockLedger = stockLedger;
         _products = products;
@@ -197,6 +201,13 @@ public sealed class CancelSalesInvoiceCommandHandler
             return released;
         }
 
+        Result reopened = await ReleaseOrderAsync(invoice, cancellationToken);
+
+        if (reopened.IsFailure)
+        {
+            return reopened;
+        }
+
         Result returned = await ReturnGoodsAsync(invoice, firm, request.Reason, cancellationToken);
 
         if (returned.IsFailure)
@@ -273,6 +284,63 @@ public sealed class CancelSalesInvoiceCommandHandler
         {
             bill.ReleaseAllocationsFrom(journalId);
         }
+
+        return Result.Success();
+    }
+
+    /// <summary>Puts back on the order what a cancelled invoice had taken off it.</summary>
+    /// <remarks>
+    /// The goods are owed again, so a completed order reopens and a part-filled one gets
+    /// its outstanding quantity back. Matched by product rather than by line, because an
+    /// invoice line does not carry the order line it came from - the products on a
+    /// converted invoice are the order's own, and where an order lists a product twice the
+    /// quantity is put back against the lines in turn.
+    /// <para>
+    /// An order somebody has since closed deliberately stays closed. Reopening it would
+    /// put work back in front of a warehouse that was told to stop, and the refusal is
+    /// swallowed here on purpose: the cancellation is about the invoice, and an order
+    /// nobody will fill again is not a reason to refuse it.
+    /// </para>
+    /// </remarks>
+    private async Task<Result> ReleaseOrderAsync(
+        SalesInvoice invoice,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.SalesOrderId is not { } orderId)
+        {
+            return Result.Success();
+        }
+
+        SalesOrder? order = await _orders.FindAsync(orderId, cancellationToken);
+
+        if (order is null)
+        {
+            return Result.Success();
+        }
+
+        Dictionary<SalesOrderLineId, decimal> released = [];
+
+        foreach (SalesInvoiceLine line in invoice.Lines)
+        {
+            decimal remaining = line.Quantity;
+
+            foreach (SalesOrderLine candidate in order.Lines
+                .Where(candidate => candidate.ProductId == line.ProductId
+                    && candidate.InvoicedQuantity > 0m))
+            {
+                if (remaining <= 0m)
+                {
+                    break;
+                }
+
+                decimal taken = Math.Min(remaining, candidate.InvoicedQuantity);
+
+                released[candidate.Id] = released.GetValueOrDefault(candidate.Id) + taken;
+                remaining -= taken;
+            }
+        }
+
+        order.ReleaseInvoiced(released);
 
         return Result.Success();
     }

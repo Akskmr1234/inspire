@@ -107,6 +107,18 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the tax charged on each line, head by head.</summary>
     public DbSet<SalesInvoiceLineTax> SalesInvoiceLineTaxes => Set<SalesInvoiceLineTax>();
 
+    /// <summary>Gets the sales orders.</summary>
+    public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
+
+    /// <summary>Gets their lines, each carrying how much of it has gone out.</summary>
+    public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
+
+    /// <summary>Gets the charges quoted beside the goods.</summary>
+    public DbSet<SalesOrderCharge> SalesOrderCharges => Set<SalesOrderCharge>();
+
+    /// <summary>Gets the tax quoted on each line, head by head.</summary>
+    public DbSet<SalesOrderLineTax> SalesOrderLineTaxes => Set<SalesOrderLineTax>();
+
     /// <summary>Gets the purchase invoices.</summary>
     public DbSet<PurchaseInvoice> PurchaseInvoices => Set<PurchaseInvoice>();
 
@@ -347,6 +359,12 @@ public class ErpDbContext : DbContext
             .HaveConversion<SalesInvoiceLineIdConverter>();
         configurationBuilder.Properties<SalesInvoiceChargeId>()
             .HaveConversion<SalesInvoiceChargeIdConverter>();
+        configurationBuilder.Properties<SalesOrderId>()
+            .HaveConversion<SalesOrderIdConverter>();
+        configurationBuilder.Properties<SalesOrderLineId>()
+            .HaveConversion<SalesOrderLineIdConverter>();
+        configurationBuilder.Properties<SalesOrderChargeId>()
+            .HaveConversion<SalesOrderChargeIdConverter>();
         configurationBuilder.Properties<PurchaseInvoiceId>()
             .HaveConversion<PurchaseInvoiceIdConverter>();
         configurationBuilder.Properties<PurchaseInvoiceLineId>()

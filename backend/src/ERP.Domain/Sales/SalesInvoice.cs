@@ -94,7 +94,8 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         WarehouseId warehouseId,
         TaxMode mode,
         CurrencyCode currency,
-        SalesInvoiceId? returnsInvoiceId)
+        SalesInvoiceId? returnsInvoiceId,
+        SalesOrderId? salesOrderId)
         : base(id)
     {
         TenantId = tenantId;
@@ -109,6 +110,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         Mode = mode;
         Currency = currency;
         ReturnsInvoiceId = returnsInvoiceId;
+        SalesOrderId = salesOrderId;
         Status = SalesInvoiceStatus.Draft;
     }
 
@@ -141,6 +143,15 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// the debt the sale raised rather than left floating on the customer's account.
     /// </remarks>
     public SalesInvoiceId? ReturnsInvoiceId { get; private set; }
+
+    /// <summary>Gets the order this invoice was raised from, where it came from one.</summary>
+    /// <remarks>
+    /// §12.2's <em>Create Invoice From</em>, kept on the invoice rather than inferred. It
+    /// is what lets a cancellation put the quantities back on the order: without it, an
+    /// order would go on believing goods had gone out against an invoice that no longer
+    /// exists, and the outstanding figure a warehouse works from would be short.
+    /// </remarks>
+    public SalesOrderId? SalesOrderId { get; private set; }
 
     /// <summary>Gets the invoice number.</summary>
     public string Number { get; private set; }
@@ -286,6 +297,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <param name="currency">The currency it is stated in.</param>
     /// <param name="kind">Whether goods are going out or coming back.</param>
     /// <param name="returnsInvoiceId">The invoice a return is against, where it names one.</param>
+    /// <param name="salesOrderId">The order it was raised from, where it came from one.</param>
     /// <returns>The draft, or the reason it was refused.</returns>
     public static Result<SalesInvoice> CreateDraft(
         TenantId tenantId,
@@ -299,7 +311,8 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         TaxMode mode,
         CurrencyCode currency,
         SalesDocumentKind kind = SalesDocumentKind.Invoice,
-        SalesInvoiceId? returnsInvoiceId = null)
+        SalesInvoiceId? returnsInvoiceId = null,
+        SalesOrderId? salesOrderId = null)
     {
         ArgumentNullException.ThrowIfNull(financialYear);
         ArgumentNullException.ThrowIfNull(customer);
@@ -381,7 +394,8 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 warehouse.Id,
                 mode,
                 currency,
-                returnsInvoiceId));
+                returnsInvoiceId,
+                salesOrderId));
     }
 
     /// <summary>Adds a line to a draft invoice.</summary>

@@ -38,6 +38,17 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .HasDatabaseName("ix_sales_invoices_returns_invoice")
             .HasFilter("returns_invoice_id IS NOT NULL");
 
+        // The order this was raised from. Restricted for the same reason a return's link
+        // is: cancelling the invoice reads it to put the quantities back.
+        builder.HasOne<SalesOrder>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.SalesOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(invoice => invoice.SalesOrderId)
+            .HasDatabaseName("ix_sales_invoices_order")
+            .HasFilter("sales_order_id IS NOT NULL");
+
         builder.Property(invoice => invoice.Currency)
             .HasMaxLength(3).IsFixedLength().IsRequired();
 

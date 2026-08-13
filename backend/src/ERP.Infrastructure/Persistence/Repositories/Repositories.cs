@@ -238,6 +238,28 @@ public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
     public void Add(SalesInvoice invoice) => _context.SalesInvoices.Add(invoice);
 }
 
+/// <summary>The EF Core sales order repository.</summary>
+public sealed class SalesOrderRepository : ISalesOrderRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="SalesOrderRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public SalesOrderRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<SalesOrder?> FindAsync(
+        SalesOrderId id,
+        CancellationToken cancellationToken = default) =>
+        _context.SalesOrders
+            .Include(order => order.Lines).ThenInclude(line => line.Components)
+            .Include(order => order.Charges)
+            .FirstOrDefaultAsync(order => order.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(SalesOrder order) => _context.SalesOrders.Add(order);
+}
+
 /// <summary>The EF Core purchase invoice repository.</summary>
 public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
 {

@@ -67,6 +67,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Sales — the return document and its journal, with its own contra-revenue account | **Done** — 9 domain tests |
 | Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
 | Sales — a filtered, paged list of documents; first paged list in the API | **Done** — 8 integration + 2 API tests |
+| Sales — the order, and §12.2's *Create Invoice From* | **Done** — 15 domain + 10 API tests, at `/api/v1/sales/orders` |
 | Sales — screens: document list, entry, posting, cancellation, returns | **Done** — verified end to end in a browser against a real database |
 | Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
 | Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
@@ -84,7 +85,7 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,145 passing, 0 failing (567 domain + 261 application + 205 API + 20 identity + 92 integration).
+**Test suite:** 1,170 passing, 0 failing (582 domain + 261 application + 215 API + 20 identity + 92 integration).
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -132,6 +133,20 @@ Integration tests need a running Docker daemon.
 > **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: *"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."* The document stayed posted and the books were untouched, which is the transaction doing its job.
 >
 > **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
+
+> ### An order that reserves nothing, and fills across as many deliveries as it takes
+>
+> §12.9's chain begins at the order, and §12.2 calls the next step *Create Invoice From*. Both now exist: `POST /api/v1/sales/orders` takes one, `/confirm` agrees it, `/convert` raises a **draft invoice** from it, and `/close` gives up on what is left. Its own aggregate rather than a third kind of `SalesInvoice` — an invoice posts, moves stock, raises a debt and writes a journal, and an order does none of those, so folding them together would make every one of those invariants ask first whether the document was the kind that moves anything.
+>
+> **An order holds no stock**, which is the business's answer of 2026-08-13. Two orders can promise the same last unit and the second invoice is the one that gets refused. That is a real limitation and it is the cheap one: the alternative is orders quietly starving the shop floor and needing an expiry discipline nobody has asked for. What the order does carry is the outstanding quantity per line, which is what a shortage report would be built from.
+>
+> **One order becomes as many invoices as it needs.** Each line records how much has gone out; the order completes itself when the last line is filled, so nobody has to remember to close it. Converting without naming lines takes everything still outstanding, which is the common path. The discount is apportioned across deliveries — ten off a line of twenty gives five off when ten ship — because giving the whole ten on the first would leave the second invoice mysteriously dearer.
+>
+> **The tax is reassessed, not copied.** A half-shipped line owes half the tax, and the engine is asked again in case the customer's state has been corrected since: the invoice charges what is true today rather than what was quoted in March. The rate and the discount *are* the order's, because those were agreed.
+>
+> **A part-filled order is closed, not cancelled**, and the two land in the same state with a reason kept. Goods have gone out against it, and a cancelled document that produced invoices is one nobody can reconcile. An order closed deliberately does not reopen when an invoice is cancelled — that would put work back in front of a warehouse that was told to stop.
+>
+> **Conversion produces a draft.** Posting moves the stock, raises the debt and writes the books, and it stays the ordinary `POST /sales/invoices/{id}/post` — so a conversion can be looked at before any of that happens, and an invoice from an order behaves like any other once it exists.
 
 > ### A cancelled credit note used to leave the sale it settled looking paid
 >

@@ -104,9 +104,11 @@ public static class DependencyInjection
         services.AddScoped<IInventoryAccountMapRepository, InventoryAccountMapRepository>();
         services.AddScoped<ITaxAccountMapRepository, TaxAccountMapRepository>();
         services.AddScoped<ISalesInvoiceRepository, SalesInvoiceRepository>();
+        services.AddScoped<ISalesOrderRepository, SalesOrderRepository>();
         services.AddScoped<IPurchaseInvoiceRepository, PurchaseInvoiceRepository>();
         services.AddScoped<IAdditionalLedgerRepository, AdditionalLedgerRepository>();
         services.AddScoped<ISalesInvoiceReader, SalesInvoiceReader>();
+        services.AddScoped<ISalesOrderReader, SalesOrderReader>();
         services.AddScoped<IPurchaseInvoiceReader, PurchaseInvoiceReader>();
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();

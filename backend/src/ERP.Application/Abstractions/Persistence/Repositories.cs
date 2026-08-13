@@ -797,6 +797,55 @@ public interface ISalesInvoiceRepository
     void Add(SalesInvoice invoice);
 }
 
+/// <summary>Reads and writes sales orders.</summary>
+public interface ISalesOrderRepository
+{
+    /// <summary>Finds an order with its lines, their tax and its charges.</summary>
+    /// <param name="id">The order.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The order, or <see langword="null"/> where there is none.</returns>
+    Task<SalesOrder?> FindAsync(
+        SalesOrderId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds an order.</summary>
+    /// <param name="order">The order.</param>
+    void Add(SalesOrder order);
+}
+
+/// <summary>What a sales order list is narrowed by.</summary>
+/// <param name="From">The earliest order date, or no lower bound.</param>
+/// <param name="To">The latest, or no upper bound.</param>
+/// <param name="Status">One lifecycle state, or all.</param>
+/// <param name="CustomerLedgerId">One customer, or all.</param>
+/// <param name="Search">Matched against the order number and the customer's reference.</param>
+/// <param name="OutstandingOnly">Only orders with goods still owed.</param>
+public sealed record SalesOrderFilter(
+    DateOnly? From = null,
+    DateOnly? To = null,
+    SalesOrderStatus? Status = null,
+    LedgerId? CustomerLedgerId = null,
+    string? Search = null,
+    bool OutstandingOnly = false);
+
+/// <summary>Reads sales orders for a list.</summary>
+public interface ISalesOrderReader
+{
+    /// <summary>Reads one page of the orders a filter matches, newest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="filter">What to narrow by.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The page, and how many rows the filter matched in total.</returns>
+    Task<PagedResult<SalesOrderSummary>> ListAsync(
+        FirmId firmId,
+        SalesOrderFilter filter,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>Reads and writes purchase invoices.</summary>
 public interface IPurchaseInvoiceRepository
 {

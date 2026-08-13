@@ -292,7 +292,7 @@ internal sealed class SalesPostingFixture
             FinancialYears, Firms, tenant, UnitOfWork);
 
         _canceller = new CancelSalesInvoiceCommandHandler(
-            Invoices, Documents, StockLedger, Products, Batches, Serials, Balances,
+            Invoices, Orders, Documents, StockLedger, Products, Batches, Serials, Balances,
             BatchBalances, AccountMaps, Numbering, FinancialYears, Bills, Vouchers, Firms,
             tenant, clock, UnitOfWork);
     }
@@ -344,6 +344,14 @@ internal sealed class SalesPostingFixture
 
     /// <summary>Gets the sales invoice repository.</summary>
     internal ISalesInvoiceRepository Invoices { get; }
+
+    /// <summary>Gets the sales order repository.</summary>
+    /// <remarks>
+    /// Substituted and empty. Nothing in this fixture converts an order; it is here so
+    /// cancelling an invoice that came from one has something to ask, and it answers that
+    /// there is no such order - which is the right answer for an invoice entered directly.
+    /// </remarks>
+    internal ISalesOrderRepository Orders { get; } = Substitute.For<ISalesOrderRepository>();
 
     /// <summary>Gets the stock document repository.</summary>
     internal IStockDocumentRepository Documents { get; }

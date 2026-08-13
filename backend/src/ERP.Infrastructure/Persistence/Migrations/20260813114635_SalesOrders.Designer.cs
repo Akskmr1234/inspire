@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ERP.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ErpDbContext))]
-    partial class ErpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260813114635_SalesOrders")]
+    partial class SalesOrders
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3913,10 +3916,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("returns_invoice_id");
 
-                    b.Property<Guid?>("SalesOrderId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("sales_order_id");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -3960,10 +3959,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("ReturnsInvoiceId")
                         .HasDatabaseName("ix_sales_invoices_returns_invoice")
                         .HasFilter("returns_invoice_id IS NOT NULL");
-
-                    b.HasIndex("SalesOrderId")
-                        .HasDatabaseName("ix_sales_invoices_order")
-                        .HasFilter("sales_order_id IS NOT NULL");
 
                     b.HasIndex("StockDocumentId")
                         .HasDatabaseName("ix_sales_invoices_stock_document_id");
@@ -5548,12 +5543,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ReturnsInvoiceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_sales_invoices_sales_invoices_returns_invoice_id");
-
-                    b.HasOne("ERP.Domain.Sales.SalesOrder", null)
-                        .WithMany()
-                        .HasForeignKey("SalesOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_sales_orders_sales_order_id");
 
                     b.HasOne("ERP.Domain.Inventory.StockDocument", null)
                         .WithMany()

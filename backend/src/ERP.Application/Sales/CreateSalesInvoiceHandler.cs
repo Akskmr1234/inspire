@@ -258,11 +258,9 @@ public sealed class CreateSalesInvoiceCommandHandler
 
     /// <summary>The tax conditions this document is entered under.</summary>
     /// <remarks>
-    /// The place-of-supply comparison is what selects IGST over CGST plus SGST, and it is
-    /// inert outside the GST regime. Two firms in the same state, or a customer whose
-    /// state nobody has recorded, are treated as an intra-state supply - which is the
-    /// safer of the two, because it is the one that keeps the tax in the state the firm
-    /// is registered in.
+    /// Shared with the order, because it is one question - which heads apply to this
+    /// customer - and two copies would eventually disagree. The place-of-supply comparison
+    /// is what selects IGST over CGST plus SGST, and it is inert outside the GST regime.
     /// <para>
     /// Amounts are treated as tax-exclusive. The reverse-tax setting of section 9 is not
     /// built, and cannot be until the invoice's own line check tells inclusive entry from
@@ -270,14 +268,7 @@ public sealed class CreateSalesInvoiceCommandHandler
     /// </para>
     /// </remarks>
     private static TaxContext ContextFor(Context context, TaxMode mode) =>
-        new(
-            context.Firm.TaxRegime,
-            mode == TaxMode.NonTax ? DocumentTaxMode.NonTax : DocumentTaxMode.Taxable,
-            AmountsIncludeTax: false,
-            IsInterStateSupply:
-                context.Firm.StateCode is { } firmState
-                && context.Customer.StateCode is { } customerState
-                && !string.Equals(firmState, customerState, StringComparison.OrdinalIgnoreCase));
+        SalesTaxContext.For(context.Firm, context.Customer, mode);
 
     /// <summary>Adds the charges the caller entered.</summary>
     /// <remarks>
