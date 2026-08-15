@@ -83,10 +83,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests, driven through the screen in both languages |
 | Purchase — screens: document list, entry, posting, cancellation; supplier master | **Done** — verified end to end in a browser against a real database |
 | Purchase — the order, and the purchase side of §12.2's *Create Invoice From* | **Done** (backend) — 16 domain tests; 11 API tests written but **not yet run** (no Docker on the build machine) |
+| Inventory — expired lots refused on a sale, §10's last open gap | **Done** — 5 domain tests; a return is exempt, and a write-off still works |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 879 passing, 0 failing, of the suites that run without Docker (598 domain + 261 application + 20 identity). The 226 API and 92 integration tests need a running Docker daemon and were **not run for the purchase-order change** — 11 of the API tests are new and unverified. Everything else was 1,170 passing at the previous commit.
+**Test suite:** 884 passing, 0 failing, of the suites that run without Docker (603 domain + 261 application + 20 identity). The 226 API and 92 integration tests need a running Docker daemon and were **not run for the purchase-order change** — 11 of the API tests are new and unverified. Everything else was 1,170 passing at the previous commit.
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -134,6 +135,18 @@ Integration tests need a running Docker daemon.
 > **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: *"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."* The document stayed posted and the books were untouched, which is the transaction doing its job.
 >
 > **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
+
+> ### Expired stock is refused on the way out of a sale, and nowhere else
+>
+> §10 carried one line of unfinished business — *"expired stock is not refused on the way out"* — and deferred it explicitly: *"whether a sale may draw on an expired lot is a rule for the sales document, and is recorded there when that document exists."* That document exists, so the rule now lives on it. `Batch.HasExpiredBy` had been written and tested since batches landed and had never had a caller.
+>
+> **It could never have been a check on the stock position**, which is why it waited. A firm has to be able to write off what has gone off, and an issue and a damaged-stock document both have to keep moving expired goods — a position that refused them would leave the expired lot stuck on the books for ever, which is the opposite of what anybody wants.
+>
+> **Judged against the invoice's own date, not today.** A sale keyed a week late is measured against the day the goods actually went out; judging it against today would refuse a backdated invoice for a lot that was in date when it was sold. Expiry is the last good day rather than the first bad one, so a lot expiring on the day of the sale still sells.
+>
+> **A return is exempt**, and that is the whole reason this is a rule about selling rather than about stock. Goods a customer brings back have physically come back, and a lot that expired while it sat on their shelf still has to reach the books — refusing it would leave the firm unable to record what is standing in its yard.
+>
+> **Nothing here is configurable.** A firm that means to sell short-dated stock corrects the batch's expiry, which is an operation that already exists and one that leaves a trail; a per-firm "allow expired sales" flag would be a setting nobody asked for, sitting in front of the one rule most likely to be a legal requirement.
 
 > ### The purchase order, which commits no money and is where the mirror stops being a mirror
 >

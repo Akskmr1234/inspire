@@ -251,10 +251,25 @@ Enabled by system setting. When on, a Batch column appears in Purchase, Sales, S
   movement — so the stock valuation and the batch-wise valuation are two views of one number
   rather than two numbers that drift.
 
-Not yet built: **expired stock is not refused on the way out**. Expired goods leave through an
-issue or a write-off like any other goods, so the position cannot be the thing that refuses
-them; whether a *sale* may draw on an expired lot is a rule for the sales document, and is
-recorded there when that document exists.
+> **Built 2026-08-15: expired stock is refused on the way out of a sale, and only there.**
+> Expired goods leave through an issue or a write-off like any other goods, so the position
+> was never the thing that could refuse them — a firm has to be able to write off what has
+> gone off. Whether a *sale* may draw on an expired lot is a rule about selling, and now that
+> the sales document exists it lives on it. Decisions now binding:
+>
+> - `SalesInvoice.AddLine` refuses a batch that expired **before the invoice's own date**,
+>   naming the lot, its expiry and the day it was judged against.
+> - Judged against the **document date, not today**, so a sale keyed a week late is measured
+>   against the day the goods actually went out. Judging it against today would refuse a
+>   backdated invoice for a lot that was in date when it was sold.
+> - Expiry is the **last good day**, not the first bad one: a lot expiring on the day of the
+>   sale is still in date.
+> - **A return is exempt**, which is the whole reason this is not a check on the stock
+>   movement. Goods a customer brings back have physically come back, and a lot that expired
+>   while it sat on their shelf still has to reach the books — refusing it would leave the
+>   firm unable to record what is standing in its yard.
+> - Nothing is configurable here. A firm that means to sell short-dated stock corrects the
+>   batch's expiry, which is an existing operation and one that leaves a trail.
 
 ---
 

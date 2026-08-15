@@ -733,7 +733,11 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     }
 
     /// <summary>Checks the batch and units a line names against what the product needs.</summary>
-    private static Result EnsureTrackingMatches(
+    /// <remarks>
+    /// An instance method rather than a static one because the expiry rule needs two facts
+    /// about the document: the date it is booked on, and whether it is a sale or a return.
+    /// </remarks>
+    private Result EnsureTrackingMatches(
         Product product,
         Batch? batch,
         IReadOnlyCollection<SerialNumber>? serials,
@@ -752,6 +756,27 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
             return Result.Failure(Error.Validation(
                 "SalesInvoice.BatchWrong",
                 $"That batch does not belong to '{product.Code}'."));
+        }
+
+        // §10's last open gap, which the specification left for this document: expired
+        // goods leave through an issue or a write-off like any other goods, so the position
+        // could never be the thing that refuses them, and whether a *sale* may draw on an
+        // expired lot is a rule about selling rather than about stock.
+        //
+        // Judged against the invoice's own date rather than today, so a sale keyed a week
+        // late is measured against the day the goods actually went out. The alternative
+        // would refuse a backdated invoice for a lot that was in date when it was sold.
+        //
+        // A return is exempt, and that is the whole reason this is not a check on the
+        // stock movement. Goods a customer brings back have physically come back, and a
+        // lot that expired while it sat on their shelf still has to reach the books -
+        // refusing it would leave the firm unable to record what is standing in its yard.
+        if (!IsReturn && batch is not null && batch.HasExpiredBy(Date))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.BatchExpired",
+                $"Batch '{batch.Number}' of '{product.Code}' expired on "
+                + $"{batch.ExpiresOn:yyyy-MM-dd} and cannot be sold on {Date:yyyy-MM-dd}."));
         }
 
         int offered = serials?.Count ?? 0;

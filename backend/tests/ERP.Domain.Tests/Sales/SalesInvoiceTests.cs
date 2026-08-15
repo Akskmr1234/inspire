@@ -315,7 +315,102 @@ public sealed class SalesInvoiceTests
         credit.Total.Amount.ShouldBe(210m);
     }
 
+    [Fact]
+    public void An_expired_lot_cannot_be_sold()
+    {
+        // §10's last open gap, which the specification left for this document: the stock
+        // position could never refuse expired goods, because an issue and a write-off both
+        // have to be able to move them.
+        SalesInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure each) = Batched();
+
+        Result<SalesInvoiceLine> sold = invoice.AddLine(
+            product, each, 2m, 2m, 100m, Assessed(200m, 10m),
+            Lot(product, "OLD", expiresOn: Date.AddDays(-1)));
+
+        sold.Error.Code.ShouldBe("SalesInvoice.BatchExpired");
+
+        // And the message names the lot, its expiry and the day it was judged against,
+        // because "expired" on a forty-line invoice is not something anybody can act on.
+        sold.Error.Description.ShouldContain("OLD");
+        sold.Error.Description.ShouldContain("2026-08-09");
+    }
+
+    [Fact]
+    public void A_lot_expiring_on_the_day_of_the_sale_is_still_in_date()
+    {
+        // Expiry is the last day the goods are good, not the first day they are not.
+        SalesInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure each) = Batched();
+
+        invoice.AddLine(
+            product, each, 2m, 2m, 100m, Assessed(200m, 10m),
+            Lot(product, "TODAY", expiresOn: Date))
+            .IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_lot_with_no_expiry_never_expires()
+    {
+        SalesInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure each) = Batched();
+
+        invoice.AddLine(
+            product, each, 2m, 2m, 100m, Assessed(200m, 10m),
+            Lot(product, "KEEPS", expiresOn: null))
+            .IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_expiry_is_judged_against_the_invoice_date_rather_than_today()
+    {
+        // A sale keyed a week late is measured against the day the goods actually went
+        // out. Judging it against today would refuse a backdated invoice for a lot that
+        // was in date when it was sold.
+        SalesInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure each) = Batched();
+
+        // Expires after this invoice's date, but well before any plausible "today".
+        invoice.AddLine(
+            product, each, 2m, 2m, 100m, Assessed(200m, 10m),
+            Lot(product, "BACKDATED", expiresOn: Date.AddDays(1)))
+            .IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void An_expired_lot_can_still_come_back_on_a_return()
+    {
+        // The whole reason this is a rule about selling rather than a check on the stock
+        // movement. Goods a customer brings back have physically come back, and a lot that
+        // expired while it sat on their shelf still has to reach the books - refusing it
+        // would leave the firm unable to record what is standing in its yard.
+        SalesInvoice credit = Draft(kind: SalesDocumentKind.Return).Value;
+        (Product product, UnitOfMeasure each) = Batched();
+
+        credit.AddLine(
+            product, each, 2m, 2m, 100m, Assessed(200m, 10m),
+            Lot(product, "OLD", expiresOn: Date.AddDays(-30)))
+            .IsSuccess.ShouldBeTrue();
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>A batched product, and the unit it is stocked in.</summary>
+    private static (Product Product, UnitOfMeasure Unit) Batched()
+    {
+        UnitOfMeasure each = BaseUnit();
+        Product product = Stocked(each);
+
+        product.SetTracking(tracksBatches: true, tracksSerialNumbers: false)
+            .IsSuccess.ShouldBeTrue();
+
+        return (product, each);
+    }
+
+    /// <summary>One lot of a batched product.</summary>
+    private static Batch Lot(Product product, string number, DateOnly? expiresOn) =>
+        Batch.Open(Tenant, Firm, product, number, manufacturedOn: null, expiresOn: expiresOn)
+            .Value;
 
     /// <summary>Assesses a line the way the application layer will: through the engine.</summary>
     /// <remarks>
