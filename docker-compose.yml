@@ -83,9 +83,9 @@ services:
       # Local-only signing key. A deployed environment must supply this from a
       # secret store - anyone holding it can mint a token for any user in any
       # tenant.
-      Jwt__SigningKey: local-development-signing-key-not-for-any-real-environment
+      Jwt__SigningKey: HNv5oryNSUxekos0yCH9Rsogru9Nssi4zE5Y0DL2ZAI
       Erp__Seed__Enabled: "true"
-      Erp__Seed__AdministratorPassword: ChangeMe!DevAdmin1
+      Erp__Seed__AdministratorPassword: Akskmr1234
     ports:
       - "8080:8080"
     healthcheck:
