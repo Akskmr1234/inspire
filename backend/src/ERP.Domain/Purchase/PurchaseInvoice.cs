@@ -89,7 +89,8 @@ public sealed class PurchaseInvoice
         WarehouseId warehouseId,
         TaxMode mode,
         CurrencyCode currency,
-        PurchaseInvoiceId? returnsInvoiceId)
+        PurchaseInvoiceId? returnsInvoiceId,
+        PurchaseOrderId? purchaseOrderId)
         : base(id)
     {
         TenantId = tenantId;
@@ -104,6 +105,7 @@ public sealed class PurchaseInvoice
         Mode = mode;
         Currency = currency;
         ReturnsInvoiceId = returnsInvoiceId;
+        PurchaseOrderId = purchaseOrderId;
         Status = PurchaseInvoiceStatus.Draft;
     }
 
@@ -137,6 +139,14 @@ public sealed class PurchaseInvoice
     /// supplier's account.
     /// </remarks>
     public PurchaseInvoiceId? ReturnsInvoiceId { get; private set; }
+
+    /// <summary>Gets the order this purchase was raised from, where it came from one.</summary>
+    /// <remarks>
+    /// Nullable because most purchases are entered directly: a firm that orders everything
+    /// formally is the exception rather than the rule, and requiring an order would stop a
+    /// storekeeper booking goods that turned up against a phone call.
+    /// </remarks>
+    public PurchaseOrderId? PurchaseOrderId { get; private set; }
 
     /// <summary>Gets the firm's own number for the document.</summary>
     public string Number { get; private set; }
@@ -265,6 +275,7 @@ public sealed class PurchaseInvoice
     /// <param name="currency">The currency it is stated in.</param>
     /// <param name="kind">Whether goods are arriving or going back.</param>
     /// <param name="returnsInvoiceId">The purchase a return is against, where it names one.</param>
+    /// <param name="purchaseOrderId">The order it was raised from, where it came from one.</param>
     /// <returns>The draft, or the reason it was refused.</returns>
     public static Result<PurchaseInvoice> CreateDraft(
         TenantId tenantId,
@@ -278,7 +289,8 @@ public sealed class PurchaseInvoice
         TaxMode mode,
         CurrencyCode currency,
         PurchaseDocumentKind kind = PurchaseDocumentKind.Invoice,
-        PurchaseInvoiceId? returnsInvoiceId = null)
+        PurchaseInvoiceId? returnsInvoiceId = null,
+        PurchaseOrderId? purchaseOrderId = null)
     {
         ArgumentNullException.ThrowIfNull(financialYear);
         ArgumentNullException.ThrowIfNull(supplier);
@@ -311,6 +323,16 @@ public sealed class PurchaseInvoice
             return Result.Failure<PurchaseInvoice>(Error.Validation(
                 "PurchaseInvoice.NotAReturn",
                 "Only a return may name the purchase it is against."));
+        }
+
+        // An order is a promise to buy, so goods going back cannot be raised from one. A
+        // return that filled an order would take the order's outstanding quantity down as
+        // though the supplier had delivered, which is the opposite of what happened.
+        if (kind == PurchaseDocumentKind.Return && purchaseOrderId is not null)
+        {
+            return Result.Failure<PurchaseInvoice>(Error.Validation(
+                "PurchaseInvoice.ReturnFromOrder",
+                "A return cannot be raised from a purchase order."));
         }
 
         // Bought from somebody who is not a supplier. A purchase booked against a bank
@@ -361,7 +383,8 @@ public sealed class PurchaseInvoice
                 warehouse.Id,
                 mode,
                 currency,
-                returnsInvoiceId));
+                returnsInvoiceId,
+                purchaseOrderId));
     }
 
     /// <summary>Adds a line to a draft purchase.</summary>

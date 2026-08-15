@@ -260,6 +260,28 @@ public sealed class SalesOrderRepository : ISalesOrderRepository
     public void Add(SalesOrder order) => _context.SalesOrders.Add(order);
 }
 
+/// <summary>The EF Core purchase order repository.</summary>
+public sealed class PurchaseOrderRepository : IPurchaseOrderRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="PurchaseOrderRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public PurchaseOrderRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<PurchaseOrder?> FindAsync(
+        PurchaseOrderId id,
+        CancellationToken cancellationToken = default) =>
+        _context.PurchaseOrders
+            .Include(order => order.Lines).ThenInclude(line => line.Components)
+            .Include(order => order.Charges)
+            .FirstOrDefaultAsync(order => order.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(PurchaseOrder order) => _context.PurchaseOrders.Add(order);
+}
+
 /// <summary>The EF Core purchase invoice repository.</summary>
 public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
 {

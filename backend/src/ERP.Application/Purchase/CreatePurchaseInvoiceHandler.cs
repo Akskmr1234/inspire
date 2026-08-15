@@ -253,19 +253,13 @@ public sealed class CreatePurchaseInvoiceCommandHandler
     /// <summary>The tax conditions this document is entered under.</summary>
     /// <remarks>
     /// The place-of-supply comparison selects IGST over CGST plus SGST, and it is inert
-    /// outside the GST regime. It reads the supplier's state here rather than the
-    /// customer's, which is the only thing that changes: a purchase from another state is
-    /// an inter-state supply in the direction the firm is receiving it.
+    /// outside the GST regime. It reads the supplier's state rather than the customer's,
+    /// which is the only thing that changes from the sales side: a purchase from another
+    /// state is an inter-state supply in the direction the firm is receiving it. Shared
+    /// with the order, because it is one question and two copies would eventually disagree.
     /// </remarks>
     private static TaxContext ContextFor(Context context, TaxMode mode) =>
-        new(
-            context.Firm.TaxRegime,
-            mode == TaxMode.NonTax ? DocumentTaxMode.NonTax : DocumentTaxMode.Taxable,
-            AmountsIncludeTax: false,
-            IsInterStateSupply:
-                context.Firm.StateCode is { } firmState
-                && context.Supplier.StateCode is { } supplierState
-                && !string.Equals(firmState, supplierState, StringComparison.OrdinalIgnoreCase));
+        PurchaseTaxContext.For(context.Firm, context.Supplier, mode);
 
     /// <summary>Adds the charges the caller entered.</summary>
     private static Result AddCharges(

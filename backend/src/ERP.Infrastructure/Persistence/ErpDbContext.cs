@@ -137,6 +137,18 @@ public class ErpDbContext : DbContext
     public DbSet<PurchaseInvoiceLineTax> PurchaseInvoiceLineTaxes =>
         Set<PurchaseInvoiceLineTax>();
 
+    /// <summary>Gets the purchase orders.</summary>
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    /// <summary>Gets their lines, each carrying how much of it has arrived.</summary>
+    public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+
+    /// <summary>Gets the charges recorded beside the goods.</summary>
+    public DbSet<PurchaseOrderCharge> PurchaseOrderCharges => Set<PurchaseOrderCharge>();
+
+    /// <summary>Gets the tax expected on each line, head by head.</summary>
+    public DbSet<PurchaseOrderLineTax> PurchaseOrderLineTaxes => Set<PurchaseOrderLineTax>();
+
     /// <summary>Gets the charges documents may carry: §9's additional-ledger matrix.</summary>
     public DbSet<AdditionalLedger> AdditionalLedgers => Set<AdditionalLedger>();
 
@@ -371,6 +383,12 @@ public class ErpDbContext : DbContext
             .HaveConversion<PurchaseInvoiceLineIdConverter>();
         configurationBuilder.Properties<PurchaseInvoiceChargeId>()
             .HaveConversion<PurchaseInvoiceChargeIdConverter>();
+        configurationBuilder.Properties<PurchaseOrderId>()
+            .HaveConversion<PurchaseOrderIdConverter>();
+        configurationBuilder.Properties<PurchaseOrderLineId>()
+            .HaveConversion<PurchaseOrderLineIdConverter>();
+        configurationBuilder.Properties<PurchaseOrderChargeId>()
+            .HaveConversion<PurchaseOrderChargeIdConverter>();
         configurationBuilder.Properties<AdditionalLedgerId>()
             .HaveConversion<AdditionalLedgerIdConverter>();
         configurationBuilder.Properties<InventoryAccountMapId>()

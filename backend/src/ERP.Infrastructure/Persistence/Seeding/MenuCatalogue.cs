@@ -159,6 +159,16 @@ public static class MenuCatalogue
                     "/sales/invoices",
                     "sales:invoice:view"),
 
+                // Before the purchases, for the reason the sales orders come before the
+                // sales invoices: an order is placed, then filled.
+                new(
+                    "transactions.purchase-orders",
+                    "Purchase orders",
+                    "أوامر الشراء",
+                    "purchase",
+                    "/purchase/orders",
+                    "purchase:order:view"),
+
                 // Purchases and debit notes on one entry, for the reason sales are on one:
                 // they are one kind of document, and a supplier's history wants both.
                 new(

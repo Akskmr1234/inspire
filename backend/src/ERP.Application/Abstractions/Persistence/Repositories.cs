@@ -761,6 +761,55 @@ public interface IPurchaseInvoiceReader
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>Reads and writes purchase orders.</summary>
+public interface IPurchaseOrderRepository
+{
+    /// <summary>Finds an order with its lines, their tax and its charges.</summary>
+    /// <param name="id">The order.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The order, or <see langword="null"/> where there is none.</returns>
+    Task<PurchaseOrder?> FindAsync(
+        PurchaseOrderId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds an order.</summary>
+    /// <param name="order">The order.</param>
+    void Add(PurchaseOrder order);
+}
+
+/// <summary>What a purchase order list is narrowed by.</summary>
+/// <param name="From">The earliest order date, or no lower bound.</param>
+/// <param name="To">The latest, or no upper bound.</param>
+/// <param name="Status">One lifecycle state, or all.</param>
+/// <param name="SupplierLedgerId">One supplier, or all.</param>
+/// <param name="Search">Matched against the order number and the supplier's reference.</param>
+/// <param name="OutstandingOnly">Only orders with goods still owed.</param>
+public sealed record PurchaseOrderFilter(
+    DateOnly? From = null,
+    DateOnly? To = null,
+    PurchaseOrderStatus? Status = null,
+    LedgerId? SupplierLedgerId = null,
+    string? Search = null,
+    bool OutstandingOnly = false);
+
+/// <summary>Reads purchase orders for a list.</summary>
+public interface IPurchaseOrderReader
+{
+    /// <summary>Reads one page of the orders a filter matches, newest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="filter">What to narrow by.</param>
+    /// <param name="page">Which page, from one.</param>
+    /// <param name="pageSize">How many rows a page holds.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The page, and how many rows the filter matched in total.</returns>
+    Task<PagedResult<PurchaseOrderSummary>> ListAsync(
+        FirmId firmId,
+        PurchaseOrderFilter filter,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>Reads the charges a firm's documents may carry.</summary>
 public interface IAdditionalLedgerRepository
 {

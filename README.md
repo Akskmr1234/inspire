@@ -82,10 +82,11 @@ This is an in-progress build. What follows is accurate as of the last commit —
 | Purchase — a filtered, paged list of documents | **Done** — the same shape the sales list takes |
 | Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests, driven through the screen in both languages |
 | Purchase — screens: document list, entry, posting, cancellation; supplier master | **Done** — verified end to end in a browser against a real database |
+| Purchase — the order, and the purchase side of §12.2's *Create Invoice From* | **Done** (backend) — 16 domain tests; 11 API tests written but **not yet run** (no Docker on the build machine) |
 | Manufacturing, Service modules | Not started |
 | Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
 
-**Test suite:** 1,170 passing, 0 failing (582 domain + 261 application + 215 API + 20 identity + 92 integration).
+**Test suite:** 879 passing, 0 failing, of the suites that run without Docker (598 domain + 261 application + 20 identity). The 226 API and 92 integration tests need a running Docker daemon and were **not run for the purchase-order change** — 11 of the API tests are new and unverified. Everything else was 1,170 passing at the previous commit.
 
 > **Coverage note:** every layer now has tests of its own — domain invariants, persistence and tenant isolation, use-case handlers, and the HTTP edge through a real in-memory host. The API suite boots the application against a PostgreSQL container and exercises authentication, refresh rotation, permission enforcement, and the ProblemDetails contract end to end.
 
@@ -133,6 +134,24 @@ Integration tests need a running Docker daemon.
 > **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: *"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."* The document stayed posted and the books were untouched, which is the transaction doing its job.
 >
 > **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
+
+> ### The purchase order, which commits no money and is where the mirror stops being a mirror
+>
+> `POST /api/v1/purchase/orders` places one, `/confirm` agrees it, `/convert` raises a **draft purchase** from it, and `/close` gives up on what is left. Its own aggregate rather than a flag on `PurchaseInvoice`, for the reason the sales order is its own: a purchase posts, receives stock, raises a debt and writes a journal, and an order does none of those.
+>
+> **An order commits no money.** Nothing reaches the nominal ledger and no bill is raised, so a supplier's balance stays what the firm has been *invoiced* rather than what it has *ordered*. A committed-spend report would be built over the outstanding quantities the order carries, not out of the creditors ledger.
+>
+> **The batch is typed, not chosen** — and this is where the sales conversion stops being a useful template. A sale picks from the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is read off the supplier's carton and the expiry keyed beside it, and the receipt opens the batch when the purchase posts. The conversion line carries `BatchNumber` and `ExpiresOn` where the sales one carries only a batch to select.
+>
+> **The supplier's own invoice number may be given at conversion**, which has no counterpart on the sales side: a purchase that will be posted needs one before its input tax is reclaimable. It is checked for a duplicate here as well as on a directly-entered purchase, because keying the same supplier invoice twice reclaims its input tax twice whichever door it came through. Where the goods have arrived but the paperwork has not, it is left off and filled in later.
+>
+> **A return cannot be raised from an order.** A return that filled an order would take its outstanding quantity down as though the supplier had delivered, which is the opposite of what happened. Refused in `PurchaseInvoice.CreateDraft`, beside the check that only a return may name the purchase it is against.
+>
+> **Cancelling a purchase puts the goods back on its order**, which is the same fix the sales side got on 2026-08-13 and the reason the purchase now remembers the order it came from. Without it the order would go on believing goods had arrived against a purchase that no longer exists, and a buyer's chase list would be short. An order somebody has since closed deliberately stays closed — reopening it would put work back in front of a buyer who was told to stop.
+>
+> **`PurchaseTaxContext` is now shared** by the order and the purchase rather than copied. It reads the *supplier's* state where the sales side reads the customer's, which is the only thing that differs; two copies would eventually disagree about a supplier whose state nobody recorded.
+>
+> Backend only, which is the depth the sales order shipped at — neither has a screen yet.
 
 > ### An order that reserves nothing, and fills across as many deliveries as it takes
 >
