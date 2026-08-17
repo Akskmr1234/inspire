@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { DirectionBadge } from '@/components/ChequeBadges';
 import { request, type ApiError } from '@/lib/api';
 import { CHEQUE_DIRECTIONS, type ChequeReportLine } from '@/lib/cheques';
@@ -86,40 +86,38 @@ export function ChequeCalendarPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, direction });
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.from')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.from')}</span>
         <input
           type="date"
           value={from}
           onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.to')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.to')}</span>
         <input
           type="date"
           value={to}
           onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('cheques.direction.label')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('cheques.direction.label')}</span>
         <select
           value={direction}
           onChange={(event) => setDirection(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('cheques.allDirections')}</option>
           {CHEQUE_DIRECTIONS.map((option) => (
@@ -133,8 +131,9 @@ export function ChequeCalendarPage(): React.JSX.Element {
       <button
         type="submit"
         disabled={query.isFetching}
-        className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+        className="btn-primary btn-sm py-1.5"
       >
+        {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
     </form>
@@ -144,20 +143,18 @@ export function ChequeCalendarPage(): React.JSX.Element {
     <ReportFrame title={t('nav.chequeCalendar')} controls={controls} query={query}>
       {(data) =>
         data.days.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('cheques.noDue')}</p>
+          <EmptyState message={t('cheques.noDue')} />
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {data.currencies.length > 1 && (
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                {t('cheques.multiCurrency')}
-              </p>
+              <p className="alert-warn">{t('cheques.multiCurrency')}</p>
             )}
 
             {data.days.map((day) => (
-              <section key={day.date} className="space-y-2">
-                <header className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="font-semibold">{day.date}</h2>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+              <section key={day.date} className="card overflow-hidden">
+                <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line bg-surface-3 px-4 py-3">
+                  <h2 className="font-semibold text-ink">{day.date}</h2>
+                  <p className="text-sm text-ink-muted">
                     {t('cheques.receivable')}: {moneyAlways(day.receivable)} ·{' '}
                     {t('cheques.payable')}: {moneyAlways(day.payable)} ·{' '}
                     {t('cheques.net')}: {net(day.net)} {data.currency}
@@ -165,39 +162,34 @@ export function ChequeCalendarPage(): React.JSX.Element {
                 </header>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[44rem] border-collapse text-sm">
+                  <table className="table min-w-[44rem]">
                     <thead>
-                      <tr className="border-b border-slate-300 text-left dark:border-slate-700">
-                        <th className="py-2 pe-3 font-medium">{t('cheques.chequeNo')}</th>
-                        <th className="py-2 pe-3 font-medium">{t('cheques.party')}</th>
-                        <th className="py-2 pe-3 font-medium">
-                          {t('cheques.direction.label')}
-                        </th>
-                        <th className="py-2 pe-3 font-medium">{t('cheques.bank')}</th>
-                        <th className="py-2 text-end font-medium">{t('cheques.amount')}</th>
+                      <tr>
+                        <th className="text-start">{t('cheques.chequeNo')}</th>
+                        <th className="text-start">{t('cheques.party')}</th>
+                        <th className="text-start">{t('cheques.direction.label')}</th>
+                        <th className="text-start">{t('cheques.bank')}</th>
+                        <th className="text-end">{t('cheques.amount')}</th>
                       </tr>
                     </thead>
 
                     <tbody>
                       {day.cheques.map((cheque) => (
-                        <tr
-                          key={cheque.chequeId}
-                          className="border-b border-slate-100 dark:border-slate-900"
-                        >
-                          <td className="py-1 pe-3 font-medium">{cheque.chequeNumber}</td>
-                          <td className="py-1 pe-3">
-                            <span className="text-slate-500 dark:text-slate-500">
-                              {cheque.partyCode}
-                            </span>{' '}
+                        <tr key={cheque.chequeId}>
+                          <td className="py-1.5 font-medium whitespace-nowrap">
+                            {cheque.chequeNumber}
+                          </td>
+                          <td className="py-1.5">
+                            <span className="text-ink-subtle">{cheque.partyCode}</span>{' '}
                             {cheque.partyName}
                           </td>
-                          <td className="py-1 pe-3">
+                          <td className="py-1.5">
                             <DirectionBadge direction={cheque.direction} />
                           </td>
-                          <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                          <td className="py-1.5 text-ink-muted">
                             {cheque.bankName ?? ''}
                           </td>
-                          <td className="py-1 text-end tabular-nums">
+                          <td className="cell-numeric py-1.5">
                             {moneyAlways(cheque.amount)}
                           </td>
                         </tr>
@@ -208,25 +200,21 @@ export function ChequeCalendarPage(): React.JSX.Element {
               </section>
             ))}
 
-            <div className="rounded-lg border border-slate-300 px-4 py-3 text-sm dark:border-slate-700">
-              <p className="font-semibold">
+            <div className="panel text-sm">
+              <p className="font-semibold text-ink">
                 {data.from} — {data.to}
               </p>
-              <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('cheques.totalReceivable')}
-                </dt>
-                <dd className="text-end tabular-nums">
+              <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
+                <dt className="text-ink-muted">{t('cheques.totalReceivable')}</dt>
+                <dd className="text-end font-mono tabular-nums">
                   {moneyAlways(data.totalReceivable)}
                 </dd>
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('cheques.totalPayable')}
-                </dt>
-                <dd className="text-end tabular-nums">
+                <dt className="text-ink-muted">{t('cheques.totalPayable')}</dt>
+                <dd className="text-end font-mono tabular-nums">
                   {moneyAlways(data.totalPayable)}
                 </dd>
-                <dt className="text-slate-600 dark:text-slate-400">{t('cheques.net')}</dt>
-                <dd className="text-end font-semibold">
+                <dt className="text-ink-muted">{t('cheques.net')}</dt>
+                <dd className="text-end font-mono font-semibold tabular-nums">
                   {net(data.totalReceivable - data.totalPayable)} {data.currency}
                 </dd>
               </dl>

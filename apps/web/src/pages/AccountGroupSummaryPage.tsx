@@ -1,7 +1,14 @@
 import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ReportFrame, BalanceBadge, money } from '@/components/ReportFrame';
+import clsx from 'clsx';
+import {
+  BalanceBadge,
+  EmptyState,
+  ReportFrame,
+  Spinner,
+  money,
+} from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 interface AccountGroupSummaryLedger {
@@ -42,6 +49,21 @@ interface AccountGroupSummary {
   readonly totalClosingDebit: number;
   readonly totalClosingCredit: number;
   readonly isBalanced: boolean;
+}
+
+/** A group's code, name and ledger count, drawn the same whether it expands or not. */
+function GroupLabel({
+  group,
+}: {
+  readonly group: AccountGroupSummaryRow;
+}): React.JSX.Element {
+  return (
+    <span className="whitespace-nowrap">
+      <span>{group.groupCode}</span>
+      <span className="ms-2">{group.groupName}</span>
+      <span className="ms-2 font-normal text-ink-subtle">({group.ledgerCount})</span>
+    </span>
+  );
 }
 
 function startOfYear(): string {
@@ -111,38 +133,38 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, includeZeroBalances, includeLedgers });
       }}
     >
-      <div>
+      <div className="field">
         <label htmlFor="from" className="field-label">
           {t('reports.from')}
         </label>
         <input
           id="from"
           type="date"
-          className="field-input"
+          className="field-input-sm"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
         />
       </div>
-      <div>
+      <div className="field">
         <label htmlFor="to" className="field-label">
           {t('reports.to')}
         </label>
         <input
           id="to"
           type="date"
-          className="field-input"
+          className="field-input-sm"
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="field-check pb-1">
         <input
           type="checkbox"
           checked={includeLedgers}
@@ -151,7 +173,7 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
         {t('reports.includeLedgers')}
       </label>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="field-check pb-1">
         <input
           type="checkbox"
           checked={includeZeroBalances}
@@ -160,7 +182,12 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
         {t('reports.includeZeroBalances')}
       </label>
 
-      <button type="submit" disabled={query.isFetching} className="btn-primary">
+      <button
+        type="submit"
+        disabled={query.isFetching}
+        className="btn-primary btn-sm py-1.5"
+      >
+        {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
     </form>
@@ -170,36 +197,22 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
     <ReportFrame title={t('nav.accountGroupSummary')} controls={controls} query={query}>
       {(data) =>
         data.groups.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('reports.noData')}</p>
+          <EmptyState message={t('reports.noData')} />
         ) : (
           <div className="space-y-4">
             <BalanceBadge isBalanced={data.isBalanced} currency={data.currency} />
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-              <table className="w-full border-collapse text-sm">
-                <thead className="bg-slate-100 dark:bg-slate-800">
+            <div className="table-wrap table-wrap-tall">
+              <table className="table min-w-[60rem]">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2 text-start font-semibold">
-                      {t('reports.group')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.openingDebit')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.openingCredit')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.periodDebit')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.periodCredit')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.closingDebit')}
-                    </th>
-                    <th className="px-3 py-2 text-end font-semibold">
-                      {t('reports.closingCredit')}
-                    </th>
+                    <th className="text-start">{t('reports.group')}</th>
+                    <th className="text-end">{t('reports.openingDebit')}</th>
+                    <th className="text-end">{t('reports.openingCredit')}</th>
+                    <th className="text-end">{t('reports.periodDebit')}</th>
+                    <th className="text-end">{t('reports.periodCredit')}</th>
+                    <th className="text-end">{t('reports.closingDebit')}</th>
+                    <th className="text-end">{t('reports.closingCredit')}</th>
                   </tr>
                 </thead>
 
@@ -210,24 +223,37 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
 
                     return (
                       <Fragment key={group.groupCode}>
-                        <tr
-                          onClick={canExpand ? () => toggle(group.groupCode) : undefined}
-                          className={
-                            'border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-800/40' +
-                            (canExpand ? ' cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800' : '')
-                          }
-                        >
-                          <td className="px-3 py-2">
-                            {canExpand && (
-                              <span className="me-1 inline-block w-3 text-slate-400">
-                                {isOpen ? '▾' : '▸'}
+                        <tr className="bg-surface-2 font-semibold">
+                          <td className="py-1.5">
+                            {/*
+                              A real button rather than a click handler on the row.
+                              The row carries the group's figures, and a keyboard
+                              user needs something focusable to press — a `<tr>`
+                              with an onClick is reachable by mouse only.
+                            */}
+                            {canExpand ? (
+                              <button
+                                type="button"
+                                onClick={() => toggle(group.groupCode)}
+                                aria-expanded={isOpen}
+                                className="-mx-1 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-start transition hover:bg-surface-3"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className={clsx(
+                                    'inline-block text-ink-subtle transition-transform duration-200',
+                                    isOpen ? 'rotate-90' : 'rotate-0 rtl:-rotate-180',
+                                  )}
+                                >
+                                  ▸
+                                </span>
+                                <GroupLabel group={group} />
+                              </button>
+                            ) : (
+                              <span className="flex items-center gap-1.5 ps-[1.125rem]">
+                                <GroupLabel group={group} />
                               </span>
                             )}
-                            <span>{group.groupCode}</span>
-                            <span className="ms-2">{group.groupName}</span>
-                            <span className="ms-2 font-normal text-slate-400">
-                              ({group.ledgerCount})
-                            </span>
                           </td>
                           <td className="cell-numeric">{money(group.openingDebit)}</td>
                           <td className="cell-numeric">{money(group.openingCredit)}</td>
@@ -239,23 +265,28 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
 
                         {isOpen &&
                           group.ledgers.map((ledger) => (
-                            <tr
-                              key={ledger.ledgerId}
-                              className="border-t border-slate-100 dark:border-slate-900"
-                            >
-                              <td className="px-3 py-2 ps-8">
+                            <tr key={ledger.ledgerId} className="animate-fade-in">
+                              <td className="ps-9">
                                 <span className="font-medium">{ledger.ledgerCode}</span>
-                                <span className="ms-2 text-slate-500">
+                                <span className="ms-2 text-ink-muted">
                                   {ledger.ledgerName}
                                 </span>
                               </td>
-                              <td className="cell-numeric">{money(ledger.openingDebit)}</td>
+                              <td className="cell-numeric">
+                                {money(ledger.openingDebit)}
+                              </td>
                               <td className="cell-numeric">
                                 {money(ledger.openingCredit)}
                               </td>
-                              <td className="cell-numeric">{money(ledger.periodDebit)}</td>
-                              <td className="cell-numeric">{money(ledger.periodCredit)}</td>
-                              <td className="cell-numeric">{money(ledger.closingDebit)}</td>
+                              <td className="cell-numeric">
+                                {money(ledger.periodDebit)}
+                              </td>
+                              <td className="cell-numeric">
+                                {money(ledger.periodCredit)}
+                              </td>
+                              <td className="cell-numeric">
+                                {money(ledger.closingDebit)}
+                              </td>
                               <td className="cell-numeric">
                                 {money(ledger.closingCredit)}
                               </td>
@@ -266,9 +297,9 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
                   })}
                 </tbody>
 
-                <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-semibold dark:border-slate-700 dark:bg-slate-800">
+                <tfoot>
                   <tr>
-                    <td className="px-3 py-2">{t('reports.totals')}</td>
+                    <td>{t('reports.totals')}</td>
                     <td className="cell-numeric">{money(data.totalOpeningDebit)}</td>
                     <td className="cell-numeric">{money(data.totalOpeningCredit)}</td>
                     <td className="cell-numeric">{money(data.totalPeriodDebit)}</td>

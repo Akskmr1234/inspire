@@ -59,6 +59,9 @@ function readLanguage(): Language {
 export function applyPresentation(theme: Theme, language: Language): void {
   const root = document.documentElement;
 
+  // The class, not a media query: the stylesheet declares a `dark` custom variant
+  // bound to this class, so every `dark:` utility in the application keys off what
+  // is toggled here rather than off the operating system's setting.
   root.classList.toggle('dark', theme === 'dark');
   root.lang = language;
 
@@ -66,6 +69,41 @@ export function applyPresentation(theme: Theme, language: Language): void {
   // whole layout mirror, which is why the styles use logical properties
   // (start/end) rather than left/right throughout.
   root.dir = language === 'ar' ? 'rtl' : 'ltr';
+}
+
+/** How long the cross-fade in the stylesheet runs for. */
+const THEME_FADE_MS = 300;
+
+let fadeTimer: number | undefined;
+
+/**
+ * Cross-fades the whole document across a theme change.
+ *
+ * The transition lives on a class that is added for the length of the change and
+ * then taken off again, rather than sitting permanently on every element. Left in
+ * place it would also animate the ordinary hover and focus colours — a row that
+ * takes a quarter of a second to acknowledge the pointer feels broken — and it
+ * would put a transition on every cell of a four-thousand-row ledger for the
+ * benefit of a switch pressed twice a day.
+ */
+function withThemeTransition(apply: () => void): void {
+  const root = document.documentElement;
+
+  // Honoured here as well as in the stylesheet: this path adds a class rather than
+  // declaring a transition, so the media query in the CSS never sees it.
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    apply();
+    return;
+  }
+
+  root.classList.add('theme-switching');
+  apply();
+
+  window.clearTimeout(fadeTimer);
+  fadeTimer = window.setTimeout(
+    () => root.classList.remove('theme-switching'),
+    THEME_FADE_MS,
+  );
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -117,7 +155,7 @@ export const useSession = create<SessionState>((set, get) => ({
 
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
-    applyPresentation(theme, get().language);
+    withThemeTransition(() => applyPresentation(theme, get().language));
     set({ theme });
   },
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { useSession } from '@/stores/session';
@@ -79,6 +79,7 @@ export function DataGrid<TRow>({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { can } = useSession();
+  const narrow = useIsNarrow();
 
   const [search, setSearch] = useState('');
   const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
@@ -93,7 +94,10 @@ export function DataGrid<TRow>({
   // Columns the user is not entitled to never enter the arrangement at all, so they
   // cannot be turned on from the picker or restored by a stale saved layout.
   const permitted = useMemo(
-    () => columns.filter((column) => !column.requiredPermission || can(column.requiredPermission)),
+    () =>
+      columns.filter(
+        (column) => !column.requiredPermission || can(column.requiredPermission),
+      ),
     [columns, can],
   );
 
@@ -157,7 +161,9 @@ export function DataGrid<TRow>({
     ordered.push(...permitted.filter((column) => byKey.has(column.key)));
 
     return ordered.filter(
-      (column) => !hidden.has(column.key) && !(column.hiddenByDefault && !order.includes(column.key)),
+      (column) =>
+        !hidden.has(column.key) &&
+        !(column.hiddenByDefault && !order.includes(column.key)),
     );
   }, [permitted, order, hidden]);
 
@@ -323,18 +329,37 @@ export function DataGrid<TRow>({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      {/*
+        The toolbar scrolls sideways on a phone rather than wrapping. Six buttons
+        wrapping to three rows would push the table itself below the fold on every
+        screen in the application.
+      */}
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
         {!paging && (
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t('grid.search')}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
-          />
+          <div className="relative shrink-0">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              className="pointer-events-none absolute inset-y-0 start-2.5 my-auto size-4 text-ink-subtle"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.6-3.6" />
+            </svg>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t('grid.search')}
+              className="field-input-sm w-44 ps-8 sm:w-56"
+            />
+          </div>
         )}
 
-        <span className="text-xs text-slate-500">
+        <span className="shrink-0 text-xs whitespace-nowrap text-ink-muted">
           {paging
             ? t('grid.pageOf', {
                 page: paging.page,
@@ -344,15 +369,66 @@ export function DataGrid<TRow>({
             : t('grid.rowCount', { shown: shown.length, total: rows.length })}
         </span>
 
-        <div className="ms-auto flex flex-wrap items-center gap-2">
-          {saved && <span className="text-xs text-emerald-600">{saved}</span>}
+        {/*
+          Sorting lives in the column headers, and the card view has none — so
+          without this a phone can search and export a list but never order it.
+          Offered only where the headers are gone, and only where sorting applies
+          at all: a server-paged grid sorts nothing on the client, for the same
+          reason it hides the search box.
+        */}
+        {narrow && !paging && (
+          <label className="flex shrink-0 items-center gap-1.5">
+            <span className="sr-only">{t('grid.sortBy')}</span>
+            <select
+              value={sortKey ?? ''}
+              onChange={(event) => {
+                const next = event.target.value;
+                setSortKey(next === '' ? null : next);
+                setSortDescending(false);
+              }}
+              className="field-input-sm w-auto py-1 text-xs"
+            >
+              <option value="">{t('grid.sortNone')}</option>
+              {visible
+                .filter((column) => column.header.trim() !== '')
+                .map((column) => (
+                  <option key={column.key} value={column.key}>
+                    {column.header}
+                  </option>
+                ))}
+            </select>
 
-          <GridButton onClick={() => setShowPicker((value) => !value)}>
+            {sortKey !== null && (
+              <GridButton
+                onClick={() => setSortDescending((value) => !value)}
+                label={t('grid.sortDirection')}
+              >
+                {sortDescending ? '▾' : '▴'}
+              </GridButton>
+            )}
+          </label>
+        )}
+
+        <div className="ms-auto flex shrink-0 items-center gap-1.5">
+          {saved && <span className="badge-success animate-pop">{saved}</span>}
+
+          <GridButton
+            onClick={() => setShowPicker((value) => !value)}
+            pressed={showPicker}
+          >
             {t('grid.columns')}
           </GridButton>
-          <GridButton onClick={() => setFrozen((value) => (value === 0 ? 1 : 0))}>
-            {frozen > 0 ? t('grid.unfreeze') : t('grid.freeze')}
-          </GridButton>
+
+          {/* Freezing a column means nothing once the columns are gone. */}
+          {!narrow && (
+            <GridButton
+              onClick={() => setFrozen((value) => (value === 0 ? 1 : 0))}
+              pressed={frozen > 0}
+            >
+              {frozen > 0 ? t('grid.unfreeze') : t('grid.freeze')}
+            </GridButton>
+          )}
+
           <GridButton onClick={exportCsv}>{t('grid.exportCsv')}</GridButton>
           <GridButton onClick={() => void persist()}>{t('grid.saveLayout')}</GridButton>
           <GridButton onClick={() => void restoreDefaults()}>
@@ -362,120 +438,204 @@ export function DataGrid<TRow>({
       </div>
 
       {showPicker && (
-        <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          {permitted.map((column) => (
-            <div
-              key={column.key}
-              className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-700"
-            >
-              <label className="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={visible.some((candidate) => candidate.key === column.key)}
-                  onChange={() => toggleHidden(column.key)}
-                />
-                {column.header}
-              </label>
-              <button
-                type="button"
-                onClick={() => move(column.key, -1)}
-                className="px-1 text-slate-400 hover:text-slate-700"
-                title={t('grid.moveLeft')}
+        <div className="panel animate-drop flex flex-wrap gap-1.5">
+          {permitted.map((column) => {
+            const isVisible = visible.some((candidate) => candidate.key === column.key);
+
+            return (
+              <div
+                key={column.key}
+                className={clsx(
+                  'flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition',
+                  isVisible
+                    ? 'border-brand-500/40 bg-brand-50 text-brand-800 dark:bg-brand-500/12 dark:text-brand-200'
+                    : 'border-line bg-surface text-ink-muted',
+                )}
               >
-                ‹
-              </button>
-              <button
-                type="button"
-                onClick={() => move(column.key, 1)}
-                className="px-1 text-slate-400 hover:text-slate-700"
-                title={t('grid.moveRight')}
-              >
-                ›
-              </button>
-            </div>
-          ))}
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    className="size-3.5"
+                    checked={isVisible}
+                    onChange={() => toggleHidden(column.key)}
+                  />
+                  {column.header}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => move(column.key, -1)}
+                  className="rounded px-1 text-ink-subtle transition hover:bg-surface-3 hover:text-ink"
+                  title={t('grid.moveLeft')}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(column.key, 1)}
+                  className="rounded px-1 text-ink-subtle transition hover:bg-surface-3 hover:text-ink"
+                  title={t('grid.moveRight')}
+                >
+                  ›
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div className="max-h-[70vh] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
-            <tr>
-              {visible.map((column, index) => (
-                <th
-                  key={column.key}
-                  onClick={() => toggleSort(column.key)}
-                  className={clsx(
-                    'cursor-pointer px-3 py-2 font-semibold select-none',
-                    column.numeric ? 'text-end' : 'text-start',
-                    // A frozen column sticks to the logical start edge, so Arabic
-                    // freezes from the right without a second rule.
-                    index < frozen && 'sticky start-0 z-20 bg-slate-100 dark:bg-slate-800',
-                  )}
-                >
-                  {column.header}
-                  {sortKey === column.key && (
-                    <span className="ms-1 text-slate-400">{sortDescending ? '▾' : '▴'}</span>
-                  )}
-                </th>
-              ))}
-            </tr>
-            {!paging && (
+      {/*
+        Below `sm` the grid stops being a table.
+
+        A twelve-column ledger on a 375px screen is a horizontal scroll where every
+        row has to be dragged across to be read, and the headings are off-screen for
+        most of that journey — so a figure in the fourth column is a number with no
+        label attached. As cards each row carries its own labels and nothing
+        scrolls sideways.
+
+        One or the other is rendered, not both hidden with a breakpoint class: a
+        four-thousand-row chart of accounts would otherwise build twice.
+      */}
+      {narrow ? (
+        <CardList
+          rows={shown}
+          columns={visible}
+          rowKey={rowKey}
+          emptyMessage={emptyMessage ?? t('grid.noRows')}
+        />
+      ) : (
+        <div className="table-wrap table-wrap-tall">
+          <table className="table">
+            {/*
+            `z-20` on the header against `z-10` on a frozen body cell, so a frozen
+            first column slides *under* the header rather than over it when the
+            table is scrolled in both directions at once.
+          */}
+            <thead className="sticky top-0 z-20">
               <tr>
-                {visible.map((column) => (
-                  <th key={column.key} className="px-2 pb-2">
-                    <input
-                      type="search"
-                      value={columnSearch[column.key] ?? ''}
-                      onChange={(event) =>
-                        setColumnSearch((previous) => ({
-                          ...previous,
-                          [column.key]: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded border border-slate-300 bg-white px-1 py-0.5 text-xs font-normal dark:border-slate-700 dark:bg-slate-900"
-                    />
+                {visible.map((column, index) => (
+                  <th
+                    key={column.key}
+                    aria-sort={
+                      sortKey === column.key
+                        ? sortDescending
+                          ? 'descending'
+                          : 'ascending'
+                        : undefined
+                    }
+                    className={clsx(
+                      'select-none',
+                      column.numeric ? 'text-end' : 'text-start',
+                      // A frozen column sticks to the logical start edge, so Arabic
+                      // freezes from the right without a second rule.
+                      index < frozen && 'sticky start-0 z-30 bg-surface-3',
+                    )}
+                  >
+                    {/*
+                    A real button, not a click handler on the cell. A `<th>` with an
+                    onClick is reachable by mouse only — it takes no focus, answers
+                    no Enter or Space, and is announced as a plain heading — so
+                    sorting a grid was impossible from the keyboard. `aria-sort`
+                    stays on the cell, which is where the specification puts it.
+                  */}
+                    {paging ? (
+                      <span className="inline-flex items-center gap-1">
+                        {column.header}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(column.key)}
+                        className={clsx(
+                          '-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5',
+                          'font-semibold tracking-wide uppercase transition-colors',
+                          'hover:text-ink focus-visible:ring-2 focus-visible:ring-brand-500/40',
+                        )}
+                      >
+                        {column.header}
+                        <span
+                          aria-hidden="true"
+                          className={clsx(
+                            'transition-opacity',
+                            sortKey === column.key
+                              ? 'text-brand-600 opacity-100 dark:text-brand-300'
+                              : // Held in the layout at zero opacity rather than
+                                // absent, so the header does not jump sideways the
+                                // first time a column is sorted.
+                                'opacity-0',
+                          )}
+                        >
+                          {sortKey === column.key && sortDescending ? '▾' : '▴'}
+                        </span>
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>
-            )}
-          </thead>
-
-          <tbody>
-            {shown.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={visible.length}
-                  className="px-3 py-6 text-center text-sm text-slate-500"
-                >
-                  {emptyMessage ?? t('grid.noRows')}
-                </td>
-              </tr>
-            ) : (
-              shown.map((row) => (
-                <tr
-                  key={rowKey(row)}
-                  className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-900 dark:hover:bg-slate-800/50"
-                >
+              {!paging && (
+                <tr>
                   {visible.map((column, index) => (
-                    <td
+                    <th
                       key={column.key}
                       className={clsx(
-                        'px-3 py-1.5',
-                        column.numeric && 'text-end font-mono whitespace-nowrap',
-                        index < frozen &&
-                          'sticky start-0 bg-white dark:bg-slate-950',
+                        'bg-surface-3 px-2 pt-0 pb-2',
+                        index < frozen && 'sticky start-0 z-30',
                       )}
                     >
-                      {column.render ? column.render(row) : (column.value(row) ?? '')}
-                    </td>
+                      <input
+                        type="search"
+                        aria-label={`${t('grid.search')} — ${column.header}`}
+                        value={columnSearch[column.key] ?? ''}
+                        onChange={(event) =>
+                          setColumnSearch((previous) => ({
+                            ...previous,
+                            [column.key]: event.target.value,
+                          }))
+                        }
+                        className="w-full min-w-24 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                      />
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </thead>
+
+            <tbody>
+              {shown.length === 0 ? (
+                <tr>
+                  <td colSpan={visible.length} className="px-3 py-10 text-center">
+                    <p className="text-sm text-ink-muted">
+                      {emptyMessage ?? t('grid.noRows')}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                shown.map((row) => (
+                  <tr key={rowKey(row)} className="group">
+                    {visible.map((column, index) => (
+                      <td
+                        key={column.key}
+                        className={clsx(
+                          'py-1.5',
+                          column.numeric &&
+                            'text-end font-mono whitespace-nowrap tabular-nums',
+                          // The frozen cell repaints its own background on hover:
+                          // it sits above the row, so the row's hover colour does
+                          // not show through it and the stripe would otherwise
+                          // break at the first column.
+                          index < frozen &&
+                            'sticky start-0 z-10 bg-surface group-hover:bg-surface-2',
+                        )}
+                      >
+                        {column.render ? column.render(row) : (column.value(row) ?? '')}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {paging && paging.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 text-sm">
@@ -486,7 +646,7 @@ export function DataGrid<TRow>({
             {t('grid.previousPage')}
           </GridButton>
 
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-ink-muted">
             {t('grid.pageOf', {
               page: paging.page,
               pages: paging.totalPages,
@@ -506,22 +666,131 @@ export function DataGrid<TRow>({
   );
 }
 
+/** Tailwind's `sm`. Below it the grid is a list of cards rather than a table. */
+const NARROW = '(max-width: 639px)';
+
+/** Tracks whether the viewport is below the table breakpoint. */
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW).matches);
+
+  useEffect(() => {
+    const query = window.matchMedia(NARROW);
+    const onChange = (event: MediaQueryListEvent): void => setNarrow(event.matches);
+
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return narrow;
+}
+
+/**
+ * The grid as a list of cards, for screens too narrow to hold a table.
+ *
+ * The first column leads each card. It is the one that identifies the row — a code,
+ * a document number, a name — and on every grid in this application it is also the
+ * one carrying the link into the record, so it has to keep whatever `render` gave
+ * it rather than being flattened to text.
+ *
+ * The rest become labelled pairs. A column with no header is an actions column, and
+ * its buttons go at the foot of the card with nothing captioning them.
+ */
+function CardList<TRow>({
+  rows,
+  columns,
+  rowKey,
+  emptyMessage,
+}: {
+  readonly rows: readonly TRow[];
+  readonly columns: readonly GridColumn<TRow>[];
+  readonly rowKey: (row: TRow) => string;
+  readonly emptyMessage: string;
+}): React.JSX.Element {
+  if (rows.length === 0) {
+    return (
+      <div className="card px-4 py-10 text-center">
+        <p className="text-sm text-ink-muted">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  const [lead, ...rest] = columns;
+  const labelled = rest.filter((column) => column.header.trim() !== '');
+  const actions = rest.filter((column) => column.header.trim() === '');
+
+  return (
+    <ul className="space-y-2">
+      {rows.map((row) => (
+        <li key={rowKey(row)} className="card card-body space-y-3 py-3">
+          {lead && (
+            <div className="text-sm font-semibold text-ink">
+              {lead.render ? lead.render(row) : (lead.value(row) ?? '')}
+            </div>
+          )}
+
+          <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+            {labelled.map((column) => (
+              <Fragment key={column.key}>
+                <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                  {column.header}
+                </dt>
+                <dd
+                  className={clsx(
+                    'min-w-0 text-end text-ink',
+                    column.numeric && 'font-mono tabular-nums',
+                  )}
+                >
+                  {column.render ? column.render(row) : (column.value(row) ?? '')}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+
+          {actions.length > 0 && (
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              {actions.map((column) => (
+                <Fragment key={column.key}>
+                  {column.render ? column.render(row) : (column.value(row) ?? '')}
+                </Fragment>
+              ))}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function GridButton({
   onClick,
   children,
   disabled,
+  pressed,
+  label,
 }: {
   readonly onClick: () => void;
   readonly children: React.ReactNode;
   /** Greyed and inert, so the ends of a pager cannot be walked past. */
   readonly disabled?: boolean;
+  /** Held down, for the toggles — the column picker and the freeze. */
+  readonly pressed?: boolean;
+  /** Spoken name, for the buttons whose whole content is a glyph. */
+  readonly label?: string;
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      {...(label === undefined ? {} : { 'aria-label': label })}
+      {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      className={clsx(
+        'shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition duration-150',
+        'active:scale-95 disabled:pointer-events-none disabled:opacity-40',
+        pressed
+          ? 'border-brand-500/40 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200'
+          : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
+      )}
     >
       {children}
     </button>

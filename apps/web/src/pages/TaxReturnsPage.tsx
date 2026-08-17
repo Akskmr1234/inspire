@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import { ReportFrame, ReportSkeleton, moneyAlways } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import {
   componentName,
@@ -69,7 +69,7 @@ export function TaxReturnsPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setRange({ from, to });
@@ -122,7 +122,7 @@ export function TaxReturnsPage(): React.JSX.Element {
               {t('tax.inputTax')}
             </ViewTab>
 
-            <span className="ms-auto text-xs text-slate-500">
+            <span className="ms-auto text-xs text-ink-muted">
               {regimeName(data.regime, t)} · {data.currency}
             </span>
           </div>
@@ -130,9 +130,7 @@ export function TaxReturnsPage(): React.JSX.Element {
           {view === 'summary' && <Summary data={data} />}
 
           {view === 'output' && (
-            <Detail query={output}>
-              {(report) => <OutputRows report={report} />}
-            </Detail>
+            <Detail query={output}>{(report) => <OutputRows report={report} />}</Detail>
           )}
 
           {view === 'input' && (
@@ -155,12 +153,19 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
           the documents disagree the only honest thing is to say so before it is filed. */}
       <p
         className={clsx(
-          'inline-block rounded-lg px-3 py-1.5 text-sm font-medium',
+          'inline-flex animate-pop items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
           data.isReconciled
-            ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-            : 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100',
+            ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
+            : 'bg-red-50 text-red-800 dark:bg-red-500/12 dark:text-red-200',
         )}
       >
+        <span
+          aria-hidden="true"
+          className={clsx(
+            'size-2 shrink-0 rounded-full',
+            data.isReconciled ? 'bg-emerald-500' : 'animate-breathe bg-red-500',
+          )}
+        />
         {data.isReconciled ? t('tax.reconciled') : t('tax.notReconciled')}
       </p>
 
@@ -172,9 +177,9 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
         <Figure label={t('tax.netPayable')} value={data.netPayable} emphasis />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+      <div className="table-wrap table-wrap-tall">
+        <table className="table">
+          <thead className="bg-surface-3">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('tax.head')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.outputTax')}</th>
@@ -182,24 +187,25 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
               <th className="px-3 py-2 text-end font-semibold">{t('tax.netPayable')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.onLedger')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.difference')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('tax.inputOnLedger')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('tax.inputDifference')}</th>
+              <th className="px-3 py-2 text-end font-semibold">
+                {t('tax.inputOnLedger')}
+              </th>
+              <th className="px-3 py-2 text-end font-semibold">
+                {t('tax.inputDifference')}
+              </th>
             </tr>
           </thead>
 
           <tbody>
             {data.lines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-ink-muted">
                   {t('tax.nothingCharged')}
                 </td>
               </tr>
             ) : (
               data.lines.map((line) => (
-                <tr
-                  key={line.component}
-                  className="border-t border-slate-100 dark:border-slate-900"
-                >
+                <tr key={line.component} className="border-t border-line">
                   <td className="px-3 py-1.5">{componentName(line.component)}</td>
                   <td className="px-3 py-1.5 text-end font-mono">
                     {moneyAlways(line.outputTax)}
@@ -210,7 +216,7 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
                   <td className="px-3 py-1.5 text-end font-mono font-semibold">
                     {moneyAlways(line.netPayable)}
                   </td>
-                  <td className="px-3 py-1.5 text-end font-mono text-slate-500">
+                  <td className="px-3 py-1.5 text-end font-mono text-ink-muted">
                     {moneyAlways(line.outputTaxPosted)}
                   </td>
                   <td
@@ -221,7 +227,7 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
                   >
                     {moneyAlways(line.difference)}
                   </td>
-                  <td className="px-3 py-1.5 text-end font-mono text-slate-500">
+                  <td className="px-3 py-1.5 text-end font-mono text-ink-muted">
                     {moneyAlways(line.inputTaxPosted)}
                   </td>
                   <td
@@ -239,7 +245,7 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
         </table>
       </div>
 
-      <p className="text-xs text-slate-500">{t('tax.differenceHint')}</p>
+      <p className="text-xs text-ink-muted">{t('tax.differenceHint')}</p>
     </div>
   );
 }
@@ -249,14 +255,16 @@ function OutputRows({ report }: { readonly report: OutputTaxReport }): React.JSX
   const { t } = useTranslation();
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-      <table className="w-full border-collapse text-sm">
-        <thead className="bg-slate-100 dark:bg-slate-800">
+    <div className="table-wrap table-wrap-tall">
+      <table className="table">
+        <thead className="bg-surface-3">
           <tr>
             <th className="px-3 py-2 text-start font-semibold">{t('tax.document')}</th>
             <th className="px-3 py-2 text-start font-semibold">{t('sales.date')}</th>
             <th className="px-3 py-2 text-start font-semibold">{t('sales.customer')}</th>
-            <th className="px-3 py-2 text-start font-semibold">{t('tax.registration')}</th>
+            <th className="px-3 py-2 text-start font-semibold">
+              {t('tax.registration')}
+            </th>
             <th className="px-3 py-2 text-start font-semibold">{t('tax.head')}</th>
             <th className="px-3 py-2 text-end font-semibold">{t('tax.rate')}</th>
             <th className="px-3 py-2 text-end font-semibold">{t('tax.taxableValue')}</th>
@@ -267,7 +275,7 @@ function OutputRows({ report }: { readonly report: OutputTaxReport }): React.JSX
         <tbody>
           {report.rows.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
+              <td colSpan={8} className="px-3 py-6 text-center text-sm text-ink-muted">
                 {t('tax.noSupplies')}
               </td>
             </tr>
@@ -275,12 +283,12 @@ function OutputRows({ report }: { readonly report: OutputTaxReport }): React.JSX
             report.rows.map((row, index) => (
               <tr
                 key={`${row.documentId}-${row.component}-${index}`}
-                className="border-t border-slate-100 dark:border-slate-900"
+                className="border-t border-line"
               >
                 <td className="px-3 py-1.5">{row.number}</td>
                 <td className="px-3 py-1.5">{row.date}</td>
                 <td className="px-3 py-1.5">{row.customerName}</td>
-                <td className="px-3 py-1.5 text-slate-500">
+                <td className="px-3 py-1.5 text-ink-muted">
                   {row.taxRegistrationNumber ?? '—'}
                   {row.stateCode ? ` · ${row.stateCode}` : ''}
                 </td>
@@ -289,7 +297,9 @@ function OutputRows({ report }: { readonly report: OutputTaxReport }): React.JSX
                 <td className="px-3 py-1.5 text-end font-mono">
                   {moneyAlways(row.taxableAmount)}
                 </td>
-                <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.taxAmount)}</td>
+                <td className="px-3 py-1.5 text-end font-mono">
+                  {moneyAlways(row.taxAmount)}
+                </td>
               </tr>
             ))
           )}
@@ -313,24 +323,26 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
       {/* Only where there is one, and only about the rows it applies to: a listing built
           from purchases carries its base, and a hand-written journal cannot. */}
       {report.rows.some((row) => row.taxableAmount === null) && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {t('tax.inputHint')}
-        </p>
+        <p className="alert-warn text-xs">{t('tax.inputHint')}</p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+      <div className="table-wrap table-wrap-tall">
+        <table className="table">
+          <thead className="bg-surface-3">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('tax.document')}</th>
               <th className="px-3 py-2 text-start font-semibold">{t('sales.date')}</th>
-              <th className="px-3 py-2 text-start font-semibold">{t('purchase.supplier')}</th>
+              <th className="px-3 py-2 text-start font-semibold">
+                {t('purchase.supplier')}
+              </th>
               <th className="px-3 py-2 text-start font-semibold">
                 {t('purchase.supplierInvoice')}
               </th>
               <th className="px-3 py-2 text-start font-semibold">{t('tax.head')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.rate')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('tax.taxableValue')}</th>
+              <th className="px-3 py-2 text-end font-semibold">
+                {t('tax.taxableValue')}
+              </th>
               <th className="px-3 py-2 text-end font-semibold">{t('tax.tax')}</th>
             </tr>
           </thead>
@@ -338,7 +350,7 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
           <tbody>
             {report.rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-ink-muted">
                   {t('tax.noInput')}
                 </td>
               </tr>
@@ -346,7 +358,7 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
               report.rows.map((row, index) => (
                 <tr
                   key={`${row.documentId}-${row.component}-${index}`}
-                  className="border-t border-slate-100 dark:border-slate-900"
+                  className="border-t border-line"
                 >
                   <td className="px-3 py-1.5">{row.number}</td>
                   <td className="px-3 py-1.5">{row.date}</td>
@@ -365,7 +377,9 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
                   <td className="px-3 py-1.5 text-end font-mono">
                     {row.taxableAmount === null ? '—' : moneyAlways(row.taxableAmount)}
                   </td>
-                  <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.taxAmount)}</td>
+                  <td className="px-3 py-1.5 text-end font-mono">
+                    {moneyAlways(row.taxAmount)}
+                  </td>
                 </tr>
               ))
             )}
@@ -384,18 +398,26 @@ function Detail<TReport>({
   readonly query: UseQueryResult<TReport, ApiError>;
   readonly children: (report: TReport) => React.ReactNode;
 }): React.JSX.Element {
-  const { t } = useTranslation();
-
+  // No `t` here any more: the waiting state is a skeleton shaped like the listing
+  // rather than the word "Loading", so there is nothing left to translate.
   if (query.error) {
-    return (
-      <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-300">
-        {query.error.detail || query.error.code}
-      </p>
-    );
+    return <p className="alert-error">{query.error.detail || query.error.code}</p>;
   }
 
   if (query.isLoading || !query.data) {
-    return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index} className="card px-4 py-3">
+              <span className="skeleton block h-2.5 w-3/5 rounded" />
+              <span className="skeleton mt-3 block h-5 w-4/5 rounded" />
+            </div>
+          ))}
+        </div>
+        <ReportSkeleton rows={4} />
+      </div>
+    );
   }
 
   return <>{children(query.data)}</>;
@@ -417,10 +439,10 @@ function ViewTab({
       type="button"
       onClick={() => onChange(value)}
       className={clsx(
-        'rounded-md px-3 py-1.5 text-sm transition',
+        'rounded-lg px-3 py-1.5 text-sm font-medium transition duration-150 active:scale-95',
         current === value
-          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-          : 'border border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'bg-brand-600 text-white shadow-xs'
+          : 'border border-line text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
       )}
     >
       {children}
@@ -438,8 +460,8 @@ function Figure({
   readonly emphasis?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800">
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className="card px-4 py-3">
+      <div className="text-xs text-ink-muted">{label}</div>
       <div className={clsx('font-mono', emphasis ? 'text-xl font-semibold' : 'text-lg')}>
         {moneyAlways(value)}
       </div>

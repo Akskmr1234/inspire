@@ -57,12 +57,19 @@ const en = {
     chequeCalendar: 'Cheque calendar',
     chequeRegister: 'Cheque register',
     signOut: 'Sign out',
+    menu: 'Menu',
+    openMenu: 'Open menu',
+    closeMenu: 'Close menu',
+    collapseSidebar: 'Collapse',
+    expandSidebar: 'Expand',
+    skipToContent: 'Skip to content',
   },
   reports: {
     from: 'From',
     to: 'To',
     asAt: 'As at',
     run: 'Run',
+    print: 'Print',
     running: 'Running…',
     ledger: 'Ledger',
     group: 'Group',
@@ -500,11 +507,14 @@ const en = {
     noSerials: 'No units of this product are on the shelf in that warehouse.',
     savedNotice: 'Saved as {{number}}. Nothing has moved until it is posted.',
     postedNotice: '{{number}} posted. Stock issued on {{stock}}; total {{total}}.',
-    cancelledNotice: 'Cancelled. The goods, the debt and the books are back where they were.',
-    postedProduced: 'Posting produced a stock document, a journal, and — for a sale — a bill.',
+    cancelledNotice:
+      'Cancelled. The goods, the debt and the books are back where they were.',
+    postedProduced:
+      'Posting produced a stock document, a journal, and — for a sale — a bill.',
     returnHint:
       'Naming the invoice lets the goods come back at the cost they left at, and the credit settle that sale’s bill. Without one they come back at the current average and the credit sits on the account.',
-    totalsHint: 'An estimate. The server rounds the total to the currency when it is saved.',
+    totalsHint:
+      'An estimate. The server rounds the total to the currency when it is saved.',
   },
   customers: {
     mobile: 'Mobile',
@@ -582,7 +592,8 @@ const en = {
       'Input tax is reclaimable against the supplier’s own tax invoice, so their number and date are what a return reports. The same number twice for one supplier is refused.',
     returnHint:
       'Naming the purchase lets the debit settle that document’s bill. Without one it sits on the supplier’s account. Goods go back at what the shelf says they cost, which is not always what was agreed.',
-    totalsHint: 'An estimate. The server rounds the total to the currency when it is saved.',
+    totalsHint:
+      'An estimate. The server rounds the total to the currency when it is saved.',
   },
   tax: {
     summary: 'Summary',
@@ -630,6 +641,9 @@ const en = {
     resetLayout: 'Reset',
     layoutSaved: 'Layout saved',
     layoutReset: 'Layout reset',
+    sortBy: 'Sort by',
+    sortNone: 'Unsorted',
+    sortDirection: 'Reverse the order',
     moveLeft: 'Move earlier',
     moveRight: 'Move later',
     noRows: 'Nothing to show.',
@@ -698,12 +712,19 @@ const ar = {
     chequeCalendar: 'تقويم الشيكات',
     chequeRegister: 'سجل الشيكات',
     signOut: 'تسجيل الخروج',
+    menu: 'القائمة',
+    openMenu: 'فتح القائمة',
+    closeMenu: 'إغلاق القائمة',
+    collapseSidebar: 'طي',
+    expandSidebar: 'توسيع',
+    skipToContent: 'تخطٍّ إلى المحتوى',
   },
   reports: {
     from: 'من',
     to: 'إلى',
     asAt: 'كما في',
     run: 'تشغيل',
+    print: 'طباعة',
     running: 'جارٍ التشغيل…',
     ledger: 'الحساب',
     group: 'المجموعة',
@@ -1039,8 +1060,7 @@ const ar = {
     typeAdjustment: 'تسوية مخزون',
     typeDamaged: 'بضاعة تالفة',
     typeVerification: 'جرد فعلي',
-    countHint:
-      'أدخل ما وُجد على الرف فعلياً. يُرحَّل الفرق عن رصيد النظام فقط.',
+    countHint: 'أدخل ما وُجد على الرف فعلياً. يُرحَّل الفرق عن رصيد النظام فقط.',
     adjustmentHint:
       'الكمية الموجبة بضاعة وُجدت، والسالبة بضاعة مفقودة. اترك السعر فارغاً لتقييمها بتكلفة الرصيد الحالية.',
     postedNotice: 'تم ترحيل {{number}} — حركة واحدة مسجّلة.',
@@ -1154,7 +1174,8 @@ const ar = {
     serialsChosen: 'تم اختيار {{chosen}} من {{wanted}} وحدة',
     noSerials: 'لا توجد وحدات من هذا الصنف في ذلك المستودع.',
     savedNotice: 'حُفظ برقم {{number}}. لا شيء يتحرك قبل الترحيل.',
-    postedNotice: 'تم ترحيل {{number}}. صرف المخزون بالمستند {{stock}}؛ الإجمالي {{total}}.',
+    postedNotice:
+      'تم ترحيل {{number}}. صرف المخزون بالمستند {{stock}}؛ الإجمالي {{total}}.',
     cancelledNotice: 'تم الإلغاء. عادت البضاعة والمديونية والقيود كما كانت.',
     postedProduced: 'أنتج الترحيل مستند مخزون وقيداً — وفاتورة مستحقة في حالة البيع.',
     returnHint:
@@ -1228,9 +1249,11 @@ const ar = {
     serialsNamed: 'تم إدخال {{named}} من {{wanted}} وحدة',
     serialsHint: 'رقم واحد في كل سطر',
     savedNotice: 'حُفظ برقم {{number}}. لا شيء يتحرك قبل الترحيل.',
-    postedNotice: 'تم ترحيل {{number}}. استلمت البضاعة بالمستند {{stock}}؛ الإجمالي {{total}}.',
+    postedNotice:
+      'تم ترحيل {{number}}. استلمت البضاعة بالمستند {{stock}}؛ الإجمالي {{total}}.',
     cancelledNotice: 'تم الإلغاء. عادت البضاعة والمديونية والقيود كما كانت.',
-    postedProduced: 'أنتج الترحيل مستند استلام وقيداً — وفاتورة مستحقة للمورد في حالة الشراء.',
+    postedProduced:
+      'أنتج الترحيل مستند استلام وقيداً — وفاتورة مستحقة للمورد في حالة الشراء.',
     supplierInvoiceHint:
       'ضريبة المدخلات تُسترد مقابل فاتورة المورد الضريبية، فرقمها وتاريخها هما ما يرد في الإقرار. ولا يُقبل الرقم نفسه مرتين لنفس المورد.',
     returnHint:
@@ -1283,6 +1306,9 @@ const ar = {
     resetLayout: 'إعادة تعيين',
     layoutSaved: 'تم حفظ التخطيط',
     layoutReset: 'تمت إعادة التعيين',
+    sortBy: 'ترتيب حسب',
+    sortNone: 'بدون ترتيب',
+    sortDirection: 'عكس الترتيب',
     moveLeft: 'تحريك للأمام',
     moveRight: 'تحريك للخلف',
     noRows: 'لا يوجد ما يُعرض.',

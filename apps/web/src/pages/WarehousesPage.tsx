@@ -118,7 +118,7 @@ function AddWarehouse({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -142,7 +142,12 @@ function AddWarehouse({
       }}
     >
       <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField label={t('masters.name')} value={name} onChange={setName} width="w-44" />
+      <MasterField
+        label={t('masters.name')}
+        value={name}
+        onChange={setName}
+        width="w-44"
+      />
       <MasterField
         label={t('masters.nameArabic')}
         value={nameArabic}

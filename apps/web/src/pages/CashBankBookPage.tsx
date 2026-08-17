@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ReportFrame } from '@/components/ReportFrame';
+import { DateRangeControls, ReportFrame } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 interface BookLine {
@@ -91,41 +91,14 @@ export function CashBankBookPage({
   });
 
   const controls = (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setRange({ from, to });
-      }}
-    >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.from')}</span>
-        <input
-          type="date"
-          value={from}
-          onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
-        />
-      </label>
-
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.to')}</span>
-        <input
-          type="date"
-          value={to}
-          onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
-        />
-      </label>
-
-      <button
-        type="submit"
-        disabled={query.isFetching}
-        className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
-      >
-        {query.isFetching ? t('reports.running') : t('reports.run')}
-      </button>
-    </form>
+    <DateRangeControls
+      from={from}
+      to={to}
+      onFromChange={setFrom}
+      onToChange={setTo}
+      onApply={() => setRange({ from, to })}
+      busy={query.isFetching}
+    />
   );
 
   return (
@@ -136,63 +109,48 @@ export function CashBankBookPage({
       isEmpty={(data) => data.accounts.length === 0}
     >
       {(data) => (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {data.accounts.map((account) => (
-            <section key={account.ledgerId} className="space-y-2">
-              <header className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="font-semibold">
-                  <span className="text-slate-500 dark:text-slate-500">
-                    {account.ledgerCode}
-                  </span>{' '}
+            <section key={account.ledgerId} className="card overflow-hidden">
+              <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line bg-surface-3 px-4 py-3">
+                <h2 className="font-semibold text-ink">
+                  <span className="text-ink-subtle">{account.ledgerCode}</span>{' '}
                   {account.ledgerName}
                 </h2>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {t('reports.closingBalance')}: {balance(account.closingBalance)}{' '}
-                  {data.currency}
+                <p className="text-sm text-ink-muted">
+                  {t('reports.closingBalance')}:{' '}
+                  <span className="font-mono font-medium text-ink tabular-nums">
+                    {balance(account.closingBalance)} {data.currency}
+                  </span>
                 </p>
               </header>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[52rem] border-collapse text-sm">
+                <table className="table min-w-[52rem]">
                   <thead>
-                    <tr className="border-b border-slate-300 text-left dark:border-slate-700">
-                      <th className="py-2 pe-3 font-medium">{t('reports.date')}</th>
-                      <th className="py-2 pe-3 font-medium">{t('reports.voucherNo')}</th>
-                      <th className="py-2 pe-3 font-medium">
-                        {t('reports.particulars')}
-                      </th>
-                      <th className="py-2 pe-3 text-end font-medium">
-                        {t('reports.receipts')}
-                      </th>
-                      <th className="py-2 pe-3 text-end font-medium">
-                        {t('reports.payments')}
-                      </th>
-                      <th className="py-2 text-end font-medium">
-                        {t('reports.balance')}
-                      </th>
+                    <tr>
+                      <th className="text-start">{t('reports.date')}</th>
+                      <th className="text-start">{t('reports.voucherNo')}</th>
+                      <th className="text-start">{t('reports.particulars')}</th>
+                      <th className="text-end">{t('reports.receipts')}</th>
+                      <th className="text-end">{t('reports.payments')}</th>
+                      <th className="text-end">{t('reports.balance')}</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    <tr className="border-b border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-400">
-                      <td className="py-1 pe-3" colSpan={5}>
-                        {t('reports.openingBalance')}
-                      </td>
-                      <td className="py-1 text-end tabular-nums">
-                        {balance(account.openingBalance)}
-                      </td>
+                    <tr className="text-ink-muted">
+                      <td colSpan={5}>{t('reports.openingBalance')}</td>
+                      <td className="cell-numeric">{balance(account.openingBalance)}</td>
                     </tr>
 
                     {account.lines.map((line) => (
-                      <tr
-                        key={`${line.voucherId}-${line.runningBalance}`}
-                        className="border-b border-slate-100 dark:border-slate-900"
-                      >
-                        <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                      <tr key={`${line.voucherId}-${line.runningBalance}`}>
+                        <td className="py-1 text-ink-muted whitespace-nowrap">
                           {line.date}
                         </td>
-                        <td className="py-1 pe-3">{line.voucherNumber}</td>
-                        <td className="py-1 pe-3">
+                        <td className="py-1 whitespace-nowrap">{line.voucherNumber}</td>
+                        <td className="py-1">
                           {/*
                             The contra ledgers are what make a cash book readable.
                             "Cash 500.00" says nothing; "Cash 500.00 — Sales Account"
@@ -200,19 +158,12 @@ export function CashBankBookPage({
                           */}
                           {line.contraLedgerNames.join(', ')}
                           {line.narration ? (
-                            <span className="text-slate-500 dark:text-slate-500">
-                              {' '}
-                              — {line.narration}
-                            </span>
+                            <span className="text-ink-subtle"> — {line.narration}</span>
                           ) : null}
                         </td>
-                        <td className="py-1 pe-3 text-end tabular-nums">
-                          {money(line.debit)}
-                        </td>
-                        <td className="py-1 pe-3 text-end tabular-nums">
-                          {money(line.credit)}
-                        </td>
-                        <td className="py-1 text-end tabular-nums">
+                        <td className="cell-numeric py-1">{money(line.debit)}</td>
+                        <td className="cell-numeric py-1">{money(line.credit)}</td>
+                        <td className="cell-numeric py-1">
                           {balance(line.runningBalance)}
                         </td>
                       </tr>
@@ -220,19 +171,11 @@ export function CashBankBookPage({
                   </tbody>
 
                   <tfoot>
-                    <tr className="border-t-2 border-slate-400 font-semibold dark:border-slate-600">
-                      <td className="py-2 pe-3" colSpan={3}>
-                        {t('reports.totals')}
-                      </td>
-                      <td className="py-2 pe-3 text-end tabular-nums">
-                        {money(account.totalReceipts)}
-                      </td>
-                      <td className="py-2 pe-3 text-end tabular-nums">
-                        {money(account.totalPayments)}
-                      </td>
-                      <td className="py-2 text-end tabular-nums">
-                        {balance(account.closingBalance)}
-                      </td>
+                    <tr>
+                      <td colSpan={3}>{t('reports.totals')}</td>
+                      <td className="cell-numeric">{money(account.totalReceipts)}</td>
+                      <td className="cell-numeric">{money(account.totalPayments)}</td>
+                      <td className="cell-numeric">{balance(account.closingBalance)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -241,27 +184,23 @@ export function CashBankBookPage({
           ))}
 
           {data.accounts.length > 1 && (
-            <div className="rounded-lg border border-slate-300 px-4 py-3 text-sm dark:border-slate-700">
-              <p className="font-semibold">{t('reports.allAccounts')}</p>
-              <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('reports.openingBalance')}
-                </dt>
-                <dd className="text-end tabular-nums">
+            <div className="panel text-sm">
+              <p className="font-semibold text-ink">{t('reports.allAccounts')}</p>
+              <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-4">
+                <dt className="text-ink-muted">{t('reports.openingBalance')}</dt>
+                <dd className="text-end font-mono tabular-nums">
                   {balance(data.totalOpeningBalance)}
                 </dd>
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('reports.receipts')}
-                </dt>
-                <dd className="text-end tabular-nums">{balance(data.totalReceipts)}</dd>
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('reports.payments')}
-                </dt>
-                <dd className="text-end tabular-nums">{balance(data.totalPayments)}</dd>
-                <dt className="text-slate-600 dark:text-slate-400">
-                  {t('reports.closingBalance')}
-                </dt>
-                <dd className="text-end font-semibold tabular-nums">
+                <dt className="text-ink-muted">{t('reports.receipts')}</dt>
+                <dd className="text-end font-mono tabular-nums">
+                  {balance(data.totalReceipts)}
+                </dd>
+                <dt className="text-ink-muted">{t('reports.payments')}</dt>
+                <dd className="text-end font-mono tabular-nums">
+                  {balance(data.totalPayments)}
+                </dd>
+                <dt className="text-ink-muted">{t('reports.closingBalance')}</dt>
+                <dd className="text-end font-mono font-semibold tabular-nums">
                   {balance(data.totalClosingBalance)}
                 </dd>
               </dl>

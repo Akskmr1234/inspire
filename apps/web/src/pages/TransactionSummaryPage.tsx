@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import {
+  DateRangeControls,
+  EmptyState,
+  ReportFrame,
+  moneyAlways,
+} from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 /** The voucher types, keyed by the wire value, for the `voucherTypes.<name>` lookup. */
@@ -82,83 +87,43 @@ export function TransactionSummaryPage(): React.JSX.Element {
   });
 
   const controls = (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setRange({ from, to });
-      }}
-    >
-      <div>
-        <label htmlFor="from" className="field-label">
-          {t('reports.from')}
-        </label>
-        <input
-          id="from"
-          type="date"
-          className="field-input"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-      </div>
-      <div>
-        <label htmlFor="to" className="field-label">
-          {t('reports.to')}
-        </label>
-        <input
-          id="to"
-          type="date"
-          className="field-input"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
-      </div>
-      <button type="submit" disabled={query.isFetching} className="btn-primary">
-        {query.isFetching ? t('reports.running') : t('reports.run')}
-      </button>
-    </form>
+    <DateRangeControls
+      from={from}
+      to={to}
+      onFromChange={setFrom}
+      onToChange={setTo}
+      onApply={() => setRange({ from, to })}
+      busy={query.isFetching}
+    />
   );
 
   return (
     <ReportFrame title={t('nav.transactionSummary')} controls={controls} query={query}>
       {(data) =>
         data.types.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('reports.noData')}</p>
+          <EmptyState message={t('reports.noData')} />
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             <section className="space-y-2">
-              <h2 className="font-semibold">{t('reports.byType')}</h2>
+              <h2 className="text-sm font-semibold text-ink">{t('reports.byType')}</h2>
 
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                <table className="w-full border-collapse text-sm">
-                  <thead className="bg-slate-100 dark:bg-slate-800">
+              <div className="table-wrap table-wrap-tall">
+                <table className="table min-w-[40rem]">
+                  <thead>
                     <tr>
-                      <th className="px-3 py-2 text-start font-semibold">
-                        {t('reports.voucherType')}
-                      </th>
-                      <th className="px-3 py-2 text-end font-semibold">
-                        {t('reports.count')}
-                      </th>
-                      <th className="px-3 py-2 text-start font-semibold">
-                        {t('reports.status')}
-                      </th>
-                      <th className="px-3 py-2 text-end font-semibold">
-                        {t('reports.amount')}
-                      </th>
+                      <th className="text-start">{t('reports.voucherType')}</th>
+                      <th className="text-end">{t('reports.count')}</th>
+                      <th className="text-start">{t('reports.status')}</th>
+                      <th className="text-end">{t('reports.amount')}</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {data.types.map((row) => (
-                      <tr
-                        key={row.type}
-                        className="border-t border-slate-200 dark:border-slate-800"
-                      >
-                        <td className="px-3 py-2">
-                          {t(`voucherTypes.${TYPE_NAME[row.type]}`)}
-                        </td>
+                      <tr key={row.type}>
+                        <td>{t(`voucherTypes.${TYPE_NAME[row.type]}`)}</td>
                         <td className="cell-numeric">{row.voucherCount}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
+                        <td className="text-xs text-ink-muted">
                           {Object.entries(row.countByStatus)
                             .map(([status, count]) => {
                               const name = STATUS_NAME[Number(status)] ?? status;
@@ -171,11 +136,11 @@ export function TransactionSummaryPage(): React.JSX.Element {
                     ))}
                   </tbody>
 
-                  <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-semibold dark:border-slate-700 dark:bg-slate-800">
+                  <tfoot>
                     <tr>
-                      <td className="px-3 py-2">{t('reports.totals')}</td>
+                      <td>{t('reports.totals')}</td>
                       <td className="cell-numeric">{data.voucherCount}</td>
-                      <td className="px-3 py-2"></td>
+                      <td />
                       <td className="cell-numeric">
                         {moneyAlways(data.totalAmount)} {data.currency}
                       </td>
@@ -187,10 +152,10 @@ export function TransactionSummaryPage(): React.JSX.Element {
 
             {data.months.length > 0 && (
               <section className="space-y-2">
-                <h2 className="font-semibold">{t('reports.byMonth')}</h2>
+                <h2 className="text-sm font-semibold text-ink">{t('reports.byMonth')}</h2>
 
-                <ul className="space-y-1">
-                  {data.months.map((month) => {
+                <ul className="card card-body space-y-1.5">
+                  {data.months.map((month, index) => {
                     // Scaled against the busiest month rather than the total, so the
                     // tallest bar is always full width and the comparison between
                     // months stays legible however many there are.
@@ -203,20 +168,33 @@ export function TransactionSummaryPage(): React.JSX.Element {
                     return (
                       <li
                         key={monthLabel(month.year, month.month)}
-                        className="flex items-center gap-3 text-sm"
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
                       >
-                        <span className="w-20 shrink-0 tabular-nums text-slate-600 dark:text-slate-400">
+                        <span className="w-20 shrink-0 font-mono text-ink-muted tabular-nums">
                           {monthLabel(month.year, month.month)}
                         </span>
-                        <span
-                          aria-hidden="true"
-                          className="h-4 rounded bg-sky-500/70 dark:bg-sky-400/60"
-                          style={{ width: `${width}%` }}
-                        />
-                        <span className="shrink-0 tabular-nums">
+
+                        {/*
+                          The bar is given its own flexible track rather than being
+                          sized against the row: without it a long month label on a
+                          narrow screen squeezes every bar to nothing and the
+                          comparison the section exists for disappears.
+                        */}
+                        <span className="order-last h-2 min-w-24 flex-1 basis-full overflow-hidden rounded-full bg-surface-3 sm:order-none sm:basis-auto">
+                          <span
+                            aria-hidden="true"
+                            className="bar-grow block h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
+                            style={{
+                              width: `${width}%`,
+                              animationDelay: `${Math.min(index * 40, 400)}ms`,
+                            }}
+                          />
+                        </span>
+
+                        <span className="shrink-0 font-mono tabular-nums">
                           {moneyAlways(month.totalAmount)}
                         </span>
-                        <span className="shrink-0 text-xs text-slate-500">
+                        <span className="shrink-0 text-xs text-ink-subtle">
                           {t('reports.voucherCount', { count: month.voucherCount })}
                         </span>
                       </li>

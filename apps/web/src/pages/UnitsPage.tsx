@@ -73,9 +73,7 @@ export function UnitsPage(): React.JSX.Element {
     <MasterFrame<UnitSummary>
       title={t('nav.units')}
       queryKey="units"
-      fetchRows={(includeInactive) =>
-        listMaster<UnitSummary>('units', includeInactive)
-      }
+      fetchRows={(includeInactive) => listMaster<UnitSummary>('units', includeInactive)}
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy, rows) => <AddUnit run={run} busy={busy} rows={rows} />}
@@ -106,7 +104,7 @@ function AddUnit({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -131,16 +129,31 @@ function AddUnit({
         setFactor('1');
       }}
     >
-      <MasterField label={t('masters.code')} value={code} onChange={setCode} placeholder="BOX" />
-      <MasterField label={t('masters.name')} value={name} onChange={setName} width="w-44" />
-      <MasterField label={t('units.symbol')} value={symbol} onChange={setSymbol} width="w-20" />
+      <MasterField
+        label={t('masters.code')}
+        value={code}
+        onChange={setCode}
+        placeholder="BOX"
+      />
+      <MasterField
+        label={t('masters.name')}
+        value={name}
+        onChange={setName}
+        width="w-44"
+      />
+      <MasterField
+        label={t('units.symbol')}
+        value={symbol}
+        onChange={setSymbol}
+        width="w-20"
+      />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('units.base')}</span>
+      <label className="field">
+        <span className="field-label">{t('units.base')}</span>
         <select
           value={baseUnitId}
           onChange={(event) => setBaseUnitId(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('units.newGroup')}</option>
           {bases.map((base) => (

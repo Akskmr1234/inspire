@@ -5,7 +5,12 @@ import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { ReportFrame } from '@/components/ReportFrame';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
-import { listMaster, type BrandSummary, type CategorySummary, type UnitSummary } from '@/lib/inventory';
+import {
+  listMaster,
+  type BrandSummary,
+  type CategorySummary,
+  type UnitSummary,
+} from '@/lib/inventory';
 import { createProduct, listProducts, type ProductSummary } from '@/lib/products';
 
 /**
@@ -149,31 +154,29 @@ export function ProductsPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setApplied(search);
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('products.search')}</span>
+      <label className="field">
+        <span className="field-label">{t('products.search')}</span>
         <input
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder={t('products.searchHint')}
-          className="w-64 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm w-full sm:w-64"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('products.category')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('products.category')}</span>
         <select
           value={categoryId}
           onChange={(event) => setCategoryId(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('products.allCategories')}</option>
           {(categories.data ?? []).map((row) => (
@@ -200,9 +203,7 @@ export function ProductsPage(): React.JSX.Element {
   );
 
   if (editingId) {
-    return (
-      <ProductEditor productId={editingId} onClose={() => setEditingId(null)} />
-    );
+    return <ProductEditor productId={editingId} onClose={() => setEditingId(null)} />;
   }
 
   return (
@@ -210,10 +211,7 @@ export function ProductsPage(): React.JSX.Element {
       {(rows) => (
         <div className="space-y-4">
           {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-            >
+            <div role="alert" className="alert-error">
               {error}
             </div>
           )}
@@ -229,11 +227,7 @@ export function ProductsPage(): React.JSX.Element {
               }}
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="btn-primary"
-            >
+            <button type="button" onClick={() => setAdding(true)} className="btn-primary">
               {t('products.new')}
             </button>
           )}
@@ -292,7 +286,7 @@ function AddProduct({
 
   return (
     <form
-      className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+      className="panel animate-drop space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
 

@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import clsx from 'clsx';
-import { ReportFrame } from '@/components/ReportFrame';
+import { BalanceBadge, ReportFrame, Spinner } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 interface DayBookLine {
@@ -104,40 +103,38 @@ export function DayBookPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, voucherType });
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.from')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.from')}</span>
         <input
           type="date"
           value={from}
           onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.to')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.to')}</span>
         <input
           type="date"
           value={to}
           onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('reports.voucherType')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('reports.voucherType')}</span>
         <select
           value={voucherType}
           onChange={(event) => setVoucherType(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('reports.allTypes')}</option>
           {VOUCHER_TYPES.map((type) => (
@@ -151,8 +148,9 @@ export function DayBookPage(): React.JSX.Element {
       <button
         type="submit"
         disabled={query.isFetching}
-        className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+        className="btn-primary btn-sm py-1.5"
       >
+        {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
     </form>
@@ -167,74 +165,70 @@ export function DayBookPage(): React.JSX.Element {
     >
       {(data) => (
         <div className="space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-sm text-ink-muted">
             {t('reports.voucherCount', { count: data.voucherCount })} · {data.currency}
           </p>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[56rem] border-collapse text-sm">
+          <div className="table-wrap table-wrap-tall">
+            <table className="table min-w-[56rem]">
               <thead>
-                <tr className="border-b border-slate-300 text-left dark:border-slate-700">
-                  <th className="py-2 pe-3 font-medium">{t('reports.date')}</th>
-                  <th className="py-2 pe-3 font-medium">{t('reports.voucherNo')}</th>
-                  <th className="py-2 pe-3 font-medium">{t('reports.ledger')}</th>
-                  <th className="py-2 pe-3 font-medium">{t('reports.particulars')}</th>
-                  <th className="py-2 pe-3 text-end font-medium">
-                    {t('reports.debit')}
-                  </th>
-                  <th className="py-2 text-end font-medium">{t('reports.credit')}</th>
+                <tr>
+                  <th className="text-start">{t('reports.date')}</th>
+                  <th className="text-start">{t('reports.voucherNo')}</th>
+                  <th className="text-start">{t('reports.ledger')}</th>
+                  <th className="text-start">{t('reports.particulars')}</th>
+                  <th className="text-end">{t('reports.debit')}</th>
+                  <th className="text-end">{t('reports.credit')}</th>
                 </tr>
               </thead>
 
               {data.entries.map((entry) => (
                 // One tbody per voucher, so the browser keeps a voucher's lines
                 // together and the group can be styled as the single document it
-                // actually is.
+                // actually is. The border goes on the group rather than each row,
+                // which is what makes a five-line voucher read as one block.
                 <tbody
                   key={entry.voucherId}
-                  className="border-b border-slate-200 align-top dark:border-slate-800"
+                  className="border-t border-line align-top transition-colors hover:bg-surface-2"
                 >
                   {entry.lines.map((line, index) => (
-                    <tr key={`${entry.voucherId}-${line.ledgerId}-${index}`}>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                    <tr
+                      key={`${entry.voucherId}-${line.ledgerId}-${index}`}
+                      className="border-t-0"
+                    >
+                      <td className="py-1 text-ink-muted whitespace-nowrap">
                         {index === 0 ? entry.date : ''}
                       </td>
-                      <td className="py-1 pe-3">
+                      <td className="py-1">
                         {index === 0 ? (
-                          <span className="font-medium">{entry.voucherNumber}</span>
+                          <span className="font-medium whitespace-nowrap">
+                            {entry.voucherNumber}
+                          </span>
                         ) : (
                           ''
                         )}
                       </td>
-                      <td className="py-1 pe-3">
-                        <span className="text-slate-500 dark:text-slate-500">
-                          {line.ledgerCode}
-                        </span>{' '}
+                      <td className="py-1">
+                        <span className="text-ink-subtle">{line.ledgerCode}</span>{' '}
                         {line.ledgerName}
                       </td>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                      <td className="py-1 text-ink-muted">
                         {index === 0
                           ? (line.narration ?? entry.narration ?? '')
                           : (line.narration ?? '')}
                       </td>
-                      <td className="py-1 pe-3 text-end tabular-nums">
-                        {money(line.debit)}
-                      </td>
-                      <td className="py-1 text-end tabular-nums">{money(line.credit)}</td>
+                      <td className="cell-numeric py-1">{money(line.debit)}</td>
+                      <td className="cell-numeric py-1">{money(line.credit)}</td>
                     </tr>
                   ))}
                 </tbody>
               ))}
 
               <tfoot>
-                <tr className="border-t-2 border-slate-400 font-semibold dark:border-slate-600">
-                  <td className="py-2 pe-3" colSpan={4}>
-                    {t('reports.totals')}
-                  </td>
-                  <td className="py-2 pe-3 text-end tabular-nums">
-                    {money(data.totalDebit)}
-                  </td>
-                  <td className="py-2 text-end tabular-nums">{money(data.totalCredit)}</td>
+                <tr>
+                  <td colSpan={4}>{t('reports.totals')}</td>
+                  <td className="cell-numeric">{money(data.totalDebit)}</td>
+                  <td className="cell-numeric">{money(data.totalCredit)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -246,18 +240,10 @@ export function DayBookPage(): React.JSX.Element {
             something has posted incorrectly - and saying so plainly is far better
             than presenting figures that quietly do not add up.
           */}
-          <p
-            className={clsx(
-              'text-sm font-medium',
-              data.totalDebit === data.totalCredit
-                ? 'text-emerald-700 dark:text-emerald-400'
-                : 'text-red-700 dark:text-red-400',
-            )}
-          >
-            {data.totalDebit === data.totalCredit
-              ? t('reports.balanced')
-              : t('reports.notBalanced')}
-          </p>
+          <BalanceBadge
+            isBalanced={data.totalDebit === data.totalCredit}
+            currency={data.currency}
+          />
         </div>
       )}
     </ReportFrame>

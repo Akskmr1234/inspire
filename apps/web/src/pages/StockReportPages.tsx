@@ -3,14 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
-import { ReportFrame } from '@/components/ReportFrame';
+import { EmptyState, ReportFrame } from '@/components/ReportFrame';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
-import {
-  listMaster,
-  type CategorySummary,
-  type WarehouseSummary,
-} from '@/lib/inventory';
+import { listMaster, type CategorySummary, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
   fetchBatchStock,
@@ -94,7 +90,7 @@ export function StockValuationPage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
       <CategoryPicker value={categoryId} onChange={setCategoryId} />
 
@@ -113,7 +109,7 @@ export function StockValuationPage(): React.JSX.Element {
     <ReportFrame title={t('nav.stockValuation')} controls={controls} query={query}>
       {(report) => (
         <div className="space-y-4">
-          <p className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium dark:bg-slate-800">
+          <p className="inline-block rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-ink">
             {t('stock.totalValue', {
               value: report.totalValue.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
@@ -156,7 +152,7 @@ export function BatchStockPage(): React.JSX.Element {
   });
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
       <CategoryPicker value={categoryId} onChange={setCategoryId} />
 
@@ -175,7 +171,7 @@ export function BatchStockPage(): React.JSX.Element {
     <ReportFrame title={t('nav.batchStock')} controls={controls} query={query}>
       {(report) => (
         <div className="space-y-4">
-          <p className="inline-block rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium dark:bg-slate-800">
+          <p className="inline-block rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-ink">
             {t('stock.totalValue', {
               value: report.totalValue.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
@@ -221,19 +217,17 @@ export function ExpiryReportPage(): React.JSX.Element {
   });
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <DateBox label={t('stock.asOn')} value={asOn} onChange={setAsOn} />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('stock.expiringWithin')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('stock.expiringWithin')}</span>
         <select
           value={withinDays}
           onChange={(event) =>
             setWithinDays(event.target.value === '' ? '' : Number(event.target.value))
           }
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('stock.onlyExpired')}</option>
           {[30, 60, 90, 180, 365].map((days) => (
@@ -381,13 +375,13 @@ export function StockLedgerPage(): React.JSX.Element {
   });
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('stock.product')}</span>
+    <div className="toolbar">
+      <label className="field">
+        <span className="field-label">{t('stock.product')}</span>
         <select
           value={productId}
           onChange={(event) => setProductId(event.target.value)}
-          className="w-72 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm w-full sm:w-72"
         >
           <option value="">{t('stock.choose')}</option>
           {(products.data ?? []).map((product) => (
@@ -406,12 +400,14 @@ export function StockLedgerPage(): React.JSX.Element {
 
   if (!productId) {
     return (
-      <section className="space-y-4">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="text-xl font-semibold">{t('nav.stockLedger')}</h1>
-          {controls}
+      <section className="page">
+        <header className="page-header">
+          <h1 className="page-title">{t('nav.stockLedger')}</h1>
+          <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+            {controls}
+          </div>
         </header>
-        <p className="text-sm text-slate-500">{t('stock.chooseProduct')}</p>
+        <EmptyState message={t('stock.chooseProduct')} />
       </section>
     );
   }
@@ -421,7 +417,10 @@ export function StockLedgerPage(): React.JSX.Element {
       {(report) => (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3 text-sm">
-            <Figure label={t('stock.opening')} value={`${trim(report.openingQuantity)} ${report.stockUnitCode}`} />
+            <Figure
+              label={t('stock.opening')}
+              value={`${trim(report.openingQuantity)} ${report.stockUnitCode}`}
+            />
             <Figure label={t('stock.totalIn')} value={trim(report.totalIn)} />
             <Figure label={t('stock.totalOut')} value={trim(report.totalOut)} />
             <Figure
@@ -430,19 +429,27 @@ export function StockLedgerPage(): React.JSX.Element {
             />
           </div>
 
-          <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-800">
+          <div className="table-wrap max-h-[70vh] overflow-y-auto">
+            <table className="table">
+              <thead className="bg-surface-3">
                 <tr>
-                  <th className="px-3 py-2 text-start font-semibold">{t('stock.date')}</th>
-                  <th className="px-3 py-2 text-start font-semibold">{t('stock.number')}</th>
-                  <th className="px-3 py-2 text-start font-semibold">{t('stock.type')}</th>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.date')}
+                  </th>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.number')}
+                  </th>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.type')}
+                  </th>
                   <th className="px-3 py-2 text-start font-semibold">
                     {t('stock.warehouse')}
                   </th>
                   <th className="px-3 py-2 text-end font-semibold">{t('stock.in')}</th>
                   <th className="px-3 py-2 text-end font-semibold">{t('stock.out')}</th>
-                  <th className="px-3 py-2 text-end font-semibold">{t('stock.unitCost')}</th>
+                  <th className="px-3 py-2 text-end font-semibold">
+                    {t('stock.unitCost')}
+                  </th>
                   <th className="px-3 py-2 text-end font-semibold">{t('stock.value')}</th>
                   <th className="px-3 py-2 text-end font-semibold">
                     {t('stock.balanceAfter')}
@@ -455,7 +462,10 @@ export function StockLedgerPage(): React.JSX.Element {
               <tbody>
                 {report.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-6 text-center text-sm text-slate-500">
+                    <td
+                      colSpan={10}
+                      className="px-3 py-6 text-center text-sm text-ink-muted"
+                    >
                       {t('stock.noMovementsInRange')}
                     </td>
                   </tr>
@@ -463,7 +473,7 @@ export function StockLedgerPage(): React.JSX.Element {
                   report.rows.map((row, index) => (
                     <tr
                       key={`${row.documentId}-${index}`}
-                      className="border-t border-slate-100 dark:border-slate-900"
+                      className="border-t border-line"
                     >
                       <td className="px-3 py-1.5">{row.date}</td>
                       <td className="px-3 py-1.5 font-mono">{row.documentNumber}</td>
@@ -563,7 +573,7 @@ export function ItemMovementPage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <DateBox label={t('reports.from')} value={from} onChange={setFrom} />
       <DateBox label={t('reports.to')} value={to} onChange={setTo} />
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
@@ -601,12 +611,12 @@ function WarehousePicker({
   });
 
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{t('stock.warehouse')}</span>
+    <label className="field">
+      <span className="field-label">{t('stock.warehouse')}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        className="field-input-sm"
       >
         <option value="">{t('stock.allWarehouses')}</option>
         {(warehouses.data ?? []).map((warehouse) => (
@@ -634,12 +644,12 @@ function CategoryPicker({
   });
 
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{t('products.category')}</span>
+    <label className="field">
+      <span className="field-label">{t('products.category')}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        className="field-input-sm"
       >
         <option value="">{t('products.allCategories')}</option>
         {(categories.data ?? []).map((category) => (
@@ -662,13 +672,13 @@ function DateBox({
   readonly onChange: (value: string) => void;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+    <label className="field">
+      <span className="field-label">{label}</span>
       <input
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+        className="field-input-sm"
       />
     </label>
   );
@@ -682,8 +692,8 @@ function Figure({
   readonly value: string;
 }): React.JSX.Element {
   return (
-    <span className="rounded-lg bg-slate-100 px-3 py-1.5 dark:bg-slate-800">
-      <span className="text-slate-500">{label}:</span>{' '}
+    <span className="rounded-lg border border-line bg-surface-2 px-3 py-1.5">
+      <span className="text-ink-muted">{label}:</span>{' '}
       <span className="font-medium">{value}</span>
     </span>
   );

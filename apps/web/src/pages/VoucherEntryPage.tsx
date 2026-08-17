@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { Spinner } from '@/components/ReportFrame';
 import { ApiError, request } from '@/lib/api';
 
 interface LedgerSummary {
@@ -160,26 +161,25 @@ export function VoucherEntryPage(): React.JSX.Element {
   });
 
   return (
-    <section className="space-y-4">
-      <h1 className="text-xl font-semibold">Voucher entry</h1>
+    <section className="page">
+      <header className="page-header">
+        <h1 className="page-title">Voucher entry</h1>
+      </header>
 
       {posted && (
-        <p className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+        <p className="alert-success">
           Posted <strong>{posted.number}</strong> for {money(posted.totalDebit)}.
         </p>
       )}
 
       {post.isError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-        >
-          <p className="font-medium">{post.error.code}</p>
-          <p>{post.error.detail}</p>
+        <div role="alert" className="alert-error">
+          <p className="font-semibold">{post.error.code}</p>
+          <p className="mt-0.5 opacity-90">{post.error.detail}</p>
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="panel grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div>
           <label htmlFor="type" className="field-label">
             Voucher type
@@ -236,29 +236,31 @@ export function VoucherEntryPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+      <div className="table-wrap">
+        {/*
+          A floor width, because five editable controls per row cannot be squeezed
+          into a phone's width without every select becoming unreadable. The table
+          scrolls sideways instead, which keeps each control at a usable size.
+        */}
+        <table className="table min-w-[56rem]">
+          <thead>
             <tr>
-              <th className="px-3 py-2 text-start font-semibold">Dr / Cr</th>
-              <th className="px-3 py-2 text-start font-semibold">Ledger</th>
-              <th className="px-3 py-2 text-start font-semibold">Line narration</th>
-              <th className="px-3 py-2 text-end font-semibold">Debit</th>
-              <th className="px-3 py-2 text-end font-semibold">Credit</th>
+              <th className="text-start">Dr / Cr</th>
+              <th className="text-start">Ledger</th>
+              <th className="text-start">Line narration</th>
+              <th className="text-end">Debit</th>
+              <th className="text-end">Credit</th>
               <th className="w-10" />
             </tr>
           </thead>
 
           <tbody>
             {lines.map((line) => (
-              <tr
-                key={line.key}
-                className="border-t border-slate-200 dark:border-slate-800"
-              >
-                <td className="px-3 py-2">
+              <tr key={line.key}>
+                <td className="py-2">
                   <select
                     aria-label="Debit or credit"
-                    className="field-input"
+                    className="field-input-sm w-28"
                     value={line.side}
                     onChange={(e) =>
                       update(line.key, {
@@ -271,10 +273,10 @@ export function VoucherEntryPage(): React.JSX.Element {
                   </select>
                 </td>
 
-                <td className="px-3 py-2">
+                <td className="py-2">
                   <select
                     aria-label="Ledger"
-                    className="field-input"
+                    className="field-input-sm min-w-52"
                     value={line.ledgerId}
                     onChange={(e) => update(line.key, { ledgerId: e.target.value })}
                     disabled={ledgers.isPending}
@@ -290,10 +292,10 @@ export function VoucherEntryPage(): React.JSX.Element {
                   </select>
                 </td>
 
-                <td className="px-3 py-2">
+                <td className="py-2">
                   <input
                     aria-label="Line narration"
-                    className="field-input"
+                    className="field-input-sm min-w-40"
                     value={line.narration}
                     onChange={(e) => update(line.key, { narration: e.target.value })}
                   />
@@ -305,35 +307,37 @@ export function VoucherEntryPage(): React.JSX.Element {
                   amount plus a side, so offering two editable boxes would invite a
                   row with both filled in - which has no meaning.
                 */}
-                <td className="px-3 py-2">
+                <td className="py-2">
                   {line.side === DEBIT ? (
                     <input
                       aria-label="Debit amount"
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="field-input text-end font-mono"
+                      className="field-input-sm w-32 text-end font-mono tabular-nums"
                       value={line.amount}
                       onChange={(e) => update(line.key, { amount: e.target.value })}
                     />
                   ) : (
-                    <span className="block text-end text-slate-300">—</span>
+                    <span className="block text-end text-ink-subtle">—</span>
                   )}
                 </td>
 
-                <td className="px-3 py-2">
+                <td className="py-2">
                   {line.side === CREDIT ? (
                     <input
                       aria-label="Credit amount"
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="field-input text-end font-mono"
+                      className="field-input-sm w-32 text-end font-mono tabular-nums"
                       value={line.amount}
                       onChange={(e) => update(line.key, { amount: e.target.value })}
                     />
                   ) : (
-                    <span className="block text-end text-slate-300">—</span>
+                    <span className="block text-end text-ink-subtle">—</span>
                   )}
                 </td>
 
@@ -345,7 +349,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                     onClick={() =>
                       setLines((current) => current.filter((l) => l.key !== line.key))
                     }
-                    className="rounded px-2 py-1 text-slate-400 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
+                    className="grid size-7 place-items-center rounded-md text-ink-subtle transition hover:bg-red-50 hover:text-red-600 active:scale-90 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                   >
                     ✕
                   </button>
@@ -354,11 +358,9 @@ export function VoucherEntryPage(): React.JSX.Element {
             ))}
           </tbody>
 
-          <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-semibold dark:border-slate-700 dark:bg-slate-800">
+          <tfoot>
             <tr>
-              <td className="px-3 py-2" colSpan={3}>
-                Total
-              </td>
+              <td colSpan={3}>Total</td>
               <td className="cell-numeric">{money(totals.debit)}</td>
               <td className="cell-numeric">{money(totals.credit)}</td>
               <td />
@@ -367,24 +369,31 @@ export function VoucherEntryPage(): React.JSX.Element {
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <button
           type="button"
           onClick={() => setLines((current) => [...current, emptyLine()])}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          className="btn-secondary self-start"
         >
           + Add row
         </button>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
           <span
             className={clsx(
-              'rounded-lg px-3 py-1.5 text-sm font-medium',
+              'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
               totals.isBalanced
-                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                : 'bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
+                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
+                : 'bg-amber-50 text-amber-900 dark:bg-amber-500/12 dark:text-amber-200',
             )}
           >
+            <span
+              aria-hidden="true"
+              className={clsx(
+                'size-2 shrink-0 rounded-full',
+                totals.isBalanced ? 'bg-emerald-500' : 'animate-breathe bg-amber-500',
+              )}
+            />
             {totals.isBalanced
               ? 'Balanced'
               : `Difference ${money(Math.abs(totals.difference))} ${
@@ -398,12 +407,13 @@ export function VoucherEntryPage(): React.JSX.Element {
             onClick={() => post.mutate()}
             className="btn-primary"
           >
+            {post.isPending && <Spinner />}
             {post.isPending ? 'Posting…' : 'Post voucher'}
           </button>
         </div>
       </div>
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className="text-xs text-ink-muted">
         Every debit has a corresponding credit. The voucher number is issued by the
         branch&apos;s numbering series when it posts.
       </p>

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
-import { ReportFrame } from '@/components/ReportFrame';
+import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
@@ -124,7 +124,12 @@ export function StockOperationsPage(): React.JSX.Element {
       value: (row) => row.referenceNumber ?? '',
       hiddenByDefault: true,
     },
-    { key: 'lines', header: t('stock.lines'), value: (row) => row.lineCount, numeric: true },
+    {
+      key: 'lines',
+      header: t('stock.lines'),
+      value: (row) => row.lineCount,
+      numeric: true,
+    },
     {
       key: 'quantity',
       header: t('stock.quantity'),
@@ -151,11 +156,11 @@ export function StockOperationsPage(): React.JSX.Element {
           className={clsx(
             'rounded px-2 py-0.5 text-xs',
             row.status === StockDocumentStatus.posted &&
-              'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+              'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
             row.status === StockDocumentStatus.draft &&
-              'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+              'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
             row.status === StockDocumentStatus.cancelled &&
-              'bg-slate-100 text-slate-600 line-through dark:bg-slate-800 dark:text-slate-300',
+              'bg-surface-3 text-ink-subtle line-through',
           )}
         >
           {t(statusKey(row.status))}
@@ -165,13 +170,13 @@ export function StockOperationsPage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <Labelled label={t('reports.from')}>
         <input
           type="date"
           value={from}
           onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </Labelled>
 
@@ -180,7 +185,7 @@ export function StockOperationsPage(): React.JSX.Element {
           type="date"
           value={to}
           onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </Labelled>
 
@@ -190,7 +195,7 @@ export function StockOperationsPage(): React.JSX.Element {
           onChange={(event) =>
             setTypeFilter(event.target.value === '' ? '' : Number(event.target.value))
           }
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('stock.allTypes')}</option>
           {STOCK_TYPES.map((type) => (
@@ -205,7 +210,7 @@ export function StockOperationsPage(): React.JSX.Element {
         <select
           value={warehouseFilter}
           onChange={(event) => setWarehouseFilter(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('stock.allWarehouses')}</option>
           {(warehouses.data ?? []).map((warehouse) => (
@@ -271,7 +276,11 @@ export function StockOperationsPage(): React.JSX.Element {
               }
             />
           ) : (
-            <button type="button" onClick={() => setEntering(true)} className="btn-primary">
+            <button
+              type="button"
+              onClick={() => setEntering(true)}
+              className="btn-primary"
+            >
               {t('stock.new')}
             </button>
           )}
@@ -402,7 +411,7 @@ function StockEntry({
 
   return (
     <form
-      className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+      className="panel space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -541,21 +550,19 @@ function StockEntry({
         </label>
       </div>
 
-      {counting && (
-        <p className="text-xs text-slate-500">{t('stock.countHint')}</p>
-      )}
+      {counting && <p className="text-xs text-ink-muted">{t('stock.countHint')}</p>}
 
       {allowsNegative(type) && (
-        <p className="text-xs text-slate-500">{t('stock.adjustmentHint')}</p>
+        <p className="text-xs text-ink-muted">{t('stock.adjustmentHint')}</p>
       )}
 
-      {anyBatched && <p className="text-xs text-slate-500">{t('stock.batchHint')}</p>}
+      {anyBatched && <p className="text-xs text-ink-muted">{t('stock.batchHint')}</p>}
 
-      {anySerialised && <p className="text-xs text-slate-500">{t('stock.serialHint')}</p>}
+      {anySerialised && <p className="text-xs text-ink-muted">{t('stock.serialHint')}</p>}
 
-      <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+      <div className="table-wrap max-h-[70vh] overflow-y-auto">
+        <table className="table">
+          <thead className="bg-surface-3">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
               <th className="px-3 py-2 text-end font-semibold">
@@ -576,7 +583,7 @@ function StockEntry({
           </thead>
           <tbody>
             {lines.map((line) => (
-              <tr key={line.key} className="border-t border-slate-100 dark:border-slate-900">
+              <tr key={line.key} className="border-t border-line">
                 <td className="px-2 py-1">
                   <select
                     value={line.productId}
@@ -592,7 +599,7 @@ function StockEntry({
                         warrantyUntil: '',
                       })
                     }
-                    className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+                    className="field-input-sm"
                   >
                     <option value="">{t('stock.choose')}</option>
                     {(products.data ?? []).map((product) => (
@@ -607,8 +614,10 @@ function StockEntry({
                     type="number"
                     step="any"
                     value={line.quantity}
-                    onChange={(event) => update(line.key, { quantity: event.target.value })}
-                    className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-end dark:border-slate-700 dark:bg-slate-900"
+                    onChange={(event) =>
+                      update(line.key, { quantity: event.target.value })
+                    }
+                    className="field-input-sm w-28 text-end font-mono tabular-nums"
                   />
                 </td>
                 {showRate && (
@@ -620,7 +629,7 @@ function StockEntry({
                       value={line.rate}
                       onChange={(event) => update(line.key, { rate: event.target.value })}
                       placeholder={t('stock.ratePlaceholder')}
-                      className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-end dark:border-slate-700 dark:bg-slate-900"
+                      className="field-input-sm w-28 text-end font-mono tabular-nums"
                     />
                   </td>
                 )}
@@ -634,7 +643,9 @@ function StockEntry({
                         onChange={(patch) => update(line.key, patch)}
                       />
                     ) : (
-                      <span className="text-xs text-slate-400">{t('stock.batchNone')}</span>
+                      <span className="text-xs text-ink-subtle">
+                        {t('stock.batchNone')}
+                      </span>
                     )}
                   </td>
                 )}
@@ -648,15 +659,19 @@ function StockEntry({
                         onChange={(patch) => update(line.key, patch)}
                       />
                     ) : (
-                      <span className="text-xs text-slate-400">{t('stock.batchNone')}</span>
+                      <span className="text-xs text-ink-subtle">
+                        {t('stock.batchNone')}
+                      </span>
                     )}
                   </td>
                 )}
                 <td className="px-2 py-1">
                   <input
                     value={line.remarks}
-                    onChange={(event) => update(line.key, { remarks: event.target.value })}
-                    className="w-full rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+                    onChange={(event) =>
+                      update(line.key, { remarks: event.target.value })
+                    }
+                    className="field-input-sm"
                   />
                 </td>
                 <td className="px-2 py-1 text-end">
@@ -668,7 +683,7 @@ function StockEntry({
                         current.filter((candidate) => candidate.key !== line.key),
                       )
                     }
-                    className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+                    className="rounded-md border border-line px-2 py-0.5 text-xs font-medium text-ink-muted transition hover:border-line-strong hover:bg-surface-3 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
                   >
                     {t('stock.removeLine')}
                   </button>
@@ -761,14 +776,14 @@ function BatchCell({
           value={line.batchNumber}
           onChange={(event) => onChange({ batchNumber: event.target.value })}
           placeholder={t('stock.batchAuto')}
-          className="w-28 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm w-28"
         />
         <input
           type="date"
           value={line.expiresOn}
           onChange={(event) => onChange({ expiresOn: event.target.value })}
           title={t('stock.expiresOn')}
-          className="w-36 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm w-36"
         />
       </div>
     );
@@ -782,7 +797,7 @@ function BatchCell({
     <select
       value={line.batchId}
       onChange={(event) => onChange({ batchId: event.target.value })}
-      className="w-56 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+      className="field-input-sm w-full sm:w-56"
     >
       <option value="">{t('stock.chooseBatch')}</option>
       {available.map((batch) => (
@@ -838,7 +853,7 @@ function SerialCell({
       className={clsx(
         'text-xs',
         entered === needed && needed > 0
-          ? 'text-slate-500'
+          ? 'text-ink-muted'
           : 'text-amber-700 dark:text-amber-300',
       )}
     >
@@ -854,7 +869,7 @@ function SerialCell({
           onChange={(event) => onChange({ serialNumbers: event.target.value })}
           placeholder={t('stock.unitsPlaceholder')}
           rows={2}
-          className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm w-full font-mono text-xs sm:w-56"
         />
         <div className="flex items-center gap-2">
           <input
@@ -862,7 +877,7 @@ function SerialCell({
             value={line.warrantyUntil}
             onChange={(event) => onChange({ warrantyUntil: event.target.value })}
             title={t('stock.warrantyUntil')}
-            className="w-36 rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+            className="field-input-sm w-full text-xs sm:w-36"
           />
           {counter}
         </div>
@@ -890,7 +905,7 @@ function SerialCell({
           })
         }
         aria-label={t('stock.unitsChoose')}
-        className="w-56 rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+        className="field-input-sm w-full font-mono text-xs sm:w-56"
       >
         {available.map((unit) => (
           <option key={unit.serialNumberId} value={unit.number}>
@@ -938,7 +953,12 @@ function StockDocumentView({
   });
 
   if (query.isPending) {
-    return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+    return (
+      <section className="page" aria-busy="true">
+        <div className="skeleton h-7 w-64 rounded" />
+        <ReportSkeleton rows={4} />
+      </section>
+    );
   }
 
   if (query.isError || !query.data) {
@@ -952,13 +972,13 @@ function StockDocumentView({
   const batchedDocument = document.lines.some((line) => line.batchNumber);
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">
+    <section className="page">
+      <header className="page-header sm:items-center">
+        <div className="min-w-0">
+          <h2 className="page-title">
             {document.number} — {t(typeKey(document.type))}
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-muted">
             {document.date} · {document.warehouseName}
             {document.destinationWarehouseName
               ? ` → ${document.destinationWarehouseName}`
@@ -1006,7 +1026,7 @@ function StockDocumentView({
 
       {cancelling && (
         <form
-          className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+          className="panel toolbar"
           onSubmit={(event) => {
             event.preventDefault();
 
@@ -1033,14 +1053,16 @@ function StockDocumentView({
       )}
 
       <Panel title={t('stock.lines')}>
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+        <table className="table">
+          <thead className="bg-surface-3">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">#</th>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('stock.quantity')}</th>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.unit')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('stock.inStockUnits')}</th>
+              <th className="px-3 py-2 text-end font-semibold">
+                {t('stock.inStockUnits')}
+              </th>
               <th className="px-3 py-2 text-end font-semibold">{t('stock.rate')}</th>
               {batchedDocument && (
                 <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
@@ -1050,7 +1072,7 @@ function StockDocumentView({
           </thead>
           <tbody>
             {document.lines.map((line) => (
-              <tr key={line.id} className="border-t border-slate-100 dark:border-slate-900">
+              <tr key={line.id} className="border-t border-line">
                 <td className="px-3 py-1.5">{line.lineNumber}</td>
                 <td className="px-3 py-1.5">
                   <span className="font-mono">{line.productCode}</span>{' '}
@@ -1066,7 +1088,7 @@ function StockDocumentView({
                   <td className="px-3 py-1.5">
                     {line.batchNumber ?? ''}
                     {line.expiresOn && (
-                      <span className="ms-2 text-xs text-slate-500">
+                      <span className="ms-2 text-xs text-ink-muted">
                         {t('stock.expiresOn')} {line.expiresOn}
                       </span>
                     )}
@@ -1081,20 +1103,34 @@ function StockDocumentView({
 
       <Panel title={t('stock.movements')}>
         {document.movements.length === 0 ? (
-          <p className="px-3 py-4 text-sm text-slate-500">{t('stock.noMovements')}</p>
+          <p className="px-3 py-4 text-sm text-ink-muted">{t('stock.noMovements')}</p>
         ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-slate-100 dark:bg-slate-800">
+          <table className="table">
+            <thead className="bg-surface-3">
               <tr>
-                <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
-                <th className="px-3 py-2 text-start font-semibold">{t('stock.warehouse')}</th>
-                <th className="px-3 py-2 text-end font-semibold">{t('stock.quantity')}</th>
-                <th className="px-3 py-2 text-end font-semibold">{t('stock.unitCost')}</th>
+                <th className="px-3 py-2 text-start font-semibold">
+                  {t('stock.product')}
+                </th>
+                <th className="px-3 py-2 text-start font-semibold">
+                  {t('stock.warehouse')}
+                </th>
+                <th className="px-3 py-2 text-end font-semibold">
+                  {t('stock.quantity')}
+                </th>
+                <th className="px-3 py-2 text-end font-semibold">
+                  {t('stock.unitCost')}
+                </th>
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.value')}</th>
-                <th className="px-3 py-2 text-end font-semibold">{t('stock.balanceAfter')}</th>
-                <th className="px-3 py-2 text-end font-semibold">{t('stock.averageAfter')}</th>
+                <th className="px-3 py-2 text-end font-semibold">
+                  {t('stock.balanceAfter')}
+                </th>
+                <th className="px-3 py-2 text-end font-semibold">
+                  {t('stock.averageAfter')}
+                </th>
                 {batchedDocument && (
-                  <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.batch')}
+                  </th>
                 )}
               </tr>
             </thead>
@@ -1102,7 +1138,7 @@ function StockDocumentView({
               {document.movements.map((movement, index) => (
                 <tr
                   key={`${movement.productCode}-${movement.warehouseName}-${index}`}
-                  className="border-t border-slate-100 dark:border-slate-900"
+                  className="border-t border-line"
                 >
                   <td className="px-3 py-1.5 font-mono">{movement.productCode}</td>
                   <td className="px-3 py-1.5">{movement.warehouseName}</td>
@@ -1180,8 +1216,8 @@ function Labelled({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+    <label className="field">
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );
@@ -1196,10 +1232,8 @@ function Panel({
 }): React.JSX.Element {
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-slate-500 uppercase">{title}</h3>
-      <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        {children}
-      </div>
+      <h3 className="text-sm font-semibold text-ink-muted uppercase">{title}</h3>
+      <div className="table-wrap max-h-[70vh] overflow-y-auto">{children}</div>
     </div>
   );
 }
@@ -1215,13 +1249,12 @@ function Alert({
     <div
       role="alert"
       className={clsx(
-        'rounded-lg border px-4 py-3 text-sm',
+        'rounded-xl border px-4 py-3 text-sm',
         tone === 'error' &&
-          'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200',
+          'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200',
         tone === 'ok' &&
-          'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
-        tone === 'muted' &&
-          'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+          'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
+        tone === 'muted' && 'border-line bg-surface-2 text-ink-muted',
       )}
     >
       {children}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { ReportFrame } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
@@ -27,8 +28,10 @@ export function MasterFrame<TRow>({
   readonly queryKey: string;
   readonly fetchRows: (includeInactive: boolean) => Promise<readonly TRow[]>;
   /** Built with a runner, so a row's own actions can invoke a mutation. */
-  readonly columns: (run: (action: () => Promise<void>) => void, busy: boolean)
-    => readonly GridColumn<TRow>[];
+  readonly columns: (
+    run: (action: () => Promise<void>) => void,
+    busy: boolean,
+  ) => readonly GridColumn<TRow>[];
   readonly rowKey: (row: TRow) => string;
   /** The fields this master asks for when adding a record. */
   readonly addForm: (
@@ -64,7 +67,7 @@ export function MasterFrame<TRow>({
   };
 
   const controls = (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="field-check pb-1">
       <input
         type="checkbox"
         checked={includeInactive}
@@ -79,17 +82,12 @@ export function MasterFrame<TRow>({
       {(rows) => (
         <div className="space-y-4">
           {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-            >
+            <div role="alert" className="alert-error">
               {error}
             </div>
           )}
 
-          <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-            {addForm(run, mutation.isPending, rows)}
-          </div>
+          <div className="panel">{addForm(run, mutation.isPending, rows)}</div>
 
           <DataGrid
             gridKey={queryKey}
@@ -108,30 +106,45 @@ export function RowAction({
   label,
   disabled,
   onClick,
+  tone = 'neutral',
 }: {
   readonly label: string;
   readonly disabled: boolean;
   readonly onClick: () => void;
+  /** `danger` for the ones that withdraw or delete, so they read differently. */
+  readonly tone?: 'neutral' | 'danger';
 }): React.JSX.Element {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      className={clsx(
+        'rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition duration-150',
+        'active:scale-95 disabled:pointer-events-none disabled:opacity-40',
+        tone === 'danger'
+          ? 'border-red-200 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-500/10'
+          : 'border-line text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
+      )}
     >
       {label}
     </button>
   );
 }
 
-/** A labelled input for a master's add form. */
+/**
+ * A labelled input for a master's add form.
+ *
+ * `width` names the width the field prefers on a roomy screen. It is paired with a
+ * full width below `sm`, because a row of `w-32` boxes on a phone leaves four
+ * two-inch fields stranded beside each other rather than one usable one.
+ */
 export function MasterField({
   label,
   value,
   onChange,
   placeholder,
-  width = 'w-32',
+  width = 'sm:w-32',
 }: {
   readonly label: string;
   readonly value: string;
@@ -140,13 +153,13 @@ export function MasterField({
   readonly width?: string;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+    <label className={clsx('field w-full', width)}>
+      <span className="field-label">{label}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder ?? ''}
-        className={`${width} rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900`}
+        className="field-input-sm"
       />
     </label>
   );

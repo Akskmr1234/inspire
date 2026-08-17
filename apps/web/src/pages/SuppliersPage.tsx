@@ -149,7 +149,12 @@ function AddSupplier({
   return (
     <>
       <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField label={t('masters.name')} value={name} onChange={setName} width="w-56" />
+      <MasterField
+        label={t('masters.name')}
+        value={name}
+        onChange={setName}
+        width="w-56"
+      />
       <MasterField label={t('customers.mobile')} value={mobile} onChange={setMobile} />
       <MasterField
         label={t('customers.address')}
@@ -180,7 +185,7 @@ function AddSupplier({
         type="button"
         disabled={busy || code.trim() === '' || name.trim() === ''}
         onClick={add}
-        className="self-end rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white transition disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+        className="btn-primary btn-sm self-end py-1.5"
       >
         {t('masters.add')}
       </button>
