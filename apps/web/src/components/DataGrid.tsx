@@ -461,13 +461,20 @@ export function DataGrid<TRow>({
                   />
                   {column.header}
                 </label>
+                {/*
+                  The labels say "earlier" and "later" rather than left and right,
+                  which is right for both a table's columns and a card's fields. The
+                  glyphs have to follow the reading direction to agree with them:
+                  earlier is leftward in English and rightward in Arabic, so a fixed
+                  `‹` would point at the wrong end of the order under Arabic.
+                */}
                 <button
                   type="button"
                   onClick={() => move(column.key, -1)}
                   className="rounded px-1 text-ink-subtle transition hover:bg-surface-3 hover:text-ink"
                   title={t('grid.moveLeft')}
                 >
-                  ‹
+                  <span className="inline-block rtl:rotate-180">‹</span>
                 </button>
                 <button
                   type="button"
@@ -475,7 +482,7 @@ export function DataGrid<TRow>({
                   className="rounded px-1 text-ink-subtle transition hover:bg-surface-3 hover:text-ink"
                   title={t('grid.moveRight')}
                 >
-                  ›
+                  <span className="inline-block rtl:rotate-180">›</span>
                 </button>
               </div>
             );
