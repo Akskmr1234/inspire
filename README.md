@@ -290,6 +290,8 @@ Inspire/
 ├── infrastructure/           nginx, keycloak realm, k8s manifests
 ├── docs/
 │   ├── SPEC.md               canonical functional specification
+│   ├── WEB.md                how the web application works, end to end
+│   ├── DEPLOYMENT.md         container images and platform configuration
 │   └── adr/                  architecture decision records
 └── scripts/
 ```
