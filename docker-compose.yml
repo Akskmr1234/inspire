@@ -24,9 +24,9 @@ services:
       POSTGRES_PASSWORD: postgres
       # Deterministic collation, so an ORDER BY behaves the same on every
       # developer's machine and in CI.
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # Scripts in this directory run once, in name order, on first start only.
@@ -35,7 +35,7 @@ services:
     healthcheck:
       # The API and the migration job both wait on this, so it must test the
       # specific database rather than merely that the process is listening.
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -55,15 +55,15 @@ services:
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
 
   api:
-    profiles: ["api"]
+    profiles: ['api']
     build:
       context: .
       dockerfile: Dockerfile
@@ -84,12 +84,12 @@ services:
       # secret store - anyone holding it can mint a token for any user in any
       # tenant.
       Jwt__SigningKey: HNv5oryNSUxekos0yCH9Rsogru9Nssi4zE5Y0DL2ZAI
-      Erp__Seed__Enabled: "true"
+      Erp__Seed__Enabled: 'true'
       Erp__Seed__AdministratorPassword: Akskmr1234
     ports:
-      - "8080:8080"
+      - '8080:8080'
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/live || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health/live || exit 1']
       interval: 10s
       timeout: 5s
       retries: 10

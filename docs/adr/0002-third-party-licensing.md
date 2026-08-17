@@ -9,11 +9,11 @@
 
 The engagement brief specified MediatR, AutoMapper, and (implicitly, via “unit tests”) FluentAssertions. Between 2024 and 2026 all three relicensed from permissive open-source terms to paid commercial terms:
 
-| Package | Last permissive release | Licence from | Now requires |
-|---|---|---|---|
-| MediatR | 12.5.0 (Apache-2.0) | 13.0.0 | paid licence (Lucky Penny Software) |
-| AutoMapper | 13.0.1 (MIT) | 14.0.0 | paid licence (Lucky Penny Software) |
-| FluentAssertions | 7.2.2 (Apache-2.0) | 8.0.0 | paid licence (Xceed) |
+| Package          | Last permissive release | Licence from | Now requires                        |
+| ---------------- | ----------------------- | ------------ | ----------------------------------- |
+| MediatR          | 12.5.0 (Apache-2.0)     | 13.0.0       | paid licence (Lucky Penny Software) |
+| AutoMapper       | 13.0.1 (MIT)            | 14.0.0       | paid licence (Lucky Penny Software) |
+| FluentAssertions | 7.2.2 (Apache-2.0)      | 8.0.0        | paid licence (Xceed)                |
 
 The obvious response — pin the last permissive release of each — works for two of the three. It does **not** work for AutoMapper.
 
@@ -61,12 +61,12 @@ MediatR 12.5.0 will not receive future security patches. Accepted because it is 
 
 ## Alternatives considered
 
-| Alternative | Why rejected |
-|---|---|
-| Buy AutoMapper 16.1.1+ commercial licences | Not our decision to commit the customer to recurring per-seat cost. Available to them later if preferred; the mapping seam makes adoption straightforward. |
-| Ship AutoMapper 13.0.1 with the advisory accepted | Unacceptable in a financial system, and it would fail any dependency-scanning gate in CI or a customer security review. |
-| Fork AutoMapper 13.0.1 and patch it | Perpetual maintenance burden and licence ambiguity around the fork point. |
-| Mapperly (source generator, MIT) | Genuinely good option — compile-time generated, no licence issue. Rejected only to avoid adding a dependency for something a plain extension method does clearly. Worth revisiting if mapping volume grows. |
+| Alternative                                       | Why rejected                                                                                                                                                                                                |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buy AutoMapper 16.1.1+ commercial licences        | Not our decision to commit the customer to recurring per-seat cost. Available to them later if preferred; the mapping seam makes adoption straightforward.                                                  |
+| Ship AutoMapper 13.0.1 with the advisory accepted | Unacceptable in a financial system, and it would fail any dependency-scanning gate in CI or a customer security review.                                                                                     |
+| Fork AutoMapper 13.0.1 and patch it               | Perpetual maintenance burden and licence ambiguity around the fork point.                                                                                                                                   |
+| Mapperly (source generator, MIT)                  | Genuinely good option — compile-time generated, no licence issue. Rejected only to avoid adding a dependency for something a plain extension method does clearly. Worth revisiting if mapping volume grows. |
 
 ## Action required from the business
 

@@ -4,7 +4,7 @@ A multi-tenant, multi-firm, multi-branch ERP platform: accounting, inventory wit
 
 Built for both Gulf (VAT) and Indian (GST) tax regimes, in English and Arabic with full RTL support.
 
-> **Specification:** [`docs/SPEC.md`](docs/SPEC.md) is the canonical functional spec, distilled from `Inspire_web.docx` and the 14 reference screenshots of the legacy *Easy Retail* Windows application and the *mysalebooks.com* web reference. Where the prose and the screenshots disagreed, both are recorded along with the resolution. Read it before writing a feature.
+> **Specification:** [`docs/SPEC.md`](docs/SPEC.md) is the canonical functional spec, distilled from `Inspire_web.docx` and the 14 reference screenshots of the legacy _Easy Retail_ Windows application and the _mysalebooks.com_ web reference. Where the prose and the screenshots disagreed, both are recorded along with the resolution. Read it before writing a feature.
 
 ---
 
@@ -12,80 +12,80 @@ Built for both Gulf (VAT) and Indian (GST) tax regimes, in English and Arabic wi
 
 This is an in-progress build. What follows is accurate as of the last commit — no module is claimed complete unless it is.
 
-| Area | State |
-|---|---|
-| Canonical specification | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business, all now answered |
-| Monorepo + solution scaffold (15 projects) | **Done** — builds clean, 0 warnings |
-| Dependency set, security-scanned & licence-audited | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md) |
-| Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests |
-| Domain — tenancy identifiers, `FinancialYear` | **Done** — 25 tests |
-| Tax engine — GCC VAT + India GST concurrently, inclusive/exclusive, CGST/SGST/IGST | **Done** — 38 tests |
-| API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks | **Done** |
-| Domain — Tenant, Firm, Branch aggregates | **Done** |
-| Multi-tenancy — EF query filters + PostgreSQL RLS, verified on real Postgres | **Done** — 17 integration tests |
-| Auth — JWT sign-in, refresh rotation with theft detection, DB-driven RBAC | **Done** — 20 tests |
-| Domain — chart of accounts, double-entry vouchers, numbering series | **Done** |
-| Application layer — CQRS pipeline, validation, repositories | **Done** |
-| Seeding — permission catalogue, roles, chart of accounts, first administrator | **Done** |
-| Accounting reports — Trial Balance, P&L, Balance Sheet, Ledger Statement | **Done** |
-| Frontend — React shell, sign-in, voucher entry, report screens | **Done** |
-| Docker Compose, API container image, GitHub Actions CI | **Done** |
-| Accounting reports — Day Book, Cash Book, Bank Book | **Done** — 33 application tests |
-| Accounting — bill-wise settlement (domain + persistence) | **Done** — 25 tests |
-| Accounting — bills raised and settled by voucher posting | **Done** — 19 tests |
-| Accounting — Debtors/Creditors and age-wise reports | **Done** — 23 application + 9 integration tests |
-| Accounting — cheque lifecycle incl. PDC (domain + persistence) | **Done** — 34 tests |
-| Accounting — cheques recorded on posting; bank, clear, bounce, stop, void | **Done** — 31 tests |
-| Accounting — PDC report, PDC calendar, cheque register | **Done** — 15 application + 11 integration tests |
-| Accounting — account group summary, voucher report, transaction summary | **Done** — 23 application + 15 integration tests |
-| Accounting — cash flow statement (direct method) | **Done** — 15 application + 11 integration tests |
-| Deployment — container images for API and web, platform configuration | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) |
-| Accounting — bounced cheque reversal, raised automatically or supplied | **Done** — 11 tests; the journal is written by the bounce itself |
-| Dynamic menus — DB-driven tree, permission-filtered, seeded per firm | **Done** — 15 domain + 9 application + 5 API tests |
-| Dynamic menus — administration: add, rename, reorder, regroup, hide, delete | **Done** — 8 API tests, with a screen at `/settings/menu` |
-| Data grid — sort, search, columns, freeze, CSV export, saved layouts | **Done** — 8 API tests; first screen is the chart of accounts |
-| Dashboards — role-assigned, KPI/trend/ranked panels, seeded accounting overview | **Done** — 8 API tests |
-| Dashboards — custom SQL widgets, read-only and RLS-confined | **Done** — 20 guard + 11 API tests |
-| Report builder, print designer, workflow engine | Not started |
-| Inventory — masters: units with conversion groups, categories, brands, warehouses | **Done** — 33 domain + 10 API tests, with screens on the data grid |
-| Inventory — product master: rates, units, tracking, barcodes (domain + persistence) | **Done** — 45 tests |
-| Inventory — product master screens and API | **Done** — 13 API tests, with a three-tab editor |
-| Inventory — stock operations and average costing | **Done** — 34 domain + 19 API tests, with screens and 3 reports |
-| Inventory — batch tracking: per-batch cost, expiry, generated numbers | **Done** — 34 domain + 13 API tests, with a batch column and 2 reports |
-| Inventory — serial numbers: per-unit identity, warranty, selection on sale | **Done** — 12 domain + 8 API tests, with a unit column on the entry grid |
-| Inventory — per-firm account map for stock postings (answer to Q8a) | **Done** — 7 domain tests, seeded per firm |
-| Inventory — stock movements posted to the nominal ledger | **Done** — 5 API tests; inventory now appears in the trial balance |
-| Accounting — additional-charge matrix (§9), seeded per firm | **Done** — 8 domain tests; Round Off is the only default |
-| Accounting — credit position of a party, read from open bills | **Done** — 4 API tests; warns rather than blocks |
-| Sales — invoice aggregate: lines, tax per component, charges, rounding | **Done** (domain + persistence) — 15 tests |
-| Accounting — per-firm tax account map, head by head, output and input | **Done** — 5 domain + 5 integration tests, seeded per regime |
-| Sales — the journal a posted invoice raises, under either tax regime | **Done** — 11 domain tests; see the note below on rounding |
-| Sales — posting: goods issued, bill raised, books written, in one transaction | **Done** — 13 application tests |
-| Sales — entering an invoice, and the API for both | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices` |
-| Sales — customer master, with §12.1's mobile-number lookup | **Done** — 11 application + 7 API tests, at `/api/v1/sales/customers` |
-| Sales — cancelling a posted invoice: goods back, debt withdrawn, books reversed | **Done** — 4 domain + 8 application + 3 API tests |
-| Sales — the return document and its journal, with its own contra-revenue account | **Done** — 9 domain tests |
-| Sales — posting a return: goods back at their own cost, credit against the bill | **Done** — 10 application + 1 API test, on the same endpoints |
-| Sales — a filtered, paged list of documents; first paged list in the API | **Done** — 8 integration + 2 API tests |
-| Sales — the order, and §12.2's *Create Invoice From* | **Done** — 15 domain + 10 API tests, at `/api/v1/sales/orders` |
-| Sales — screens: document list, entry, posting, cancellation, returns | **Done** — verified end to end in a browser against a real database |
-| Sales — batch and serial selection on the entry grid | **Done** — a batched sale driven through the UI to the stock ledger |
-| Sales — customer master screen, on the existing master pattern | **Done** — created, listed and withdrawn through the UI |
-| Data grid — server-side paging, for lists that outgrow the browser | **Done** — sorting and search withdraw in paged mode |
-| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3) | **Done** — 16 integration + 7 API tests; the input side reads purchase documents |
-| Accounting — the returns screen, one for both regimes | **Done** — verified in a browser, English and Arabic |
-| Purchase — invoice aggregate: lines, input tax per component, charges, rounding | **Done** (domain + persistence) — 26 domain tests |
-| Purchase — the journal a posted purchase raises, through a goods-received account | **Done** — 21 domain tests; see the note below |
-| Purchase — posting: goods received, bill raised, books written, in one transaction | **Done** — driven end to end in the API suite |
-| Purchase — entering a purchase, and the API for both | **Done** — 8 API tests, at `/api/v1/purchase/invoices` |
-| Purchase — supplier master | **Done** — 3 API tests, at `/api/v1/purchase/suppliers` |
-| Purchase — a filtered, paged list of documents | **Done** — the same shape the sales list takes |
-| Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed | **Done** — 5 API tests, driven through the screen in both languages |
-| Purchase — screens: document list, entry, posting, cancellation; supplier master | **Done** — verified end to end in a browser against a real database |
-| Purchase — the order, and the purchase side of §12.2's *Create Invoice From* | **Done** (backend) — 16 domain tests; 11 API tests written but **not yet run** (no Docker on the build machine) |
-| Inventory — expired lots refused on a sale, §10's last open gap | **Done** — 5 domain tests; a return is exempt, and a write-off still works |
-| Manufacturing, Service modules | Not started |
-| Keycloak / SSO (deferred by request — plain JWT in its place) | Deferred |
+| Area                                                                                                                           | State                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Canonical specification                                                                                                        | **Done** — `docs/SPEC.md`, incl. 8 open questions for the business, all now answered                            |
+| Monorepo + solution scaffold (15 projects)                                                                                     | **Done** — builds clean, 0 warnings                                                                             |
+| Dependency set, security-scanned & licence-audited                                                                             | **Done** — see [ADR 0002](docs/adr/0002-third-party-licensing.md)                                               |
+| Shared Kernel — `Result`/`Error`, `Entity`, `AggregateRoot`, domain events, tenancy & audit contracts, `Money`, `CurrencyCode` | **Done** — 36 tests                                                                                             |
+| Domain — tenancy identifiers, `FinancialYear`                                                                                  | **Done** — 25 tests                                                                                             |
+| Tax engine — GCC VAT + India GST concurrently, inclusive/exclusive, CGST/SGST/IGST                                             | **Done** — 38 tests                                                                                             |
+| API bootstrap — Serilog, ProblemDetails, versioning, Swagger, health checks                                                    | **Done**                                                                                                        |
+| Domain — Tenant, Firm, Branch aggregates                                                                                       | **Done**                                                                                                        |
+| Multi-tenancy — EF query filters + PostgreSQL RLS, verified on real Postgres                                                   | **Done** — 17 integration tests                                                                                 |
+| Auth — JWT sign-in, refresh rotation with theft detection, DB-driven RBAC                                                      | **Done** — 20 tests                                                                                             |
+| Domain — chart of accounts, double-entry vouchers, numbering series                                                            | **Done**                                                                                                        |
+| Application layer — CQRS pipeline, validation, repositories                                                                    | **Done**                                                                                                        |
+| Seeding — permission catalogue, roles, chart of accounts, first administrator                                                  | **Done**                                                                                                        |
+| Accounting reports — Trial Balance, P&L, Balance Sheet, Ledger Statement                                                       | **Done**                                                                                                        |
+| Frontend — React shell, sign-in, voucher entry, report screens                                                                 | **Done**                                                                                                        |
+| Docker Compose, API container image, GitHub Actions CI                                                                         | **Done**                                                                                                        |
+| Accounting reports — Day Book, Cash Book, Bank Book                                                                            | **Done** — 33 application tests                                                                                 |
+| Accounting — bill-wise settlement (domain + persistence)                                                                       | **Done** — 25 tests                                                                                             |
+| Accounting — bills raised and settled by voucher posting                                                                       | **Done** — 19 tests                                                                                             |
+| Accounting — Debtors/Creditors and age-wise reports                                                                            | **Done** — 23 application + 9 integration tests                                                                 |
+| Accounting — cheque lifecycle incl. PDC (domain + persistence)                                                                 | **Done** — 34 tests                                                                                             |
+| Accounting — cheques recorded on posting; bank, clear, bounce, stop, void                                                      | **Done** — 31 tests                                                                                             |
+| Accounting — PDC report, PDC calendar, cheque register                                                                         | **Done** — 15 application + 11 integration tests                                                                |
+| Accounting — account group summary, voucher report, transaction summary                                                        | **Done** — 23 application + 15 integration tests                                                                |
+| Accounting — cash flow statement (direct method)                                                                               | **Done** — 15 application + 11 integration tests                                                                |
+| Deployment — container images for API and web, platform configuration                                                          | **Done** — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)                                                       |
+| Accounting — bounced cheque reversal, raised automatically or supplied                                                         | **Done** — 11 tests; the journal is written by the bounce itself                                                |
+| Dynamic menus — DB-driven tree, permission-filtered, seeded per firm                                                           | **Done** — 15 domain + 9 application + 5 API tests                                                              |
+| Dynamic menus — administration: add, rename, reorder, regroup, hide, delete                                                    | **Done** — 8 API tests, with a screen at `/settings/menu`                                                       |
+| Data grid — sort, search, columns, freeze, CSV export, saved layouts                                                           | **Done** — 8 API tests; first screen is the chart of accounts                                                   |
+| Dashboards — role-assigned, KPI/trend/ranked panels, seeded accounting overview                                                | **Done** — 8 API tests                                                                                          |
+| Dashboards — custom SQL widgets, read-only and RLS-confined                                                                    | **Done** — 20 guard + 11 API tests                                                                              |
+| Report builder, print designer, workflow engine                                                                                | Not started                                                                                                     |
+| Inventory — masters: units with conversion groups, categories, brands, warehouses                                              | **Done** — 33 domain + 10 API tests, with screens on the data grid                                              |
+| Inventory — product master: rates, units, tracking, barcodes (domain + persistence)                                            | **Done** — 45 tests                                                                                             |
+| Inventory — product master screens and API                                                                                     | **Done** — 13 API tests, with a three-tab editor                                                                |
+| Inventory — stock operations and average costing                                                                               | **Done** — 34 domain + 19 API tests, with screens and 3 reports                                                 |
+| Inventory — batch tracking: per-batch cost, expiry, generated numbers                                                          | **Done** — 34 domain + 13 API tests, with a batch column and 2 reports                                          |
+| Inventory — serial numbers: per-unit identity, warranty, selection on sale                                                     | **Done** — 12 domain + 8 API tests, with a unit column on the entry grid                                        |
+| Inventory — per-firm account map for stock postings (answer to Q8a)                                                            | **Done** — 7 domain tests, seeded per firm                                                                      |
+| Inventory — stock movements posted to the nominal ledger                                                                       | **Done** — 5 API tests; inventory now appears in the trial balance                                              |
+| Accounting — additional-charge matrix (§9), seeded per firm                                                                    | **Done** — 8 domain tests; Round Off is the only default                                                        |
+| Accounting — credit position of a party, read from open bills                                                                  | **Done** — 4 API tests; warns rather than blocks                                                                |
+| Sales — invoice aggregate: lines, tax per component, charges, rounding                                                         | **Done** (domain + persistence) — 15 tests                                                                      |
+| Accounting — per-firm tax account map, head by head, output and input                                                          | **Done** — 5 domain + 5 integration tests, seeded per regime                                                    |
+| Sales — the journal a posted invoice raises, under either tax regime                                                           | **Done** — 11 domain tests; see the note below on rounding                                                      |
+| Sales — posting: goods issued, bill raised, books written, in one transaction                                                  | **Done** — 13 application tests                                                                                 |
+| Sales — entering an invoice, and the API for both                                                                              | **Done** — 10 application + 7 API tests, at `/api/v1/sales/invoices`                                            |
+| Sales — customer master, with §12.1's mobile-number lookup                                                                     | **Done** — 11 application + 7 API tests, at `/api/v1/sales/customers`                                           |
+| Sales — cancelling a posted invoice: goods back, debt withdrawn, books reversed                                                | **Done** — 4 domain + 8 application + 3 API tests                                                               |
+| Sales — the return document and its journal, with its own contra-revenue account                                               | **Done** — 9 domain tests                                                                                       |
+| Sales — posting a return: goods back at their own cost, credit against the bill                                                | **Done** — 10 application + 1 API test, on the same endpoints                                                   |
+| Sales — a filtered, paged list of documents; first paged list in the API                                                       | **Done** — 8 integration + 2 API tests                                                                          |
+| Sales — the order, and §12.2's _Create Invoice From_                                                                           | **Done** — 15 domain + 10 API tests, at `/api/v1/sales/orders`                                                  |
+| Sales — screens: document list, entry, posting, cancellation, returns                                                          | **Done** — verified end to end in a browser against a real database                                             |
+| Sales — batch and serial selection on the entry grid                                                                           | **Done** — a batched sale driven through the UI to the stock ledger                                             |
+| Sales — customer master screen, on the existing master pattern                                                                 | **Done** — created, listed and withdrawn through the UI                                                         |
+| Data grid — server-side paging, for lists that outgrow the browser                                                             | **Done** — sorting and search withdraw in paged mode                                                            |
+| Accounting — VAT and GST returns: output tax, input tax, summary (§7.3)                                                        | **Done** — 16 integration + 7 API tests; the input side reads purchase documents                                |
+| Accounting — the returns screen, one for both regimes                                                                          | **Done** — verified in a browser, English and Arabic                                                            |
+| Purchase — invoice aggregate: lines, input tax per component, charges, rounding                                                | **Done** (domain + persistence) — 26 domain tests                                                               |
+| Purchase — the journal a posted purchase raises, through a goods-received account                                              | **Done** — 21 domain tests; see the note below                                                                  |
+| Purchase — posting: goods received, bill raised, books written, in one transaction                                             | **Done** — driven end to end in the API suite                                                                   |
+| Purchase — entering a purchase, and the API for both                                                                           | **Done** — 8 API tests, at `/api/v1/purchase/invoices`                                                          |
+| Purchase — supplier master                                                                                                     | **Done** — 3 API tests, at `/api/v1/purchase/suppliers`                                                         |
+| Purchase — a filtered, paged list of documents                                                                                 | **Done** — the same shape the sales list takes                                                                  |
+| Purchase — cancelling a posted purchase: goods off the shelf, debt withdrawn, books reversed                                   | **Done** — 5 API tests, driven through the screen in both languages                                             |
+| Purchase — screens: document list, entry, posting, cancellation; supplier master                                               | **Done** — verified end to end in a browser against a real database                                             |
+| Purchase — the order, and the purchase side of §12.2's _Create Invoice From_                                                   | **Done** (backend) — 16 domain tests; 11 API tests written but **not yet run** (no Docker on the build machine) |
+| Inventory — expired lots refused on a sale, §10's last open gap                                                                | **Done** — 5 domain tests; a return is exempt, and a write-off still works                                      |
+| Manufacturing, Service modules                                                                                                 | Not started                                                                                                     |
+| Keycloak / SSO (deferred by request — plain JWT in its place)                                                                  | Deferred                                                                                                        |
 
 **Test suite:** 884 passing, 0 failing, of the suites that run without Docker (603 domain + 261 application + 20 identity). The 226 API and 92 integration tests need a running Docker daemon and were **not run for the purchase-order change** — 11 of the API tests are new and unverified. Everything else was 1,170 passing at the previous commit.
 
@@ -101,8 +101,7 @@ Integration tests need a running Docker daemon.
 >
 > **The operator's route is untouched.** `reversalVoucherId` on `POST /cheques/{id}/bounce` still names an entry somebody has already written, and where it is given nothing is raised: a second journal appearing beside a hand-written one helps nobody. `POST /cheques/{id}/reversal` also still exists, for cheques bounced before this landed and left with no reversal named.
 >
-> **`dishonourSuspense` is not among the accounts**, though the business named it. A cheque can only bounce from *deposited* — paid in, not yet cleared — so the money is still in cheques in hand and the reversal is simply the receipt backwards. There is no moment where it sits in neither place, and an account that would only ever hold zero is one more line on a trial balance to wonder about. If a firm's own receipt posting moves cheques somewhere else on deposit, that is the case suspense would serve, and it can be added then.
-
+> **`dishonourSuspense` is not among the accounts**, though the business named it. A cheque can only bounce from _deposited_ — paid in, not yet cleared — so the money is still in cheques in hand and the reversal is simply the receipt backwards. There is no moment where it sits in neither place, and an account that would only ever hold zero is one more line on a trial balance to wonder about. If a firm's own receipt posting moves cheques somewhere else on deposit, that is the case suspense would serve, and it can be added then.
 
 > ### The returns can be filed on, and the input side has no taxable value to state
 >
@@ -132,13 +131,13 @@ Integration tests need a running Docker daemon.
 >
 > **The entry screen types batches rather than choosing them**, which is where it stops looking like the sales one. A sale offers the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is keyed off the carton and an expiry date sits beside it. Serial numbers are keyed the same way, one per line, and the count is shown against the quantity so a short list is visible before the server refuses it.
 >
-> **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: *"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."* The document stayed posted and the books were untouched, which is the transaction doing its job.
+> **Both paths were driven through the screen** against a real database. A purchase of four widgets at 25 entered and posted in Arabic, then cancelled with a reason typed in Arabic — status `ملغاة`, the shelf empty, the supplier owed nothing, and the trial balance back to no rows at all. Then a second purchase whose goods were issued away, where the cancel button produces the server's own refusal in the screen's error banner: _"WIDGET: Only 0.000000 of the 4.000000 received is still on hand, so the receipt can no longer be reversed."_ The document stayed posted and the books were untouched, which is the transaction doing its job.
 >
 > **Cancelling can be refused because the goods are gone**, which is where it stops mirroring a sale's. Cancelling a sale puts stock back on a shelf and always can; cancelling a purchase takes stock off one, and a purchase whose goods have since been sold has nothing left to remove. The stock document's own reversal refuses it, and that is the right answer — what the firm has is a return or a write-off, not a mistake to undo. A purchase already paid against is refused too, by name, for the reason a paid sale is: a payment has to stay where it was made.
 
 > ### Expired stock is refused on the way out of a sale, and nowhere else
 >
-> §10 carried one line of unfinished business — *"expired stock is not refused on the way out"* — and deferred it explicitly: *"whether a sale may draw on an expired lot is a rule for the sales document, and is recorded there when that document exists."* That document exists, so the rule now lives on it. `Batch.HasExpiredBy` had been written and tested since batches landed and had never had a caller.
+> §10 carried one line of unfinished business — _"expired stock is not refused on the way out"_ — and deferred it explicitly: _"whether a sale may draw on an expired lot is a rule for the sales document, and is recorded there when that document exists."_ That document exists, so the rule now lives on it. `Batch.HasExpiredBy` had been written and tested since batches landed and had never had a caller.
 >
 > **It could never have been a check on the stock position**, which is why it waited. A firm has to be able to write off what has gone off, and an issue and a damaged-stock document both have to keep moving expired goods — a position that refused them would leave the expired lot stuck on the books for ever, which is the opposite of what anybody wants.
 >
@@ -152,7 +151,7 @@ Integration tests need a running Docker daemon.
 >
 > `POST /api/v1/purchase/orders` places one, `/confirm` agrees it, `/convert` raises a **draft purchase** from it, and `/close` gives up on what is left. Its own aggregate rather than a flag on `PurchaseInvoice`, for the reason the sales order is its own: a purchase posts, receives stock, raises a debt and writes a journal, and an order does none of those.
 >
-> **An order commits no money.** Nothing reaches the nominal ledger and no bill is raised, so a supplier's balance stays what the firm has been *invoiced* rather than what it has *ordered*. A committed-spend report would be built over the outstanding quantities the order carries, not out of the creditors ledger.
+> **An order commits no money.** Nothing reaches the nominal ledger and no bill is raised, so a supplier's balance stays what the firm has been _invoiced_ rather than what it has _ordered_. A committed-spend report would be built over the outstanding quantities the order carries, not out of the creditors ledger.
 >
 > **The batch is typed, not chosen** — and this is where the sales conversion stops being a useful template. A sale picks from the batches a warehouse holds; a purchase is usually the moment a batch comes into existence, so the number is read off the supplier's carton and the expiry keyed beside it, and the receipt opens the batch when the purchase posts. The conversion line carries `BatchNumber` and `ExpiresOn` where the sales one carries only a batch to select.
 >
@@ -162,19 +161,19 @@ Integration tests need a running Docker daemon.
 >
 > **Cancelling a purchase puts the goods back on its order**, which is the same fix the sales side got on 2026-08-13 and the reason the purchase now remembers the order it came from. Without it the order would go on believing goods had arrived against a purchase that no longer exists, and a buyer's chase list would be short. An order somebody has since closed deliberately stays closed — reopening it would put work back in front of a buyer who was told to stop.
 >
-> **`PurchaseTaxContext` is now shared** by the order and the purchase rather than copied. It reads the *supplier's* state where the sales side reads the customer's, which is the only thing that differs; two copies would eventually disagree about a supplier whose state nobody recorded.
+> **`PurchaseTaxContext` is now shared** by the order and the purchase rather than copied. It reads the _supplier's_ state where the sales side reads the customer's, which is the only thing that differs; two copies would eventually disagree about a supplier whose state nobody recorded.
 >
 > Backend only, which is the depth the sales order shipped at — neither has a screen yet.
 
 > ### An order that reserves nothing, and fills across as many deliveries as it takes
 >
-> §12.9's chain begins at the order, and §12.2 calls the next step *Create Invoice From*. Both now exist: `POST /api/v1/sales/orders` takes one, `/confirm` agrees it, `/convert` raises a **draft invoice** from it, and `/close` gives up on what is left. Its own aggregate rather than a third kind of `SalesInvoice` — an invoice posts, moves stock, raises a debt and writes a journal, and an order does none of those, so folding them together would make every one of those invariants ask first whether the document was the kind that moves anything.
+> §12.9's chain begins at the order, and §12.2 calls the next step _Create Invoice From_. Both now exist: `POST /api/v1/sales/orders` takes one, `/confirm` agrees it, `/convert` raises a **draft invoice** from it, and `/close` gives up on what is left. Its own aggregate rather than a third kind of `SalesInvoice` — an invoice posts, moves stock, raises a debt and writes a journal, and an order does none of those, so folding them together would make every one of those invariants ask first whether the document was the kind that moves anything.
 >
 > **An order holds no stock**, which is the business's answer of 2026-08-13. Two orders can promise the same last unit and the second invoice is the one that gets refused. That is a real limitation and it is the cheap one: the alternative is orders quietly starving the shop floor and needing an expiry discipline nobody has asked for. What the order does carry is the outstanding quantity per line, which is what a shortage report would be built from.
 >
 > **One order becomes as many invoices as it needs.** Each line records how much has gone out; the order completes itself when the last line is filled, so nobody has to remember to close it. Converting without naming lines takes everything still outstanding, which is the common path. The discount is apportioned across deliveries — ten off a line of twenty gives five off when ten ship — because giving the whole ten on the first would leave the second invoice mysteriously dearer.
 >
-> **The tax is reassessed, not copied.** A half-shipped line owes half the tax, and the engine is asked again in case the customer's state has been corrected since: the invoice charges what is true today rather than what was quoted in March. The rate and the discount *are* the order's, because those were agreed.
+> **The tax is reassessed, not copied.** A half-shipped line owes half the tax, and the engine is asked again in case the customer's state has been corrected since: the invoice charges what is true today rather than what was quoted in March. The rate and the discount _are_ the order's, because those were agreed.
 >
 > **A part-filled order is closed, not cancelled**, and the two land in the same state with a reason kept. Goods have gone out against it, and a cancelled document that produced invoices is one nobody can reconcile. An order closed deliberately does not reopen when an invoice is cancelled — that would put work back in front of a warehouse that was told to stop.
 >
@@ -198,7 +197,7 @@ Integration tests need a running Docker daemon.
 >
 > The purchase document exists as its own aggregate — its own tables, its own numbering, invoice and return in one type as the sales side has — and `PurchaseJournal` turns a posted one into what it did to the accounts. The document is deliberately a mirror of `SalesInvoice` rather than a direction flag on it, which is roughly seven hundred lines of shape said twice. The two read the same at a distance and diverge in every detail that matters: a sale selects goods that exist and a purchase brings goods into existence, a sale is numbered by the firm and a purchase carries the supplier's number as well, a sale credits revenue and a purchase debits a clearing account. Sharing them would have produced one type where half the fields are always null.
 >
-> **The goods sit in `Goods Received Not Invoiced` between arriving and being billed.** The receipt debits inventory and credits that account; the invoice debits it back, debits input tax head by head, and credits the supplier. The two halves cancel, so a firm that receives and invoices everything ends the period with nothing in it — and whatever *is* in it is exactly the goods received and not yet invoiced, which is a figure an accountant otherwise rebuilds from delivery notes at a year end. It is a current liability, not a suspense account, because that is what it is.
+> **The goods sit in `Goods Received Not Invoiced` between arriving and being billed.** The receipt debits inventory and credits that account; the invoice debits it back, debits input tax head by head, and credits the supplier. The two halves cancel, so a firm that receives and invoices everything ends the period with nothing in it — and whatever _is_ in it is exactly the goods received and not yet invoiced, which is a figure an accountant otherwise rebuilds from delivery notes at a year end. It is a current liability, not a suspense account, because that is what it is.
 >
 > **A purchase return needs no contra account**, which is where the mirror stops. A sales return has one because gross sales and returns are both figures somebody reports; a purchase return credits back the same clearing account it debited, because netting that account to zero is the whole point of it.
 >
@@ -230,12 +229,12 @@ Integration tests need a running Docker daemon.
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|---|---|---|
-| .NET SDK | **10.0.302+** | The brief specified ASP.NET Core 9; only the .NET 10 SDK was present and 10 is current LTS, so projects target `net10.0`. |
-| Node.js | 22+ | 24.14.1 verified |
-| Docker | 29+ | Required for integration tests (Testcontainers) and local infrastructure |
-| PostgreSQL | 16+ | Supplied by Docker Compose; no local install needed |
+| Tool       | Version       | Notes                                                                                                                     |
+| ---------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| .NET SDK   | **10.0.302+** | The brief specified ASP.NET Core 9; only the .NET 10 SDK was present and 10 is current LTS, so projects target `net10.0`. |
+| Node.js    | 22+           | 24.14.1 verified                                                                                                          |
+| Docker     | 29+           | Required for integration tests (Testcontainers) and local infrastructure                                                  |
+| PostgreSQL | 16+           | Supplied by Docker Compose; no local install needed                                                                       |
 
 `pnpm` is **not** required — the frontend uses **npm workspaces**, which works with the npm you already have. Switching to pnpm later is a drop-in change.
 
@@ -313,7 +312,7 @@ Enforced by project references. `ERP.SharedKernel` has **zero** package referenc
 
 Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 
-**Tenant isolation is enforced twice** — an EF Core global query filter *and* a PostgreSQL row-level-security policy. One layer would be a single point of failure, and the failure mode (one customer reading another's financial data) is the worst outcome this system can produce.
+**Tenant isolation is enforced twice** — an EF Core global query filter _and_ a PostgreSQL row-level-security policy. One layer would be a single point of failure, and the failure mode (one customer reading another's financial data) is the worst outcome this system can produce.
 
 > ### ⚠️ The application must never connect to PostgreSQL as a superuser
 >
@@ -321,7 +320,7 @@ Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 >
 > This was caught by an integration test that initially reported 14 rows where 1 was expected, because Testcontainers' bootstrap user is a superuser.
 >
-> **Deployment requirement:** the app connects as a dedicated role created `NOSUPERUSER NOBYPASSRLS`, holding only `SELECT/INSERT/UPDATE/DELETE`. Schema ownership and migrations use a *separate*, more privileged role. `SchemaTests.The_application_role_cannot_bypass_row_level_security` fails the build if this is ever violated.
+> **Deployment requirement:** the app connects as a dedicated role created `NOSUPERUSER NOBYPASSRLS`, holding only `SELECT/INSERT/UPDATE/DELETE`. Schema ownership and migrations use a _separate_, more privileged role. `SchemaTests.The_application_role_cannot_bypass_row_level_security` fails the build if this is ever violated.
 
 **AutoMapper is not used.** Every freely-licensed version carries an unpatched high-severity advisory (`GHSA-rvv3-g6hj-g44x`); every patched version requires a paid licence. Mapping is hand-written, which is also compile-time checked. See [ADR 0002](docs/adr/0002-third-party-licensing.md).
 
@@ -331,7 +330,7 @@ Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 
 **Financial years are arbitrary date ranges.** The legacy system's year runs 01-10-2021 to 31-12-2026. Nothing may assume a 12-month period or a particular start month.
 
-**The tax engine is jurisdiction-pluggable.** The screenshots show Qatari Riyal with VAT reports *and* Indian CGST/SGST/IGST ledgers. Tax components are data, selected by a per-firm regime — not hardcoded.
+**The tax engine is jurisdiction-pluggable.** The screenshots show Qatari Riyal with VAT reports _and_ Indian CGST/SGST/IGST ledgers. Tax components are data, selected by a per-firm regime — not hardcoded.
 
 **Lists are paged from the sales list onwards.** `PagedResult<T>` — items, page, size, a counted total, and a 200-row ceiling — is the shape every list built after 2026-08-12 takes. The earlier ones (chart of accounts, stock documents) are unpaged and stay that way: one is small, the other is bounded by its date range, and retrofitting paging into them would change a contract screens already depend on.
 
@@ -343,6 +342,6 @@ Full reasoning lives in [`docs/adr/`](docs/adr/). The short version:
 
 `dotnet build` must produce **zero warnings**. CI sets `TreatWarningsAsErrors`, so a warning breaks the build.
 
-Analyzers: .NET built-in (`latest-recommended`), SonarAnalyzer, and StyleCop. Where a rule is disabled, [`backend/.editorconfig`](backend/.editorconfig) states *why* — so nobody has to guess later whether it was deliberate.
+Analyzers: .NET built-in (`latest-recommended`), SonarAnalyzer, and StyleCop. Where a rule is disabled, [`backend/.editorconfig`](backend/.editorconfig) states _why_ — so nobody has to guess later whether it was deliberate.
 
 Conventions: nullable reference types enabled everywhere; XML documentation on public API (`CS1591` is a warning); British English in prose and comments.
