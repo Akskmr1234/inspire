@@ -14,6 +14,7 @@ interface SessionState {
 
   restore: () => Promise<void>;
   signIn: (userName: string, password: string, tenantCode: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
@@ -139,6 +140,18 @@ export const useSession = create<SessionState>((set, get) => ({
       displayName: auth.displayName,
       mustChangePassword: auth.mustChangePassword,
       permissions: new Set(permissions),
+    });
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    await api.changePassword(currentPassword, newPassword);
+    api.clearSession();
+
+    set({
+      status: 'signedOut',
+      displayName: null,
+      mustChangePassword: false,
+      permissions: new Set<string>(),
     });
   },
 

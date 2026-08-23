@@ -216,6 +216,17 @@ export async function login(
   return auth;
 }
 
+/** Changes the signed-in user's password. */
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  return request('/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
+}
+
 /** Signs out, revoking the refresh token server-side. */
 export async function logout(): Promise<void> {
   const refreshToken = getStoredRefreshToken();

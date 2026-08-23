@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { Spinner } from '@/components/ReportFrame';
 import { ApiError, getStoredTenantCode } from '@/lib/api';
 import { useSession } from '@/stores/session';
@@ -7,6 +8,7 @@ import { useSession } from '@/stores/session';
 /** The sign-in screen. */
 export function LoginPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const signIn = useSession((s) => s.signIn);
 
   // Prefilled from the last successful sign-in. A company code is an identifier,
@@ -73,6 +75,12 @@ export function LoginPage(): React.JSX.Element {
         {error !== null && (
           <p role="alert" className="alert-error mb-4">
             {error}
+          </p>
+        )}
+
+        {error === null && searchParams.get('passwordChanged') === '1' && (
+          <p role="status" className="alert-success mb-4">
+            {t('signIn.passwordChanged')}
           </p>
         )}
 

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, type ComponentType } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
 import { ReportSkeleton } from '@/components/ReportFrame';
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { applyPresentation, useSession } from '@/stores/session';
 
@@ -138,7 +139,7 @@ function RouteFallback(): React.JSX.Element {
 
 /** Routing and the signed-in gate. */
 export function App(): React.JSX.Element {
-  const { status, theme, language, restore } = useSession();
+  const { status, mustChangePassword, theme, language, restore } = useSession();
 
   useEffect(() => {
     applyPresentation(theme, language);
@@ -176,6 +177,12 @@ export function App(): React.JSX.Element {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route element={<AppShell />}>
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+          {mustChangePassword && (
+            <Route path="*" element={<Navigate to="/change-password" replace />} />
+          )}
+          {!mustChangePassword && (
+            <>
           <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
           <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
           <Route
@@ -225,6 +232,8 @@ export function App(): React.JSX.Element {
           <Route path="/accounting/cheque-calendar" element={<ChequeCalendarPage />} />
           <Route path="/accounting/cheque-register" element={<ChequeRegisterPage />} />
           <Route path="*" element={<Navigate to="/accounting/trial-balance" replace />} />
+            </>
+          )}
         </Route>
       </Routes>
     </Suspense>
