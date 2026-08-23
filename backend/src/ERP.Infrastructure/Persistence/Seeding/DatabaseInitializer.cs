@@ -161,7 +161,14 @@ public static partial class DatabaseInitializer
         // question "is it up" and never the question that actually matters, which is
         // "what is it dialling". The password is stripped; everything else is what an
         // operator needs to compare against the database the platform provisioned.
-        LogDialling(logger, DescribeTarget(context.Database.GetConnectionString()));
+        //
+        // Guarded because `DescribeTarget` parses a connection string, and the
+        // generated log method cannot elide an argument that was already evaluated to
+        // be passed to it (CA1873).
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogDialling(logger, DescribeTarget(context.Database.GetConnectionString()));
+        }
 
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
         int attempt = 0;
