@@ -277,6 +277,7 @@ public static partial class DatabaseInitializer
     [LoggerMessage(
         EventId = 1005,
         Level = LogLevel.Information,
+        SkipEnabledCheck = true,
         Message = "Connecting to {Target}")]
     private static partial void LogDialling(ILogger logger, string target);
 
