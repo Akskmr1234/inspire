@@ -172,7 +172,15 @@ function Panel({
     }[widget.span] ?? '';
 
   return (
-    <div className={clsx('card card-body group/panel relative overflow-hidden', span)}>
+    <div
+      className={clsx(
+        // `justify-between` with a floor height: a KPI tile holding one figure and a
+        // chart tile holding twelve bars sit in the same row, and without a floor the
+        // short one collapses to half the height of its neighbour.
+        'card card-body group/panel relative flex min-h-28 flex-col justify-between overflow-hidden',
+        span,
+      )}
+    >
       {/* A brand wash that surfaces under the pointer, so a dense grid of figures
           still acknowledges which one is being read. */}
       <span

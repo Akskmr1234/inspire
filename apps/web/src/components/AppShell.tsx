@@ -230,7 +230,13 @@ export function AppShell(): React.JSX.Element {
           tabIndex={-1}
           className="min-w-0 flex-1 p-3 outline-none sm:p-4 lg:p-6"
         >
-          <div className="mx-auto w-full max-w-[120rem]">
+          {/*
+              1920px was too generous: at that width a report's own header spans the
+              monitor and its columns drift apart until the figures stop relating to
+              their labels. 1600 still holds every table this application has, and
+              the wide ones scroll inside their own container anyway.
+            */}
+          <div className="mx-auto w-full max-w-[100rem]">
             {/*
               Inside the shell, not around it: a screen that throws should leave the
               navigation and the header standing so the user can go somewhere else.

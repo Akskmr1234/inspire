@@ -385,8 +385,23 @@
     @apply animate-rise space-y-4 sm:space-y-5;
   }
 
+  /*
+    Title and the one action that belongs beside it. Filters live in `.filter-bar`
+    below rather than across the row: on a wide screen a heading at one edge and its
+    own controls at the other are separated by most of a metre of nothing, and stop
+    reading as related.
+  */
   .page-header {
-    @apply flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4;
+    @apply flex items-start justify-between gap-4;
+  }
+
+  /*
+    The strip of filters under a report's title. A defined surface rather than
+    controls floating on the canvas, so the eye has somewhere to land between the
+    heading and the figures.
+  */
+  .filter-bar {
+    @apply rounded-xl border border-line bg-surface-2 px-3 py-2.5 sm:px-4;
   }
 
   .page-title {

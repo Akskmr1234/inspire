@@ -32,6 +32,15 @@ export function ReportFrame<TData>({
 
   return (
     <section className="page">
+      {/*
+        Title on its own line, filters in a bar beneath it.
+
+        They used to share a row with the filters pinned to the opposite edge, which
+        on a wide screen left the better part of a thousand pixels of nothing between
+        a heading and the controls belonging to it — they read as two unrelated
+        things. A filter bar is also what every screen here actually is: a period, a
+        couple of pickers, and a Run.
+      */}
       <header className="page-header">
         <div className="min-w-0">
           <h1 className="page-title">{title}</h1>
@@ -39,49 +48,46 @@ export function ReportFrame<TData>({
         </div>
 
         {/*
-          `justify-between` so the print button keeps to the far edge. On a screen
-          with no filters at all — the chart of accounts, for one — it would
-          otherwise sit alone against the start edge under the heading, reading as
-          something left behind rather than an action.
+          Printing is what half these screens are for, so it gets a control rather
+          than being left to whoever remembers the keyboard shortcut. The stylesheet
+          does the work; this only opens the dialog.
         */}
-        <div className="flex items-end justify-between gap-2">
-          {/*
-            The controls scroll on their own below `sm` rather than wrapping into a
-            four-line stack that pushes the report itself off the screen.
-          */}
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="btn-icon shrink-0"
+          title={t('reports.print')}
+          aria-label={t('reports.print')}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-[18px]"
+            aria-hidden="true"
+          >
+            <path d="M6 9V3h12v6" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+            <path d="M6 14h12v7H6z" />
+          </svg>
+        </button>
+      </header>
+
+      {/*
+        Rendered only where a screen actually has filters — an empty bar is a line of
+        furniture saying nothing. The controls scroll on their own below `sm` rather
+        than wrapping into a four-line stack that pushes the report off the screen.
+      */}
+      {controls && (
+        <div className="filter-bar">
           <div className="-mx-3 min-w-0 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
             {controls}
           </div>
-
-          {/*
-            Printing is what half these screens are for, so it gets a control rather
-            than being left to whoever remembers the keyboard shortcut. The stylesheet
-            does the work; this only opens the dialog.
-          */}
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="btn-icon mb-0.5 shrink-0"
-            title={t('reports.print')}
-            aria-label={t('reports.print')}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="size-[18px]"
-              aria-hidden="true"
-            >
-              <path d="M6 9V3h12v6" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-              <path d="M6 14h12v7H6z" />
-            </svg>
-          </button>
         </div>
-      </header>
+      )}
 
       {/*
         A refetch of a report that is already on screen shows a hairline rather than
