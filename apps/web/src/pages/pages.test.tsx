@@ -57,6 +57,7 @@ vi.mock('@/lib/grid', () => ({
   resetGridLayout: vi.fn(async () => undefined),
 }));
 
+const { ChangePasswordPage } = await import('@/pages/ChangePasswordPage');
 const { TrialBalancePage } = await import('@/pages/TrialBalancePage');
 const { VoucherEntryPage } = await import('@/pages/VoucherEntryPage');
 const { ProfitAndLossPage } = await import('@/pages/ProfitAndLossPage');
@@ -93,6 +94,7 @@ const {
 
 /** Every screen, and the heading it must show once its figures land. */
 const screens: readonly (readonly [string, React.ReactNode, RegExp])[] = [
+  ['change password', <ChangePasswordPage />, /password/i],
   ['trial balance', <TrialBalancePage />, /trial balance/i],
   ['voucher entry', <VoucherEntryPage />, /voucher entry/i],
   ['profit and loss', <ProfitAndLossPage />, /profit and loss/i],
@@ -169,7 +171,16 @@ describe('every screen', () => {
       // rather than failing on a missing heading and sending you looking in the
       // wrong place.
       expect(crashed(container)).toBeNull();
-      expect(screen.getAllByRole('heading')[0]?.textContent ?? '').toMatch(heading);
+
+      // Any heading, not the first. Most screens lead with their title, but the
+      // change-password screen leads with whose password it is and carries its own
+      // title beneath — an assumption about heading order is a claim about page
+      // structure, not about whether the screen rendered.
+      const headings = screen
+        .getAllByRole('heading')
+        .map((node) => node.textContent ?? '');
+
+      expect(headings.some((text) => heading.test(text))).toBe(true);
     },
   );
 });
@@ -177,8 +188,9 @@ describe('every screen', () => {
 describe('the count', () => {
   it('covers every route the router serves', () => {
     // Guards against a screen being added to the application and quietly never
-    // being rendered by anything. The two book variants share one component, and
-    // the login page is not reachable from the signed-in router.
-    expect(screens.length).toBe(33);
+    // being rendered by anything — which is exactly what happened when the
+    // change-password screen landed. The two book variants share one component,
+    // and the login page is not reachable from the signed-in router.
+    expect(screens.length).toBe(34);
   });
 });

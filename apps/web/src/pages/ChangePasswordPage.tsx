@@ -54,9 +54,7 @@ export function ChangePasswordPage(): React.JSX.Element {
       navigate('/login?passwordChanged=1', { replace: true });
     } catch (cause) {
       setError(
-        cause instanceof ApiError
-          ? cause.detail
-          : t('changePassword.unreachable'),
+        cause instanceof ApiError ? cause.detail : t('changePassword.unreachable'),
       );
     } finally {
       setBusy(false);
@@ -71,10 +69,7 @@ export function ChangePasswordPage(): React.JSX.Element {
       <div className="card animate-rise overflow-hidden shadow-float">
         {/* Decorative gradient band across the top of the card. Purely visual,
             so hidden from assistive tech. */}
-        <div
-          aria-hidden="true"
-          className="relative h-28 sm:h-32"
-        >
+        <div aria-hidden="true" className="relative h-28 sm:h-32">
           <div className="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-500 to-sky-400" />
           {/* Subtle noise texture overlay for depth */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.12),transparent_70%)]" />
@@ -91,9 +86,7 @@ export function ChangePasswordPage(): React.JSX.Element {
               <h1 className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">
                 {displayName ?? t('profile.anonymous')}
               </h1>
-              <p className="text-sm text-ink-muted">
-                {t('profile.subtitle')}
-              </p>
+              <p className="text-sm text-ink-muted">{t('profile.subtitle')}</p>
             </div>
           </div>
 
@@ -114,7 +107,10 @@ export function ChangePasswordPage(): React.JSX.Element {
       {/* ----------------------------------------------------------------- *
        *  Change password form                                               *
        * ----------------------------------------------------------------- */}
-      <div className="card animate-rise p-5 shadow-card sm:p-6" style={{ animationDelay: '60ms' }}>
+      <div
+        className="card animate-rise p-5 shadow-card sm:p-6"
+        style={{ animationDelay: '60ms' }}
+      >
         <div className="mb-5">
           <div className="flex items-center gap-2.5">
             <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
@@ -124,9 +120,7 @@ export function ChangePasswordPage(): React.JSX.Element {
               <h2 className="text-base font-semibold tracking-tight text-ink">
                 {t('changePassword.title')}
               </h2>
-              <p className="text-sm text-ink-muted">
-                {t('changePassword.subtitle')}
-              </p>
+              <p className="text-sm text-ink-muted">{t('changePassword.subtitle')}</p>
             </div>
           </div>
         </div>

@@ -183,55 +183,64 @@ export function App(): React.JSX.Element {
           )}
           {!mustChangePassword && (
             <>
-          <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
-          <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
-          <Route
-            path="/accounting/account-group-summary"
-            element={<AccountGroupSummaryPage />}
-          />
-          <Route path="/accounting/profit-and-loss" element={<ProfitAndLossPage />} />
-          <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
-          <Route path="/accounting/day-book" element={<DayBookPage />} />
-          <Route path="/accounting/voucher-report" element={<VoucherReportPage />} />
-          <Route
-            path="/accounting/transaction-summary"
-            element={<TransactionSummaryPage />}
-          />
-          <Route
-            path="/accounting/cash-book"
-            element={<CashBankBookPage book="cash-book" />}
-          />
-          <Route
-            path="/accounting/bank-book"
-            element={<CashBankBookPage book="bank-book" />}
-          />
-          <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
-          <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
-          <Route path="/settings/menu" element={<MenuAdministrationPage />} />
-          <Route path="/accounting/ledgers" element={<LedgersPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/sales/invoices" element={<SalesPage />} />
-          <Route path="/sales/customers" element={<CustomersPage />} />
-          <Route path="/purchase/invoices" element={<PurchasePage />} />
-          <Route path="/purchase/suppliers" element={<SuppliersPage />} />
-          <Route path="/inventory/products" element={<ProductsPage />} />
-          <Route path="/inventory/stock" element={<StockOperationsPage />} />
-          <Route path="/inventory/valuation" element={<StockValuationPage />} />
-          <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
-          <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
-          <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
-          <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
-          <Route path="/inventory/units" element={<UnitsPage />} />
-          <Route path="/inventory/categories" element={<CategoriesPage />} />
-          <Route path="/inventory/brands" element={<BrandsPage />} />
-          <Route path="/inventory/warehouses" element={<WarehousesPage />} />
-          <Route
-            path="/accounting/post-dated-cheques"
-            element={<PostDatedChequesPage />}
-          />
-          <Route path="/accounting/cheque-calendar" element={<ChequeCalendarPage />} />
-          <Route path="/accounting/cheque-register" element={<ChequeRegisterPage />} />
-          <Route path="*" element={<Navigate to="/accounting/trial-balance" replace />} />
+              <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
+              <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
+              <Route
+                path="/accounting/account-group-summary"
+                element={<AccountGroupSummaryPage />}
+              />
+              <Route path="/accounting/profit-and-loss" element={<ProfitAndLossPage />} />
+              <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
+              <Route path="/accounting/day-book" element={<DayBookPage />} />
+              <Route path="/accounting/voucher-report" element={<VoucherReportPage />} />
+              <Route
+                path="/accounting/transaction-summary"
+                element={<TransactionSummaryPage />}
+              />
+              <Route
+                path="/accounting/cash-book"
+                element={<CashBankBookPage book="cash-book" />}
+              />
+              <Route
+                path="/accounting/bank-book"
+                element={<CashBankBookPage book="bank-book" />}
+              />
+              <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
+              <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
+              <Route path="/settings/menu" element={<MenuAdministrationPage />} />
+              <Route path="/accounting/ledgers" element={<LedgersPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/sales/invoices" element={<SalesPage />} />
+              <Route path="/sales/customers" element={<CustomersPage />} />
+              <Route path="/purchase/invoices" element={<PurchasePage />} />
+              <Route path="/purchase/suppliers" element={<SuppliersPage />} />
+              <Route path="/inventory/products" element={<ProductsPage />} />
+              <Route path="/inventory/stock" element={<StockOperationsPage />} />
+              <Route path="/inventory/valuation" element={<StockValuationPage />} />
+              <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
+              <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
+              <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
+              <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
+              <Route path="/inventory/units" element={<UnitsPage />} />
+              <Route path="/inventory/categories" element={<CategoriesPage />} />
+              <Route path="/inventory/brands" element={<BrandsPage />} />
+              <Route path="/inventory/warehouses" element={<WarehousesPage />} />
+              <Route
+                path="/accounting/post-dated-cheques"
+                element={<PostDatedChequesPage />}
+              />
+              <Route
+                path="/accounting/cheque-calendar"
+                element={<ChequeCalendarPage />}
+              />
+              <Route
+                path="/accounting/cheque-register"
+                element={<ChequeRegisterPage />}
+              />
+              <Route
+                path="*"
+                element={<Navigate to="/accounting/trial-balance" replace />}
+              />
             </>
           )}
         </Route>
