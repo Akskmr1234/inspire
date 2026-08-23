@@ -80,6 +80,19 @@ To override it — pointing at a database the platform did not provision, say �
 `ConnectionStrings__Postgres` to a full keyword-form string. An explicit value always
 wins.
 
+> **If your platform injects `ConnectionStrings__Postgres` for you**, check what it
+> put there. Some inject the same `postgres://` URI they use for `DATABASE_URL`.
+> That is not keyword form, and it used to defeat the derivation above: the variable
+> looked like a deliberate override, suppressed the `PG*` fallback that would have
+> worked, and handed Npgsql a string it cannot parse. The application now translates
+> a URI found under that name rather than obeying it, and leaves anything already in
+> keyword form alone.
+>
+> The startup log names what it is dialling — `Connecting to host:port/database as
+user`, password omitted — before the first attempt, and reports the actual failure
+> on the first retry and every fifth after it. If a deployment cannot reach its
+> database, that line says why.
+
 ### Optional
 
 | Variable                                  | Default            | Notes                                                                                                                                                                                                                 |
