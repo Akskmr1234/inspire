@@ -167,7 +167,8 @@ public static partial class DatabaseInitializer
         // be passed to it (CA1873).
         if (logger.IsEnabled(LogLevel.Information))
         {
-            LogDialling(logger, DescribeTarget(context.Database.GetConnectionString()));
+            string target = DescribeTarget(context.Database.GetConnectionString());
+            LogDialling(logger, target);
         }
 
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
