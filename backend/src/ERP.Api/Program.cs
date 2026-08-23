@@ -290,10 +290,13 @@ public partial class Program
             documentation = "/swagger",
         })).AllowAnonymous();
 
-        app.MapHealthChecks("/health/live", new HealthCheckOptions
+        HealthCheckOptions livenessOptions = new()
         {
             Predicate = _ => false,
-        });
+        };
+
+        app.MapHealthChecks("/health", livenessOptions);
+        app.MapHealthChecks("/health/live", livenessOptions);
 
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
