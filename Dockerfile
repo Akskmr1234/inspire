@@ -90,6 +90,6 @@ EXPOSE 8080
 # is not reported unhealthy merely because PostgreSQL is briefly unreachable.
 # Shell form, so PORT is expanded at runtime rather than baked in at build.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD wget -qO- "http://localhost:${PORT:-8080}/health/live" || exit 1
+    CMD wget -qO- "http://127.0.0.1:${PORT:-8080}/health/live" || exit 1
 
 ENTRYPOINT ["dotnet", "ERP.Api.dll"]
