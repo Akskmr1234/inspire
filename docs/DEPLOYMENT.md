@@ -12,10 +12,10 @@ them against a PostgreSQL container with **only** the variables listed below.
 
 ## Two services
 
-| Service | Root directory | Dockerfile | Container port |
-|---|---|---|---|
-| API | `.` (repository root) | `Dockerfile` | 8080 |
-| Web | `apps/web` | `apps/web/Dockerfile` | 80 |
+| Service | Root directory        | Dockerfile            | Container port |
+| ------- | --------------------- | --------------------- | -------------- |
+| API     | `.` (repository root) | `Dockerfile`          | 8080           |
+| Web     | `apps/web`            | `apps/web/Dockerfile` | 80             |
 
 > The API's Dockerfile is at the repository root on purpose: the build needs the
 > root `.editorconfig`, which carries analyzer severities the backend compiles
@@ -35,7 +35,7 @@ Doing it in this order avoids a redeploy:
 1. **Deploy the API.** Set the variables in the table below. Note its public URL,
    e.g. `https://api-erp.apps.example.com`.
 2. **Deploy the web client** with `VITE_API_URL` set to that URL.
-   This is a *build-time* variable — see the warning below.
+   This is a _build-time_ variable — see the warning below.
 3. **Set the API's `Cors__AllowedOrigins`** to the web client's public URL and
    redeploy the API.
 
@@ -48,9 +48,9 @@ order above resolves it with exactly one redeploy of the API.
 
 ### Required
 
-| Variable | Value |
-|---|---|
-| `Jwt__SigningKey` | 32+ characters. Generate one: `openssl rand -base64 48` |
+| Variable               | Value                                                                   |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `Jwt__SigningKey`      | 32+ characters. Generate one: `openssl rand -base64 48`                 |
 | `Cors__AllowedOrigins` | The web client's public origin, e.g. `https://web-erp.apps.example.com` |
 
 Startup **fails loudly** on a missing or short signing key rather than starting and
@@ -64,11 +64,11 @@ itself perfectly healthy.
 
 ### Supplied by the platform — set nothing
 
-| Variable | Used for |
-|---|---|
-| `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` | The database connection |
-| `DATABASE_URL` | Fallback if the discrete variables are absent |
-| `PORT` | The address the server binds |
+| Variable                                                 | Used for                                      |
+| -------------------------------------------------------- | --------------------------------------------- |
+| `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` | The database connection                       |
+| `DATABASE_URL`                                           | Fallback if the discrete variables are absent |
+| `PORT`                                                   | The address the server binds                  |
 
 **You do not need to set a connection string.** The application builds one in the
 keyword form Npgsql requires — `Host=…;Port=…;Database=…;Username=…;Password=…` —
@@ -80,22 +80,35 @@ To override it — pointing at a database the platform did not provision, say �
 `ConnectionStrings__Postgres` to a full keyword-form string. An explicit value always
 wins.
 
+> **If your platform injects `ConnectionStrings__Postgres` for you**, check what it
+> put there. Some inject the same `postgres://` URI they use for `DATABASE_URL`.
+> That is not keyword form, and it used to defeat the derivation above: the variable
+> looked like a deliberate override, suppressed the `PG*` fallback that would have
+> worked, and handed Npgsql a string it cannot parse. The application now translates
+> a URI found under that name rather than obeying it, and leaves anything already in
+> keyword form alone.
+>
+> The startup log names what it is dialling — `Connecting to host:port/database as
+user`, password omitted — before the first attempt, and reports the actual failure
+> on the first retry and every fifth after it. If a deployment cannot reach its
+> database, that line says why.
+
 ### Optional
 
-| Variable | Default | Notes |
-|---|---|---|
-| `Erp__Database__ApplyMigrationsOnStartup` | `true` | Migrations run on boot, so a fresh database is usable immediately. Set `false` when migrations are a separate release step, or when running several replicas — they would otherwise race to apply the same migration. |
-| `Erp__Seed__Enabled` | `false` | Creates the first tenant, firm, chart of accounts and administrator. Turn it **on for the first deploy only**, then off. |
-| `Erp__Seed__AdministratorPassword` | — | Required when seeding. Use a real password; you sign in with it. |
-| `Erp__Hosting__HttpsRedirection` | off behind a proxy | Off automatically wherever the platform assigns `PORT`, because TLS is terminated in front of the container. Redirecting there would send the health probe to a URL the container does not serve. |
-| `ASPNETCORE_ENVIRONMENT` | `Production` | Setting `Development` also exposes Swagger at `/swagger`. |
+| Variable                                  | Default            | Notes                                                                                                                                                                                                                 |
+| ----------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Erp__Database__ApplyMigrationsOnStartup` | `true`             | Migrations run on boot, so a fresh database is usable immediately. Set `false` when migrations are a separate release step, or when running several replicas — they would otherwise race to apply the same migration. |
+| `Erp__Seed__Enabled`                      | `false`            | Creates the first tenant, firm, chart of accounts and administrator. Turn it **on for the first deploy only**, then off.                                                                                              |
+| `Erp__Seed__AdministratorPassword`        | —                  | Required when seeding. Use a real password; you sign in with it.                                                                                                                                                      |
+| `Erp__Hosting__HttpsRedirection`          | off behind a proxy | Off automatically wherever the platform assigns `PORT`, because TLS is terminated in front of the container. Redirecting there would send the health probe to a URL the container does not serve.                     |
+| `ASPNETCORE_ENVIRONMENT`                  | `Production`       | Setting `Development` also exposes Swagger at `/swagger`.                                                                                                                                                             |
 
 ---
 
 ## Web variables
 
-| Variable | When it applies |
-|---|---|
+| Variable       | When it applies     |
+| -------------- | ------------------- |
 | `VITE_API_URL` | **Build time only** |
 
 Vite inlines `VITE_*` variables into the JavaScript bundle when the image is built.
@@ -119,11 +132,11 @@ only as an application that loads and then does nothing.
 
 ## Health checks
 
-| Path | Checks | Use |
-|---|---|---|
-| `/` | Nothing | The platform's default probe. Returns 200 with a small JSON body. |
-| `/health/live` | Nothing | Liveness. Deliberately dependency-free, so a brief database outage does not cause a restart. |
-| `/health/ready` | Dependencies | Readiness. Gate traffic on this. |
+| Path            | Checks       | Use                                                                                          |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `/`             | Nothing      | The platform's default probe. Returns 200 with a small JSON body.                            |
+| `/health/live`  | Nothing      | Liveness. Deliberately dependency-free, so a brief database outage does not cause a restart. |
+| `/health/ready` | Dependencies | Readiness. Gate traffic on this.                                                             |
 
 The web service answers `/` with the application shell.
 

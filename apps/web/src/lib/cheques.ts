@@ -31,13 +31,19 @@ export const STATUS_NAME: Record<ChequeStatus, string> = {
 };
 
 /** The directions a filter offers, in wire order. */
-export const CHEQUE_DIRECTIONS: readonly { readonly value: ChequeDirection; readonly name: string }[] = [
+export const CHEQUE_DIRECTIONS: readonly {
+  readonly value: ChequeDirection;
+  readonly name: string;
+}[] = [
   { value: 1, name: 'Received' },
   { value: 2, name: 'Issued' },
 ];
 
 /** The statuses a filter offers, in lifecycle order. */
-export const CHEQUE_STATUSES: readonly { readonly value: ChequeStatus; readonly name: string }[] = [
+export const CHEQUE_STATUSES: readonly {
+  readonly value: ChequeStatus;
+  readonly name: string;
+}[] = [
   { value: 1, name: 'Pending' },
   { value: 2, name: 'Deposited' },
   { value: 3, name: 'Cleared' },

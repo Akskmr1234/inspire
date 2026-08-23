@@ -159,7 +159,8 @@ export async function listSalesInvoices(
 
   if (filter.from) query.set('from', filter.from);
   if (filter.to) query.set('to', filter.to);
-  if (filter.kind !== '' && filter.kind !== undefined) query.set('kind', String(filter.kind));
+  if (filter.kind !== '' && filter.kind !== undefined)
+    query.set('kind', String(filter.kind));
   if (filter.status !== '' && filter.status !== undefined) {
     query.set('status', String(filter.status));
   }

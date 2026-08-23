@@ -1,8 +1,10 @@
+using System.Globalization;
 using ERP.SharedKernel.Results;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace ERP.Infrastructure.Persistence.Seeding;
 
@@ -155,6 +157,12 @@ public static partial class DatabaseInitializer
     {
         ErpDbContext context = services.GetRequiredService<ErpDbContext>();
 
+        // Said once, before the first attempt. Thirty lines of "waiting" answer the
+        // question "is it up" and never the question that actually matters, which is
+        // "what is it dialling". The password is stripped; everything else is what an
+        // operator needs to compare against the database the platform provisioned.
+        LogDialling(logger, DescribeTarget(context.Database.GetConnectionString()));
+
         DateTimeOffset deadline = DateTimeOffset.UtcNow + timeout;
         int attempt = 0;
         Exception? lastFailure = null;
@@ -165,15 +173,22 @@ public static partial class DatabaseInitializer
 
             try
             {
-                if (await context.Database.CanConnectAsync(cancellationToken))
-                {
-                    if (attempt > 1)
-                    {
-                        LogDatabaseReady(logger, attempt);
-                    }
+                // Opened directly rather than through CanConnectAsync, which catches
+                // the provider's exception and returns false. That leaves the loop
+                // with nothing to report: the reason is discarded at the point it is
+                // known, and both the retry lines and the final message are reduced
+                // to guessing. A bad host, a refused password and a connection string
+                // Npgsql cannot even parse are indistinguishable — and the first
+                // deployment failure this code met was exactly that.
+                await context.Database.OpenConnectionAsync(cancellationToken);
+                await context.Database.CloseConnectionAsync();
 
-                    return;
+                if (attempt > 1)
+                {
+                    LogDatabaseReady(logger, attempt);
                 }
+
+                return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -185,7 +200,21 @@ public static partial class DatabaseInitializer
                 lastFailure = ex;
             }
 
-            LogWaitingForDatabase(logger, attempt);
+            // The reason travels with the first attempt and then every fifth, so a
+            // log that is read from the top says what is wrong immediately and one
+            // read from the bottom does too, without thirty repetitions in between.
+            if (attempt == 1 || attempt % 5 == 0)
+            {
+                LogWaitingForDatabaseWithReason(
+                    logger,
+                    attempt,
+                    lastFailure?.GetType().Name ?? "the server reported no error",
+                    lastFailure?.Message ?? "the connection simply did not open");
+            }
+            else
+            {
+                LogWaitingForDatabase(logger, attempt);
+            }
 
             await Task.Delay(RetryDelayMilliseconds, cancellationToken);
         }
@@ -195,9 +224,64 @@ public static partial class DatabaseInitializer
             $"seconds. Check that the server is running and that the connection string " +
             $"names the right host - on a managed platform it is built from PGHOST, " +
             $"PGPORT, PGDATABASE, PGUSER and PGPASSWORD unless ConnectionStrings__Postgres " +
-            $"is set explicitly.",
+            $"is set explicitly. It was dialling " +
+            $"{DescribeTarget(context.Database.GetConnectionString())}.",
             lastFailure);
     }
+
+    /// <summary>Describes a connection string without disclosing its password.</summary>
+    /// <param name="connectionString">The connection string in use, if any.</param>
+    /// <returns>The host, port and database, or a note that none was configured.</returns>
+    /// <remarks>
+    /// Deliberately tolerant. A connection string Npgsql cannot parse is one of the
+    /// failures this is meant to explain, so an unparseable value is reported as such
+    /// rather than throwing and replacing the diagnostic with a stack trace. The first
+    /// token of a URI-form string is echoed — that is enough to recognise
+    /// <c>postgres://…</c>, which Npgsql does not accept, without printing credentials.
+    /// </remarks>
+    private static string DescribeTarget(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return "no connection string at all";
+        }
+
+        try
+        {
+            NpgsqlConnectionStringBuilder parsed = new(connectionString);
+
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{parsed.Host}:{parsed.Port}/{parsed.Database} as {parsed.Username}");
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            int separator = connectionString.IndexOf(':', StringComparison.Ordinal);
+            string scheme = separator > 0 ? connectionString[..separator] : "unknown";
+
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"a connection string Npgsql cannot parse (it begins '{scheme}:'). " +
+                $"Npgsql wants keyword form - semicolon-separated Host, Port, " +
+                $"Database, Username and the credential - not a URI");
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 1005,
+        Level = LogLevel.Information,
+        Message = "Connecting to {Target}")]
+    private static partial void LogDialling(ILogger logger, string target);
+
+    [LoggerMessage(
+        EventId = 1006,
+        Level = LogLevel.Warning,
+        Message = "Waiting for the database (attempt {Attempt}): {Failure} - {Reason}")]
+    private static partial void LogWaitingForDatabaseWithReason(
+        ILogger logger,
+        int attempt,
+        string failure,
+        string reason);
 
     [LoggerMessage(
         EventId = 1003,

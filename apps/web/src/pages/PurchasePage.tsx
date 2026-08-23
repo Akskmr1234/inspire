@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { ReportFrame } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
@@ -120,24 +121,27 @@ export function PurchasePage(): React.JSX.Element {
 
   const run = (action: () => Promise<string | null>): void => mutation.mutate(action);
 
-  const narrow = <T,>(set: (value: T) => void) => (value: T): void => {
-    set(value);
-    setPage(1);
-  };
+  const narrow =
+    <T,>(set: (value: T) => void) =>
+    (value: T): void => {
+      set(value);
+      setPage(1);
+    };
 
   const columns: readonly GridColumn<PurchaseInvoiceSummary>[] = [
     { key: 'number', header: t('purchase.number'), value: (row) => row.number },
     {
       key: 'kind',
       header: t('purchase.kind'),
-      value: (row) => (isPurchaseReturn(row.kind) ? t('purchase.return') : t('purchase.invoice')),
+      value: (row) =>
+        isPurchaseReturn(row.kind) ? t('purchase.return') : t('purchase.invoice'),
       render: (row) => (
         <span
           className={clsx(
             'rounded px-2 py-0.5 text-xs',
             isPurchaseReturn(row.kind)
-              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+              ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+              : 'bg-surface-3 text-ink-muted',
           )}
         >
           {isPurchaseReturn(row.kind) ? t('purchase.return') : t('purchase.invoice')}
@@ -153,10 +157,25 @@ export function PurchasePage(): React.JSX.Element {
       // document is looking the entry up by.
       value: (row) => row.supplierInvoiceNumber ?? '',
     },
-    { key: 'lines', header: t('purchase.lines'), value: (row) => row.lineCount, numeric: true },
-    { key: 'taxable', header: t('purchase.taxable'), value: (row) => row.taxable, numeric: true },
+    {
+      key: 'lines',
+      header: t('purchase.lines'),
+      value: (row) => row.lineCount,
+      numeric: true,
+    },
+    {
+      key: 'taxable',
+      header: t('purchase.taxable'),
+      value: (row) => row.taxable,
+      numeric: true,
+    },
     { key: 'tax', header: t('purchase.tax'), value: (row) => row.tax, numeric: true },
-    { key: 'total', header: t('purchase.total'), value: (row) => row.total, numeric: true },
+    {
+      key: 'total',
+      header: t('purchase.total'),
+      value: (row) => row.total,
+      numeric: true,
+    },
     {
       key: 'status',
       header: t('purchase.status'),
@@ -170,7 +189,7 @@ export function PurchasePage(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setViewing(row.purchaseInvoiceId)}
-          className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          className="rounded-md border border-line px-2 py-0.5 text-xs font-medium text-ink-muted transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
         >
           {t('purchase.open')}
         </button>
@@ -179,7 +198,7 @@ export function PurchasePage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="toolbar">
       <Field label={t('purchase.from')}>
         <DateInput value={from} onChange={narrow(setFrom)} />
       </Field>
@@ -219,14 +238,14 @@ export function PurchasePage(): React.JSX.Element {
           value={search}
           onChange={(event) => narrow(setSearch)(event.target.value)}
           placeholder={t('purchase.searchHint')}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </Field>
 
       <button
         type="button"
         onClick={() => setEntering(true)}
-        className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white dark:bg-slate-100 dark:text-slate-900"
+        className="btn-primary btn-sm self-end py-1.5"
       >
         {t('purchase.new')}
       </button>
@@ -238,17 +257,9 @@ export function PurchasePage(): React.JSX.Element {
       <ReportFrame title={t('nav.purchase')} controls={controls} query={query}>
         {(result) => (
           <div className="space-y-3">
-            {error && (
-              <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-300">
-                {error}
-              </p>
-            )}
+            {error && <p className="alert-error">{error}</p>}
 
-            {notice && (
-              <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                {notice}
-              </p>
-            )}
+            {notice && <p className="alert-success">{notice}</p>}
 
             <DataGrid
               gridKey="purchase-invoices"
@@ -413,11 +424,14 @@ function EntryDialog({
         warehouseId,
         lines: payload,
         kind,
-        returnsInvoiceId: isPurchaseReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
+        returnsInvoiceId:
+          isPurchaseReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
         supplierInvoiceNumber: supplierInvoiceNumber.trim() || null,
         // Only sent with the number it belongs to: a date on its own is a fact about a
         // document nobody can identify, and the server refuses it.
-        supplierInvoiceDate: supplierInvoiceNumber.trim() ? supplierInvoiceDate || null : null,
+        supplierInvoiceDate: supplierInvoiceNumber.trim()
+          ? supplierInvoiceDate || null
+          : null,
       });
 
       onSaved(t('purchase.savedNotice', { number: header.number }));
@@ -487,7 +501,7 @@ function EntryDialog({
           <input
             value={supplierInvoiceNumber}
             onChange={(event) => setSupplierInvoiceNumber(event.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+            className="field-input-sm"
           />
         </Field>
 
@@ -514,49 +528,51 @@ function EntryDialog({
 
       {/* Said plainly rather than left to be discovered: reclaiming input tax needs the
           supplier's own tax invoice, and the same number twice is refused. */}
-      <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-400">
+      <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
         {t('purchase.supplierInvoiceHint')}
       </p>
 
       {isPurchaseReturn(kind) && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          {t('purchase.returnHint')}
-        </p>
+        <p className="alert-warn text-xs">{t('purchase.returnHint')}</p>
       )}
 
-      <table className="w-full text-sm">
-        <thead className="text-start text-xs text-slate-500">
-          <tr>
-            <th className="px-2 py-1 text-start">{t('purchase.product')}</th>
-            <th className="px-2 py-1 text-end">{t('purchase.quantity')}</th>
-            <th className="px-2 py-1 text-end">{t('purchase.rate')}</th>
-            <th className="px-2 py-1 text-end">{t('purchase.discount')}</th>
-            <th className="px-2 py-1 text-end">{t('purchase.taxPercent')}</th>
-            <th className="px-2 py-1 text-end">{t('purchase.net')}</th>
-            <th />
-          </tr>
-        </thead>
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <table className="w-full min-w-[46rem] text-sm">
+          <thead className="text-start text-xs text-ink-muted">
+            <tr>
+              <th className="px-2 py-1 text-start">{t('purchase.product')}</th>
+              <th className="px-2 py-1 text-end">{t('purchase.quantity')}</th>
+              <th className="px-2 py-1 text-end">{t('purchase.rate')}</th>
+              <th className="px-2 py-1 text-end">{t('purchase.discount')}</th>
+              <th className="px-2 py-1 text-end">{t('purchase.taxPercent')}</th>
+              <th className="px-2 py-1 text-end">{t('purchase.net')}</th>
+              <th />
+            </tr>
+          </thead>
 
-        <tbody>
-          {lines.map((line, index) => (
-            <LineRow
-              key={index}
-              line={line}
-              isReturn={isPurchaseReturn(kind)}
-              products={products.data ?? []}
-              removable={lines.length > 1}
-              onChange={(patch) => change(index, patch)}
-              onRemove={() => setLines((previous) => previous.filter((_, at) => at !== index))}
-            />
-          ))}
-        </tbody>
-      </table>
+          <tbody>
+            {lines.map((line, index) => (
+              <LineRow
+                key={index}
+                line={line}
+                isReturn={isPurchaseReturn(kind)}
+                products={products.data ?? []}
+                removable={lines.length > 1}
+                onChange={(patch) => change(index, patch)}
+                onRemove={() =>
+                  setLines((previous) => previous.filter((_, at) => at !== index))
+                }
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="flex flex-wrap items-center gap-4">
         <button
           type="button"
           onClick={() => setLines((previous) => [...previous, { ...emptyLine }])}
-          className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
+          className="btn-secondary btn-sm"
         >
           {t('purchase.addLine')}
         </button>
@@ -566,16 +582,18 @@ function EntryDialog({
           <strong className="font-mono">{totals.taxable.toFixed(2)}</strong>
         </span>
         <span className="text-sm">
-          {t('purchase.tax')}: <strong className="font-mono">{totals.tax.toFixed(2)}</strong>
+          {t('purchase.tax')}:{' '}
+          <strong className="font-mono">{totals.tax.toFixed(2)}</strong>
         </span>
         <span className="text-base">
-          {t('purchase.total')}: <strong className="font-mono">{totals.total.toFixed(2)}</strong>
+          {t('purchase.total')}:{' '}
+          <strong className="font-mono">{totals.total.toFixed(2)}</strong>
         </span>
       </div>
 
       {/* What the screen adds up is what the lines come to; the server rounds the total
           to the currency and may differ in the last place. */}
-      <p className="text-xs text-slate-500">{t('purchase.totalsHint')}</p>
+      <p className="text-xs text-ink-muted">{t('purchase.totalsHint')}</p>
 
       <div className="flex justify-end gap-2">
         <DialogButton onClick={onClose}>{t('purchase.close')}</DialogButton>
@@ -622,7 +640,7 @@ function LineRow({
 
   return (
     <>
-      <tr className="border-t border-slate-100 dark:border-slate-900">
+      <tr className="border-t border-line">
         <td className="px-2 py-1">
           <Select
             value={line.productId}
@@ -645,9 +663,15 @@ function LineRow({
             ]}
           />
         </td>
-        <NumberCell value={line.quantity} onChange={(value) => onChange({ quantity: value })} />
+        <NumberCell
+          value={line.quantity}
+          onChange={(value) => onChange({ quantity: value })}
+        />
         <NumberCell value={line.rate} onChange={(value) => onChange({ rate: value })} />
-        <NumberCell value={line.discount} onChange={(value) => onChange({ discount: value })} />
+        <NumberCell
+          value={line.discount}
+          onChange={(value) => onChange({ discount: value })}
+        />
         <NumberCell
           value={line.taxPercentage}
           onChange={(value) => onChange({ taxPercentage: value })}
@@ -660,7 +684,7 @@ function LineRow({
             <button
               type="button"
               onClick={onRemove}
-              className="text-xs text-rose-600 hover:underline"
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
             >
               {t('purchase.removeLine')}
             </button>
@@ -669,7 +693,7 @@ function LineRow({
       </tr>
 
       {(needsBatch || needsSerials) && (
-        <tr className="border-t border-dashed border-slate-100 dark:border-slate-900">
+        <tr className="border-t border-dashed border-line">
           <td colSpan={7} className="px-2 pb-2">
             <div className="flex flex-wrap items-start gap-4">
               {needsBatch && (
@@ -681,7 +705,7 @@ function LineRow({
                       placeholder={
                         isReturn ? t('purchase.batchExisting') : t('purchase.batchHint')
                       }
-                      className="w-40 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                      className="field-input-sm w-full sm:w-40"
                     />
                   </Field>
 
@@ -711,7 +735,7 @@ function LineRow({
                     onChange={(event) => onChange({ serialNumbers: event.target.value })}
                     rows={2}
                     placeholder={t('purchase.serialsHint')}
-                    className="w-72 rounded-md border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+                    className="field-input-sm w-full font-mono text-xs sm:w-72"
                   />
                 </Field>
               )}
@@ -749,13 +773,28 @@ function DocumentDialog({
 
   return (
     <Dialog title={document?.header.number ?? t('purchase.document')} onClose={onClose}>
-      {query.isLoading && <p className="text-sm text-slate-500">{t('common.loading')}</p>}
+      {query.isLoading && (
+        <div className="space-y-3" aria-busy="true">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={index}>
+                <span className="skeleton block h-2 w-16 rounded" />
+                <span className="skeleton mt-1.5 block h-4 w-24 rounded" />
+              </div>
+            ))}
+          </div>
+          <span className="skeleton block h-24 w-full rounded-lg" />
+        </div>
+      )}
 
       {document && (
         <>
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('purchase.date')} value={document.date} />
-            <Detail label={t('purchase.status')} value={statusLabel(document.header.status, t)} />
+            <Detail
+              label={t('purchase.status')}
+              value={statusLabel(document.header.status, t)}
+            />
             <Detail label={t('purchase.currency')} value={document.currency} />
             <Detail
               label={t('purchase.supplierInvoice')}
@@ -765,43 +804,56 @@ function DocumentDialog({
               label={t('purchase.supplierInvoiceDate')}
               value={document.supplierInvoiceDate ?? '—'}
             />
-            <Detail label={t('purchase.taxable')} value={document.header.taxable.toFixed(2)} />
+            <Detail
+              label={t('purchase.taxable')}
+              value={document.header.taxable.toFixed(2)}
+            />
             <Detail label={t('purchase.tax')} value={document.header.tax.toFixed(2)} />
-            <Detail label={t('purchase.total')} value={document.header.total.toFixed(2)} />
+            <Detail
+              label={t('purchase.total')}
+              value={document.header.total.toFixed(2)}
+            />
           </div>
 
-          <table className="w-full text-sm">
-            <thead className="text-xs text-slate-500">
-              <tr>
-                <th className="px-2 py-1 text-start">#</th>
-                <th className="px-2 py-1 text-start">{t('purchase.batch')}</th>
-                <th className="px-2 py-1 text-end">{t('purchase.quantity')}</th>
-                <th className="px-2 py-1 text-end">{t('purchase.rate')}</th>
-                <th className="px-2 py-1 text-end">{t('purchase.taxable')}</th>
-                <th className="px-2 py-1 text-end">{t('purchase.tax')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {document.lines.map((line) => (
-                <tr
-                  key={line.lineNumber}
-                  className="border-t border-slate-100 dark:border-slate-900"
-                >
-                  <td className="px-2 py-1">{line.lineNumber}</td>
-                  <td className="px-2 py-1 font-mono text-xs">{line.batchNumber ?? '—'}</td>
-                  <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                  <td className="px-2 py-1 text-end font-mono">{line.rate.toFixed(2)}</td>
-                  <td className="px-2 py-1 text-end font-mono">{line.taxable.toFixed(2)}</td>
-                  <td className="px-2 py-1 text-end font-mono">{line.tax.toFixed(2)}</td>
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead className="text-xs text-ink-muted">
+                <tr>
+                  <th className="px-2 py-1 text-start">#</th>
+                  <th className="px-2 py-1 text-start">{t('purchase.batch')}</th>
+                  <th className="px-2 py-1 text-end">{t('purchase.quantity')}</th>
+                  <th className="px-2 py-1 text-end">{t('purchase.rate')}</th>
+                  <th className="px-2 py-1 text-end">{t('purchase.taxable')}</th>
+                  <th className="px-2 py-1 text-end">{t('purchase.tax')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {document.lines.map((line) => (
+                  <tr key={line.lineNumber} className="border-t border-line">
+                    <td className="px-2 py-1">{line.lineNumber}</td>
+                    <td className="px-2 py-1 font-mono text-xs">
+                      {line.batchNumber ?? '—'}
+                    </td>
+                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
+                    <td className="px-2 py-1 text-end font-mono">
+                      {line.rate.toFixed(2)}
+                    </td>
+                    <td className="px-2 py-1 text-end font-mono">
+                      {line.taxable.toFixed(2)}
+                    </td>
+                    <td className="px-2 py-1 text-end font-mono">
+                      {line.tax.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {/* What posting produced. A purchase leaves two documents on purpose, so the
               receipt is named rather than left for somebody to find in the stock ledger. */}
           {document.stockDocumentId && (
-            <p className="text-xs text-slate-500">{t('purchase.postedProduced')}</p>
+            <p className="text-xs text-ink-muted">{t('purchase.postedProduced')}</p>
           )}
 
           {document.header.status === PurchaseInvoiceStatus.draft && (
@@ -818,7 +870,7 @@ function DocumentDialog({
                 <input
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  className="field-input-sm"
                 />
               </Field>
               <DialogButton
@@ -855,8 +907,8 @@ function Detail({
 }): React.JSX.Element {
   return (
     <div>
-      <span className="text-xs text-slate-500">{label}</span>
-      <div className="font-mono">{value}</div>
+      <span className="text-xs text-ink-muted">{label}</span>
+      <div className="font-mono tabular-nums text-ink">{value}</div>
     </div>
   );
 }
@@ -869,7 +921,7 @@ function Field({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-500">
+    <label className="flex min-w-0 flex-col gap-1 text-xs text-ink-muted">
       {label}
       {children}
     </label>
@@ -888,7 +940,7 @@ function DateInput({
       type="date"
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+      className="field-input-sm"
     />
   );
 }
@@ -906,7 +958,7 @@ function NumberCell({
         type="number"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-24 rounded border border-slate-300 bg-white px-1 py-0.5 text-end text-sm dark:border-slate-700 dark:bg-slate-900"
+        className="field-input-sm w-24 text-end font-mono tabular-nums"
       />
     </td>
   );
@@ -926,10 +978,12 @@ function Select<TValue extends string | number>({
       value={value}
       onChange={(event) =>
         onChange(
-          (typeof value === 'number' ? Number(event.target.value) : event.target.value) as TValue,
+          (typeof value === 'number'
+            ? Number(event.target.value)
+            : event.target.value) as TValue,
         )
       }
-      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+      className="field-input-sm"
     >
       {options.map((option) => (
         <option key={String(option.value)} value={option.value}>
@@ -949,12 +1003,29 @@ function Dialog({
   readonly onClose: () => void;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
+  const panel = useModalBehaviour(onClose);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-slate-900/40 p-6">
-      <div className="flex w-full max-w-5xl flex-col gap-4 rounded-xl bg-white p-5 shadow-xl dark:bg-slate-950">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 backdrop-blur-[2px] sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      {/*
+        `tabIndex={-1}` so the panel itself can take focus while a document is still
+        loading and has no control to give it to yet.
+      */}
+      <div
+        ref={panel as React.RefObject<HTMLDivElement>}
+        tabIndex={-1}
+        className="animate-rise flex min-h-full w-full max-w-5xl flex-col gap-4 border-line bg-surface p-4 shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-5"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="truncate text-lg font-semibold tracking-tight text-ink">
+            {title}
+          </h2>
+          <button type="button" onClick={onClose} className="btn-icon" aria-label="Close">
             ✕
           </button>
         </div>
@@ -981,10 +1052,10 @@ function DialogButton({
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        'rounded-md px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40',
+        'btn px-3 py-1.5 text-sm',
         primary
-          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-          : 'border border-slate-300 dark:border-slate-700',
+          ? 'bg-brand-600 text-white shadow-xs hover:bg-brand-700'
+          : 'border border-line-strong bg-surface text-ink hover:bg-surface-3',
       )}
     >
       {children}

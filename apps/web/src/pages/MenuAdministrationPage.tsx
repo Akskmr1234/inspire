@@ -80,17 +80,14 @@ export function MenuAdministrationPage(): React.JSX.Element {
       {(data) => (
         <div className="space-y-4">
           {error && (
-            <div
-              role="alert"
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-            >
+            <div role="alert" className="alert-error">
               {error}
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-800">
+          <div className="table-wrap">
+            <table className="table">
+              <thead className="bg-surface-3">
                 <tr>
                   <th className="px-3 py-2 text-start font-semibold">
                     {t('menuAdmin.entry')}
@@ -165,33 +162,31 @@ function EntryRows({
 
   return (
     <Fragment>
-      <tr
-        className={clsx(
-          'border-t border-slate-200 dark:border-slate-800',
-          !entry.isEnabled && 'opacity-50',
-        )}
-      >
-        <td className="px-3 py-2" style={{ paddingInlineStart: `${0.75 + depth * 1.25}rem` }}>
+      <tr className={clsx('border-t border-line', !entry.isEnabled && 'opacity-50')}>
+        <td
+          className="px-3 py-2"
+          style={{ paddingInlineStart: `${0.75 + depth * 1.25}rem` }}
+        >
           <span className={clsx('font-medium', !entry.isEnabled && 'line-through')}>
             {entry.label}
           </span>
-          <span className="ms-2 text-xs text-slate-400">{entry.code}</span>
+          <span className="ms-2 text-xs text-ink-subtle">{entry.code}</span>
           {entry.isSystem && (
-            <span className="ms-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800">
+            <span className="ms-2 rounded bg-surface-3 px-1.5 py-0.5 text-xs text-ink-muted">
               {t('menuAdmin.system')}
             </span>
           )}
         </td>
 
-        <td className="px-3 py-2 text-slate-500">
+        <td className="px-3 py-2 text-ink-muted">
           {entry.route ?? (
-            <span className="italic text-slate-400">{t('menuAdmin.heading')}</span>
+            <span className="text-ink-subtle italic">{t('menuAdmin.heading')}</span>
           )}
         </td>
 
-        <td className="px-3 py-2 text-xs text-slate-500">
+        <td className="px-3 py-2 text-xs text-ink-muted">
           {entry.requiredPermission ?? (
-            <span className="italic text-slate-400">{t('menuAdmin.everyone')}</span>
+            <span className="text-ink-subtle italic">{t('menuAdmin.everyone')}</span>
           )}
         </td>
 
@@ -294,10 +289,10 @@ function ActionButton({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'rounded border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40',
+        'rounded-md border px-2 py-1 text-xs font-medium transition duration-150 active:scale-95 disabled:pointer-events-none disabled:opacity-40',
         danger
-          ? 'border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950'
-          : 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'border-red-200 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10'
+          : 'border-line text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
       )}
     >
       {label}
@@ -319,7 +314,7 @@ function AddEntryForm({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -333,34 +328,32 @@ function AddEntryForm({
         setRoute('');
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('menuAdmin.code')}</span>
+      <label className="field">
+        <span className="field-label">{t('menuAdmin.code')}</span>
         <input
           value={code}
           onChange={(event) => setCode(event.target.value)}
           placeholder="custom.my-link"
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('menuAdmin.label')}</span>
+      <label className="field">
+        <span className="field-label">{t('menuAdmin.label')}</span>
         <input
           value={label}
           onChange={(event) => setLabel(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('menuAdmin.routeOptional')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('menuAdmin.routeOptional')}</span>
         <input
           value={route}
           onChange={(event) => setRoute(event.target.value)}
           placeholder="/accounting/day-book"
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 

@@ -34,5 +34,15 @@ export default defineConfig(({ mode }) => {
       // symbols and is worthless.
       sourcemap: true,
     },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: ['./src/test/setup.ts'],
+      // Only the suites, not the pages beside them. Without this the default
+      // include pattern reaches into `dist` after a build and tries to run the
+      // bundle.
+      include: ['src/**/*.test.{ts,tsx}'],
+      css: false,
+    },
   };
 });

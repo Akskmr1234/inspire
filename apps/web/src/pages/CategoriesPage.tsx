@@ -90,7 +90,7 @@ function AddCategory({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -113,7 +113,12 @@ function AddCategory({
       }}
     >
       <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField label={t('masters.name')} value={name} onChange={setName} width="w-44" />
+      <MasterField
+        label={t('masters.name')}
+        value={name}
+        onChange={setName}
+        width="w-44"
+      />
       <MasterField
         label={t('masters.nameArabic')}
         value={nameArabic}
@@ -121,12 +126,12 @@ function AddCategory({
         width="w-44"
       />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('categories.parent')}</span>
+      <label className="field">
+        <span className="field-label">{t('categories.parent')}</span>
         <select
           value={parentId}
           onChange={(event) => setParentId(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('categories.topLevel')}</option>
           {rows
@@ -193,9 +198,7 @@ export function BrandsPage(): React.JSX.Element {
     <MasterFrame<BrandSummary>
       title={t('nav.brands')}
       queryKey="brands"
-      fetchRows={(includeInactive) =>
-        listMaster<BrandSummary>('brands', includeInactive)
-      }
+      fetchRows={(includeInactive) => listMaster<BrandSummary>('brands', includeInactive)}
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy) => <AddBrand run={run} busy={busy} />}
@@ -217,7 +220,7 @@ function AddBrand({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -239,7 +242,12 @@ function AddBrand({
       }}
     >
       <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField label={t('masters.name')} value={name} onChange={setName} width="w-44" />
+      <MasterField
+        label={t('masters.name')}
+        value={name}
+        onChange={setName}
+        width="w-44"
+      />
       <MasterField
         label={t('masters.nameArabic')}
         value={nameArabic}

@@ -42,10 +42,7 @@ export async function fetchGridLayout(gridKey: string): Promise<GridLayoutState 
 }
 
 /** Records an arrangement. */
-export function saveGridLayout(
-  gridKey: string,
-  state: GridLayoutState,
-): Promise<void> {
+export function saveGridLayout(gridKey: string, state: GridLayoutState): Promise<void> {
   return request<void>(`/grid-layouts/${gridKey}`, {
     method: 'PUT',
     body: { state: JSON.stringify(state) },

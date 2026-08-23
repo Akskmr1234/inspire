@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import { DateRangeControls, ReportFrame, moneyAlways } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 /** The cash flow headings, keyed by the wire value the API serialises them as. */
@@ -91,41 +91,14 @@ export function CashFlowPage(): React.JSX.Element {
   });
 
   const controls = (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setRange({ from, to });
-      }}
-    >
-      <div>
-        <label htmlFor="from" className="field-label">
-          {t('reports.from')}
-        </label>
-        <input
-          id="from"
-          type="date"
-          className="field-input"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-      </div>
-      <div>
-        <label htmlFor="to" className="field-label">
-          {t('reports.to')}
-        </label>
-        <input
-          id="to"
-          type="date"
-          className="field-input"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
-      </div>
-      <button type="submit" disabled={query.isFetching} className="btn-primary">
-        {query.isFetching ? t('reports.running') : t('reports.run')}
-      </button>
-    </form>
+    <DateRangeControls
+      from={from}
+      to={to}
+      onFromChange={setFrom}
+      onToChange={setTo}
+      onApply={() => setRange({ from, to })}
+      busy={query.isFetching}
+    />
   );
 
   return (
@@ -134,48 +107,45 @@ export function CashFlowPage(): React.JSX.Element {
         <div className="space-y-4">
           <p
             className={clsx(
-              'inline-block rounded-lg px-3 py-1.5 text-sm font-medium',
+              'inline-flex animate-pop items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
               data.isReconciled
-                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                : 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100',
+                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
+                : 'bg-red-50 text-red-800 dark:bg-red-500/12 dark:text-red-200',
             )}
           >
+            <span
+              aria-hidden="true"
+              className={clsx(
+                'size-2 rounded-full',
+                data.isReconciled ? 'bg-emerald-500' : 'animate-breathe bg-red-500',
+              )}
+            />
             {data.isReconciled
               ? `${t('reports.cashReconciled')} · ${data.currency}`
               : t('reports.cashNotReconciled')}
           </p>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-slate-100 dark:bg-slate-800">
+          <div className="table-wrap table-wrap-tall">
+            <table className="table min-w-[44rem]">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2 text-start font-semibold">
-                    {t('reports.ledger')}
-                  </th>
-                  <th className="px-3 py-2 text-end font-semibold">
-                    {t('reports.cashIn')}
-                  </th>
-                  <th className="px-3 py-2 text-end font-semibold">
-                    {t('reports.cashOut')}
-                  </th>
-                  <th className="px-3 py-2 text-end font-semibold">{t('cheques.net')}</th>
+                  <th className="text-start">{t('reports.ledger')}</th>
+                  <th className="text-end">{t('reports.cashIn')}</th>
+                  <th className="text-end">{t('reports.cashOut')}</th>
+                  <th className="text-end">{t('cheques.net')}</th>
                 </tr>
               </thead>
 
               <tbody>
-                <tr className="border-t border-slate-200 font-medium dark:border-slate-800">
-                  <td className="px-3 py-2" colSpan={3}>
-                    {t('reports.openingBalance')}
-                  </td>
+                <tr className="font-medium">
+                  <td colSpan={3}>{t('reports.openingBalance')}</td>
                   <td className="cell-numeric">{moneyAlways(data.openingBalance)}</td>
                 </tr>
 
                 {data.sections.map((section) => (
                   <Fragment key={section.category}>
-                    <tr className="border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-800/40">
-                      <td className="px-3 py-2">
-                        {t(`cashFlow.${CATEGORY_NAME[section.category]}`)}
-                      </td>
+                    <tr className="bg-surface-2 font-semibold">
+                      <td>{t(`cashFlow.${CATEGORY_NAME[section.category]}`)}</td>
                       <td className="cell-numeric">{moneyAlways(section.inflow)}</td>
                       <td className="cell-numeric">{moneyAlways(section.outflow)}</td>
                       <td className="cell-numeric">
@@ -184,27 +154,25 @@ export function CashFlowPage(): React.JSX.Element {
                     </tr>
 
                     {section.lines.length === 0 ? (
-                      <tr className="border-t border-slate-100 dark:border-slate-900">
-                        <td
-                          className="px-3 py-1 ps-8 text-slate-400 italic"
-                          colSpan={4}
-                        >
+                      <tr>
+                        <td className="py-1 ps-8 text-ink-subtle italic" colSpan={4}>
                           {t('reports.noMovement')}
                         </td>
                       </tr>
                     ) : (
                       section.lines.map((line) => (
-                        <tr
-                          key={line.ledgerId}
-                          className="border-t border-slate-100 dark:border-slate-900"
-                        >
-                          <td className="px-3 py-1 ps-8">
-                            <span className="text-slate-500">{line.ledgerCode}</span>{' '}
+                        <tr key={line.ledgerId}>
+                          <td className="py-1 ps-8">
+                            <span className="text-ink-subtle">{line.ledgerCode}</span>{' '}
                             {line.ledgerName}
                           </td>
-                          <td className="cell-numeric">{moneyAlways(line.inflow)}</td>
-                          <td className="cell-numeric">{moneyAlways(line.outflow)}</td>
-                          <td className="cell-numeric">
+                          <td className="cell-numeric py-1">
+                            {moneyAlways(line.inflow)}
+                          </td>
+                          <td className="cell-numeric py-1">
+                            {moneyAlways(line.outflow)}
+                          </td>
+                          <td className="cell-numeric py-1">
                             <Signed value={line.net} />
                           </td>
                         </tr>
@@ -213,21 +181,17 @@ export function CashFlowPage(): React.JSX.Element {
                   </Fragment>
                 ))}
 
-                <tr className="border-t border-slate-200 font-medium dark:border-slate-800">
-                  <td className="px-3 py-2" colSpan={3}>
-                    {t('reports.netChange')}
-                  </td>
+                <tr className="font-medium">
+                  <td colSpan={3}>{t('reports.netChange')}</td>
                   <td className="cell-numeric">
                     <Signed value={data.netChange} />
                   </td>
                 </tr>
               </tbody>
 
-              <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-semibold dark:border-slate-700 dark:bg-slate-800">
+              <tfoot>
                 <tr>
-                  <td className="px-3 py-2" colSpan={3}>
-                    {t('reports.closingBalance')}
-                  </td>
+                  <td colSpan={3}>{t('reports.closingBalance')}</td>
                   <td className="cell-numeric">
                     {moneyAlways(data.closingBalance)} {data.currency}
                   </td>

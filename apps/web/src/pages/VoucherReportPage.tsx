@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
@@ -19,9 +19,9 @@ const TYPE_NAME: Record<number, string> = {
 };
 
 const STATUS_STYLES: Record<number, string> = {
-  1: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  2: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  3: 'bg-red-50 text-red-700 line-through dark:bg-red-950 dark:text-red-300',
+  1: 'bg-surface-3 text-ink-muted',
+  2: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  3: 'bg-red-50 text-red-700 line-through dark:bg-red-500/15 dark:text-red-300',
 };
 
 interface VoucherReportLine {
@@ -77,12 +77,7 @@ function StatusBadge({ status }: { readonly status: number }): React.JSX.Element
   const { t } = useTranslation();
 
   return (
-    <span
-      className={clsx(
-        'inline-block rounded px-2 py-0.5 text-xs font-medium',
-        STATUS_STYLES[status],
-      )}
-    >
+    <span className={clsx('badge', STATUS_STYLES[status])}>
       {t(`voucherStatus.${STATUS_NAME[status]}`)}
     </span>
   );
@@ -136,40 +131,38 @@ export function VoucherReportPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, type, status });
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.from')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.from')}</span>
         <input
           type="date"
           value={from}
           onChange={(event) => setFrom(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.to')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.to')}</span>
         <input
           type="date"
           value={to}
           onChange={(event) => setTo(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('reports.voucherType')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('reports.voucherType')}</span>
         <select
           value={type}
           onChange={(event) => setType(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('reports.allTypes')}</option>
           {Object.entries(TYPE_NAME).map(([value, name]) => (
@@ -180,12 +173,12 @@ export function VoucherReportPage(): React.JSX.Element {
         </select>
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.status')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.status')}</span>
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('reports.allStatuses')}</option>
           {Object.entries(STATUS_NAME).map(([value, name]) => (
@@ -199,8 +192,9 @@ export function VoucherReportPage(): React.JSX.Element {
       <button
         type="submit"
         disabled={query.isFetching}
-        className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+        className="btn-primary btn-sm py-1.5"
       >
+        {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
     </form>
@@ -210,17 +204,15 @@ export function VoucherReportPage(): React.JSX.Element {
     <ReportFrame title={t('nav.voucherReport')} controls={controls} query={query}>
       {(data) =>
         data.vouchers.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('reports.noData')}</p>
+          <EmptyState message={t('reports.noData')} />
         ) : (
           <div className="space-y-4">
             {data.currencies.length > 1 && (
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                {t('cheques.multiCurrency')}
-              </p>
+              <p className="alert-warn">{t('cheques.multiCurrency')}</p>
             )}
 
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-slate-600 dark:text-slate-400">
+              <span className="text-ink-muted">
                 {t('reports.voucherCount', { count: data.voucherCount })}:
               </span>
               {Object.keys(STATUS_NAME)
@@ -236,45 +228,42 @@ export function VoucherReportPage(): React.JSX.Element {
                 ))}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[60rem] border-collapse text-sm">
+            <div className="table-wrap table-wrap-tall">
+              <table className="table min-w-[60rem]">
                 <thead>
-                  <tr className="border-b border-slate-300 text-left dark:border-slate-700">
-                    <th className="py-2 pe-3 font-medium">{t('reports.date')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('reports.voucherNo')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('reports.voucherType')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('reports.status')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('reports.reference')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('reports.particulars')}</th>
-                    <th className="py-2 text-end font-medium">{t('reports.amount')}</th>
+                  <tr>
+                    <th className="text-start">{t('reports.date')}</th>
+                    <th className="text-start">{t('reports.voucherNo')}</th>
+                    <th className="text-start">{t('reports.voucherType')}</th>
+                    <th className="text-start">{t('reports.status')}</th>
+                    <th className="text-start">{t('reports.reference')}</th>
+                    <th className="text-start">{t('reports.particulars')}</th>
+                    <th className="text-end">{t('reports.amount')}</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {data.vouchers.map((voucher) => (
-                    <tr
-                      key={voucher.voucherId}
-                      className="border-b border-slate-100 dark:border-slate-900"
-                    >
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                    <tr key={voucher.voucherId}>
+                      <td className="py-1.5 text-ink-muted whitespace-nowrap">
                         {voucher.date}
                       </td>
-                      <td className="py-1 pe-3 font-medium">{voucher.voucherNumber}</td>
-                      <td className="py-1 pe-3">
+                      <td className="py-1.5 font-medium whitespace-nowrap">
+                        {voucher.voucherNumber}
+                      </td>
+                      <td className="py-1.5 whitespace-nowrap">
                         {t(`voucherTypes.${TYPE_NAME[voucher.type]}`)}
                       </td>
-                      <td className="py-1 pe-3">
+                      <td className="py-1.5">
                         <StatusBadge status={voucher.status} />
                       </td>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                      <td className="py-1.5 text-ink-muted">
                         {voucher.referenceNumber ?? ''}
                       </td>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
-                        {voucher.narration ?? ''}
-                      </td>
-                      <td className="py-1 text-end tabular-nums">
+                      <td className="py-1.5 text-ink-muted">{voucher.narration ?? ''}</td>
+                      <td className="cell-numeric py-1.5">
                         {moneyAlways(voucher.documentAmount)}{' '}
-                        <span className="text-slate-400">{voucher.currency}</span>
+                        <span className="text-ink-subtle">{voucher.currency}</span>
                       </td>
                     </tr>
                   ))}
@@ -282,9 +271,9 @@ export function VoucherReportPage(): React.JSX.Element {
               </table>
             </div>
 
-            <dl className="grid max-w-xs grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              <dt className="text-slate-600 dark:text-slate-400">{t('reports.totals')}</dt>
-              <dd className="text-end font-medium tabular-nums">
+            <dl className="panel grid max-w-sm grid-cols-2 gap-x-6 gap-y-1 text-sm">
+              <dt className="text-ink-muted">{t('reports.totals')}</dt>
+              <dd className="text-end font-mono font-semibold tabular-nums">
                 {moneyAlways(data.totalBaseAmount)} {data.currency}
               </dd>
             </dl>

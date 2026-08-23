@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Spinner } from '@/components/ReportFrame';
 import { ApiError, getStoredTenantCode } from '@/lib/api';
 import { useSession } from '@/stores/session';
 
@@ -38,28 +39,39 @@ export function LoginPage(): React.JSX.Element {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center p-4">
+    <div className="relative grid min-h-screen place-items-center overflow-hidden p-4">
+      {/*
+        Two soft colour fields behind the card. Purely decorative, so they are
+        hidden from assistive technology and sit under a `pointer-events-none`
+        layer — a sign-in screen must not have a div intercepting the tap that was
+        meant for the password box.
+      */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+      >
+        <div className="absolute -top-40 -start-32 size-[32rem] rounded-full bg-brand-500/15 blur-3xl" />
+        <div className="absolute -bottom-48 -end-32 size-[34rem] rounded-full bg-sky-500/10 blur-3xl" />
+      </div>
+
       <form
         onSubmit={(event) => void submit(event)}
-        className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        className="card animate-rise relative w-full max-w-sm p-6 shadow-float sm:p-8"
       >
-        <div className="mb-6 flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-brand-600 font-bold text-white">
+        <div className="mb-7 flex items-center gap-3">
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 font-bold text-white shadow-card">
             IE
           </div>
-          <div>
-            <h1 className="text-lg font-semibold">{t('app.name')}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {t('signIn.subtitle')}
-            </p>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold tracking-tight text-ink">
+              {t('app.name')}
+            </h1>
+            <p className="text-sm text-ink-muted">{t('signIn.subtitle')}</p>
           </div>
         </div>
 
         {error !== null && (
-          <p
-            role="alert"
-            className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-          >
+          <p role="alert" className="alert-error mb-4">
             {error}
           </p>
         )}
@@ -77,9 +89,7 @@ export function LoginPage(): React.JSX.Element {
               autoComplete="organization"
               spellCheck={false}
             />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t('signIn.companyHint')}
-            </p>
+            <p className="field-hint">{t('signIn.companyHint')}</p>
           </div>
 
           <div>
@@ -113,7 +123,8 @@ export function LoginPage(): React.JSX.Element {
           </div>
         </div>
 
-        <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
+        <button type="submit" disabled={busy} className="btn-primary mt-7 w-full">
+          {busy && <Spinner />}
           {busy ? t('signIn.working') : t('signIn.submit')}
         </button>
       </form>

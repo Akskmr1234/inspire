@@ -107,9 +107,9 @@ export function BalanceSheetPage(): React.JSX.Element {
                 }}
               />
 
-              <div className="flex items-center justify-between rounded-xl bg-slate-100 px-4 py-3 text-base font-semibold dark:bg-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface-3 px-4 py-3.5 text-base font-semibold text-ink">
                 <span>{t('reports.totalLiabilitiesAndEquity')}</span>
-                <span className="font-mono">
+                <span className="font-mono tabular-nums">
                   {moneyAlways(data.totalLiabilitiesAndEquity)} {data.currency}
                 </span>
               </div>
@@ -137,53 +137,53 @@ function Panel({
   readonly extraRow?: { readonly label: string; readonly amount: number };
 }): React.JSX.Element {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <h2 className="bg-slate-100 px-4 py-2 text-sm font-semibold dark:bg-slate-800">
+    <div className="card overflow-hidden">
+      <h2 className="border-b border-line bg-surface-3 px-4 py-2.5 text-xs font-semibold tracking-wide text-ink-muted uppercase">
         {heading}
       </h2>
 
-      <table className="w-full border-collapse text-sm">
-        <tbody>
-          {lines.length === 0 && extraRow === undefined ? (
-            <tr>
-              <td className="px-4 py-3 text-slate-400" colSpan={2}>
-                —
-              </td>
-            </tr>
-          ) : (
-            lines.map((line) => (
-              <tr
-                key={line.ledgerCode}
-                className="border-t border-slate-200 dark:border-slate-800"
-              >
-                <td className="px-4 py-2">
-                  <span className="font-medium">{line.ledgerCode}</span>
-                  <span className="ms-2 text-slate-500">{line.ledgerName}</span>
+      <div className="overflow-x-auto">
+        <table className="table">
+          <tbody>
+            {lines.length === 0 && extraRow === undefined ? (
+              <tr>
+                <td className="px-4 py-3 text-ink-subtle" colSpan={2}>
+                  —
                 </td>
-                <td className="cell-numeric">{moneyAlways(line.amount)}</td>
               </tr>
-            ))
-          )}
+            ) : (
+              lines.map((line) => (
+                <tr
+                  key={line.ledgerCode}
+                  className="border-t border-line transition-colors hover:bg-surface-2"
+                >
+                  <td className="px-4 py-2 text-ink">
+                    <span className="font-medium">{line.ledgerCode}</span>
+                    <span className="ms-2 text-ink-muted">{line.ledgerName}</span>
+                  </td>
+                  <td className="cell-numeric">{moneyAlways(line.amount)}</td>
+                </tr>
+              ))
+            )}
 
-          {extraRow && (
-            <tr className="border-t border-slate-200 dark:border-slate-800">
-              <td className="px-4 py-2 italic text-slate-600 dark:text-slate-400">
-                {extraRow.label}
+            {extraRow && (
+              <tr className="border-t border-line transition-colors hover:bg-surface-2">
+                <td className="px-4 py-2 text-ink-muted italic">{extraRow.label}</td>
+                <td className="cell-numeric">{moneyAlways(extraRow.amount)}</td>
+              </tr>
+            )}
+          </tbody>
+
+          <tfoot className="border-t-2 border-line-strong bg-surface-2 font-semibold">
+            <tr>
+              <td className="px-4 py-2.5 text-ink">{totalLabel}</td>
+              <td className="cell-numeric">
+                {moneyAlways(extraRow ? total + extraRow.amount : total)} {currency}
               </td>
-              <td className="cell-numeric">{moneyAlways(extraRow.amount)}</td>
             </tr>
-          )}
-        </tbody>
-
-        <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-800/50">
-          <tr>
-            <td className="px-4 py-2">{totalLabel}</td>
-            <td className="cell-numeric">
-              {moneyAlways(extraRow ? total + extraRow.amount : total)} {currency}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

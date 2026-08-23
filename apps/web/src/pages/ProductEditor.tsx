@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { ReportSkeleton } from '@/components/ReportFrame';
 import clsx from 'clsx';
 import type { ApiError } from '@/lib/api';
 import {
@@ -75,7 +76,17 @@ export function ProductEditor({
   };
 
   if (product.isPending) {
-    return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+    return (
+      <section className="page" aria-busy="true">
+        <div className="skeleton h-7 w-72 rounded" />
+        <div className="flex gap-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <span key={index} className="skeleton h-8 w-28 rounded" />
+          ))}
+        </div>
+        <ReportSkeleton rows={4} />
+      </section>
+    );
   }
 
   if (product.isError || !product.data) {
@@ -89,13 +100,13 @@ export function ProductEditor({
   const row = product.data;
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">
+    <section className="page">
+      <header className="page-header sm:items-center">
+        <div className="min-w-0">
+          <h2 className="page-title">
             {row.code} — {row.description}
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-muted">
             {row.isActive ? t('masters.active') : t('masters.withdrawn')}
             {row.isDiscontinued ? ` · ${t('products.discontinued')}` : ''}
           </p>
@@ -113,7 +124,7 @@ export function ProductEditor({
 
       {error && <Alert>{error}</Alert>}
 
-      <nav className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
+      <nav className="flex gap-1 border-b border-line">
         <Tab active={tab === 'description'} onClick={() => setTab('description')}>
           {t('products.tabDescription')}
         </Tab>
@@ -488,9 +499,7 @@ function DetailsTab({
             movement: Number(form.movement),
             tracksBatches: form.tracksBatches,
             tracksSerialNumbers: form.tracksSerialNumbers,
-            shelfLifeDays: form.shelfLifeDays.trim()
-              ? Number(form.shelfLifeDays)
-              : null,
+            shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
             isPacking: form.isPacking,
           });
         });
@@ -624,11 +633,7 @@ function DetailsTab({
           className="btn-secondary"
           onClick={() =>
             run(async () => {
-              await setProductFlag(
-                product.id,
-                'discontinued',
-                !product.isDiscontinued,
-              );
+              await setProductFlag(product.id, 'discontinued', !product.isDiscontinued);
             })
           }
         >
@@ -678,7 +683,7 @@ function BarcodesTab({
   return (
     <div className="space-y-4">
       <form
-        className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800"
+        className="panel toolbar"
         onSubmit={(event) => {
           event.preventDefault();
 
@@ -731,9 +736,9 @@ function BarcodesTab({
         </button>
       </form>
 
-      <div className="overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-800">
+      <div className="table-wrap max-h-[70vh] overflow-y-auto">
+        <table className="table">
+          <thead className="bg-surface-3">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">
                 {t('products.barcode')}
@@ -754,16 +759,13 @@ function BarcodesTab({
           <tbody>
             {product.barcodes.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-sm text-ink-muted">
                   {t('products.noBarcodes')}
                 </td>
               </tr>
             ) : (
               product.barcodes.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-t border-slate-100 dark:border-slate-900"
-                >
+                <tr key={row.id} className="border-t border-line">
                   <td className="px-3 py-1.5 font-mono">{row.barcode}</td>
                   <td className="cell-numeric">{row.cost.toFixed(2)}</td>
                   <td className="cell-numeric">{row.retailRate.toFixed(2)}</td>
@@ -773,7 +775,7 @@ function BarcodesTab({
                     <button
                       type="button"
                       disabled={busy}
-                      className="rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="rounded-md border border-line px-2 py-0.5 text-xs font-medium text-ink-muted transition hover:border-line-strong hover:bg-surface-3 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
                       onClick={() =>
                         run(async () => {
                           await removeProductBarcode(product.id, row.id);
@@ -819,7 +821,7 @@ function Section({
 }): React.JSX.Element {
   return (
     <fieldset className="space-y-3">
-      <legend className="text-sm font-semibold text-slate-500 uppercase">{title}</legend>
+      <legend className="text-sm font-semibold text-ink-muted uppercase">{title}</legend>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </fieldset>
   );
@@ -861,7 +863,7 @@ function NumberField({
         onChange={(event) => onChange(event.target.value)}
         className="field-input text-end"
       />
-      {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
     </label>
   );
 }
@@ -899,16 +901,13 @@ function Compact({
   readonly numeric?: boolean;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-600 dark:text-slate-400">{label}</span>
+    <label className="field">
+      <span className="field-label">{label}</span>
       <input
         {...(numeric ? { type: 'number', step: 'any' } : {})}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={clsx(
-          'w-32 rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900',
-          numeric && 'text-end',
-        )}
+        className={clsx('field-input-sm w-full sm:w-32', numeric && 'text-end')}
       />
     </label>
   );
@@ -931,7 +930,7 @@ function Tab({
         '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
         active
           ? 'border-brand-600 text-brand-700 dark:text-brand-100'
-          : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200',
+          : 'border-transparent text-ink-muted hover:border-line-strong hover:text-ink',
       )}
     >
       {children}
@@ -941,10 +940,7 @@ function Tab({
 
 function Alert({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
   return (
-    <div
-      role="alert"
-      className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
-    >
+    <div role="alert" className="alert-error">
       {children}
     </div>
   );

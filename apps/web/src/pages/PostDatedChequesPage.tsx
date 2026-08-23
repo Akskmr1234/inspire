@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { DirectionBadge } from '@/components/ChequeBadges';
 import { request, type ApiError } from '@/lib/api';
 import { CHEQUE_DIRECTIONS, type ChequeReportLine } from '@/lib/cheques';
@@ -50,30 +50,28 @@ export function PostDatedChequesPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ asAt, direction });
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">{t('reports.asAt')}</span>
+      <label className="field">
+        <span className="field-label">{t('reports.asAt')}</span>
         <input
           type="date"
           value={asAt}
           onChange={(event) => setAsAt(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-600 dark:text-slate-400">
-          {t('cheques.direction.label')}
-        </span>
+      <label className="field">
+        <span className="field-label">{t('cheques.direction.label')}</span>
         <select
           value={direction}
           onChange={(event) => setDirection(event.target.value)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+          className="field-input-sm"
         >
           <option value="">{t('cheques.allDirections')}</option>
           {CHEQUE_DIRECTIONS.map((option) => (
@@ -87,8 +85,9 @@ export function PostDatedChequesPage(): React.JSX.Element {
       <button
         type="submit"
         disabled={query.isFetching}
-        className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+        className="btn-primary btn-sm py-1.5"
       >
+        {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
     </form>
@@ -98,61 +97,50 @@ export function PostDatedChequesPage(): React.JSX.Element {
     <ReportFrame title={t('nav.postDatedCheques')} controls={controls} query={query}>
       {(data) =>
         data.cheques.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('cheques.noPostDated')}</p>
+          <EmptyState message={t('cheques.noPostDated')} />
         ) : (
           <div className="space-y-4">
             {data.currencies.length > 1 && (
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                {t('cheques.multiCurrency')}
-              </p>
+              <p className="alert-warn">{t('cheques.multiCurrency')}</p>
             )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[52rem] border-collapse text-sm">
+            <div className="table-wrap table-wrap-tall">
+              <table className="table min-w-[52rem]">
                 <thead>
-                  <tr className="border-b border-slate-300 text-left dark:border-slate-700">
-                    <th className="py-2 pe-3 font-medium">{t('cheques.chequeNo')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('cheques.party')}</th>
-                    <th className="py-2 pe-3 font-medium">
-                      {t('cheques.direction.label')}
-                    </th>
-                    <th className="py-2 pe-3 font-medium">{t('cheques.dueDate')}</th>
-                    <th className="py-2 pe-3 text-end font-medium">
-                      {t('cheques.daysToRun')}
-                    </th>
-                    <th className="py-2 pe-3 font-medium">{t('cheques.bank')}</th>
-                    <th className="py-2 text-end font-medium">{t('cheques.amount')}</th>
+                  <tr>
+                    <th className="text-start">{t('cheques.chequeNo')}</th>
+                    <th className="text-start">{t('cheques.party')}</th>
+                    <th className="text-start">{t('cheques.direction.label')}</th>
+                    <th className="text-start">{t('cheques.dueDate')}</th>
+                    <th className="text-end">{t('cheques.daysToRun')}</th>
+                    <th className="text-start">{t('cheques.bank')}</th>
+                    <th className="text-end">{t('cheques.amount')}</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {data.cheques.map((cheque) => (
-                    <tr
-                      key={cheque.chequeId}
-                      className="border-b border-slate-100 dark:border-slate-900"
-                    >
-                      <td className="py-1 pe-3 font-medium">{cheque.chequeNumber}</td>
-                      <td className="py-1 pe-3">
-                        <span className="text-slate-500 dark:text-slate-500">
-                          {cheque.partyCode}
-                        </span>{' '}
+                    <tr key={cheque.chequeId}>
+                      <td className="py-1.5 font-medium whitespace-nowrap">
+                        {cheque.chequeNumber}
+                      </td>
+                      <td className="py-1.5">
+                        <span className="text-ink-subtle">{cheque.partyCode}</span>{' '}
                         {cheque.partyName}
                       </td>
-                      <td className="py-1 pe-3">
+                      <td className="py-1.5">
                         <DirectionBadge direction={cheque.direction} />
                       </td>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
+                      <td className="py-1.5 text-ink-muted whitespace-nowrap">
                         {cheque.instrumentDate}
                       </td>
-                      <td className="py-1 pe-3 text-end tabular-nums">
+                      <td className="cell-numeric py-1.5">
                         {cheque.daysUntilDue === 0
                           ? t('cheques.dueNow')
                           : cheque.daysUntilDue}
                       </td>
-                      <td className="py-1 pe-3 text-slate-600 dark:text-slate-400">
-                        {cheque.bankName ?? ''}
-                      </td>
-                      <td className="py-1 text-end tabular-nums">
+                      <td className="py-1.5 text-ink-muted">{cheque.bankName ?? ''}</td>
+                      <td className="cell-numeric py-1.5">
                         {moneyAlways(cheque.amount)}
                       </td>
                     </tr>
@@ -161,17 +149,13 @@ export function PostDatedChequesPage(): React.JSX.Element {
               </table>
             </div>
 
-            <dl className="grid max-w-sm grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              <dt className="text-slate-600 dark:text-slate-400">
-                {t('cheques.totalReceivable')}
-              </dt>
-              <dd className="text-end font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+            <dl className="panel grid max-w-sm grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+              <dt className="text-ink-muted">{t('cheques.totalReceivable')}</dt>
+              <dd className="text-end font-mono font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                 {moneyAlways(data.totalReceivable)} {data.currency}
               </dd>
-              <dt className="text-slate-600 dark:text-slate-400">
-                {t('cheques.totalPayable')}
-              </dt>
-              <dd className="text-end font-medium tabular-nums text-amber-700 dark:text-amber-400">
+              <dt className="text-ink-muted">{t('cheques.totalPayable')}</dt>
+              <dd className="text-end font-mono font-semibold tabular-nums text-amber-700 dark:text-amber-400">
                 {moneyAlways(data.totalPayable)} {data.currency}
               </dd>
             </dl>

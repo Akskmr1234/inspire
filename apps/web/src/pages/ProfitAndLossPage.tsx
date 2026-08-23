@@ -86,16 +86,16 @@ export function ProfitAndLossPage(): React.JSX.Element {
           */}
           <div
             className={clsx(
-              'flex items-center justify-between rounded-xl px-4 py-3 text-base font-semibold',
+              'flex animate-rise-sm flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-base font-semibold',
               data.netProfit >= 0
-                ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100'
-                : 'bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100',
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100'
+                : 'border-red-200 bg-red-50 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100',
             )}
           >
             <span>
               {data.netProfit >= 0 ? t('reports.netProfit') : t('reports.netLoss')}
             </span>
-            <span className="font-mono">
+            <span className="font-mono tabular-nums">
               {moneyAlways(Math.abs(data.netProfit))} {data.currency}
             </span>
           </div>
@@ -119,45 +119,47 @@ function Section({
   readonly currency: string;
 }): React.JSX.Element {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-      <h2 className="bg-slate-100 px-4 py-2 text-sm font-semibold dark:bg-slate-800">
+    <div className="card overflow-hidden">
+      <h2 className="border-b border-line bg-surface-3 px-4 py-2.5 text-xs font-semibold tracking-wide text-ink-muted uppercase">
         {heading}
       </h2>
 
-      <table className="w-full border-collapse text-sm">
-        <tbody>
-          {lines.length === 0 ? (
+      <div className="overflow-x-auto">
+        <table className="table">
+          <tbody>
+            {lines.length === 0 ? (
+              <tr>
+                <td className="px-4 py-3 text-ink-subtle" colSpan={2}>
+                  —
+                </td>
+              </tr>
+            ) : (
+              lines.map((line) => (
+                <tr
+                  key={line.ledgerCode}
+                  className="border-t border-line transition-colors hover:bg-surface-2"
+                >
+                  <td className="px-4 py-2 text-ink">
+                    <span className="font-medium">{line.ledgerCode}</span>
+                    <span className="ms-2 text-ink-muted">{line.ledgerName}</span>
+                    <span className="ms-2 text-xs text-ink-subtle">{line.groupName}</span>
+                  </td>
+                  <td className="cell-numeric">{moneyAlways(line.amount)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+
+          <tfoot className="border-t-2 border-line-strong bg-surface-2 font-semibold">
             <tr>
-              <td className="px-4 py-3 text-slate-400" colSpan={2}>
-                —
+              <td className="px-4 py-2.5 text-ink">{totalLabel}</td>
+              <td className="cell-numeric">
+                {moneyAlways(total)} {currency}
               </td>
             </tr>
-          ) : (
-            lines.map((line) => (
-              <tr
-                key={line.ledgerCode}
-                className="border-t border-slate-200 dark:border-slate-800"
-              >
-                <td className="px-4 py-2">
-                  <span className="font-medium">{line.ledgerCode}</span>
-                  <span className="ms-2 text-slate-500">{line.ledgerName}</span>
-                  <span className="ms-2 text-xs text-slate-400">{line.groupName}</span>
-                </td>
-                <td className="cell-numeric">{moneyAlways(line.amount)}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-
-        <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-800/50">
-          <tr>
-            <td className="px-4 py-2">{totalLabel}</td>
-            <td className="cell-numeric">
-              {moneyAlways(total)} {currency}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

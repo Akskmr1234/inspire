@@ -116,11 +116,32 @@ internal static class PlatformConfiguration
     /// </remarks>
     private static void AddDerivedConnectionString(Dictionary<string, string?> derived)
     {
-        // An explicit connection string is the operator saying precisely what they
-        // want, and it outranks anything inferred from the environment.
-        if (!string.IsNullOrWhiteSpace(
-            Environment.GetEnvironmentVariable(PostgresConnectionStringVariable)))
+        string? explicitValue =
+            Environment.GetEnvironmentVariable(PostgresConnectionStringVariable);
+
+        if (!string.IsNullOrWhiteSpace(explicitValue))
         {
+            // An explicit connection string is normally the operator saying precisely
+            // what they want, and it outranks anything inferred from the environment.
+            //
+            // Except that "explicit" is an assumption about who set it. Some managed
+            // platforms inject `ConnectionStrings__Postgres` themselves, and inject it
+            // as a `postgres://` URI — the form Node and Rails read directly and the
+            // one Npgsql refuses. The variable then looks like a deliberate choice,
+            // suppresses the PG* derivation below that would have worked, and hands
+            // the application a string it cannot parse. That failure arrives as a
+            // connection timeout naming neither the variable nor the format.
+            //
+            // So a URI here is translated rather than obeyed. Anything already in
+            // keyword form is left exactly as it was.
+            NpgsqlConnectionStringBuilder? fromUri = ParseDatabaseUri(explicitValue);
+
+            if (fromUri is not null)
+            {
+                fromUri.SslMode = SslMode.Prefer;
+                derived[PostgresConnectionStringKey] = fromUri.ConnectionString;
+            }
+
             return;
         }
 
@@ -186,10 +207,16 @@ internal static class PlatformConfiguration
     /// which is a better diagnostic than a parse exception thrown before logging is
     /// even running.
     /// </remarks>
-    private static NpgsqlConnectionStringBuilder? FromDatabaseUrl()
-    {
-        string? databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    private static NpgsqlConnectionStringBuilder? FromDatabaseUrl() =>
+        ParseDatabaseUri(Environment.GetEnvironmentVariable("DATABASE_URL"));
 
+    /// <summary>Parses a <c>postgres://</c> URI into Npgsql's keyword form.</summary>
+    /// <param name="databaseUrl">The candidate URI. May be null, blank, or not a URI.</param>
+    /// <returns>The connection, or <see langword="null"/> when the value is not a
+    /// PostgreSQL URI — including when it is already in keyword form, which is the
+    /// signal to leave it alone.</returns>
+    private static NpgsqlConnectionStringBuilder? ParseDatabaseUri(string? databaseUrl)
+    {
         if (string.IsNullOrWhiteSpace(databaseUrl)
             || !Uri.TryCreate(databaseUrl, UriKind.Absolute, out Uri? uri)
             || (!uri.Scheme.Equals("postgres", StringComparison.OrdinalIgnoreCase)

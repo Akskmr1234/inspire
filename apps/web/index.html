@@ -2,8 +2,47 @@
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Inspire ERP" />
+    <!-- Paints the browser's own chrome to match the app rather than leaving a
+         white bar above a dark interface on mobile. -->
+    <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101625" media="(prefers-color-scheme: dark)" />
     <title>Inspire ERP</title>
+    <script>
+      /*
+        Applies the stored theme and direction before the first paint.
+
+        The application sets these from its session store, but that runs after React
+        has mounted - which is one frame too late. Without this the browser paints a
+        light interface and then repaints it dark, and the flash is at its worst
+        exactly where it is most noticed: on a slow first load.
+
+        Wrapped in a try/catch because localStorage throws rather than returning null
+        when a browser is set to block site data, and a theme preference is not worth
+        failing to boot over.
+      */
+      (function () {
+        try {
+          var theme = localStorage.getItem('erp.theme');
+
+          if (theme !== 'light' && theme !== 'dark') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+          }
+
+          var language = localStorage.getItem('erp.language') === 'ar' ? 'ar' : 'en';
+          var root = document.documentElement;
+
+          root.classList.toggle('dark', theme === 'dark');
+          root.lang = language;
+          root.dir = language === 'ar' ? 'rtl' : 'ltr';
+        } catch (error) {
+          /* No stored preference is reachable; the defaults in the markup stand. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
