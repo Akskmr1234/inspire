@@ -17,6 +17,7 @@ export function ReportFrame<TData>({
   title,
   subtitle,
   controls,
+  actions,
   query,
   isEmpty,
   children,
@@ -25,6 +26,13 @@ export function ReportFrame<TData>({
   /** A line under the heading, for a period or a scope the title cannot carry. */
   readonly subtitle?: string;
   readonly controls: React.ReactNode;
+  /**
+   * What the screen as a whole does — the button that opens its add form, almost
+   * always. Rendered in the bar beside the title rather than over the list, and
+   * outside the query's success path: a list that failed to load must still let
+   * somebody enter a record.
+   */
+  readonly actions?: React.ReactNode;
   readonly query: UseQueryResult<TData, ApiError>;
   readonly isEmpty?: (data: TData) => boolean;
   readonly children: (data: TData) => React.ReactNode;
@@ -32,7 +40,9 @@ export function ReportFrame<TData>({
   const { t } = useTranslation();
 
   return (
-    <section className="page">
+    // `page-lean` where the screen has no filter strip: the list below is sized to
+    // what the screen has left, and that is 70px more without one.
+    <section className={clsx('page', !controls && 'page-lean')}>
       {/*
         The title is not rendered here at all: `PageHeading` puts it in the
         application bar, which already spans the screen and had nothing on it but a
@@ -48,28 +58,32 @@ export function ReportFrame<TData>({
         title={title}
         subtitle={subtitle}
         actions={
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="btn-icon shrink-0"
-            title={t('reports.print')}
-            aria-label={t('reports.print')}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="size-[18px]"
-              aria-hidden="true"
+          <>
+            {actions}
+
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="btn-icon shrink-0"
+              title={t('reports.print')}
+              aria-label={t('reports.print')}
             >
-              <path d="M6 9V3h12v6" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-              <path d="M6 14h12v7H6z" />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-[18px]"
+                aria-hidden="true"
+              >
+                <path d="M6 9V3h12v6" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+                <path d="M6 14h12v7H6z" />
+              </svg>
+            </button>
+          </>
         }
       />
 

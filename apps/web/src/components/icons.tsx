@@ -273,6 +273,15 @@ export function IconMenu({ className }: IconProps): React.JSX.Element {
   );
 }
 
+export function IconPlus({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </Svg>
+  );
+}
+
 export function IconClose({ className }: IconProps): React.JSX.Element {
   return (
     <Svg className={className}>

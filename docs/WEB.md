@@ -262,7 +262,8 @@ computer, which fails only in the browser and leaves nothing in any log.
 
 ## Screens
 
-Three frames cover almost every screen. Reach for one before writing markup.
+Three frames and a dialog cover almost every screen. Reach for one before writing
+markup.
 
 ### `ReportFrame`
 
@@ -284,6 +285,15 @@ The heading is not drawn on the page: it goes to `PageHeading`, which puts it in
 application bar (see [the shell](#the-screens-name-lives-in-the-bar)) so the list gets
 the whole content area. The print button rides up with it, since it belongs to the
 screen rather than to the figures — and printing is what half these screens are for.
+Anything passed as `actions` rides up with it too: in practice the button that opens the
+screen's add form.
+
+`actions` is rendered outside the query's success path on purpose — a list that failed
+to load must still let somebody enter a record.
+
+A screen with no filters at all passes `controls={null}`, and the frame then marks the
+page `.page-lean`: no filter strip is drawn, and the list below knows it has those two
+centimetres to use.
 
 ### `DataGrid`
 
@@ -316,12 +326,47 @@ CSV export quotes anything holding a delimiter, quote or newline, and writes a B
 without it Excel reads UTF-8 as the local code page and turns every Arabic name into
 punctuation.
 
+A screen with one or two filters of its own passes them as `filters`, and they sit in
+the grid's toolbar beside the search box. The masters do: a strip across the screen to
+hold a single "include withdrawn" checkbox costs the list more than the checkbox is
+worth, and the toolbar is where somebody narrowing a list looks anyway.
+
+**The table is sized to what the viewport has left**, not to a fraction of it —
+`max(20rem, 100dvh - var(--page-chrome))`, where `.page` names the chrome standing above
+the list and `.page-lean` names it again for a screen with no filter strip. A fraction
+(it was `70vh`) leaves a band of canvas under a full list _and_ still scrolls the page as
+well as the table, which is two scrollbars for one list — and the outer one scrolls away
+the headings the inner one is pinning.
+
 ### `MasterFrame`
 
 The chrome the inventory masters share: the list, the include-withdrawn toggle, the add
 form, and the plumbing that refreshes one after the other. Extracted after the second of
 four rather than the first — repeating the mutation and invalidation per screen is how
 three of them end up refreshing and the fourth does not.
+
+**The add form is a dialog, not a panel above the list.** A master is read constantly
+and added to occasionally — a customer is created once and looked up for years — and
+seven fields held a fifth of the screen open for the occasional case on every visit. The
+button that opens it (`addTitle`, named for the record: "New supplier", not "Add") sits
+in the bar beside the title, so nothing of the form is on the page until it is asked for.
+
+The dialog closes when the mutation succeeds and stays open when it fails, with the
+server's refusal above the fields that caused it. Closing is also what clears the form,
+which is why no add form resets its own state any more: the old code cleared the fields
+_before_ the create returned, so a refused code took the typed record with it.
+
+### `Modal`
+
+The dialog shell: backdrop, panel, title, close, and `useModalBehaviour` for the focus
+handling that separates a dialog from a div drawn on top of the page. `size="form"` for
+a handful of fields, the default for a document with its own lines.
+
+It began as two identical copies in the sales and purchase screens; the third caller is
+what made it a component. Fields inside it are laid out with `.form-grid` — two even
+columns — ending in a `.form-actions` row. The widths those forms used to name (`w-20`
+for a symbol, `w-44` for a name) suit a filter strip and leave a ragged staircase of
+boxes down the middle of a dialog.
 
 ---
 
@@ -479,7 +524,7 @@ who will paste it into a ticket, and a specific line beats "something went wrong
 
 ## Tests
 
-`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 75 tests, run in CI
+`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 80 tests, run in CI
 **before** the build so a broken component fails in seconds with the assertion that caught it.
 
 | Suite                        | Covers                                                                                                   |
@@ -487,6 +532,7 @@ who will paste it into a ticket, and a specific line beats "something went wrong
 | `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view |
 | `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                 |
 | `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                  |
+| `MasterFrame.test.tsx`       | Add form absent until asked for, opens in a dialog, closes on success, stays open on a refusal           |
 | `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                       |
 | `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                  |
 | `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                        |

@@ -246,6 +246,15 @@ const en = {
     restore: 'Restore',
     add: 'Add',
     includeWithdrawn: 'Include withdrawn',
+    // The record a master creates, named on the button that opens its form. A
+    // shared "Add" would leave every one of these screens saying the same word
+    // about a different thing.
+    newUnit: 'New unit',
+    newCategory: 'New category',
+    newBrand: 'New brand',
+    newWarehouse: 'New warehouse',
+    newCustomer: 'New customer',
+    newSupplier: 'New supplier',
   },
   units: {
     symbol: 'Symbol',
@@ -678,6 +687,7 @@ const en = {
     loading: 'Loading…',
     theme: 'Theme',
     language: 'Language',
+    close: 'Close',
     mustChangePassword: 'Your password must be changed before you continue.',
   },
 } as const;
@@ -931,6 +941,12 @@ const ar = {
     restore: 'استعادة',
     add: 'إضافة',
     includeWithdrawn: 'تضمين المسحوب',
+    newUnit: 'وحدة جديدة',
+    newCategory: 'فئة جديدة',
+    newBrand: 'علامة تجارية جديدة',
+    newWarehouse: 'مستودع جديد',
+    newCustomer: 'عميل جديد',
+    newSupplier: 'مورد جديد',
   },
   units: {
     symbol: 'الرمز المختصر',
@@ -1362,6 +1378,7 @@ const ar = {
     loading: 'جارٍ التحميل…',
     theme: 'المظهر',
     language: 'اللغة',
+    close: 'إغلاق',
     mustChangePassword: 'يجب تغيير كلمة المرور قبل المتابعة.',
   },
 } as const;

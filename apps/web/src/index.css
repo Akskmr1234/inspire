@@ -380,9 +380,23 @@
      ====================================================================== */
 
   /* Every screen's outermost element. The stagger variables let a page's own
-     sections fade in one after another without each one naming a delay. */
+     sections fade in one after another without each one naming a delay.
+
+     `--page-chrome` is how much of the viewport the screen spends before its list
+     starts: the application bar, this page's padding, the filter strip and the
+     grid's own toolbar. A tall list reads it to size itself to what is left — see
+     `.table-wrap-tall`. The default assumes a filter strip, and `.page-lean` is
+     the same page without one. */
   .page {
     @apply animate-rise space-y-4 sm:space-y-5;
+
+    --page-chrome: 14.5rem;
+  }
+
+  /* A screen whose filters fit in the grid's toolbar — every master — so there is
+     no strip above the list and the list gets those two centimetres back. */
+  .page-lean {
+    --page-chrome: 10rem;
   }
 
   /*
@@ -483,6 +497,26 @@
 
   .toolbar {
     @apply flex flex-wrap items-end gap-2 sm:gap-3;
+  }
+
+  /*
+    The fields a record is created with, in the dialog that now asks for them.
+
+    A grid rather than the `.toolbar` these forms used to be. As a strip above a
+    list they were a row of boxes sized to their contents — a two-character symbol
+    got `w-20`, a name `w-44` — which is right for a filter bar and wrong in a
+    dialog, where the same widths leave a ragged staircase of boxes down the middle
+    of the panel. Two even columns where there is room for two, one where there is
+    not, and every field the width of its column.
+  */
+  .form-grid {
+    @apply grid gap-3 sm:grid-cols-2;
+  }
+
+  /* The row a dialog's form ends with. Ruled off, so the button that commits the
+     record reads as the end of the form rather than another field. */
+  .form-actions {
+    @apply flex items-center justify-end gap-2 border-t border-line pt-4;
   }
 
   .divider {
@@ -685,11 +719,26 @@
     to stick to and the rule silently does nothing. Giving it a ceiling is what
     makes the pinning real.
 
+    The ceiling is what is left of the viewport rather than a fraction of it. 70vh
+    was a guess made when a screen spent its first 200px on a heading and an add
+    form; with both of those gone the guess left a band of canvas under every list
+    and still made the page scroll as well as the table — two scrollbars for one
+    list, and the outer one moving the headings off the screen the inner one is
+    pinning them to. `--page-chrome` is what stands above a list: the bar, the page padding,
+    the filter strip and the grid's toolbar — named by the page, since a screen
+    with no strip has 70px more to give the list than one with. The `max()` is a
+    floor on the ceiling rather than a height: a short list is still only as tall
+    as its rows, but a phone held in landscape gets a list rather than a letterbox.
+
+    `dvh`, not `vh`: on a phone `vh` is the viewport with the browser's own bars
+    retracted, so a list sized in it is cut off by the address bar until the user
+    scrolls.
+
     The print layer lifts both the ceiling and the overflow, so paper still gets
     every row.
   */
   .table-wrap-tall {
-    @apply max-h-[70vh] overflow-y-auto;
+    @apply max-h-[max(20rem,calc(100dvh-var(--page-chrome,14.5rem)))] overflow-y-auto;
   }
 
   .table-wrap-tall thead th {

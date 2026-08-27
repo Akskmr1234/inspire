@@ -72,6 +72,7 @@ export function UnitsPage(): React.JSX.Element {
   return (
     <MasterFrame<UnitSummary>
       title={t('nav.units')}
+      addTitle={t('masters.newUnit')}
       queryKey="units"
       fetchRows={(includeInactive) => listMaster<UnitSummary>('units', includeInactive)}
       columns={columns}
@@ -104,7 +105,7 @@ function AddUnit({
 
   return (
     <form
-      className="toolbar"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -122,68 +123,51 @@ function AddUnit({
             decimalPlaces: Number(decimals) || 0,
           });
         });
-
-        setCode('');
-        setName('');
-        setSymbol('');
-        setFactor('1');
       }}
     >
-      <MasterField
-        label={t('masters.code')}
-        value={code}
-        onChange={setCode}
-        placeholder="BOX"
-      />
-      <MasterField
-        label={t('masters.name')}
-        value={name}
-        onChange={setName}
-        width="w-44"
-      />
-      <MasterField
-        label={t('units.symbol')}
-        value={symbol}
-        onChange={setSymbol}
-        width="w-20"
-      />
-
-      <label className="field">
-        <span className="field-label">{t('units.base')}</span>
-        <select
-          value={baseUnitId}
-          onChange={(event) => setBaseUnitId(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('units.newGroup')}</option>
-          {bases.map((base) => (
-            <option key={base.id} value={base.id}>
-              {base.code} — {base.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* A factor only means anything on a derived unit; a base is one by definition. */}
-      {baseUnitId && (
+      <div className="form-grid">
         <MasterField
-          label={t('units.factor')}
-          value={factor}
-          onChange={setFactor}
-          width="w-24"
+          label={t('masters.code')}
+          value={code}
+          onChange={setCode}
+          placeholder="BOX"
         />
-      )}
+        <MasterField label={t('masters.name')} value={name} onChange={setName} />
+        <MasterField label={t('units.symbol')} value={symbol} onChange={setSymbol} />
 
-      <MasterField
-        label={t('units.decimals')}
-        value={decimals}
-        onChange={setDecimals}
-        width="w-20"
-      />
+        <label className="field">
+          <span className="field-label">{t('units.base')}</span>
+          <select
+            value={baseUnitId}
+            onChange={(event) => setBaseUnitId(event.target.value)}
+            className="field-input-sm"
+          >
+            <option value="">{t('units.newGroup')}</option>
+            {bases.map((base) => (
+              <option key={base.id} value={base.id}>
+                {base.code} — {base.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-      <button type="submit" disabled={busy} className="btn-primary">
-        {t('masters.add')}
-      </button>
+        {/* A factor only means anything on a derived unit; a base is one by definition. */}
+        {baseUnitId && (
+          <MasterField label={t('units.factor')} value={factor} onChange={setFactor} />
+        )}
+
+        <MasterField
+          label={t('units.decimals')}
+          value={decimals}
+          onChange={setDecimals}
+        />
+      </div>
+
+      <div className="form-actions">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('masters.add')}
+        </button>
+      </div>
     </form>
   );
 }
