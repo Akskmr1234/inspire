@@ -66,6 +66,7 @@ export function DataGrid<TRow>({
   columns,
   rowKey,
   emptyMessage,
+  filters,
   paging,
 }: {
   /** Identifies the grid, so a user's arrangement is remembered against it. */
@@ -74,6 +75,14 @@ export function DataGrid<TRow>({
   readonly columns: readonly GridColumn<TRow>[];
   readonly rowKey: (row: TRow) => string;
   readonly emptyMessage?: string;
+  /**
+   * A screen's own filters, for the ones with too few to earn a filter bar.
+   *
+   * A master has one — include withdrawn — and a bar of its own for it costs the
+   * list a strip of the screen to hold a single checkbox. Beside the search box is
+   * also where somebody narrowing a list looks for it.
+   */
+  readonly filters?: React.ReactNode;
   /** Supplied when the server holds the list and this is one page of it. */
   readonly paging?: GridPaging;
 }): React.JSX.Element {
@@ -358,6 +367,8 @@ export function DataGrid<TRow>({
             />
           </div>
         )}
+
+        {filters}
 
         <span className="shrink-0 text-xs whitespace-nowrap text-ink-muted">
           {paging

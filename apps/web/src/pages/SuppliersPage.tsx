@@ -92,6 +92,7 @@ export function SuppliersPage(): React.JSX.Element {
   return (
     <MasterFrame<SupplierSummary>
       title={t('nav.suppliers')}
+      addTitle={t('masters.newSupplier')}
       queryKey="suppliers"
       fetchRows={(includeInactive) => listSuppliers('', !includeInactive)}
       columns={columns}
@@ -137,58 +138,51 @@ function AddSupplier({
           stateCode: stateCode.trim() || null,
         },
       });
-
-      setCode('');
-      setName('');
-      setMobile('');
-      setAddress('');
-      setRegistration('');
-      setStateCode('');
     });
 
   return (
-    <>
-      <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField
-        label={t('masters.name')}
-        value={name}
-        onChange={setName}
-        width="w-56"
-      />
-      <MasterField label={t('customers.mobile')} value={mobile} onChange={setMobile} />
-      <MasterField
-        label={t('customers.address')}
-        value={address}
-        onChange={setAddress}
-        width="w-56"
-      />
-      <MasterField
-        label={t('suppliers.registration')}
-        value={registration}
-        onChange={setRegistration}
-        width="w-36"
-      />
-      <MasterField
-        label={t('customers.creditDays')}
-        value={creditDays}
-        onChange={setCreditDays}
-        width="w-20"
-      />
-      <MasterField
-        label={t('customers.stateCode')}
-        value={stateCode}
-        onChange={setStateCode}
-        width="w-20"
-      />
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        add();
+      }}
+    >
+      <div className="form-grid">
+        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
+        <MasterField label={t('masters.name')} value={name} onChange={setName} />
+        <MasterField label={t('customers.mobile')} value={mobile} onChange={setMobile} />
+        <MasterField
+          label={t('customers.address')}
+          value={address}
+          onChange={setAddress}
+        />
+        <MasterField
+          label={t('suppliers.registration')}
+          value={registration}
+          onChange={setRegistration}
+        />
+        <MasterField
+          label={t('customers.creditDays')}
+          value={creditDays}
+          onChange={setCreditDays}
+        />
+        <MasterField
+          label={t('customers.stateCode')}
+          value={stateCode}
+          onChange={setStateCode}
+        />
+      </div>
 
-      <button
-        type="button"
-        disabled={busy || code.trim() === '' || name.trim() === ''}
-        onClick={add}
-        className="btn-primary btn-sm self-end py-1.5"
-      >
-        {t('masters.add')}
-      </button>
-    </>
+      <div className="form-actions">
+        <button
+          type="submit"
+          disabled={busy || code.trim() === '' || name.trim() === ''}
+          className="btn-primary"
+        >
+          {t('masters.add')}
+        </button>
+      </div>
+    </form>
   );
 }

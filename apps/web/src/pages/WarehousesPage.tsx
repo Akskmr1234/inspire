@@ -92,6 +92,7 @@ export function WarehousesPage(): React.JSX.Element {
   return (
     <MasterFrame<WarehouseSummary>
       title={t('nav.warehouses')}
+      addTitle={t('masters.newWarehouse')}
       queryKey="warehouses"
       fetchRows={(includeInactive) =>
         listMaster<WarehouseSummary>('warehouses', includeInactive)
@@ -118,7 +119,7 @@ function AddWarehouse({
 
   return (
     <form
-      className="toolbar"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -134,36 +135,28 @@ function AddWarehouse({
             address: address.trim() || null,
           });
         });
-
-        setCode('');
-        setName('');
-        setNameArabic('');
-        setAddress('');
       }}
     >
-      <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField
-        label={t('masters.name')}
-        value={name}
-        onChange={setName}
-        width="w-44"
-      />
-      <MasterField
-        label={t('masters.nameArabic')}
-        value={nameArabic}
-        onChange={setNameArabic}
-        width="w-44"
-      />
-      <MasterField
-        label={t('warehouses.address')}
-        value={address}
-        onChange={setAddress}
-        width="w-56"
-      />
+      <div className="form-grid">
+        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
+        <MasterField label={t('masters.name')} value={name} onChange={setName} />
+        <MasterField
+          label={t('masters.nameArabic')}
+          value={nameArabic}
+          onChange={setNameArabic}
+        />
+        <MasterField
+          label={t('warehouses.address')}
+          value={address}
+          onChange={setAddress}
+        />
+      </div>
 
-      <button type="submit" disabled={busy} className="btn-primary">
-        {t('masters.add')}
-      </button>
+      <div className="form-actions">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('masters.add')}
+        </button>
+      </div>
     </form>
   );
 }

@@ -62,6 +62,7 @@ export function CategoriesPage(): React.JSX.Element {
   return (
     <MasterFrame<CategorySummary>
       title={t('nav.categories')}
+      addTitle={t('masters.newCategory')}
       queryKey="categories"
       fetchRows={(includeInactive) =>
         listMaster<CategorySummary>('categories', includeInactive)
@@ -90,7 +91,7 @@ function AddCategory({
 
   return (
     <form
-      className="toolbar"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -106,47 +107,41 @@ function AddCategory({
             parentId: parentId || null,
           });
         });
-
-        setCode('');
-        setName('');
-        setNameArabic('');
       }}
     >
-      <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField
-        label={t('masters.name')}
-        value={name}
-        onChange={setName}
-        width="w-44"
-      />
-      <MasterField
-        label={t('masters.nameArabic')}
-        value={nameArabic}
-        onChange={setNameArabic}
-        width="w-44"
-      />
+      <div className="form-grid">
+        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
+        <MasterField label={t('masters.name')} value={name} onChange={setName} />
+        <MasterField
+          label={t('masters.nameArabic')}
+          value={nameArabic}
+          onChange={setNameArabic}
+        />
 
-      <label className="field">
-        <span className="field-label">{t('categories.parent')}</span>
-        <select
-          value={parentId}
-          onChange={(event) => setParentId(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('categories.topLevel')}</option>
-          {rows
-            .filter((row) => row.isActive)
-            .map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.code} — {row.name}
-              </option>
-            ))}
-        </select>
-      </label>
+        <label className="field">
+          <span className="field-label">{t('categories.parent')}</span>
+          <select
+            value={parentId}
+            onChange={(event) => setParentId(event.target.value)}
+            className="field-input-sm"
+          >
+            <option value="">{t('categories.topLevel')}</option>
+            {rows
+              .filter((row) => row.isActive)
+              .map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.code} — {row.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
 
-      <button type="submit" disabled={busy} className="btn-primary">
-        {t('masters.add')}
-      </button>
+      <div className="form-actions">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('masters.add')}
+        </button>
+      </div>
     </form>
   );
 }
@@ -197,6 +192,7 @@ export function BrandsPage(): React.JSX.Element {
   return (
     <MasterFrame<BrandSummary>
       title={t('nav.brands')}
+      addTitle={t('masters.newBrand')}
       queryKey="brands"
       fetchRows={(includeInactive) => listMaster<BrandSummary>('brands', includeInactive)}
       columns={columns}
@@ -220,7 +216,7 @@ function AddBrand({
 
   return (
     <form
-      className="toolbar"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -235,29 +231,23 @@ function AddBrand({
             nameArabic: nameArabic.trim() || null,
           });
         });
-
-        setCode('');
-        setName('');
-        setNameArabic('');
       }}
     >
-      <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-      <MasterField
-        label={t('masters.name')}
-        value={name}
-        onChange={setName}
-        width="w-44"
-      />
-      <MasterField
-        label={t('masters.nameArabic')}
-        value={nameArabic}
-        onChange={setNameArabic}
-        width="w-44"
-      />
+      <div className="form-grid">
+        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
+        <MasterField label={t('masters.name')} value={name} onChange={setName} />
+        <MasterField
+          label={t('masters.nameArabic')}
+          value={nameArabic}
+          onChange={setNameArabic}
+        />
+      </div>
 
-      <button type="submit" disabled={busy} className="btn-primary">
-        {t('masters.add')}
-      </button>
+      <div className="form-actions">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('masters.add')}
+        </button>
+      </div>
     </form>
   );
 }

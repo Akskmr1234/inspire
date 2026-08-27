@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { Modal, ModalButton } from '@/components/Modal';
+import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
@@ -226,20 +227,19 @@ export function SalesPage(): React.JSX.Element {
           className="field-input-sm"
         />
       </Field>
-
-      <button
-        type="button"
-        onClick={() => setEntering(true)}
-        className="btn-primary btn-sm self-end py-1.5"
-      >
-        {t('sales.new')}
-      </button>
     </div>
   );
 
   return (
     <>
-      <ReportFrame title={t('nav.sales')} controls={controls} query={query}>
+      <ReportFrame
+        title={t('nav.sales')}
+        controls={controls}
+        actions={
+          <HeadingAction label={t('sales.new')} onClick={() => setEntering(true)} />
+        }
+        query={query}
+      >
         {(result) => (
           <div className="space-y-3">
             {error && <p className="alert-error">{error}</p>}
@@ -428,7 +428,7 @@ function EntryDialog({
     lines.some((line) => line.productId && Number(line.quantity) > 0);
 
   return (
-    <Dialog
+    <Modal
       title={isReturn(kind) ? t('sales.newReturn') : t('sales.newInvoice')}
       onClose={onClose}
     >
@@ -567,12 +567,12 @@ function EntryDialog({
       <p className="text-xs text-ink-muted">{t('sales.totalsHint')}</p>
 
       <div className="flex justify-end gap-2">
-        <DialogButton onClick={onClose}>{t('sales.close')}</DialogButton>
-        <DialogButton primary disabled={!ready || busy} onClick={() => void save()}>
+        <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
+        <ModalButton primary disabled={!ready || busy} onClick={() => void save()}>
           {t('sales.saveDraft')}
-        </DialogButton>
+        </ModalButton>
       </div>
-    </Dialog>
+    </Modal>
   );
 }
 
@@ -769,7 +769,7 @@ function DocumentDialog({
   const document = query.data;
 
   return (
-    <Dialog title={document?.header.number ?? t('sales.document')} onClose={onClose}>
+    <Modal title={document?.header.number ?? t('sales.document')} onClose={onClose}>
       {query.isLoading && (
         <div className="space-y-3" aria-busy="true">
           <div className="grid gap-2 sm:grid-cols-3">
@@ -840,9 +840,9 @@ function DocumentDialog({
 
           {document.header.status === SalesInvoiceStatus.draft && (
             <div className="flex justify-end">
-              <DialogButton primary disabled={busy} onClick={() => onPost(id)}>
+              <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
                 {t('sales.post')}
-              </DialogButton>
+              </ModalButton>
             </div>
           )}
 
@@ -855,21 +855,21 @@ function DocumentDialog({
                   className="field-input-sm"
                 />
               </Field>
-              <DialogButton
+              <ModalButton
                 disabled={busy || reason.trim() === ''}
                 onClick={() => onCancel(id, reason.trim())}
               >
                 {t('sales.cancel')}
-              </DialogButton>
+              </ModalButton>
             </div>
           )}
         </>
       )}
 
       <div className="flex justify-end">
-        <DialogButton onClick={onClose}>{t('sales.close')}</DialogButton>
+        <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
       </div>
-    </Dialog>
+    </Modal>
   );
 }
 
@@ -973,74 +973,5 @@ function Select<TValue extends string | number>({
         </option>
       ))}
     </select>
-  );
-}
-
-function Dialog({
-  title,
-  onClose,
-  children,
-}: {
-  readonly title: string;
-  readonly onClose: () => void;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  const panel = useModalBehaviour(onClose);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 backdrop-blur-[2px] sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      {/*
-        `tabIndex={-1}` so the panel itself can take focus while a document is still
-        loading and has no control to give it to yet.
-      */}
-      <div
-        ref={panel as React.RefObject<HTMLDivElement>}
-        tabIndex={-1}
-        className="animate-rise flex min-h-full w-full max-w-5xl flex-col gap-4 border-line bg-surface p-4 shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-5"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="truncate text-lg font-semibold tracking-tight text-ink">
-            {title}
-          </h2>
-          <button type="button" onClick={onClose} className="btn-icon" aria-label="Close">
-            ✕
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function DialogButton({
-  onClick,
-  children,
-  primary,
-  disabled,
-}: {
-  readonly onClick: () => void;
-  readonly children: React.ReactNode;
-  readonly primary?: boolean;
-  readonly disabled?: boolean;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        'btn px-3 py-1.5 text-sm',
-        primary
-          ? 'bg-brand-600 text-white shadow-xs hover:bg-brand-700'
-          : 'border border-line-strong bg-surface text-ink hover:bg-surface-3',
-      )}
-    >
-      {children}
-    </button>
   );
 }

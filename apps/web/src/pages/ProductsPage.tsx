@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { Modal } from '@/components/Modal';
+import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame } from '@/components/ReportFrame';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
@@ -207,41 +209,60 @@ export function ProductsPage(): React.JSX.Element {
   }
 
   return (
-    <ReportFrame title={t('nav.products')} controls={controls} query={query}>
-      {(rows) => (
-        <div className="space-y-4">
+    <>
+      <ReportFrame
+        title={t('nav.products')}
+        controls={controls}
+        actions={
+          <HeadingAction label={t('products.new')} onClick={() => setAdding(true)} />
+        }
+        query={query}
+      >
+        {(rows) => (
+          <div className="space-y-3">
+            {error && !adding && (
+              <div role="alert" className="alert-error">
+                {error}
+              </div>
+            )}
+
+            <DataGrid
+              gridKey="products"
+              rows={rows}
+              columns={columns}
+              rowKey={(row) => row.id}
+              emptyMessage={t('products.noneFound')}
+            />
+          </div>
+        )}
+      </ReportFrame>
+
+      {/*
+        A dialog rather than a panel over the list, and outside the frame so a
+        catalogue that failed to load can still be added to. The seven fields it
+        asks for used to hold a third of the screen open on a list that is searched
+        far more often than it is added to.
+      */}
+      {adding && (
+        <Modal title={t('products.new')} size="form" onClose={() => setAdding(false)}>
           {error && (
             <div role="alert" className="alert-error">
               {error}
             </div>
           )}
 
-          {adding ? (
-            <AddProduct
-              categories={categories.data ?? []}
-              busy={mutation.isPending}
-              onCancel={() => setAdding(false)}
-              onSubmit={(body) => {
-                setError(null);
-                mutation.mutate(() => createProduct(body));
-              }}
-            />
-          ) : (
-            <button type="button" onClick={() => setAdding(true)} className="btn-primary">
-              {t('products.new')}
-            </button>
-          )}
-
-          <DataGrid
-            gridKey="products"
-            rows={rows}
-            columns={columns}
-            rowKey={(row) => row.id}
-            emptyMessage={t('products.noneFound')}
+          <AddProduct
+            categories={categories.data ?? []}
+            busy={mutation.isPending}
+            onCancel={() => setAdding(false)}
+            onSubmit={(body) => {
+              setError(null);
+              mutation.mutate(() => createProduct(body));
+            }}
           />
-        </div>
+        </Modal>
       )}
-    </ReportFrame>
+    </>
   );
 }
 
@@ -286,7 +307,7 @@ function AddProduct({
 
   return (
     <form
-      className="panel animate-drop space-y-3"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -307,7 +328,7 @@ function AddProduct({
         });
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="field-label">{t('masters.code')}</span>
           <input

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { Modal } from '@/components/Modal';
+import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -250,51 +252,63 @@ export function StockOperationsPage(): React.JSX.Element {
   }
 
   return (
-    <ReportFrame title={t('nav.stockOperations')} controls={controls} query={query}>
-      {(rows) => (
-        <div className="space-y-4">
-          {error && <Alert tone="error">{error}</Alert>}
-          {notice && <Alert tone="ok">{notice}</Alert>}
+    <>
+      <ReportFrame
+        title={t('nav.stockOperations')}
+        controls={controls}
+        actions={
+          <HeadingAction label={t('stock.new')} onClick={() => setEntering(true)} />
+        }
+        query={query}
+      >
+        {(rows) => (
+          <div className="space-y-3">
+            {error && !entering && <Alert tone="error">{error}</Alert>}
+            {notice && <Alert tone="ok">{notice}</Alert>}
 
-          {entering ? (
-            <StockEntry
-              warehouses={warehouses.data ?? []}
-              busy={mutation.isPending}
-              onCancel={() => setEntering(false)}
-              onSubmit={(body) =>
-                run(async () => {
-                  const created = await createStockDocument(body);
-                  setEntering(false);
-
-                  return created.status === StockDocumentStatus.draft
-                    ? t('stock.draftNotice', { number: created.number })
-                    : t('stock.postedNotice', {
-                        number: created.number,
-                        count: created.movements,
-                      });
-                })
-              }
+            <DataGrid
+              gridKey="stock-documents"
+              rows={rows}
+              columns={columns}
+              rowKey={(row) => row.id}
+              emptyMessage={t('stock.noneFound')}
             />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEntering(true)}
-              className="btn-primary"
-            >
-              {t('stock.new')}
-            </button>
-          )}
+          </div>
+        )}
+      </ReportFrame>
 
-          <DataGrid
-            gridKey="stock-documents"
-            rows={rows}
-            columns={columns}
-            rowKey={(row) => row.id}
-            emptyMessage={t('stock.noneFound')}
+      {/*
+        A receipt with a dozen lines never belonged above the register it is entered
+        into: it pushed the list off the screen while it was open, and the list is
+        what the screen is for. The same dialog the sales and purchase screens use,
+        and outside the frame for the same reason — a register that failed to load
+        must still let somebody enter a document.
+      */}
+      {entering && (
+        <Modal title={t('stock.new')} onClose={() => setEntering(false)}>
+          {error && <Alert tone="error">{error}</Alert>}
+
+          <StockEntry
+            warehouses={warehouses.data ?? []}
+            busy={mutation.isPending}
+            onCancel={() => setEntering(false)}
+            onSubmit={(body) =>
+              run(async () => {
+                const created = await createStockDocument(body);
+                setEntering(false);
+
+                return created.status === StockDocumentStatus.draft
+                  ? t('stock.draftNotice', { number: created.number })
+                  : t('stock.postedNotice', {
+                      number: created.number,
+                      count: created.movements,
+                    });
+              })
+            }
           />
-        </div>
+        </Modal>
       )}
-    </ReportFrame>
+    </>
   );
 }
 
@@ -411,7 +425,7 @@ function StockEntry({
 
   return (
     <form
-      className="panel space-y-4"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
