@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
-import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame } from '@/components/ReportFrame';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
@@ -210,14 +209,7 @@ export function ProductsPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame
-        title={t('nav.products')}
-        controls={controls}
-        actions={
-          <HeadingAction label={t('products.new')} onClick={() => setAdding(true)} />
-        }
-        query={query}
-      >
+      <ReportFrame title={t('nav.products')} controls={controls} query={query}>
         {(rows) => (
           <div className="space-y-3">
             {error && !adding && (
@@ -232,16 +224,20 @@ export function ProductsPage(): React.JSX.Element {
               columns={columns}
               rowKey={(row) => row.id}
               emptyMessage={t('products.noneFound')}
+              actions={
+                <GridAction label={t('products.new')} onClick={() => setAdding(true)} />
+              }
             />
           </div>
         )}
       </ReportFrame>
 
       {/*
-        A dialog rather than a panel over the list, and outside the frame so a
-        catalogue that failed to load can still be added to. The seven fields it
-        asks for used to hold a third of the screen open on a list that is searched
-        far more often than it is added to.
+        A dialog rather than a panel over the list: the seven fields it asks for
+        used to hold a third of the screen open on a catalogue that is searched far
+        more often than it is added to. Mounted outside the frame, whose children
+        are replaced by a skeleton whenever the list goes back to pending — a
+        search applied behind the dialog should not empty it.
       */}
       {adding && (
         <Modal title={t('products.new')} size="form" onClose={() => setAdding(false)}>

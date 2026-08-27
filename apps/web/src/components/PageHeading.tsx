@@ -8,7 +8,6 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { IconPlus } from '@/components/icons';
 
 /*
   A screen's title and the line describing it, carried by the application bar
@@ -148,37 +147,5 @@ export function PageHeading({
         {hasSubtitle && <p className="page-subtitle mt-0.5">{subtitle}</p>}
       </header>
     </>
-  );
-}
-
-/**
- * The button that opens a screen's add form, sat in the bar beside the title.
- *
- * In the bar rather than on the page because it is the only thing that was left
- * once the form itself moved into a dialog, and a lone button on a row of its own
- * costs the list as much as the form did.
- *
- * Below `sm` it is the glyph alone: "New supplier" and a screen title cannot both
- * have a 390px bar, and the plus beside a heading that already says which list
- * this is means the same thing in a quarter of the width.
- */
-export function HeadingAction({
-  label,
-  onClick,
-}: {
-  readonly label: string;
-  readonly onClick: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="btn-primary btn-sm shrink-0"
-      title={label}
-      aria-label={label}
-    >
-      <IconPlus className="size-4" />
-      <span className="hidden sm:inline">{label}</span>
-    </button>
   );
 }

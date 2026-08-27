@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
-import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -253,14 +252,7 @@ export function StockOperationsPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame
-        title={t('nav.stockOperations')}
-        controls={controls}
-        actions={
-          <HeadingAction label={t('stock.new')} onClick={() => setEntering(true)} />
-        }
-        query={query}
-      >
+      <ReportFrame title={t('nav.stockOperations')} controls={controls} query={query}>
         {(rows) => (
           <div className="space-y-3">
             {error && !entering && <Alert tone="error">{error}</Alert>}
@@ -272,6 +264,9 @@ export function StockOperationsPage(): React.JSX.Element {
               columns={columns}
               rowKey={(row) => row.id}
               emptyMessage={t('stock.noneFound')}
+              actions={
+                <GridAction label={t('stock.new')} onClick={() => setEntering(true)} />
+              }
             />
           </div>
         )}
@@ -281,8 +276,9 @@ export function StockOperationsPage(): React.JSX.Element {
         A receipt with a dozen lines never belonged above the register it is entered
         into: it pushed the list off the screen while it was open, and the list is
         what the screen is for. The same dialog the sales and purchase screens use,
-        and outside the frame for the same reason — a register that failed to load
-        must still let somebody enter a document.
+        Mounted outside the frame, whose children are replaced by a skeleton
+        whenever the register goes back to pending — a half-entered receipt should
+        not be lost to a refetch.
       */}
       {entering && (
         <Modal title={t('stock.new')} onClose={() => setEntering(false)}>
