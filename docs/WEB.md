@@ -157,6 +157,34 @@ over a backdrop, because a 240 px column on a 390 px phone leaves no room for th
 ledger it exists to open. Writing it twice would mean every menu change had to be made
 in both, and one of them would drift.
 
+### The screen's name lives in the bar
+
+The header carries the **active screen's title and subtitle**, not just the theme and
+language switches. A screen renders a `PageHeading` where it is convenient — inside
+`ReportFrame`, for almost all of them — and that heading is moved into the bar with a
+portal.
+
+It used to open the page instead, on a row of its own above the filters. That row spent
+a band of the content area repeating what the highlighted menu entry already said, and
+on a laptop the band is about three rows of the list underneath it. The bar was half
+empty anyway.
+
+A portal rather than lifting the text into a store the shell reads: a screen still names
+itself in one place, beside its subtitle and the print button that belongs with it, and
+there is no moment during a navigation where the bar shows the departed screen's name
+because the arriving one has not registered yet. The wordmark shown on a narrow screen
+steps aside once a screen claims the space — on a 390 px phone "Inspire ERP" and "Cheque
+register" cannot both have the bar, and the second is the one saying where the user is.
+
+The bar is `.no-print`, so `PageHeading` also leaves a **hidden copy in the page** for
+paper. It carries the `hidden` attribute as well as `.print-only`: `space-y` skips
+`[hidden]` but not an element merely set to `display: none`, and without the attribute
+the invisible copy would still push the list down by the gap it is owed — which is the
+gap being removed.
+
+A screen mounted without the shell — every page test — renders its heading in place
+instead, so it still says what it is.
+
 The menu is **data, not code**: it is fetched from `/menu` once a session begins. The
 server has already removed everything the user cannot reach, and every heading left
 empty by that filtering, so the client renders what it is given and decides nothing.
@@ -252,7 +280,10 @@ silently rendering a blank page on failure.
 That last row matters: blanking a statement somebody is reading in order to say
 "loading" costs them their place.
 
-It also renders the print button, since printing is what half these screens are for.
+The heading is not drawn on the page: it goes to `PageHeading`, which puts it in the
+application bar (see [the shell](#the-screens-name-lives-in-the-bar)) so the list gets
+the whole content area. The print button rides up with it, since it belongs to the
+screen rather than to the figures — and printing is what half these screens are for.
 
 ### `DataGrid`
 
@@ -419,7 +450,10 @@ so nothing is clipped at a scroll container; sets `thead { display: table-header
 headings repeat on every sheet; and avoids breaking rows and cards across pages.
 
 Date inputs are deliberately **kept** and flattened to plain text — a trial balance with no
-period on it is a page of figures nobody can file.
+period on it is a page of figures nobody can file. `.print-only` is the counterpart to
+`.no-print`, and carries the screen's heading onto the sheet: the bar it sits in on
+screen does not print, and a trial balance reaching the auditor with nothing on it
+saying which report it is has the same problem as one with no period.
 
 ---
 
@@ -445,13 +479,14 @@ who will paste it into a ticket, and a specific line beats "something went wrong
 
 ## Tests
 
-`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 69 tests, run in CI
+`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 75 tests, run in CI
 **before** the build so a broken component fails in seconds with the assertion that caught it.
 
 | Suite                        | Covers                                                                                                   |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view |
 | `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                 |
+| `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                  |
 | `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                       |
 | `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                  |
 | `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                        |

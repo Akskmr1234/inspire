@@ -7,6 +7,7 @@ import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
 import type { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import {
@@ -41,6 +42,9 @@ export function AppShell(): React.JSX.Element {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The bar carries the active screen's title. See `PageHeading` for the half of
+  // this that lives at the other end.
+  const { slot, setElement, occupied } = useHeadingSlot();
   const {
     displayName,
     mustChangePassword,
@@ -172,16 +176,39 @@ export function AppShell(): React.JSX.Element {
             <IconMenu />
           </button>
 
-          {/* The wordmark rides in the header only where the sidebar is not showing it. */}
-          <span className="truncate text-sm font-semibold text-ink lg:hidden">
-            {t('app.name')}
-          </span>
+          {/*
+            The wordmark rides in the header only where the sidebar is not showing
+            it — and only until a screen puts its own name there, because on a 390px
+            phone "Inspire ERP" and "Cheque register" cannot both have the bar, and
+            the second is the one saying where the user is.
+          */}
+          {!occupied && (
+            <span className="truncate text-sm font-semibold text-ink lg:hidden">
+              {t('app.name')}
+            </span>
+          )}
 
-          <span className="ms-auto hidden truncate text-sm text-ink-muted sm:block">
-            {displayName}
-          </span>
+          {/*
+            Where the active screen puts its title, subtitle and the one control
+            that belongs beside them — portalled in from wherever it renders its
+            `PageHeading`, and left empty by anything that does not name itself.
 
-          <div className="ms-auto flex items-center gap-1.5 sm:ms-0 sm:gap-2">
+            Nothing of the shell's own goes inside: React places a portal's children
+            by appending them, so a node holding both would have the two sets
+            fighting over the same positions.
+          */}
+          <div ref={setElement} className="flex min-w-0 flex-1 items-center gap-2" />
+
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {/*
+              Withdrawn until `xl` rather than `sm`. The screen's name has the
+              middle of the bar now, and on a laptop it is the more useful of the
+              two — the user knows who they signed in as.
+            */}
+            <span className="hidden max-w-40 truncate text-sm text-ink-muted xl:block">
+              {displayName}
+            </span>
+
             <ThemeSwitch theme={theme} onChange={setTheme} />
 
             <Switch<Language>
@@ -243,7 +270,14 @@ export function AppShell(): React.JSX.Element {
               Keyed on the path so walking away from the broken screen clears it.
             */}
             <ErrorBoundary resetKey={location.pathname}>
-              <Outlet />
+              {/*
+                Only the screens need the slot, so only they are given it — and a
+                screen that throws takes its heading out of the bar with it, rather
+                than leaving the bar naming a page that is no longer there.
+              */}
+              <HeadingSlotProvider value={slot}>
+                <Outlet />
+              </HeadingSlotProvider>
             </ErrorBoundary>
           </div>
         </main>

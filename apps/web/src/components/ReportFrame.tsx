@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { PageHeading } from '@/components/PageHeading';
 import type { ApiError } from '@/lib/api';
 
 /**
@@ -33,48 +34,44 @@ export function ReportFrame<TData>({
   return (
     <section className="page">
       {/*
-        Title on its own line, filters in a bar beneath it.
+        The title is not rendered here at all: `PageHeading` puts it in the
+        application bar, which already spans the screen and had nothing on it but a
+        wordmark and three switches.
 
-        They used to share a row with the filters pinned to the opposite edge, which
-        on a wide screen left the better part of a thousand pixels of nothing between
-        a heading and the controls belonging to it — they read as two unrelated
-        things. A filter bar is also what every screen here actually is: a period, a
-        couple of pickers, and a Run.
+        It used to open the page — first on the same row as the filters, then on a
+        row of its own above them. Both spent a band of the content area repeating
+        what the highlighted menu entry says, and on a laptop that band is three
+        rows of the list underneath it. The print control goes up with it: it
+        belongs to the screen as a whole, not to the figures.
       */}
-      <header className="page-header">
-        <div className="min-w-0">
-          <h1 className="page-title">{title}</h1>
-          {subtitle && <p className="page-subtitle mt-0.5">{subtitle}</p>}
-        </div>
-
-        {/*
-          Printing is what half these screens are for, so it gets a control rather
-          than being left to whoever remembers the keyboard shortcut. The stylesheet
-          does the work; this only opens the dialog.
-        */}
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="btn-icon shrink-0"
-          title={t('reports.print')}
-          aria-label={t('reports.print')}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-[18px]"
-            aria-hidden="true"
+      <PageHeading
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="btn-icon shrink-0"
+            title={t('reports.print')}
+            aria-label={t('reports.print')}
           >
-            <path d="M6 9V3h12v6" />
-            <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-            <path d="M6 14h12v7H6z" />
-          </svg>
-        </button>
-      </header>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-[18px]"
+              aria-hidden="true"
+            >
+              <path d="M6 9V3h12v6" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+              <path d="M6 14h12v7H6z" />
+            </svg>
+          </button>
+        }
+      />
 
       {/*
         Rendered only where a screen actually has filters — an empty bar is a line of
