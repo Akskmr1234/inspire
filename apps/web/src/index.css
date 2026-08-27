@@ -412,6 +412,36 @@
     @apply text-sm text-ink-muted;
   }
 
+  /*
+    The same heading once it has been moved into the application bar, where the
+    room it has is 56px tall and however much of the row the switches leave it.
+
+    Smaller than `.page-title` on purpose: this is chrome now, sitting beside the
+    wordmark and the sign-out rather than opening the page. Everything truncates,
+    because a ledger named in Arabic and English is longer than any bar.
+  */
+  .topbar-heading {
+    @apply flex min-w-0 flex-1 flex-col gap-x-2 sm:flex-row sm:items-baseline;
+  }
+
+  .topbar-title {
+    @apply truncate text-sm font-semibold tracking-tight text-ink sm:text-base;
+  }
+
+  .topbar-subtitle {
+    @apply truncate text-xs text-ink-muted;
+  }
+
+  /*
+    The counterpart to `.no-print`: on paper only. Used for the heading the bar
+    carries on screen, which the bar cannot carry onto a sheet. Pair it with the
+    `hidden` attribute, which `space-y` skips where a bare `display: none` still
+    earns the gap above it.
+  */
+  .print-only {
+    @apply hidden;
+  }
+
   /* A translucent, blurred bar. Used by the header and the sidebar so both read as
      chrome sitting above the content rather than more content. */
   .glass {
@@ -804,6 +834,12 @@
   .no-print,
   .print-hidden {
     display: none !important;
+  }
+
+  /* And the other way about: the screen's heading lives in the bar, which does not
+     print, so the copy left behind in the page is what names the sheet. */
+  .print-only {
+    display: block !important;
   }
 
   /* A scroll container has to become an ordinary block or it prints one screenful

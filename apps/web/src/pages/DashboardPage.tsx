@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { PageHeading } from '@/components/PageHeading';
 import { EmptyState, moneyAlways } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 import { useSession } from '@/stores/session';
@@ -102,18 +103,19 @@ export function DashboardPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <header className="page-header">
-        <h1 className="page-title">
-          {language === 'ar' && dashboard.nameArabic
+      {/*
+        In the application bar with every other screen's, rather than opening the
+        page: the tiles are what the dashboard is, and a row spent naming it is a
+        row they do not get.
+      */}
+      <PageHeading
+        title={
+          language === 'ar' && dashboard.nameArabic
             ? dashboard.nameArabic
-            : dashboard.name}
-        </h1>
-        {data.data && (
-          <p className="page-subtitle">
-            {t('reports.asAt')} {data.data.asAt}
-          </p>
-        )}
-      </header>
+            : dashboard.name
+        }
+        subtitle={data.data ? `${t('reports.asAt')} ${data.data.asAt}` : undefined}
+      />
 
       {data.isError && (
         <div role="alert" className="alert-error">

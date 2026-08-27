@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
 import { ApiError, request } from '@/lib/api';
 
@@ -162,9 +163,7 @@ export function VoucherEntryPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <header className="page-header">
-        <h1 className="page-title">Voucher entry</h1>
-      </header>
+      <PageHeading title="Voucher entry" />
 
       {posted && (
         <p className="alert-success">
