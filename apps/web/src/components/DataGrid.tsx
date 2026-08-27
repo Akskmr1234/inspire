@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { IconPlus } from '@/components/icons';
 import { useSession } from '@/stores/session';
 import { fetchGridLayout, resetGridLayout, saveGridLayout } from '@/lib/grid';
 
@@ -67,6 +68,7 @@ export function DataGrid<TRow>({
   rowKey,
   emptyMessage,
   filters,
+  actions,
   paging,
 }: {
   /** Identifies the grid, so a user's arrangement is remembered against it. */
@@ -83,6 +85,16 @@ export function DataGrid<TRow>({
    * also where somebody narrowing a list looks for it.
    */
   readonly filters?: React.ReactNode;
+  /**
+   * What the screen does to the list rather than to a row of it — in practice the
+   * button that opens its add form.
+   *
+   * It leads the toolbar's own controls rather than sitting up in the application
+   * bar. Adding to a list is something you do while looking at the list, and the
+   * hand that reaches for the column picker or the export is the one that reaches
+   * for this.
+   */
+  readonly actions?: React.ReactNode;
   /** Supplied when the server holds the list and this is one page of it. */
   readonly paging?: GridPaging;
 }): React.JSX.Element {
@@ -422,6 +434,8 @@ export function DataGrid<TRow>({
 
         <div className="ms-auto flex shrink-0 items-center gap-1.5">
           {saved && <span className="badge-success animate-pop">{saved}</span>}
+
+          {actions}
 
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
@@ -776,6 +790,28 @@ function CardList<TRow>({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The button that opens a screen's add form, at the head of the grid's controls.
+ *
+ * Filled where the controls beside it are outlined: they arrange the list and this
+ * one adds to it, and a row of six identical buttons is a row with no primary
+ * action in it. Sized to match them all the same, so the toolbar stays one row.
+ */
+export function GridAction({
+  label,
+  onClick,
+}: {
+  readonly label: string;
+  readonly onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button type="button" onClick={onClick} className="btn-primary btn-sm shrink-0">
+      <IconPlus className="size-3.5" />
+      {label}
+    </button>
   );
 }
 

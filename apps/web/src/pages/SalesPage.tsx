@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
-import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
@@ -232,14 +231,7 @@ export function SalesPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame
-        title={t('nav.sales')}
-        controls={controls}
-        actions={
-          <HeadingAction label={t('sales.new')} onClick={() => setEntering(true)} />
-        }
-        query={query}
-      >
+      <ReportFrame title={t('nav.sales')} controls={controls} query={query}>
         {(result) => (
           <div className="space-y-3">
             {error && <p className="alert-error">{error}</p>}
@@ -252,6 +244,9 @@ export function SalesPage(): React.JSX.Element {
               columns={columns}
               rowKey={(row) => row.salesInvoiceId}
               emptyMessage={t('sales.none')}
+              actions={
+                <GridAction label={t('sales.new')} onClick={() => setEntering(true)} />
+              }
               paging={{
                 page: result.page,
                 pageSize: result.pageSize,
@@ -264,9 +259,9 @@ export function SalesPage(): React.JSX.Element {
         )}
       </ReportFrame>
 
-      {/* Outside the frame on purpose: a list that failed to load must still let
-          somebody enter a document, and the frame renders its children only on
-          success. */}
+      {/* Outside the frame on purpose: it replaces its children with a skeleton
+          whenever the list goes back to pending — a page change or a filter — and an
+          invoice half entered should not go with them. */}
       {entering && (
         <EntryDialog
           onClose={() => setEntering(false)}

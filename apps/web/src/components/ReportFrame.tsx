@@ -17,7 +17,6 @@ export function ReportFrame<TData>({
   title,
   subtitle,
   controls,
-  actions,
   query,
   isEmpty,
   children,
@@ -26,13 +25,6 @@ export function ReportFrame<TData>({
   /** A line under the heading, for a period or a scope the title cannot carry. */
   readonly subtitle?: string;
   readonly controls: React.ReactNode;
-  /**
-   * What the screen as a whole does — the button that opens its add form, almost
-   * always. Rendered in the bar beside the title rather than over the list, and
-   * outside the query's success path: a list that failed to load must still let
-   * somebody enter a record.
-   */
-  readonly actions?: React.ReactNode;
   readonly query: UseQueryResult<TData, ApiError>;
   readonly isEmpty?: (data: TData) => boolean;
   readonly children: (data: TData) => React.ReactNode;
@@ -58,32 +50,28 @@ export function ReportFrame<TData>({
         title={title}
         subtitle={subtitle}
         actions={
-          <>
-            {actions}
-
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="btn-icon shrink-0"
-              title={t('reports.print')}
-              aria-label={t('reports.print')}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="btn-icon shrink-0"
+            title={t('reports.print')}
+            aria-label={t('reports.print')}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-[18px]"
+              aria-hidden="true"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="size-[18px]"
-                aria-hidden="true"
-              >
-                <path d="M6 9V3h12v6" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-                <path d="M6 14h12v7H6z" />
-              </svg>
-            </button>
-          </>
+              <path d="M6 9V3h12v6" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+              <path d="M6 14h12v7H6z" />
+            </svg>
+          </button>
         }
       />
 

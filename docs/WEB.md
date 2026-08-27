@@ -285,11 +285,6 @@ The heading is not drawn on the page: it goes to `PageHeading`, which puts it in
 application bar (see [the shell](#the-screens-name-lives-in-the-bar)) so the list gets
 the whole content area. The print button rides up with it, since it belongs to the
 screen rather than to the figures — and printing is what half these screens are for.
-Anything passed as `actions` rides up with it too: in practice the button that opens the
-screen's add form.
-
-`actions` is rendered outside the query's success path on purpose — a list that failed
-to load must still let somebody enter a record.
 
 A screen with no filters at all passes `controls={null}`, and the frame then marks the
 page `.page-lean`: no filter strip is drawn, and the list below knows it has those two
@@ -331,6 +326,12 @@ the grid's toolbar beside the search box. The masters do: a strip across the scr
 hold a single "include withdrawn" checkbox costs the list more than the checkbox is
 worth, and the toolbar is where somebody narrowing a list looks anyway.
 
+The button that opens a screen's add form is passed as `actions` and leads the same
+toolbar, at the head of the column picker, the export and the layout controls — a
+`GridAction`, filled where those are outlined, because a row of six identical buttons
+has no primary action in it. Adding to a list is something you do while looking at the
+list, so it belongs with the list's own controls rather than up in the application bar.
+
 **The table is sized to what the viewport has left**, not to a fraction of it —
 `max(20rem, 100dvh - var(--page-chrome))`, where `.page` names the chrome standing above
 the list and `.page-lean` names it again for a screen with no filter strip. A fraction
@@ -349,10 +350,13 @@ three of them end up refreshing and the fourth does not.
 and added to occasionally — a customer is created once and looked up for years — and
 seven fields held a fifth of the screen open for the occasional case on every visit. The
 button that opens it (`addTitle`, named for the record: "New supplier", not "Add") sits
-in the bar beside the title, so nothing of the form is on the page until it is asked for.
+at the head of the grid's controls, so nothing of the form is on the page until it is
+asked for.
 
-The dialog closes when the mutation succeeds and stays open when it fails, with the
-server's refusal above the fields that caused it. Closing is also what clears the form,
+The dialog is mounted outside the frame, which swaps its children for a skeleton
+whenever the list goes back to pending — a form mounted inside would be unmounted
+mid-entry by a refetch. It closes when the mutation succeeds and stays open when it
+fails, with the server's refusal above the fields that caused it. Closing is also what clears the form,
 which is why no add form resets its own state any more: the old code cleared the fields
 _before_ the create returned, so a refused code took the typed record with it.
 

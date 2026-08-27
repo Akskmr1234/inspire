@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
-import { HeadingAction } from '@/components/PageHeading';
 import { ReportFrame } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
 
@@ -23,6 +22,9 @@ import type { ApiError } from '@/lib/api';
  * looked up for years — and the fields held a fifth of the screen open for the
  * occasional case on every visit. Opened on demand they cost nothing until they are
  * wanted, and they get a dialog's room rather than a strip above the grid.
+ *
+ * The button that opens them sits at the head of the grid's own controls, beside the
+ * column picker and the export: adding to a list is done while looking at the list.
  */
 export function MasterFrame<TRow>({
   title,
@@ -101,12 +103,7 @@ export function MasterFrame<TRow>({
 
   return (
     <>
-      <ReportFrame
-        title={title}
-        controls={null}
-        actions={<HeadingAction label={addTitle} onClick={() => setAdding(true)} />}
-        query={query}
-      >
+      <ReportFrame title={title} controls={null} query={query}>
         {(rows) => (
           <div className="space-y-3">
             {/*
@@ -126,17 +123,21 @@ export function MasterFrame<TRow>({
               columns={columns(run, mutation.isPending)}
               rowKey={rowKey}
               filters={includeWithdrawn}
+              actions={<GridAction label={addTitle} onClick={() => setAdding(true)} />}
             />
           </div>
         )}
       </ReportFrame>
 
       {/*
-        Outside the frame, which renders its children only once the list has
-        arrived: a master whose list failed to load must still let somebody add to
-        it. The rows the form is given are whatever the query holds — a unit's base
-        list, a category's parent list — and an empty list is the right answer while
-        there is nothing to choose from.
+        Outside the frame rather than beside the grid that opens it. The frame
+        swaps its children for a skeleton whenever the list goes back to pending — a
+        refetch after an add, the withdrawn toggle — and a form mounted inside would
+        be unmounted mid-entry, taking whatever had been typed with it.
+
+        The rows the form is given are whatever the query holds: a unit's base list,
+        a category's parent list. An empty list is the right answer while there is
+        nothing to choose from.
       */}
       {adding && (
         <Modal title={addTitle} size="form" onClose={() => setAdding(false)}>
