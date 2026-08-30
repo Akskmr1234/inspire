@@ -136,13 +136,17 @@ export function PageHeading({
         auditor as a page of figures with nothing on it saying which report they
         are. Hidden on screen, where the bar is already carrying it.
 
-        The `hidden` attribute as well as the class: `.page` spaces its children
-        with `space-y`, whose selector skips `[hidden]` but not an element merely
-        set to `display: none`. Without the attribute this invisible header would
-        still push the filter bar down by the gap it is owed — a band of nothing
-        where the heading used to be, which is the thing being removed.
+        The class alone, never the `hidden` attribute. Tailwind's preflight sets
+        `[hidden] { display: none !important }` in `@layer base`, and an important
+        declaration in a layer beats an important declaration in none — the cascade
+        reverses layer order for important — so `.print-only`'s print rule could
+        never win against the attribute, and the sheet printed with no heading at
+        all. The attribute was there to keep `space-y` from spending a gap on an
+        invisible element, which this version of Tailwind does not do anyway: it
+        spaces with `> :not(:last-child) { margin-block-end }`, and an element with
+        no box has no margin to give.
       */}
-      <header hidden className="print-only">
+      <header className="print-only">
         <h1 className="page-title">{title}</h1>
         {hasSubtitle && <p className="page-subtitle mt-0.5">{subtitle}</p>}
       </header>

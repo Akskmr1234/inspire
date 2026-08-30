@@ -448,9 +448,12 @@
 
   /*
     The counterpart to `.no-print`: on paper only. Used for the heading the bar
-    carries on screen, which the bar cannot carry onto a sheet. Pair it with the
-    `hidden` attribute, which `space-y` skips where a bare `display: none` still
-    earns the gap above it.
+    carries on screen, which the bar cannot carry onto a sheet.
+
+    Never pair it with the `hidden` attribute. Preflight sets
+    `[hidden] { display: none !important }` in `@layer base`, and for important
+    declarations the cascade reverses layer order — so a layer's important beats
+    the unlayered print rule below, and the element stays hidden on paper too.
   */
   .print-only {
     @apply hidden;
@@ -954,6 +957,22 @@
   .btn-ghost,
   .btn-danger,
   .btn-icon {
+    display: none !important;
+  }
+
+  /*
+    A sortable column heading is a button — that is what makes it reachable from
+    the keyboard — so the rule above printed every list in the application with an
+    empty grey band where its headings should be: a customer master on paper as
+    three unlabelled columns of text. The heading is not a control the reader can
+    press; it is the label the figures under it need.
+  */
+  th button {
+    display: inline-flex !important;
+  }
+
+  /* The caret beside it is a control's state, and means nothing on a sheet. */
+  th button > [aria-hidden='true'] {
     display: none !important;
   }
 

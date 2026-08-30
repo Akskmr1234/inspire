@@ -357,7 +357,7 @@ export function DataGrid<TRow>({
       */}
       <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
         {!paging && (
-          <div className="relative shrink-0">
+          <div className="no-print relative shrink-0">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -603,8 +603,12 @@ export function DataGrid<TRow>({
                   </th>
                 ))}
               </tr>
+              {/*
+                The per-column filters do not print: on a sheet they are a row of
+                empty boxes under the headings, and nothing the reader can type in.
+              */}
               {!paging && (
-                <tr>
+                <tr className="no-print">
                   {visible.map((column, index) => (
                     <th
                       key={column.key}

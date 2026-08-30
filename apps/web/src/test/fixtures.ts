@@ -331,6 +331,57 @@ export const fixtures: Readonly<Record<string, unknown>> = {
     totalPayments: 0,
   },
 
+  /*
+    The bank book is the same screen as the cash book with a different ledger kind
+    behind it, but it is a different endpoint and so needs its own fixture: without
+    one the screen under test renders the API's "not found" rather than a book, and
+    a suite asserting only that a heading arrived would never say so.
+  */
+  '/accounting/reports/bank-book': {
+    from: '2026-08-01',
+    to: '2026-08-17',
+    currency: 'AED',
+    accounts: [
+      {
+        ledgerId: 'l3',
+        ledgerCode: '1010',
+        ledgerName: 'Bank — current account',
+        openingBalance: 250000,
+        closingBalance: 318400.5,
+        totalReceipts: 96500,
+        totalPayments: 28099.5,
+        lines: [
+          {
+            date: '2026-08-05',
+            voucherId: 'v2',
+            voucherNumber: 'BR-1',
+            referenceNumber: 'CHQ-88214',
+            narration: null,
+            contraLedgerNames: ['Gulf Trading LLC'],
+            debit: 96500,
+            credit: 0,
+            runningBalance: 346500,
+          },
+          {
+            date: '2026-08-11',
+            voucherId: 'v3',
+            voucherNumber: 'BP-1',
+            referenceNumber: null,
+            narration: 'Supplier settlement',
+            contraLedgerNames: ['Emirates Paper Co'],
+            debit: 0,
+            credit: 28099.5,
+            runningBalance: 318400.5,
+          },
+        ],
+      },
+    ],
+    totalOpeningBalance: 250000,
+    totalClosingBalance: 318400.5,
+    totalReceipts: 96500,
+    totalPayments: 28099.5,
+  },
+
   '/accounting/reports/post-dated-cheques': {
     asAt: '2026-08-17',
     currency: 'AED',
