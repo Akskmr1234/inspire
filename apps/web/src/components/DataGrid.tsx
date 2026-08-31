@@ -477,10 +477,9 @@ export function DataGrid<TRow>({
                     : 'border-line bg-surface text-ink-muted',
                 )}
               >
-                <label className="flex cursor-pointer items-center gap-1.5">
+                <label className="field-check cursor-pointer gap-1.5 text-xs">
                   <input
                     type="checkbox"
-                    className="size-3.5"
                     checked={isVisible}
                     onChange={() => toggleHidden(column.key)}
                   />
@@ -728,8 +727,15 @@ function useIsNarrow(): boolean {
  * one carrying the link into the record, so it has to keep whatever `render` gave
  * it rather than being flattened to text.
  *
- * The rest become labelled pairs. A column with no header is an actions column, and
- * its buttons go at the foot of the card with nothing captioning them.
+ * The rest become labelled pairs — but only the ones this row has something to
+ * say for. A table can afford an empty cell, because the column above it supplies
+ * the meaning; a card cannot, because the label travels with the row. A customer
+ * with no mobile, no credit terms and no tax registration was drawing five labels
+ * against five blanks, so the card was mostly the shape of the schema rather than
+ * the record.
+ *
+ * A column with no header is an actions column, and its buttons go at the foot of
+ * the card with nothing captioning them.
  */
 function CardList<TRow>({
   rows,
@@ -765,21 +771,29 @@ function CardList<TRow>({
           )}
 
           <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-            {labelled.map((column) => (
-              <Fragment key={column.key}>
-                <dt className="text-xs tracking-wide text-ink-muted uppercase">
-                  {column.header}
-                </dt>
-                <dd
-                  className={clsx(
-                    'min-w-0 text-end text-ink',
-                    column.numeric && 'font-mono tabular-nums',
-                  )}
-                >
-                  {column.render ? column.render(row) : (column.value(row) ?? '')}
-                </dd>
-              </Fragment>
-            ))}
+            {labelled
+              // `render` is kept even where the value is blank: a column drawing a
+              // badge or a control has something to show that the value does not
+              // carry. Zero is a figure, not a blank.
+              .filter((column) => {
+                const value = column.value(row);
+                return column.render !== undefined || (value !== null && value !== '');
+              })
+              .map((column) => (
+                <Fragment key={column.key}>
+                  <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                    {column.header}
+                  </dt>
+                  <dd
+                    className={clsx(
+                      'min-w-0 text-end text-ink',
+                      column.numeric && 'font-mono tabular-nums',
+                    )}
+                  >
+                    {column.render ? column.render(row) : (column.value(row) ?? '')}
+                  </dd>
+                </Fragment>
+              ))}
           </dl>
 
           {actions.length > 0 && (
@@ -812,7 +826,11 @@ export function GridAction({
   readonly onClick: () => void;
 }): React.JSX.Element {
   return (
-    <button type="button" onClick={onClick} className="btn-primary btn-sm shrink-0">
+    <button
+      type="button"
+      onClick={onClick}
+      className="btn-primary btn-sm shrink-0 max-sm:min-h-9 max-sm:px-3 max-sm:text-sm"
+    >
       <IconPlus className="size-3.5" />
       {label}
     </button>
@@ -845,6 +863,9 @@ function GridButton({
       className={clsx(
         'shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition duration-150',
         'active:scale-95 disabled:pointer-events-none disabled:opacity-40',
+        // The toolbar is the same six controls at every width, and on a phone a
+        // 24px button is a target you aim at rather than press.
+        'max-sm:min-h-9 max-sm:px-3 max-sm:text-sm',
         pressed
           ? 'border-brand-500/40 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200'
           : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',

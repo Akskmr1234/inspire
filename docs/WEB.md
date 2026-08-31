@@ -459,6 +459,28 @@ Three rules keep it honest:
    column's minimum width and pushes the whole page into a horizontal scroll.
 3. **Toolbars scroll sideways below `sm`** rather than wrapping into a four-line stack
    that pushes the report itself off the screen.
+4. **Every target a thumb aims at is 36 px below `sm`**, and compact above it. A grid of
+   four hundred rows pays for every pixel of row height and a mouse hits a 22 px button
+   without complaint, so `.row-action`, `.cell-link`, `.field-check` and the grid's
+   toolbar buttons carry `max-sm:min-h-9` rather than one size for both. WCAG 2.5.8 puts
+   the floor at 24 px; every one of these was 20 to 22 at every width, which on a phone
+   is a target you aim at rather than press.
+5. **A card leaves out what the row has nothing for.** A table can afford an empty cell
+   because the column above it carries the meaning; on a card the label travels with the
+   row, so a customer with no mobile and no credit terms was five labels against five
+   blanks — the shape of the schema rather than the record.
+
+The `.table-wrap` background is four layers doing one job: two covers that scroll with
+the content (`local`) and two shades that do not (`scroll`), so a shade appears at
+whichever edge has more table behind it and nowhere else. Its colour is a token, because
+a black shadow on a near-black surface is nothing. Without it a trial balance on a phone
+looks like a table that simply stops after two columns.
+
+These were not eyeballed. The screens were driven at 320, 390, 430, 768, 1024, 1280 and
+1920 px with the page measuring itself: the document scrolling sideways, any element
+hanging past the edge that is not inside something meant to scroll, any target under
+24 px, and any two pieces of text whose visible boxes overlap. What is listed above is
+what that found, and it now reports nothing across eighteen routes at seven widths.
 
 `.table-wrap-tall` adds a ceiling and pins the header. That needs the ceiling: `.table-wrap`
 already sets `overflow-x`, and CSS computes the other axis to `auto` the moment one axis is
@@ -538,19 +560,19 @@ who will paste it into a ticket, and a specific line beats "something went wrong
 
 ## Tests
 
-`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 83 tests, run in CI
+`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 84 tests, run in CI
 **before** the build so a broken component fails in seconds with the assertion that caught it.
 
-| Suite                        | Covers                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view |
-| `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                 |
-| `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                  |
-| `MasterFrame.test.tsx`       | Add form absent until asked for, opens in a dialog, closes on success, stays open on a refusal           |
-| `ProductEditor.test.tsx`     | The record and its tabs; the way back and the retry when the product will not load                       |
-| `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                       |
-| `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                  |
-| `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                        |
+| Suite                        | Covers                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view, blank fields left off cards |
+| `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                                              |
+| `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                                               |
+| `MasterFrame.test.tsx`       | Add form absent until asked for, opens in a dialog, closes on success, stays open on a refusal                                        |
+| `ProductEditor.test.tsx`     | The record and its tabs; the way back and the retry when the product will not load                                                    |
+| `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                                                    |
+| `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                                               |
+| `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                                                     |
 
 `src/test/setup.ts` shims what jsdom lacks: `matchMedia` (steerable, so the card view is
 reachable), `Blob` content capture (jsdom has no `Blob.prototype.text`), and anchor clicks at

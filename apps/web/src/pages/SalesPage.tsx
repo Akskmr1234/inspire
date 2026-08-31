@@ -174,7 +174,7 @@ export function SalesPage(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setViewing(row.salesInvoiceId)}
-          className="rounded-md border border-line px-2 py-0.5 text-xs font-medium text-ink-muted transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
+          className="row-action row-action-neutral"
         >
           {t('sales.open')}
         </button>

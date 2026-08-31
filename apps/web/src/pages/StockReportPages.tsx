@@ -94,7 +94,7 @@ export function StockValuationPage(): React.JSX.Element {
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
       <CategoryPicker value={categoryId} onChange={setCategoryId} />
 
-      <label className="flex items-center gap-2 pb-1 text-sm">
+      <label className="field-check pb-1">
         <input
           type="checkbox"
           checked={includeZero}
@@ -156,7 +156,7 @@ export function BatchStockPage(): React.JSX.Element {
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
       <CategoryPicker value={categoryId} onChange={setCategoryId} />
 
-      <label className="flex items-center gap-2 pb-1 text-sm">
+      <label className="field-check pb-1">
         <input
           type="checkbox"
           checked={includeZero}

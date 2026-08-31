@@ -69,11 +69,7 @@ export function ProductsPage(): React.JSX.Element {
       header: t('masters.code'),
       value: (row) => row.code,
       render: (row) => (
-        <button
-          type="button"
-          onClick={() => setEditingId(row.id)}
-          className="font-mono text-brand-700 underline-offset-2 hover:underline dark:text-brand-100"
-        >
+        <button type="button" onClick={() => setEditingId(row.id)} className="cell-link">
           {row.code}
         </button>
       ),
@@ -188,7 +184,7 @@ export function ProductsPage(): React.JSX.Element {
         </select>
       </label>
 
-      <label className="flex items-center gap-2 pb-1 text-sm">
+      <label className="field-check pb-1">
         <input
           type="checkbox"
           checked={includeInactive}
