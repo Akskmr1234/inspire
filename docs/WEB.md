@@ -173,7 +173,7 @@ A portal rather than lifting the text into a store the shell reads: a screen sti
 itself in one place, beside its subtitle and the print button that belongs with it, and
 there is no moment during a navigation where the bar shows the departed screen's name
 because the arriving one has not registered yet. The wordmark shown on a narrow screen
-steps aside once a screen claims the space — on a 390 px phone "Inspire ERP" and "Cheque
+steps aside once a screen claims the space — on a 390 px phone "Aider ERP" and "Cheque
 register" cannot both have the bar, and the second is the one saying where the user is.
 
 The bar is `.no-print`, so `PageHeading` also leaves a **copy in the page** for paper,

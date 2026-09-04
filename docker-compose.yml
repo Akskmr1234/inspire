@@ -1,5 +1,5 @@
 # ============================================================================
-# Local development stack for Inspire ERP.
+# Local development stack for Aider ERP.
 #
 #   docker compose up -d postgres redis
 #   dotnet run --project backend/src/ERP.Api
@@ -11,7 +11,7 @@
 # suitable for a deployed environment: see infrastructure/README.md.
 # ============================================================================
 
-name: inspire-erp
+name: aider-erp
 
 services:
   postgres:

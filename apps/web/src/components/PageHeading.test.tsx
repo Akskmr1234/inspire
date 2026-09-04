@@ -20,7 +20,7 @@ function Shell({ children }: { readonly children: React.ReactNode }): React.JSX.
   return (
     <HeadingSlotProvider value={slot}>
       <header data-testid="bar">
-        {!occupied && <span>Inspire ERP</span>}
+        {!occupied && <span>Aider ERP</span>}
         <div ref={setElement} data-testid="slot" />
       </header>
       <main data-testid="body">{children}</main>
@@ -86,7 +86,7 @@ describe('inside the shell', () => {
     const { rerender } = render(<Shell>{null}</Shell>);
 
     // Nothing is naming itself yet, so the bar still says which application it is.
-    expect(screen.queryByText('Inspire ERP')).not.toBeNull();
+    expect(screen.queryByText('Aider ERP')).not.toBeNull();
 
     rerender(
       <Shell>
@@ -94,7 +94,7 @@ describe('inside the shell', () => {
       </Shell>,
     );
 
-    expect(screen.queryByText('Inspire ERP')).toBeNull();
+    expect(screen.queryByText('Aider ERP')).toBeNull();
   });
 });
 

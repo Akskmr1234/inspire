@@ -9,7 +9,7 @@ import { initReactI18next } from 'react-i18next';
  * splitting a hundred keys across files buys nothing but indirection.
  */
 const en = {
-  app: { name: 'Inspire ERP' },
+  app: { name: 'Aider ERP' },
   signIn: {
     title: 'Sign in',
     subtitle: 'Enter your credentials to continue',
@@ -693,7 +693,7 @@ const en = {
 } as const;
 
 const ar = {
-  app: { name: 'إنسباير إي آر بي' },
+  app: { name: 'أيدر إي آر بي' },
   signIn: {
     title: 'تسجيل الدخول',
     subtitle: 'أدخل بياناتك للمتابعة',

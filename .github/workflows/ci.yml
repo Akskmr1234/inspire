@@ -138,6 +138,6 @@ jobs:
           context: .
           file: Dockerfile
           push: false
-          tags: inspire-erp/api:${{ github.sha }}
+          tags: aider-erp/api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -1,4 +1,4 @@
-# Inspire ERP
+# Aider ERP
 
 A multi-tenant, multi-firm, multi-branch ERP platform: accounting, inventory with batch and serial tracking, sales, purchase, manufacturing, and mobile-device service management — with configurable menus, dashboards, reports, print layouts, and workflows.
 

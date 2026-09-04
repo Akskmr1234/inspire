@@ -1,4 +1,4 @@
-# Deploying Inspire ERP
+# Deploying Aider ERP
 
 Written against OneDeploy, and true of any platform that runs a container image
 directly and injects environment variables into it — Railway, Fly, Render, App

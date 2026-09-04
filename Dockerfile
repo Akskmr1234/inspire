@@ -11,7 +11,7 @@
 # web client is a separate service with its root directory set to apps/web,
 # where it has a Dockerfile of its own.
 #
-#   docker build -t inspire-erp/api .
+#   docker build -t aider-erp/api .
 # =============================================================================
 
 # ---------- build ----------

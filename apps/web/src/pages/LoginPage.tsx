@@ -62,7 +62,7 @@ export function LoginPage(): React.JSX.Element {
       >
         <div className="mb-7 flex items-center gap-3">
           <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 font-bold text-white shadow-card">
-            IE
+            AE
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold tracking-tight text-ink">

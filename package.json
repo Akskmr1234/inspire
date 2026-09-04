@@ -1,8 +1,8 @@
 {
-  "name": "inspire-erp",
+  "name": "aider-erp",
   "private": true,
   "version": "0.1.0",
-  "description": "Inspire ERP - multi-tenant, multi-firm, multi-branch enterprise resource planning platform",
+  "description": "Aider ERP - multi-tenant, multi-firm, multi-branch enterprise resource planning platform",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
