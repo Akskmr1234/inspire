@@ -237,6 +237,37 @@ describe('the narrow viewport', () => {
     render(grid());
     expect(screen.queryByRole('button', { name: /freeze/i })).toBeNull();
   });
+
+  it('leaves out the fields a row has nothing for', () => {
+    render(
+      <DataGrid
+        gridKey="sparse"
+        rows={[{ id: '1', code: 'C-001', name: 'Al Noor Trading', amount: 0 }]}
+        columns={[
+          { key: 'code', header: 'Code', value: (row) => row.code },
+          { key: 'name', header: 'Name', value: (row) => row.name },
+          { key: 'mobile', header: 'Mobile', value: () => '' },
+          { key: 'state', header: 'State', value: () => null },
+          { key: 'amount', header: 'Amount', value: (row) => row.amount, numeric: true },
+        ]}
+        rowKey={(row) => row.id}
+      />,
+    );
+
+    // Scoped to the card: the columns are still there to be sorted by, which is
+    // why the toolbar's sort list still names them.
+    const card = within(screen.getByRole('listitem'));
+
+    // A table can afford an empty cell; the column above it carries the meaning.
+    // On a card the label travels with the row, so a blank one is a line saying
+    // nothing — and a record with five of them is mostly the shape of the schema.
+    expect(card.queryByText('Mobile')).toBeNull();
+    expect(card.queryByText('State')).toBeNull();
+
+    // Zero is a figure, not a blank.
+    expect(card.getByText('Amount')).toBeTruthy();
+    expect(card.getByText('Name')).toBeTruthy();
+  });
 });
 
 describe('the empty result', () => {

@@ -20,7 +20,7 @@ function Shell({ children }: { readonly children: React.ReactNode }): React.JSX.
   return (
     <HeadingSlotProvider value={slot}>
       <header data-testid="bar">
-        {!occupied && <span>Inspire ERP</span>}
+        {!occupied && <span>Aider ERP</span>}
         <div ref={setElement} data-testid="slot" />
       </header>
       <main data-testid="body">{children}</main>
@@ -42,10 +42,10 @@ describe('inside the shell', () => {
     expect(slot.textContent).toContain('As at 31 Mar');
 
     // The whole point: nothing of the heading is left occupying the content area.
-    // The print copy below is the one exception, and every part of it is hidden.
+    // The print copy below is the one exception, and it is off the screen.
     const inBody = [...screen.getByTestId('body').querySelectorAll('h1')];
 
-    expect(inBody.every((node) => node.closest('[hidden]') !== null)).toBe(true);
+    expect(inBody.every((node) => node.closest('.print-only') !== null)).toBe(true);
   });
 
   it('carries the controls that belong beside the title up with it', () => {
@@ -67,21 +67,26 @@ describe('inside the shell', () => {
       </Shell>,
     );
 
-    // Hidden with the attribute and not merely with `display: none`: `space-y`
-    // skips `[hidden]`, so this is also what stops the invisible copy from
-    // pushing the list down by the gap the heading used to occupy.
     const copy = screen.getByTestId('body').querySelector('header.print-only');
 
-    expect(copy?.hasAttribute('hidden')).toBe(true);
+    expect(copy).not.toBeNull();
     expect(copy?.textContent).toContain('Cheque register');
     expect(copy?.textContent).toContain('1 Jan – 31 Mar');
+
+    // Hidden by the class and never by the attribute. Preflight sets
+    // `[hidden] { display: none !important }` in `@layer base`, and an important
+    // declaration inside a layer beats an important one outside every layer — so
+    // an element carrying the attribute cannot be shown again by the print rule,
+    // and every report printed with no heading on it. jsdom applies no
+    // stylesheet, so the attribute is what this can check.
+    expect(copy?.hasAttribute('hidden')).toBe(false);
   });
 
   it('drops the wordmark once a screen has claimed the bar', () => {
     const { rerender } = render(<Shell>{null}</Shell>);
 
     // Nothing is naming itself yet, so the bar still says which application it is.
-    expect(screen.queryByText('Inspire ERP')).not.toBeNull();
+    expect(screen.queryByText('Aider ERP')).not.toBeNull();
 
     rerender(
       <Shell>
@@ -89,7 +94,7 @@ describe('inside the shell', () => {
       </Shell>,
     );
 
-    expect(screen.queryByText('Inspire ERP')).toBeNull();
+    expect(screen.queryByText('Aider ERP')).toBeNull();
   });
 });
 

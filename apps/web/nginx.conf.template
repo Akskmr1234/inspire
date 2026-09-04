@@ -1,5 +1,5 @@
 # =============================================================================
-# nginx configuration for the Inspire ERP web client.
+# nginx configuration for the Aider ERP web client.
 #
 # Processed by the nginx image's entrypoint, which runs envsubst over every
 # template in /etc/nginx/templates and writes the result to /etc/nginx/conf.d.

@@ -93,7 +93,6 @@ export function MasterFrame<TRow>({
     <label className="field-check shrink-0 text-xs whitespace-nowrap">
       <input
         type="checkbox"
-        className="size-3.5"
         checked={includeInactive}
         onChange={(event) => setIncludeInactive(event.target.checked)}
       />
@@ -173,11 +172,8 @@ export function RowAction({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition duration-150',
-        'active:scale-95 disabled:pointer-events-none disabled:opacity-40',
-        tone === 'danger'
-          ? 'border-red-200 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-500/10'
-          : 'border-line text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
+        'row-action',
+        tone === 'danger' ? 'row-action-danger' : 'row-action-neutral',
       )}
     >
       {label}

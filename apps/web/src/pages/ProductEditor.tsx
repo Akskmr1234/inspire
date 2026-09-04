@@ -89,11 +89,33 @@ export function ProductEditor({
     );
   }
 
+  /*
+    The editor replaces the list rather than sitting beside it, so a product that
+    will not load must still offer the way back. It used to render the alert alone:
+    the list was gone, the record was gone, and the only exits left were the browser
+    button and the menu — on the one screen where the user had just been holding a
+    list of every product.
+  */
   if (product.isError || !product.data) {
     return (
-      <Alert>
-        {product.error?.detail ?? product.error?.code ?? t('products.notFound')}
-      </Alert>
+      <section className="page">
+        <Alert>
+          {product.error?.detail ?? product.error?.code ?? t('products.notFound')}
+        </Alert>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void product.refetch()}
+            className="btn-secondary"
+          >
+            {t('common.retry')}
+          </button>
+          <button type="button" onClick={onClose} className="btn-secondary">
+            {t('products.backToList')}
+          </button>
+        </div>
+      </section>
     );
   }
 

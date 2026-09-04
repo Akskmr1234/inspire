@@ -1,11 +1,11 @@
 # =============================================================================
-# Inspire ERP web client — static bundle served by nginx.
+# Aider ERP web client — static bundle served by nginx.
 #
 # On a deployment platform this is the service whose ROOT DIRECTORY is apps/web,
 # which is also this build's context. The API is a separate service built from
 # the repository root.
 #
-#   docker build -t inspire-erp/web --build-arg VITE_API_URL=https://… apps/web
+#   docker build -t aider-erp/web --build-arg VITE_API_URL=https://… apps/web
 # =============================================================================
 
 # ---------- build ----------

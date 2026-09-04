@@ -26,9 +26,9 @@
     <InvariantGlobalization>false</InvariantGlobalization>
 
     <!-- Repository metadata -->
-    <Company>Inspire</Company>
-    <Product>Inspire ERP</Product>
-    <Authors>Inspire Engineering</Authors>
+    <Company>Aider</Company>
+    <Product>Aider ERP</Product>
+    <Authors>Aider Engineering</Authors>
     <Version>0.1.0</Version>
     <NeutralLanguage>en</NeutralLanguage>
 

@@ -243,6 +243,9 @@
        the surface with a blur behind them, so content scrolling underneath is
        suggested rather than hidden. */
     --app-glass: oklch(1 0 0 / 0.82);
+
+    /* The shade at the edge of a table that has more columns behind it. */
+    --app-scroll-shade: oklch(0.28 0.02 264 / 0.3);
   }
 
   :root.dark {
@@ -259,6 +262,9 @@
     --app-ink-subtle: oklch(0.61 0.021 264);
 
     --app-glass: oklch(0.226 0.019 264 / 0.82);
+
+    /* Lighter on a dark surface: a black shadow on near-black is not a shadow. */
+    --app-scroll-shade: oklch(0.02 0 0 / 0.55);
   }
 
   html {
@@ -448,9 +454,12 @@
 
   /*
     The counterpart to `.no-print`: on paper only. Used for the heading the bar
-    carries on screen, which the bar cannot carry onto a sheet. Pair it with the
-    `hidden` attribute, which `space-y` skips where a bare `display: none` still
-    earns the gap above it.
+    carries on screen, which the bar cannot carry onto a sheet.
+
+    Never pair it with the `hidden` attribute. Preflight sets
+    `[hidden] { display: none !important }` in `@layer base`, and for important
+    declarations the cascade reverses layer order — so a layer's important beats
+    the unlayered print rule below, and the element stays hidden on paper too.
   */
   .print-only {
     @apply hidden;
@@ -559,7 +568,14 @@
   /* A checkbox and its label as one hit target, which on a phone is the difference
      between a control that can be tapped and one that cannot. */
   .field-check {
-    @apply inline-flex cursor-pointer items-center gap-2 text-sm text-ink select-none;
+    @apply inline-flex cursor-pointer items-center gap-2 text-sm text-ink select-none
+           max-sm:min-h-9;
+  }
+
+  /* The box itself, which is the part a finger aims at. 14px is a decoration on a
+     phone; 18px with the label beside it is a control. */
+  .field-check input[type='checkbox'] {
+    @apply size-4 max-sm:size-[18px];
   }
 
   /* Stacks label over control. `min-w-0` so a field inside a flex toolbar can be
@@ -609,6 +625,42 @@
 
   .btn-sm {
     @apply gap-1.5 rounded-md px-2.5 py-1 text-xs;
+  }
+
+  /*
+    The controls that live inside a row: a withdraw, an open, the code that leads
+    into a record.
+
+    Two sizes on purpose. On a pointer device they stay small, because a grid of
+    four hundred rows pays for every pixel of row height and a mouse hits a 22px
+    button without complaint. Below `sm` — where the grid is a list of cards and
+    the pointer is a thumb — they take 36px, comfortably past the 24px floor
+    WCAG 2.5.8 sets and with room to miss. They were 20 to 22px at every width,
+    which on a phone is a target you aim at rather than press.
+  */
+  .row-action {
+    @apply inline-flex shrink-0 items-center justify-center gap-1 rounded-md border
+           px-2 py-0.5 text-xs font-medium whitespace-nowrap
+           transition duration-150 active:scale-95
+           disabled:pointer-events-none disabled:opacity-40
+           max-sm:min-h-9 max-sm:px-3 max-sm:text-sm;
+  }
+
+  .row-action-neutral {
+    @apply border-line text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink;
+  }
+
+  .row-action-danger {
+    @apply border-red-200 text-red-700 hover:bg-red-50
+           dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-500/10;
+  }
+
+  /* The identifying cell that opens the record behind the row. Underlined on a
+     pointer device only on hover; on a phone it is a 36px target like the rest. */
+  .cell-link {
+    @apply inline-flex items-center rounded font-mono text-brand-700 underline-offset-2
+           hover:underline dark:text-brand-100
+           max-sm:min-h-9 max-sm:text-sm;
   }
 
   /* A square button holding a single glyph. Sized to the 40px minimum that makes a
@@ -704,6 +756,32 @@
 
   .table-wrap {
     @apply w-full overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-surface shadow-card;
+
+    /*
+      A shadow at whichever edge has more table behind it.
+
+      Every report here is wider than a phone and scrolls inside this box, which
+      worked but never said so: a trial balance on a phone looked like a table
+      that simply stopped after two columns. The trick is the attachment — the
+      two covering layers scroll with the content (`local`) and the two shadows
+      do not (`scroll`), so each shadow is hidden until there is something under
+      it to reveal, and appears exactly when that edge has more to show.
+
+      Both colours come from the theme: the cover is the surface itself, and the
+      shade is `--app-scroll-shade`, which is dark on a light surface and lighter
+      on a dark one — a black shadow on near-black is not a shadow, it is nothing.
+      The print layer drops it with every other background image.
+    */
+    background:
+      linear-gradient(to right, var(--app-surface) 40%, transparent) 0 0 / 3rem 100%
+        no-repeat local,
+      linear-gradient(to left, var(--app-surface) 40%, transparent) 100% 0 / 3rem 100%
+        no-repeat local,
+      radial-gradient(farthest-side at 0 50%, var(--app-scroll-shade), transparent) 0 0 /
+        1.25rem 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, var(--app-scroll-shade), transparent)
+        100% 0 / 1.25rem 100% no-repeat scroll,
+      var(--app-surface);
   }
 
   /*
@@ -954,6 +1032,22 @@
   .btn-ghost,
   .btn-danger,
   .btn-icon {
+    display: none !important;
+  }
+
+  /*
+    A sortable column heading is a button — that is what makes it reachable from
+    the keyboard — so the rule above printed every list in the application with an
+    empty grey band where its headings should be: a customer master on paper as
+    three unlabelled columns of text. The heading is not a control the reader can
+    press; it is the label the figures under it need.
+  */
+  th button {
+    display: inline-flex !important;
+  }
+
+  /* The caret beside it is a control's state, and means nothing on a sheet. */
+  th button > [aria-hidden='true'] {
     display: none !important;
   }
 

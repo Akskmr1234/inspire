@@ -96,11 +96,7 @@ export function StockOperationsPage(): React.JSX.Element {
       header: t('stock.number'),
       value: (row) => row.number,
       render: (row) => (
-        <button
-          type="button"
-          onClick={() => setViewing(row.id)}
-          className="font-mono text-brand-700 underline-offset-2 hover:underline dark:text-brand-100"
-        >
+        <button type="button" onClick={() => setViewing(row.id)} className="cell-link">
           {row.number}
         </button>
       ),

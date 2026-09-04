@@ -172,6 +172,13 @@ describe('every screen', () => {
       // wrong place.
       expect(crashed(container)).toBeNull();
 
+      // A screen whose endpoint has no fixture renders the API's "not found" and
+      // still shows its heading, so without this the suite reports a pass over a
+      // screen that drew an error and not one figure. That is exactly what the
+      // bank book did: it shares a component with the cash book, so nobody noticed
+      // that it does not share an endpoint.
+      expect(container.textContent).not.toContain('Test.NoFixture');
+
       // Any heading, not the first. Most screens lead with their title, but the
       // change-password screen leads with whose password it is and carries its own
       // title beneath — an assumption about heading order is a claim about page

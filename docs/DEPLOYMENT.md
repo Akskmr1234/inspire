@@ -1,4 +1,4 @@
-# Deploying Inspire ERP
+# Deploying Aider ERP
 
 Written against OneDeploy, and true of any platform that runs a container image
 directly and injects environment variables into it — Railway, Fly, Render, App
@@ -127,6 +127,33 @@ services, and wrong for two separately-hosted services. There is deliberately no
 localhost default: one would let the build succeed while shipping a bundle that tells
 every user's browser to call their own machine — invisible in every log, and visible
 only as an application that loads and then does nothing.
+
+---
+
+## Changing the public hostname
+
+The hostname is the platform's, not the application's: no file in this repository
+names it, so renaming a service or its route is done in the hosting console and
+nothing here needs editing. Two settings do have to follow it, and both fail in the
+same quiet way — an application that loads and then refuses to do anything, while the
+API reports itself perfectly healthy.
+
+1. **If the web client's hostname changed**, set the API's `Cors__AllowedOrigins` to
+   the new origin and redeploy the API. An origin that does not match exactly is
+   rejected by the browser, not by the server, so nothing appears in the API's log.
+   Include the old origin alongside the new one if the old route stays up.
+2. **If the API's hostname changed**, rebuild the web image with `VITE_API_URL` set
+   to the new URL. It is inlined at build time; setting it on the running container
+   changes nothing, and the bundle keeps calling the old host until it is rebuilt.
+
+Neither applies where a single reverse proxy fronts both services on one hostname:
+there `VITE_API_URL` is unset, the client calls its own origin, and CORS never comes
+into it. If you are unsure which arrangement you have, open the running application
+and look at where a request to `/api/v1/menu` goes — its own hostname, or another.
+
+Users are signed out by the rename whatever the arrangement. The refresh token lives
+in `localStorage`, which is per-origin: a new hostname is a new origin, and their
+stored session does not travel to it. They sign in once and are back where they were.
 
 ---
 

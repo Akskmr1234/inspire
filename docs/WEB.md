@@ -173,14 +173,18 @@ A portal rather than lifting the text into a store the shell reads: a screen sti
 itself in one place, beside its subtitle and the print button that belongs with it, and
 there is no moment during a navigation where the bar shows the departed screen's name
 because the arriving one has not registered yet. The wordmark shown on a narrow screen
-steps aside once a screen claims the space — on a 390 px phone "Inspire ERP" and "Cheque
+steps aside once a screen claims the space — on a 390 px phone "Aider ERP" and "Cheque
 register" cannot both have the bar, and the second is the one saying where the user is.
 
-The bar is `.no-print`, so `PageHeading` also leaves a **hidden copy in the page** for
-paper. It carries the `hidden` attribute as well as `.print-only`: `space-y` skips
-`[hidden]` but not an element merely set to `display: none`, and without the attribute
-the invisible copy would still push the list down by the gap it is owed — which is the
-gap being removed.
+The bar is `.no-print`, so `PageHeading` also leaves a **copy in the page** for paper,
+hidden on screen by `.print-only` and nothing else. Never give it the `hidden`
+attribute: preflight sets `[hidden] { display: none !important }` in `@layer base`, and
+for important declarations the cascade **reverses** layer order — so a layer's important
+beats the unlayered print rule, and the sheet comes out with no heading on it. (It did,
+for exactly as long as the attribute was there.) The attribute was guarding against a
+`space-y` gap that this version of Tailwind cannot produce anyway: it spaces with
+`> :not(:last-child) { margin-block-end }`, and an element with no box has no margin to
+give.
 
 A screen mounted without the shell — every page test — renders its heading in place
 instead, so it still says what it is.
@@ -455,6 +459,28 @@ Three rules keep it honest:
    column's minimum width and pushes the whole page into a horizontal scroll.
 3. **Toolbars scroll sideways below `sm`** rather than wrapping into a four-line stack
    that pushes the report itself off the screen.
+4. **Every target a thumb aims at is 36 px below `sm`**, and compact above it. A grid of
+   four hundred rows pays for every pixel of row height and a mouse hits a 22 px button
+   without complaint, so `.row-action`, `.cell-link`, `.field-check` and the grid's
+   toolbar buttons carry `max-sm:min-h-9` rather than one size for both. WCAG 2.5.8 puts
+   the floor at 24 px; every one of these was 20 to 22 at every width, which on a phone
+   is a target you aim at rather than press.
+5. **A card leaves out what the row has nothing for.** A table can afford an empty cell
+   because the column above it carries the meaning; on a card the label travels with the
+   row, so a customer with no mobile and no credit terms was five labels against five
+   blanks — the shape of the schema rather than the record.
+
+The `.table-wrap` background is four layers doing one job: two covers that scroll with
+the content (`local`) and two shades that do not (`scroll`), so a shade appears at
+whichever edge has more table behind it and nowhere else. Its colour is a token, because
+a black shadow on a near-black surface is nothing. Without it a trial balance on a phone
+looks like a table that simply stops after two columns.
+
+These were not eyeballed. The screens were driven at 320, 390, 430, 768, 1024, 1280 and
+1920 px with the page measuring itself: the document scrolling sideways, any element
+hanging past the edge that is not inside something meant to scroll, any target under
+24 px, and any two pieces of text whose visible boxes overlap. What is listed above is
+what that found, and it now reports nothing across eighteen routes at seven widths.
 
 `.table-wrap-tall` adds a ceiling and pins the header. That needs the ceiling: `.table-wrap`
 already sets `overflow-x`, and CSS computes the other axis to `auto` the moment one axis is
@@ -504,6 +530,12 @@ period on it is a page of figures nobody can file. `.print-only` is the counterp
 screen does not print, and a trial balance reaching the auditor with nothing on it
 saying which report it is has the same problem as one with no period.
 
+**A column heading is a button** — that is what makes a grid sortable from the keyboard
+— so the rule hiding every control had to spare `th button`, or a printed list is
+unlabelled columns of text. The sort caret goes, since it is a control's state; the
+grid's per-column filter boxes and its search box are `.no-print`, being a band of empty
+boxes on a sheet.
+
 ---
 
 ## When a screen throws
@@ -528,18 +560,19 @@ who will paste it into a ticket, and a specific line beats "something went wrong
 
 ## Tests
 
-`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 80 tests, run in CI
+`npm test --workspace @erp/web` — Vitest, jsdom, Testing Library. 84 tests, run in CI
 **before** the build so a broken component fails in seconds with the assertion that caught it.
 
-| Suite                        | Covers                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view |
-| `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                 |
-| `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                  |
-| `MasterFrame.test.tsx`       | Add form absent until asked for, opens in a dialog, closes on success, stays open on a refusal           |
-| `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                       |
-| `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                  |
-| `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                        |
+| Suite                        | Covers                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `DataGrid.test.tsx`          | Sorting (keyboard, `aria-sort`, by value not rendered text), permission columns, CSV escaping, card view, blank fields left off cards |
+| `ReportFrame.test.tsx`       | Loading, error, retry, empty, refetch-over-data, print, money formatting                                                              |
+| `PageHeading.test.tsx`       | Heading portalled to the bar, actions with it, the hidden print copy, in-place fallback                                               |
+| `MasterFrame.test.tsx`       | Add form absent until asked for, opens in a dialog, closes on success, stays open on a refusal                                        |
+| `ProductEditor.test.tsx`     | The record and its tabs; the way back and the retry when the product will not load                                                    |
+| `ErrorBoundary.test.tsx`     | Containment, message, reset on route change, retry                                                                                    |
+| `useModalBehaviour.test.tsx` | Focus in, focus restored, Escape, Tab trap, scroll lock                                                                               |
+| `pages.test.tsx`             | All 33 screens render their figures without reaching the boundary                                                                     |
 
 `src/test/setup.ts` shims what jsdom lacks: `matchMedia` (steerable, so the card view is
 reachable), `Blob` content capture (jsdom has no `Blob.prototype.text`), and anchor clicks at
@@ -547,14 +580,18 @@ blob URLs.
 
 ### Writing a page test
 
-Two things are easy to get wrong and both make a test that always passes:
+Three things are easy to get wrong and each makes a test that always passes:
 
 1. **Do not wait on the heading.** `ReportFrame` renders it while the query is still pending,
    so the assertion runs against a screen that has not drawn a row. Wait for the mocked
    requests to settle.
-2. **Build fixtures from the backend's DTO field names**, not from memory. A fixture that
+1. **Build fixtures from the backend's DTO field names**, not from memory. A fixture that
    guesses tests only the guess, and fails in a way indistinguishable from an application
    bug.
+1. **A missing fixture reads as a pass.** A screen whose endpoint has none renders the
+   API's "not found" and still shows its heading, so the suite asserts that no screen
+   contains `Test.NoFixture`. That is how the bank book was caught drawing an error
+   instead of a book: it shares a component with the cash book, but not an endpoint.
 
 ---
 

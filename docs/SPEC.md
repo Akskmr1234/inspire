@@ -1,4 +1,4 @@
-# Inspire ERP — Canonical Functional Specification
+# Aider ERP — Canonical Functional Specification
 
 > **Sources of truth**
 > 1. `Inspire_web.docx` — *Enterprise Resource Planning (ERP) System Requirements Specification* (prose).

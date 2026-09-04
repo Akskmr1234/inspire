@@ -79,7 +79,7 @@ public partial class Program
             ConfigurePipeline(app);
 
             Log.Information(
-                "Inspire ERP API starting in {Environment}",
+                "Aider ERP API starting in {Environment}",
                 app.Environment.EnvironmentName);
 
             // Before the first request is served, so a request never arrives at a
@@ -103,7 +103,7 @@ public partial class Program
         }
         catch (Exception ex) when (ex is not HostAbortedException)
         {
-            Log.Fatal(ex, "Inspire ERP API terminated unexpectedly during startup");
+            Log.Fatal(ex, "Aider ERP API terminated unexpectedly during startup");
             return 1;
         }
         finally
@@ -173,7 +173,7 @@ public partial class Program
         {
             options.SwaggerDoc("v1", new OpenApiInfo
             {
-                Title = "Inspire ERP API",
+                Title = "Aider ERP API",
                 Version = "v1",
                 Description =
                     "Multi-tenant, multi-firm, multi-branch ERP platform: accounting, " +
@@ -285,7 +285,7 @@ public partial class Program
         // serving, not that the database is reachable.
         app.MapGet("/", () => Results.Ok(new
         {
-            name = "Inspire ERP API",
+            name = "Aider ERP API",
             status = "ok",
             documentation = "/swagger",
         })).AllowAnonymous();
