@@ -83,7 +83,11 @@ const { WarehousesPage } = await import('@/pages/WarehousesPage');
 const { CustomersPage } = await import('@/pages/CustomersPage');
 const { SuppliersPage } = await import('@/pages/SuppliersPage');
 const { SalesPage } = await import('@/pages/SalesPage');
-const { PurchasePage } = await import('@/pages/PurchasePage');
+const { PurchasePage, PurchaseReturnsPage } = await import('@/pages/PurchasePage');
+const { PurchaseOrdersPage, SalesOrdersPage } = await import('@/pages/OrdersPage');
+const { PaymentEntryPage, ReceiptEntryPage } = await import('@/pages/VoucherEntryPage');
+const { SettingsPage } = await import('@/pages/SettingsPage');
+const { OpeningStockPage } = await import('@/pages/StockOperationsPage');
 const {
   BatchStockPage,
   ExpiryReportPage,
@@ -128,6 +132,13 @@ const screens: readonly (readonly [string, React.ReactNode, RegExp])[] = [
   ['suppliers', <SuppliersPage />, /suppliers/i],
   ['sales invoices', <SalesPage />, /sales/i],
   ['purchases', <PurchasePage />, /purchase/i],
+  ['purchase returns', <PurchaseReturnsPage />, /purchase returns/i],
+  ['purchase orders', <PurchaseOrdersPage />, /purchase orders/i],
+  ['sales orders', <SalesOrdersPage />, /sales orders/i],
+  ['payment', <PaymentEntryPage />, /payment/i],
+  ['receipt', <ReceiptEntryPage />, /receipt/i],
+  ['opening stock', <OpeningStockPage />, /opening stock/i],
+  ['settings', <SettingsPage />, /settings/i],
 ];
 
 beforeEach(() => {
@@ -198,6 +209,6 @@ describe('the count', () => {
     // being rendered by anything — which is exactly what happened when the
     // change-password screen landed. The two book variants share one component,
     // and the login page is not reachable from the signed-in router.
-    expect(screens.length).toBe(34);
+    expect(screens.length).toBe(41);
   });
 });

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { IconPlus } from '@/components/icons';
 import { useSession } from '@/stores/session';
+import { useSettings } from '@/stores/settings';
 import { fetchGridLayout, resetGridLayout, saveGridLayout } from '@/lib/grid';
 
 /**
@@ -24,6 +25,14 @@ export interface GridColumn<TRow> {
   readonly numeric?: boolean;
   /** Hidden until a user turns it on. */
   readonly hiddenByDefault?: boolean;
+  /**
+   * Given whatever width the other columns leave.
+   *
+   * For the one column carrying prose — a product description, a narration. Without
+   * it every column shares the table's width equally, so a forty-character
+   * description is wrapped to three lines beside a column holding "EA".
+   */
+  readonly wide?: boolean;
   /**
    * A `module:resource:verb` code the user must hold to see this column at all.
    *
@@ -70,6 +79,8 @@ export function DataGrid<TRow>({
   filters,
   actions,
   paging,
+  pageSize,
+  hideSearch = false,
 }: {
   /** Identifies the grid, so a user's arrangement is remembered against it. */
   readonly gridKey: string;
@@ -97,12 +108,29 @@ export function DataGrid<TRow>({
   readonly actions?: React.ReactNode;
   /** Supplied when the server holds the list and this is one page of it. */
   readonly paging?: GridPaging;
+  /**
+   * Withdraws the grid's own search box.
+   *
+   * For the screens that search on the server: two search boxes a hand's width
+   * apart, narrowing the same list by different rules, is one more than anybody can
+   * use. The screen's own box is the one that reaches the whole master.
+   */
+  readonly hideSearch?: boolean;
+  /**
+   * How many rows a page holds when the grid is paging itself.
+   *
+   * Defaults to whatever the installation is set to. A grid that is genuinely short
+   * — a document's own lines — passes `0` to draw everything on one page.
+   */
+  readonly pageSize?: number;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { can } = useSession();
   const narrow = useIsNarrow();
+  const settingsPageSize = useSettings((state) => state.pageSize);
 
   const [search, setSearch] = useState('');
+  const [clientPage, setClientPage] = useState(1);
   const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDescending, setSortDescending] = useState(false);
@@ -253,6 +281,28 @@ export function DataGrid<TRow>({
     });
   }, [rows, visible, search, columnSearch, sortKey, sortDescending]);
 
+  /*
+    The grid pages itself when the server has not already.
+
+    Every list in the application used to draw every row it held, however many that
+    was, and said how many in one line of small type at the top of the toolbar. Two
+    thousand rows of chart of accounts is a page nobody scrolls to the bottom of and
+    a browser that stutters while they try. Paging in the browser costs nothing —
+    the rows are already here — and gives the reader the same footer, with the same
+    page numbers, as the lists the server pages.
+  */
+  const rowsPerPage = pageSize ?? settingsPageSize;
+  const clientPaged = !paging && rowsPerPage > 0 && shown.length > rowsPerPage;
+  const clientPages = clientPaged ? Math.ceil(shown.length / rowsPerPage) : 1;
+
+  // Clamped rather than reset. Narrowing a search while on page nine should land on
+  // the last page of what is left, not silently on a page that no longer exists.
+  const currentClientPage = Math.min(Math.max(clientPage, 1), clientPages);
+
+  const visibleRows = clientPaged
+    ? shown.slice((currentClientPage - 1) * rowsPerPage, currentClientPage * rowsPerPage)
+    : shown;
+
   const toggleSort = (key: string): void => {
     // Withdrawn while the server holds the list: sorting the page in hand would put
     // the largest row on screen at the top of fifty and call it the largest of four
@@ -356,7 +406,7 @@ export function DataGrid<TRow>({
         screen in the application.
       */}
       <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
-        {!paging && (
+        {!paging && !hideSearch && (
           <div className="no-print relative shrink-0">
             <svg
               viewBox="0 0 24 24"
@@ -373,7 +423,10 @@ export function DataGrid<TRow>({
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setClientPage(1);
+              }}
               placeholder={t('grid.search')}
               className="field-input-sm w-44 ps-8 sm:w-56"
             />
@@ -381,16 +434,6 @@ export function DataGrid<TRow>({
         )}
 
         {filters}
-
-        <span className="shrink-0 text-xs whitespace-nowrap text-ink-muted">
-          {paging
-            ? t('grid.pageOf', {
-                page: paging.page,
-                pages: Math.max(paging.totalPages, 1),
-                total: paging.totalCount,
-              })
-            : t('grid.rowCount', { shown: shown.length, total: rows.length })}
-        </span>
 
         {/*
           Sorting lives in the column headers, and the card view has none — so
@@ -432,14 +475,27 @@ export function DataGrid<TRow>({
           </label>
         )}
 
+        {/*
+          The controls, in two groups with a rule between them.
+
+          Every list in the application carried the same six buttons in the same row
+          as the button that adds a record, all outlined, all the same size, in the
+          order they happened to be written in — so the one action that changes the
+          data sat in a row of five that only rearrange the view of it, and no two
+          screens agreed on where it was. The add button leads, filled; the view
+          controls follow as one group, in one order, on every screen.
+        */}
         <div className="ms-auto flex shrink-0 items-center gap-1.5">
           {saved && <span className="badge-success animate-pop">{saved}</span>}
 
           {actions}
 
+          {actions && <span aria-hidden="true" className="h-5 w-px bg-line" />}
+
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
             pressed={showPicker}
+            title={t('grid.columnsHint')}
           >
             {t('grid.columns')}
           </GridButton>
@@ -449,14 +505,22 @@ export function DataGrid<TRow>({
             <GridButton
               onClick={() => setFrozen((value) => (value === 0 ? 1 : 0))}
               pressed={frozen > 0}
+              title={t('grid.freezeHint')}
             >
               {frozen > 0 ? t('grid.unfreeze') : t('grid.freeze')}
             </GridButton>
           )}
 
-          <GridButton onClick={exportCsv}>{t('grid.exportCsv')}</GridButton>
-          <GridButton onClick={() => void persist()}>{t('grid.saveLayout')}</GridButton>
-          <GridButton onClick={() => void restoreDefaults()}>
+          <GridButton onClick={exportCsv} title={t('grid.exportHint')}>
+            {t('grid.exportCsv')}
+          </GridButton>
+          <GridButton onClick={() => void persist()} title={t('grid.saveLayoutHint')}>
+            {t('grid.saveLayout')}
+          </GridButton>
+          <GridButton
+            onClick={() => void restoreDefaults()}
+            title={t('grid.resetLayoutHint')}
+          >
             {t('grid.resetLayout')}
           </GridButton>
         </div>
@@ -528,7 +592,7 @@ export function DataGrid<TRow>({
       */}
       {narrow ? (
         <CardList
-          rows={shown}
+          rows={visibleRows}
           columns={visible}
           rowKey={rowKey}
           emptyMessage={emptyMessage ?? t('grid.noRows')}
@@ -555,7 +619,19 @@ export function DataGrid<TRow>({
                     }
                     className={clsx(
                       'select-none',
-                      column.numeric ? 'text-end' : 'text-start',
+                      // Three alignments, decided by what the column holds rather
+                      // than by the order it was declared in: figures end-aligned
+                      // so a column of them shares a decimal point, an actions
+                      // column end-aligned because its buttons belong against the
+                      // edge of the row, and everything else on the reading edge.
+                      // The headings follow their cells, which is the half that was
+                      // missing — a right-aligned column of money under a
+                      // left-aligned heading is a heading pointing at the wrong
+                      // column.
+                      column.numeric || column.header.trim() === ''
+                        ? 'text-end'
+                        : 'text-start',
+                      column.wide && 'w-[35%] min-w-64',
                       // A frozen column sticks to the logical start edge, so Arabic
                       // freezes from the right without a second rule.
                       index < frozen && 'sticky start-0 z-30 bg-surface-3',
@@ -616,18 +692,24 @@ export function DataGrid<TRow>({
                         index < frozen && 'sticky start-0 z-30',
                       )}
                     >
-                      <input
-                        type="search"
-                        aria-label={`${t('grid.search')} — ${column.header}`}
-                        value={columnSearch[column.key] ?? ''}
-                        onChange={(event) =>
-                          setColumnSearch((previous) => ({
-                            ...previous,
-                            [column.key]: event.target.value,
-                          }))
-                        }
-                        className="w-full min-w-24 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
-                      />
+                      {/* Nothing to narrow an actions column by: its cells hold
+                          buttons, and its `value` is the empty string on every
+                          row. A box there was a box that did nothing. */}
+                      {column.header.trim() !== '' && (
+                        <input
+                          type="search"
+                          aria-label={`${t('grid.search')} — ${column.header}`}
+                          value={columnSearch[column.key] ?? ''}
+                          onChange={(event) => {
+                            setColumnSearch((previous) => ({
+                              ...previous,
+                              [column.key]: event.target.value,
+                            }));
+                            setClientPage(1);
+                          }}
+                          className="w-full min-w-24 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                        />
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -635,7 +717,7 @@ export function DataGrid<TRow>({
             </thead>
 
             <tbody>
-              {shown.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr>
                   <td colSpan={visible.length} className="px-3 py-10 text-center">
                     <p className="text-sm text-ink-muted">
@@ -644,7 +726,7 @@ export function DataGrid<TRow>({
                   </td>
                 </tr>
               ) : (
-                shown.map((row) => (
+                visibleRows.map((row) => (
                   <tr key={rowKey(row)} className="group">
                     {visible.map((column, index) => (
                       <td
@@ -653,6 +735,11 @@ export function DataGrid<TRow>({
                           'py-1.5',
                           column.numeric &&
                             'text-end font-mono whitespace-nowrap tabular-nums',
+                          // An actions column, kept against the end of the row so
+                          // the buttons line up down the table however wide the
+                          // cells before them are.
+                          column.header.trim() === '' && 'text-end whitespace-nowrap',
+                          column.wide && 'min-w-64',
                           // The frozen cell repaints its own background on hover:
                           // it sits above the row, so the row's hover colour does
                           // not show through it and the stripe would otherwise
@@ -672,30 +759,150 @@ export function DataGrid<TRow>({
         </div>
       )}
 
-      {paging && paging.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 text-sm">
-          <GridButton
-            onClick={() => paging.onPageChange(paging.page - 1)}
-            disabled={paging.page <= 1}
-          >
-            {t('grid.previousPage')}
-          </GridButton>
+      {/*
+        The footer.
 
-          <span className="text-xs text-ink-muted">
-            {t('grid.pageOf', {
-              page: paging.page,
-              pages: paging.totalPages,
-              total: paging.totalCount,
-            })}
+        Where the count and the pager both belong, and where neither of them was.
+        The count was a line of small type wedged between the filters and the column
+        picker at the top of the toolbar — read by nobody, because the answer to
+        "how many are there" is looked for at the end of the list — and the pager
+        was two buttons with a sentence between them, offered only when the server
+        had already paged the list. Now every list ends the same way: how many rows
+        there are, which of them is on screen, and numbered pages to reach the rest.
+      */}
+      <GridFooter
+        totalCount={paging ? paging.totalCount : shown.length}
+        unfilteredCount={paging ? paging.totalCount : rows.length}
+        page={paging ? paging.page : currentClientPage}
+        pageSize={paging ? paging.pageSize : rowsPerPage}
+        totalPages={paging ? Math.max(paging.totalPages, 1) : clientPages}
+        onPageChange={paging ? paging.onPageChange : setClientPage}
+      />
+    </div>
+  );
+}
+
+/**
+ * Which page numbers a pager draws.
+ *
+ * Never more than seven buttons: the first, the last, the current and its
+ * neighbours, with a gap standing in for whatever is skipped. A hundred-page list
+ * with a hundred buttons is a pager that wraps to four rows and hides the table.
+ */
+export function pageWindow(page: number, total: number): readonly (number | 'gap')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  const pages = new Set<number>([1, total, page, page - 1, page + 1]);
+
+  // The ends get a second number so the row does not change width as the current
+  // page moves off them, which is what makes a pager feel like it is jumping.
+  if (page <= 3) {
+    pages.add(2).add(3).add(4);
+  }
+
+  if (page >= total - 2) {
+    pages
+      .add(total - 1)
+      .add(total - 2)
+      .add(total - 3);
+  }
+
+  const sorted = [...pages]
+    .filter((candidate) => candidate >= 1 && candidate <= total)
+    .sort((left, right) => left - right);
+
+  const window: (number | 'gap')[] = [];
+  let previous = 0;
+
+  for (const candidate of sorted) {
+    if (previous !== 0 && candidate - previous > 1) {
+      window.push('gap');
+    }
+
+    window.push(candidate);
+    previous = candidate;
+  }
+
+  return window;
+}
+
+/** How many rows there are, which of them are on screen, and the numbered pages. */
+function GridFooter({
+  totalCount,
+  unfilteredCount,
+  page,
+  pageSize,
+  totalPages,
+  onPageChange,
+}: {
+  readonly totalCount: number;
+  /** What the list holds before the grid's own search narrowed it. */
+  readonly unfilteredCount: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalPages: number;
+  readonly onPageChange: (page: number) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const first = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = pageSize > 0 ? Math.min(page * pageSize, totalCount) : totalCount;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-3 text-xs text-ink-muted">
+      <p className="whitespace-nowrap">
+        {totalPages > 1
+          ? t('grid.showingRange', { first, last, total: totalCount })
+          : t('grid.totalRows', { count: totalCount })}
+        {/* Said only when the two differ, so an unfiltered list is not told that it
+            is showing all of what it holds. */}
+        {unfilteredCount !== totalCount && (
+          <span className="ms-1 text-ink-subtle">
+            {t('grid.ofUnfiltered', { total: unfilteredCount })}
           </span>
+        )}
+      </p>
+
+      {totalPages > 1 && (
+        <nav
+          aria-label={t('grid.pagination')}
+          className="no-print flex flex-wrap items-center gap-1"
+        >
+          <GridButton
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            label={t('grid.previousPage')}
+          >
+            <span className="inline-block rtl:rotate-180">‹</span>
+          </GridButton>
+
+          {pageWindow(page, totalPages).map((entry, index) =>
+            entry === 'gap' ? (
+              <span key={`gap-${index}`} className="px-1 text-ink-subtle">
+                …
+              </span>
+            ) : (
+              <GridButton
+                key={entry}
+                onClick={() => onPageChange(entry)}
+                current={entry === page}
+                label={t('grid.goToPage', { page: entry })}
+              >
+                {entry}
+              </GridButton>
+            ),
+          )}
 
           <GridButton
-            onClick={() => paging.onPageChange(paging.page + 1)}
-            disabled={paging.page >= paging.totalPages}
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+            label={t('grid.nextPage')}
           >
-            {t('grid.nextPage')}
+            <span className="inline-block rtl:rotate-180">›</span>
           </GridButton>
-        </div>
+        </nav>
       )}
     </div>
   );
@@ -843,6 +1050,8 @@ function GridButton({
   disabled,
   pressed,
   label,
+  title,
+  current,
 }: {
   readonly onClick: () => void;
   readonly children: React.ReactNode;
@@ -852,6 +1061,10 @@ function GridButton({
   readonly pressed?: boolean;
   /** Spoken name, for the buttons whose whole content is a glyph. */
   readonly label?: string;
+  /** What the button does, on hover. Six two-word captions need the sentence. */
+  readonly title?: string;
+  /** The page being shown, for the numbered pager. */
+  readonly current?: boolean;
 }): React.JSX.Element {
   return (
     <button
@@ -859,14 +1072,16 @@ function GridButton({
       onClick={onClick}
       disabled={disabled}
       {...(label === undefined ? {} : { 'aria-label': label })}
+      {...(title === undefined ? {} : { title })}
       {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      {...(current === true ? { 'aria-current': 'page' as const } : {})}
       className={clsx(
         'shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition duration-150',
         'active:scale-95 disabled:pointer-events-none disabled:opacity-40',
         // The toolbar is the same six controls at every width, and on a phone a
         // 24px button is a target you aim at rather than press.
         'max-sm:min-h-9 max-sm:px-3 max-sm:text-sm',
-        pressed
+        pressed || current
           ? 'border-brand-500/40 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200'
           : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
       )}

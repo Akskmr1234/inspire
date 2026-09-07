@@ -4,15 +4,17 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
+import { DateField, Field, NumberField, SelectField, TextField } from '@/components/Form';
+import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
 import { ApiError, request } from '@/lib/api';
-
-interface LedgerSummary {
-  readonly ledgerId: string;
-  readonly code: string;
-  readonly name: string;
-  readonly groupCode: string;
-  readonly groupName: string;
-}
+import {
+  isMoneyAccount,
+  isParty,
+  LedgerKind,
+  listLedgers,
+  type LedgerSummary,
+} from '@/lib/ledgers';
+import { collect, numeric, required, useValidation } from '@/lib/validation';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -26,14 +28,15 @@ const DEBIT = 1;
 const CREDIT = 2;
 
 /** Voucher types, matching the API's VoucherType enum. */
-const VOUCHER_TYPES = [
-  [1, 'Cash Receipt'],
-  [2, 'Bank Receipt'],
-  [3, 'Cash Payment'],
-  [4, 'Bank Payment'],
-  [5, 'Journal'],
-  [6, 'Contra'],
-] as const;
+export const VoucherType = {
+  cashReceipt: 1,
+  bankReceipt: 2,
+  cashPayment: 3,
+  bankPayment: 4,
+  journal: 5,
+  contra: 6,
+  openingBalance: 7,
+} as const;
 
 interface DraftLine {
   readonly key: string;
@@ -66,37 +69,62 @@ function money(value: number): string {
   });
 }
 
+/** One ledger as a picker row: the code and name, with its group underneath. */
+function ledgerOption(ledger: LedgerSummary): SelectOption {
+  return {
+    value: ledger.ledgerId,
+    label: `${ledger.code} · ${ledger.name}`,
+    detail: ledger.groupName,
+    keywords: ledger.groupCode,
+  };
+}
+
+/** Loads the chart of accounts once and shares it across the money screens. */
+function useLedgers(): ReturnType<typeof useQuery<readonly LedgerSummary[], ApiError>> {
+  return useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(true),
+    // The chart of accounts changes rarely; refetching it on every visit to the
+    // entry screen would be wasted work.
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /**
  * Voucher entry.
  *
- * Mirrors the reference application's payment-voucher screen: a Debit/Credit
- * selector per line, separate debit and credit amount columns, a running total
- * per column, and the standing rule that every debit needs a corresponding
- * credit.
+ * Mirrors the reference application's journal screen: a Debit/Credit selector per
+ * line, separate debit and credit amount columns, a running total per column, and
+ * the standing rule that every debit needs a corresponding credit.
  *
  * The running difference is the important part of the design. It is shown as the
  * user types, so a transposed digit is caught at the keyboard rather than by the
  * server after Save. The server still enforces the rule - this is a courtesy, not
  * the guarantee.
+ *
+ * The party field above the lines is the other. A voucher is very often against a
+ * customer or a supplier — a receipt, a payment, a contra entry correcting one — and
+ * naming them here fills the line that would otherwise have to be found in a
+ * four-hundred-row picker. It is a shortcut into the lines, not a field of its own:
+ * what is saved is still the lines, which is what the books hold.
  */
 export function VoucherEntryPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const [type, setType] = useState<number>(5);
+  const [type, setType] = useState<number>(VoucherType.journal);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [narration, setNarration] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
+  const [partyId, setPartyId] = useState('');
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(), emptyLine()]);
   const [posted, setPosted] = useState<CreateVoucherResponse | null>(null);
 
-  const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
-    queryKey: ['ledgers'],
-    queryFn: () => request<readonly LedgerSummary[]>('/accounting/ledgers'),
-    // The chart of accounts changes rarely; refetching it on every visit to the
-    // entry screen would be wasted work.
-    staleTime: 5 * 60 * 1000,
-  });
+  const ledgers = useLedgers();
+  const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
+
+  const parties = useMemo(() => all.filter(isParty), [all]);
+  const ledgerOptions = useMemo(() => all.map(ledgerOption), [all]);
 
   const totals = useMemo(() => {
     let debit = 0;
@@ -129,6 +157,40 @@ export function VoucherEntryPage(): React.JSX.Element {
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
+  /*
+    Naming a party puts them on the first line that has no ledger yet, or opens one
+    if every line is spoken for. Choosing them a second time moves the line rather
+    than adding another, so correcting a mis-picked customer does not leave the
+    first one behind on a line nobody notices.
+  */
+  const chooseParty = (ledgerId: string): void => {
+    setPartyId(ledgerId);
+
+    if (ledgerId === '') {
+      return;
+    }
+
+    setLines((current) => {
+      const existing = current.findIndex((line) => line.ledgerId === partyId);
+
+      if (existing >= 0) {
+        return current.map((line, index) =>
+          index === existing ? { ...line, ledgerId } : line,
+        );
+      }
+
+      const empty = current.findIndex((line) => line.ledgerId === '');
+
+      if (empty >= 0) {
+        return current.map((line, index) =>
+          index === empty ? { ...line, ledgerId } : line,
+        );
+      }
+
+      return [...current, { ...emptyLine(), ledgerId }];
+    });
+  };
+
   const post = useMutation<CreateVoucherResponse, ApiError>({
     mutationFn: () =>
       request<CreateVoucherResponse>('/accounting/vouchers', {
@@ -154,6 +216,7 @@ export function VoucherEntryPage(): React.JSX.Element {
       setLines([emptyLine(), emptyLine()]);
       setNarration('');
       setReferenceNumber('');
+      setPartyId('');
 
       // The trial balance is now stale by definition, so it is invalidated rather
       // than left showing a position that predates this posting.
@@ -163,11 +226,14 @@ export function VoucherEntryPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <PageHeading title="Voucher entry" />
+      <PageHeading title={t('vouchers.entryTitle')} />
 
       {posted && (
         <p className="alert-success">
-          Posted <strong>{posted.number}</strong> for {money(posted.totalDebit)}.
+          {t('vouchers.postedNotice', {
+            number: posted.number,
+            total: money(posted.totalDebit),
+          })}
         </p>
       )}
 
@@ -178,61 +244,55 @@ export function VoucherEntryPage(): React.JSX.Element {
         </div>
       )}
 
-      <div className="panel grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <label htmlFor="type" className="field-label">
-            Voucher type
-          </label>
-          <select
-            id="type"
-            className="field-input"
-            value={type}
-            onChange={(e) => setType(Number(e.target.value))}
-          >
-            {VOUCHER_TYPES.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="panel grid gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
+        <SelectField
+          label={t('vouchers.type')}
+          required
+          value={type}
+          onChange={setType}
+          options={[
+            { value: VoucherType.journal, label: t('voucherTypes.Journal') },
+            { value: VoucherType.contra, label: t('voucherTypes.Contra') },
+            { value: VoucherType.cashReceipt, label: t('voucherTypes.CashReceipt') },
+            { value: VoucherType.bankReceipt, label: t('voucherTypes.BankReceipt') },
+            { value: VoucherType.cashPayment, label: t('voucherTypes.CashPayment') },
+            { value: VoucherType.bankPayment, label: t('voucherTypes.BankPayment') },
+          ]}
+        />
 
-        <div>
-          <label htmlFor="date" className="field-label">
-            Date
-          </label>
-          <input
-            id="date"
-            type="date"
-            className="field-input"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
+        <DateField label={t('vouchers.date')} required value={date} onChange={setDate} />
 
-        <div>
-          <label htmlFor="reference" className="field-label">
-            Ref / Inv no.
-          </label>
-          <input
-            id="reference"
-            className="field-input"
-            value={referenceNumber}
-            onChange={(e) => setReferenceNumber(e.target.value)}
-          />
-        </div>
+        {/*
+          The customer or supplier the voucher is against.
 
-        <div>
-          <label htmlFor="narration" className="field-label">
-            Narration
-          </label>
-          <input
-            id="narration"
-            className="field-input"
-            value={narration}
-            onChange={(e) => setNarration(e.target.value)}
+          Section 12 asks for it on this screen and it was not here: every voucher
+          against a party meant finding them among every ledger in the firm, in a
+          native select with no search, twice — once for the party and once for the
+          account. This narrows to the parties, and what it fills in is an ordinary
+          line somebody can still change.
+        */}
+        <Field label={t('vouchers.party')} hint={t('vouchers.partyHint')}>
+          <SearchSelect
+            value={partyId}
+            onChange={chooseParty}
+            clearable
+            label={t('vouchers.party')}
+            placeholder={t('vouchers.noParty')}
+            options={parties.map(ledgerOption)}
           />
-        </div>
+        </Field>
+
+        <TextField
+          label={t('vouchers.reference')}
+          value={referenceNumber}
+          onChange={setReferenceNumber}
+        />
+
+        <TextField
+          label={t('vouchers.narration')}
+          value={narration}
+          onChange={setNarration}
+        />
       </div>
 
       <div className="table-wrap">
@@ -244,11 +304,11 @@ export function VoucherEntryPage(): React.JSX.Element {
         <table className="table min-w-[56rem]">
           <thead>
             <tr>
-              <th className="text-start">Dr / Cr</th>
-              <th className="text-start">Ledger</th>
-              <th className="text-start">Line narration</th>
-              <th className="text-end">Debit</th>
-              <th className="text-end">Credit</th>
+              <th className="text-start">{t('vouchers.side')}</th>
+              <th className="text-start">{t('vouchers.ledger')}</th>
+              <th className="text-start">{t('vouchers.lineNarration')}</th>
+              <th className="text-end">{t('reports.debit')}</th>
+              <th className="text-end">{t('reports.credit')}</th>
               <th className="w-10" />
             </tr>
           </thead>
@@ -258,7 +318,7 @@ export function VoucherEntryPage(): React.JSX.Element {
               <tr key={line.key}>
                 <td className="py-2">
                   <select
-                    aria-label="Debit or credit"
+                    aria-label={t('vouchers.side')}
                     className="field-input-sm w-28"
                     value={line.side}
                     onChange={(e) =>
@@ -267,33 +327,35 @@ export function VoucherEntryPage(): React.JSX.Element {
                       })
                     }
                   >
-                    <option value={DEBIT}>Debit</option>
-                    <option value={CREDIT}>Credit</option>
+                    <option value={DEBIT}>{t('reports.debit')}</option>
+                    <option value={CREDIT}>{t('reports.credit')}</option>
                   </select>
                 </td>
 
-                <td className="py-2">
-                  <select
-                    aria-label="Ledger"
-                    className="field-input-sm min-w-52"
+                <td className="min-w-56 py-2">
+                  {/*
+                    A picker that can be typed into, in place of a native select of
+                    the whole chart of accounts. The browser's own type-ahead
+                    matches the start of an option, which here is the account code —
+                    so looking a ledger up by its name, which is what everybody
+                    does, was impossible.
+                  */}
+                  <SearchSelect
                     value={line.ledgerId}
-                    onChange={(e) => update(line.key, { ledgerId: e.target.value })}
+                    onChange={(ledgerId) => update(line.key, { ledgerId })}
+                    options={ledgerOptions}
                     disabled={ledgers.isPending}
-                  >
-                    <option value="">
-                      {ledgers.isPending ? t('common.loading') : '— select —'}
-                    </option>
-                    {(ledgers.data ?? []).map((l) => (
-                      <option key={l.ledgerId} value={l.ledgerId}>
-                        {l.code} · {l.name} ({l.groupName})
-                      </option>
-                    ))}
-                  </select>
+                    size="sm"
+                    label={t('vouchers.ledger')}
+                    placeholder={
+                      ledgers.isPending ? t('common.loading') : t('common.choose')
+                    }
+                  />
                 </td>
 
                 <td className="py-2">
                   <input
-                    aria-label="Line narration"
+                    aria-label={t('vouchers.lineNarration')}
                     className="field-input-sm min-w-40"
                     value={line.narration}
                     onChange={(e) => update(line.key, { narration: e.target.value })}
@@ -309,7 +371,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                 <td className="py-2">
                   {line.side === DEBIT ? (
                     <input
-                      aria-label="Debit amount"
+                      aria-label={t('vouchers.debitAmount')}
                       type="number"
                       inputMode="decimal"
                       step="0.01"
@@ -326,7 +388,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                 <td className="py-2">
                   {line.side === CREDIT ? (
                     <input
-                      aria-label="Credit amount"
+                      aria-label={t('vouchers.creditAmount')}
                       type="number"
                       inputMode="decimal"
                       step="0.01"
@@ -343,7 +405,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                 <td className="px-2 py-2">
                   <button
                     type="button"
-                    aria-label="Remove line"
+                    aria-label={t('vouchers.removeLine')}
                     disabled={lines.length <= 2}
                     onClick={() =>
                       setLines((current) => current.filter((l) => l.key !== line.key))
@@ -359,7 +421,7 @@ export function VoucherEntryPage(): React.JSX.Element {
 
           <tfoot>
             <tr>
-              <td colSpan={3}>Total</td>
+              <td colSpan={3}>{t('vouchers.total')}</td>
               <td className="cell-numeric">{money(totals.debit)}</td>
               <td className="cell-numeric">{money(totals.credit)}</td>
               <td />
@@ -374,7 +436,7 @@ export function VoucherEntryPage(): React.JSX.Element {
           onClick={() => setLines((current) => [...current, emptyLine()])}
           className="btn-secondary self-start"
         >
-          + Add row
+          {t('vouchers.addRow')}
         </button>
 
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
@@ -394,10 +456,13 @@ export function VoucherEntryPage(): React.JSX.Element {
               )}
             />
             {totals.isBalanced
-              ? 'Balanced'
-              : `Difference ${money(Math.abs(totals.difference))} ${
-                  totals.difference > 0 ? '(debit heavy)' : '(credit heavy)'
-                }`}
+              ? t('vouchers.balanced')
+              : t(
+                  totals.difference > 0
+                    ? 'vouchers.differenceDebit'
+                    : 'vouchers.differenceCredit',
+                  { amount: money(Math.abs(totals.difference)) },
+                )}
           </span>
 
           <button
@@ -407,15 +472,336 @@ export function VoucherEntryPage(): React.JSX.Element {
             className="btn-primary"
           >
             {post.isPending && <Spinner />}
-            {post.isPending ? 'Posting…' : 'Post voucher'}
+            {post.isPending ? t('vouchers.posting') : t('vouchers.post')}
           </button>
         </div>
       </div>
 
-      <p className="text-xs text-ink-muted">
-        Every debit has a corresponding credit. The voucher number is issued by the
-        branch&apos;s numbering series when it posts.
-      </p>
+      <p className="text-xs text-ink-muted">{t('vouchers.entryHint')}</p>
+    </section>
+  );
+}
+
+/** Money going out. */
+export function PaymentEntryPage(): React.JSX.Element {
+  return <MoneyEntry direction="payment" />;
+}
+
+/** Money coming in. */
+export function ReceiptEntryPage(): React.JSX.Element {
+  return <MoneyEntry direction="receipt" />;
+}
+
+/** What the payment and receipt form holds while it is being filled in. */
+interface MoneyDraft {
+  date: string;
+  partyId: string;
+  accountId: string;
+  amount: string;
+  reference: string;
+  paymentMode: string;
+  narration: string;
+}
+
+/**
+ * Payments and receipts, each on a screen of its own.
+ *
+ * They were one entry on the menu and one form — the journal screen with its six
+ * voucher types in a dropdown — which is how a cashier taking money over a counter
+ * ended up building a two-line double entry and choosing a side per line. The two
+ * are the commonest documents in the system and the least like a journal: one party,
+ * one cash or bank account, one amount, and the sides are decided by which of the
+ * two screens somebody opened.
+ *
+ * One component behind both, because the difference really is only the direction the
+ * money moves in. Two screens that shared nothing would be two places for the
+ * cheque handling and the bill settlement to arrive, and one of them would not get
+ * it.
+ */
+function MoneyEntry({
+  direction,
+}: {
+  readonly direction: 'payment' | 'receipt';
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const [through, setThrough] = useState<'cash' | 'bank'>('bank');
+  const [posted, setPosted] = useState<CreateVoucherResponse | null>(null);
+  const [draft, setDraft] = useState<MoneyDraft>(() => ({
+    date: new Date().toISOString().slice(0, 10),
+    partyId: '',
+    accountId: '',
+    amount: '',
+    reference: '',
+    paymentMode: '',
+    narration: '',
+  }));
+
+  const ledgers = useLedgers();
+  const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
+
+  /*
+    A payment or a receipt is against somebody: a supplier being paid, a customer
+    paying, an employee's advance. Ordinary ledgers are offered too — rent is paid to
+    an expense account and not to a party — but the parties come first, because they
+    are what most of these documents are against.
+  */
+  const partyOptions = useMemo(() => {
+    const parties = all.filter(isParty).map(ledgerOption);
+    const others = all
+      .filter((ledger) => !isParty(ledger) && !isMoneyAccount(ledger))
+      .map(ledgerOption);
+
+    return [...parties, ...others];
+  }, [all]);
+
+  const accounts = useMemo(
+    () =>
+      all.filter((ledger) =>
+        through === 'cash'
+          ? ledger.kind === LedgerKind.cash
+          : ledger.kind === LedgerKind.bank,
+      ),
+    [all, through],
+  );
+
+  const { errors, submit, reset } = useValidation<MoneyDraft>((values) =>
+    collect({
+      date: required(values.date, t('vouchers.dateRequired')),
+      partyId: required(values.partyId, t('vouchers.partyRequired')),
+      accountId: required(
+        values.accountId,
+        through === 'cash' ? t('vouchers.cashRequired') : t('vouchers.bankRequired'),
+      ),
+      amount:
+        required(values.amount, t('vouchers.amountRequired')) ??
+        numeric(values.amount, t('vouchers.amountInvalid'), { min: 0.01 }),
+    }),
+  );
+
+  const type =
+    direction === 'receipt'
+      ? through === 'cash'
+        ? VoucherType.cashReceipt
+        : VoucherType.bankReceipt
+      : through === 'cash'
+        ? VoucherType.cashPayment
+        : VoucherType.bankPayment;
+
+  const post = useMutation<CreateVoucherResponse, ApiError, MoneyDraft>({
+    mutationFn: (values) => {
+      const amount = Number(values.amount);
+
+      /*
+        Which side each account takes.
+
+        A receipt debits the firm's cash or bank — its money went up — and credits
+        the party, whose debt to the firm went down. A payment is the same sentence
+        read backwards. Deciding it here rather than asking is the whole reason
+        these screens exist: a cashier should not have to know which of two
+        accounts is debited to record a customer handing over a note.
+      */
+      const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
+      const partySide = direction === 'receipt' ? CREDIT : DEBIT;
+
+      return request<CreateVoucherResponse>('/accounting/vouchers', {
+        method: 'POST',
+        body: {
+          type,
+          date: values.date,
+          referenceNumber: values.reference || null,
+          narration: values.narration || null,
+          paymentMode: values.paymentMode || null,
+          postImmediately: true,
+          lines: [
+            { ledgerId: values.accountId, side: moneySide, amount },
+            { ledgerId: values.partyId, side: partySide, amount },
+          ],
+        },
+      });
+    },
+    onSuccess: (response) => {
+      setPosted(response);
+      reset();
+      setDraft((current) => ({
+        ...current,
+        partyId: '',
+        amount: '',
+        reference: '',
+        narration: '',
+      }));
+
+      void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
+    },
+  });
+
+  const set = <TField extends keyof MoneyDraft>(
+    field: TField,
+    value: MoneyDraft[TField],
+  ): void => setDraft((current) => ({ ...current, [field]: value }));
+
+  return (
+    <section className="page">
+      <PageHeading
+        title={
+          direction === 'receipt'
+            ? t('vouchers.receiptTitle')
+            : t('vouchers.paymentTitle')
+        }
+        subtitle={
+          direction === 'receipt' ? t('vouchers.receiptHint') : t('vouchers.paymentHint')
+        }
+      />
+
+      {posted && (
+        <p className="alert-success">
+          {t('vouchers.postedNotice', {
+            number: posted.number,
+            total: money(posted.totalDebit),
+          })}
+        </p>
+      )}
+
+      {post.isError && (
+        <div role="alert" className="alert-error">
+          <p className="font-semibold">{post.error.code}</p>
+          <p className="mt-0.5 opacity-90">{post.error.detail}</p>
+        </div>
+      )}
+
+      <form
+        className="card card-body space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+
+          if (submit(draft)) {
+            post.mutate(draft);
+          }
+        }}
+      >
+        <div className="form-grid-3">
+          <SelectField
+            label={t('vouchers.through')}
+            required
+            value={through}
+            onChange={(value) => {
+              setThrough(value);
+              // The account belongs to the kind that was chosen, so it goes with it
+              // rather than staying behind as a bank account on a cash voucher.
+              set('accountId', '');
+            }}
+            options={[
+              { value: 'bank', label: t('vouchers.throughBank') },
+              { value: 'cash', label: t('vouchers.throughCash') },
+            ]}
+          />
+
+          <DateField
+            label={t('vouchers.date')}
+            required
+            value={draft.date}
+            onChange={(value) => set('date', value)}
+            error={errors['date']}
+          />
+
+          <NumberField
+            label={t('vouchers.amount')}
+            required
+            min={0}
+            step="0.01"
+            value={draft.amount}
+            onChange={(value) => set('amount', value)}
+            error={errors['amount']}
+          />
+
+          <Field
+            label={
+              direction === 'receipt' ? t('vouchers.receivedFrom') : t('vouchers.paidTo')
+            }
+            required
+            error={errors['partyId']}
+            hint={t('vouchers.partyHint')}
+          >
+            <SearchSelect
+              value={draft.partyId}
+              onChange={(value) => set('partyId', value)}
+              options={partyOptions}
+              disabled={ledgers.isPending}
+              invalid={errors['partyId'] !== undefined}
+              label={
+                direction === 'receipt'
+                  ? t('vouchers.receivedFrom')
+                  : t('vouchers.paidTo')
+              }
+              placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+            />
+          </Field>
+
+          <Field
+            label={
+              through === 'cash' ? t('vouchers.cashAccount') : t('vouchers.bankAccount')
+            }
+            required
+            error={errors['accountId']}
+          >
+            <SearchSelect
+              value={draft.accountId}
+              onChange={(value) => set('accountId', value)}
+              options={accounts.map(ledgerOption)}
+              disabled={ledgers.isPending}
+              invalid={errors['accountId'] !== undefined}
+              label={
+                through === 'cash' ? t('vouchers.cashAccount') : t('vouchers.bankAccount')
+              }
+              placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+            />
+          </Field>
+
+          <TextField
+            label={t('vouchers.paymentMode')}
+            value={draft.paymentMode}
+            onChange={(value) => set('paymentMode', value)}
+            placeholder={t('vouchers.paymentModeHint')}
+          />
+
+          <TextField
+            label={t('vouchers.reference')}
+            value={draft.reference}
+            onChange={(value) => set('reference', value)}
+          />
+
+          <TextField
+            label={t('vouchers.narration')}
+            value={draft.narration}
+            onChange={(value) => set('narration', value)}
+            className="sm:col-span-2"
+          />
+        </div>
+
+        {/*
+          What the screen is about to write, in the words the books will use. A
+          two-line double entry made on somebody's behalf should still be shown to
+          them: it is the only way a mistake in the direction is catchable before it
+          is posted.
+        */}
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
+          {t(
+            direction === 'receipt' ? 'vouchers.receiptEffect' : 'vouchers.paymentEffect',
+          )}
+        </p>
+
+        <div className="form-actions">
+          <button type="submit" disabled={post.isPending} className="btn-primary">
+            {post.isPending && <Spinner />}
+            {post.isPending
+              ? t('vouchers.posting')
+              : direction === 'receipt'
+                ? t('vouchers.postReceipt')
+                : t('vouchers.postPayment')}
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

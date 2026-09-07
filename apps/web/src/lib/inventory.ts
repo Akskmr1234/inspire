@@ -88,6 +88,21 @@ export function setMasterActive(
   });
 }
 
+/**
+ * Renames a unit of measurement.
+ *
+ * A rename and nothing more, which is what the API offers: the code and the
+ * conversion factor are relied on by every document already entered in that unit,
+ * and changing either would silently restate quantities recorded months ago. So the
+ * edit form offers the one field that can move.
+ */
+export function renameUnit(id: string, name: string): Promise<void> {
+  return request<void>(`${INVENTORY}/units/${id}`, {
+    method: 'PUT',
+    body: { name },
+  });
+}
+
 /** Makes one warehouse the one new documents default to. */
 export function setDefaultWarehouse(id: string): Promise<void> {
   return request<void>(`${INVENTORY}/warehouses/${id}/default`, {

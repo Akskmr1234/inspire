@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
+import { CheckField, Field, SelectField, TextField } from '@/components/Form';
+import { SearchSelect } from '@/components/SearchSelect';
+import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
 import {
@@ -13,6 +16,7 @@ import {
   type UnitSummary,
 } from '@/lib/inventory';
 import { createProduct, listProducts, type ProductSummary } from '@/lib/products';
+import { collect, maxLength, required, useValidation } from '@/lib/validation';
 
 /**
  * The product master.
@@ -78,6 +82,11 @@ export function ProductsPage(): React.JSX.Element {
       key: 'description',
       header: t('products.description'),
       value: (row) => row.description,
+      // Given the width the other columns leave. A product description is the one
+      // column on this screen carrying prose, and it was sharing the table's width
+      // equally with a column holding "EA" — so a forty-character description wrapped
+      // to three lines while half the table sat empty.
+      wide: true,
     },
     {
       key: 'descriptionArabic',
@@ -149,53 +158,74 @@ export function ProductsPage(): React.JSX.Element {
     },
   ];
 
+  /*
+    One search, in one card, with everything that narrows the list beside it.
+
+    The screen had two: this one, which goes to the server and reaches the whole
+    master, and the grid's own box directly beneath it, which filters the rows
+    already fetched. Two boxes a hand's width apart, narrowing the same list by
+    different rules, and no label on either saying which was which — so a search
+    that found nothing might mean the product does not exist or might mean it was
+    not on this page. The grid's box is withdrawn here and this one says what it
+    reaches.
+  */
   const controls = (
     <form
-      className="toolbar"
+      className="filter-grid"
       onSubmit={(event) => {
         event.preventDefault();
         setApplied(search);
       }}
     >
-      <label className="field">
-        <span className="field-label">{t('products.search')}</span>
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t('products.searchHint')}
-          className="field-input-sm w-full sm:w-64"
-        />
-      </label>
+      <TextField
+        label={t('products.search')}
+        hint={t('products.searchHint')}
+        type="search"
+        size="sm"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('products.searchPlaceholder')}
+        className="sm:col-span-2"
+      />
 
-      <label className="field">
-        <span className="field-label">{t('products.category')}</span>
-        <select
+      <Field label={t('products.category')}>
+        <SearchSelect
           value={categoryId}
-          onChange={(event) => setCategoryId(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('products.allCategories')}</option>
-          {(categories.data ?? []).map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field-check pb-1">
-        <input
-          type="checkbox"
-          checked={includeInactive}
-          onChange={(event) => setIncludeInactive(event.target.checked)}
+          onChange={setCategoryId}
+          clearable
+          size="sm"
+          label={t('products.category')}
+          placeholder={t('products.allCategories')}
+          options={(categories.data ?? []).map((row) => ({
+            value: row.id,
+            label: `${row.code} — ${row.name}`,
+          }))}
         />
-        {t('masters.includeWithdrawn')}
-      </label>
+      </Field>
 
-      <button type="submit" className="btn-primary">
-        {t('products.find')}
-      </button>
+      <CheckField
+        label={t('masters.includeWithdrawn')}
+        checked={includeInactive}
+        onChange={setIncludeInactive}
+      />
+
+      <div className="flex items-center gap-2">
+        <button type="submit" className="btn-primary btn-sm">
+          {t('products.find')}
+        </button>
+        {applied !== '' && (
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => {
+              setSearch('');
+              setApplied('');
+            }}
+          >
+            {t('products.clear')}
+          </button>
+        )}
+      </div>
     </form>
   );
 
@@ -220,6 +250,7 @@ export function ProductsPage(): React.JSX.Element {
               columns={columns}
               rowKey={(row) => row.id}
               emptyMessage={t('products.noneFound')}
+              hideSearch
               actions={
                 <GridAction label={t('products.new')} onClick={() => setAdding(true)} />
               }
@@ -297,13 +328,26 @@ function AddProduct({
   const [brandId, setBrandId] = useState('');
   const [itemType, setItemType] = useState('1');
 
+  const draft = { code, description, categoryId, stockUnitId };
+
+  const { errors, submit } = useValidation<typeof draft>((values) =>
+    collect({
+      description:
+        required(values.description, t('products.descriptionRequired')) ??
+        maxLength(values.description, 200, t('products.descriptionTooLong')),
+      categoryId: required(values.categoryId, t('products.categoryRequired')),
+      stockUnitId: required(values.stockUnitId, t('products.unitRequired')),
+      code: maxLength(values.code, 30, t('products.codeTooLong')),
+    }),
+  );
+
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (!description.trim() || !categoryId || !stockUnitId) {
+        if (!submit(draft)) {
           return;
         }
 
@@ -320,107 +364,94 @@ function AddProduct({
         });
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="field-label">{t('masters.code')}</span>
-          <input
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder={t('products.codeAuto')}
-            className="field-input"
-          />
-        </label>
+      <div className="form-grid">
+        <TextField
+          label={t('masters.code')}
+          hint={t('products.codeAuto')}
+          value={code}
+          onChange={setCode}
+          error={errors['code']}
+        />
 
-        <label className="block">
-          <span className="field-label">{t('products.description')}</span>
-          <input
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            className="field-input"
-            required
-          />
-        </label>
+        <TextField
+          label={t('products.description')}
+          required
+          autoFocus
+          value={description}
+          onChange={setDescription}
+          error={errors['description']}
+        />
 
-        <label className="block">
-          <span className="field-label">{t('products.descriptionArabic')}</span>
-          <input
-            dir="rtl"
-            value={descriptionArabic}
-            onChange={(event) => setDescriptionArabic(event.target.value)}
-            className="field-input"
-          />
-        </label>
+        {/* Filled in from the English description where the firm has turned
+            translation on in Settings, and editable either way. */}
+        <ArabicNameField
+          label={t('products.descriptionArabic')}
+          source={description}
+          value={descriptionArabic}
+          onChange={setDescriptionArabic}
+        />
 
-        <label className="block">
-          <span className="field-label">{t('products.itemType')}</span>
-          <select
-            value={itemType}
-            onChange={(event) => setItemType(event.target.value)}
-            className="field-input"
-          >
-            <option value="1">{t('products.itemStock')}</option>
-            <option value="2">{t('products.itemService')}</option>
-            <option value="3">{t('products.itemNonStock')}</option>
-          </select>
-        </label>
+        <SelectField
+          label={t('products.itemType')}
+          value={itemType}
+          onChange={setItemType}
+          options={[
+            { value: '1', label: t('products.itemStock') },
+            { value: '2', label: t('products.itemService') },
+            { value: '3', label: t('products.itemNonStock') },
+          ]}
+        />
 
-        <label className="block">
-          <span className="field-label">{t('products.category')}</span>
-          <select
+        <Field label={t('products.category')} required error={errors['categoryId']}>
+          <SearchSelect
             value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
-            className="field-input"
-            required
-          >
-            <option value="">{t('products.choose')}</option>
-            {categories.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.code} — {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setCategoryId}
+            options={categories.map((row) => ({
+              value: row.id,
+              label: `${row.code} — ${row.name}`,
+              ...(row.parentName ? { detail: row.parentName } : {}),
+            }))}
+            invalid={errors['categoryId'] !== undefined}
+            label={t('products.category')}
+            placeholder={t('products.choose')}
+          />
+        </Field>
 
-        <label className="block">
-          <span className="field-label">{t('products.stockUnit')}</span>
-          <select
+        <Field label={t('products.stockUnit')} required error={errors['stockUnitId']}>
+          <SearchSelect
             value={stockUnitId}
-            onChange={(event) => setStockUnitId(event.target.value)}
-            className="field-input"
-            required
-          >
-            <option value="">{t('products.choose')}</option>
-            {(units.data ?? []).map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.code} — {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setStockUnitId}
+            options={(units.data ?? []).map((row) => ({
+              value: row.id,
+              label: `${row.code} — ${row.name}`,
+            }))}
+            invalid={errors['stockUnitId'] !== undefined}
+            label={t('products.stockUnit')}
+            placeholder={t('products.choose')}
+          />
+        </Field>
 
-        <label className="block">
-          <span className="field-label">{t('products.brand')}</span>
-          <select
+        <Field label={t('products.brand')}>
+          <SearchSelect
             value={brandId}
-            onChange={(event) => setBrandId(event.target.value)}
-            className="field-input"
-          >
-            <option value="">{t('products.noBrand')}</option>
-            {(brands.data ?? []).map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={setBrandId}
+            clearable
+            label={t('products.brand')}
+            placeholder={t('products.noBrand')}
+            options={(brands.data ?? []).map((row) => ({
+              value: row.id,
+              label: `${row.code} — ${row.name}`,
+            }))}
+          />
+        </Field>
       </div>
 
-      <div className="flex gap-3">
-        <button type="submit" disabled={busy} className="btn-primary">
-          {t('masters.add')}
-        </button>
+      <div className="form-actions">
         <button type="button" onClick={onCancel} className="btn-secondary">
-          {t('products.cancel')}
+          {t('common.cancel')}
+        </button>
+        <button type="submit" disabled={busy} className="btn-primary">
+          {busy ? t('common.saving') : t('masters.add')}
         </button>
       </div>
     </form>

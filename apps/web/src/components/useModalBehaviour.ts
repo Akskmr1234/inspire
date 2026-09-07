@@ -46,6 +46,22 @@ export function useModalBehaviour(
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
+        /*
+          A picker with its list open answers Escape itself.
+
+          This listener is on the document in the capture phase, so it runs before
+          anything inside the dialog and a handler in there cannot stop it. That is
+          right for the ordinary case and wrong for one: a combobox showing its
+          options is a second layer inside the dialog, and Escape over it means
+          "close the list" — closing the whole form and losing what has been typed
+          into it is not what anybody meant by that key.
+        */
+        const target = event.target as HTMLElement | null;
+
+        if (target?.closest('[role="combobox"][aria-expanded="true"]')) {
+          return;
+        }
+
         event.stopPropagation();
         onClose();
         return;

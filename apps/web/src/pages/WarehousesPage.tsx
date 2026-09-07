@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MasterField, MasterFrame, RowAction } from '@/components/MasterFrame';
+import { MasterFrame, RowAction } from '@/components/MasterFrame';
+import { ArabicNameField } from '@/components/ArabicNameField';
+import { TextField } from '@/components/Form';
 import type { GridColumn } from '@/components/DataGrid';
 import {
   createMaster,
@@ -9,6 +11,7 @@ import {
   setMasterActive,
   type WarehouseSummary,
 } from '@/lib/inventory';
+import { collect, maxLength, required, useValidation } from '@/lib/validation';
 
 /**
  * Warehouses, called godowns in the reference application and stock locations in the
@@ -77,6 +80,7 @@ export function WarehousesPage(): React.JSX.Element {
           )}
           <RowAction
             label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
+            tone={row.isActive ? 'danger' : 'neutral'}
             disabled={busy}
             onClick={() =>
               run(async () => {
@@ -117,13 +121,24 @@ function AddWarehouse({
   const [nameArabic, setNameArabic] = useState('');
   const [address, setAddress] = useState('');
 
+  const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
+    collect({
+      code:
+        required(values.code, t('categories.codeRequired')) ??
+        maxLength(values.code, 20, t('categories.codeTooLong')),
+      name:
+        required(values.name, t('categories.nameRequired')) ??
+        maxLength(values.name, 100, t('categories.nameTooLong')),
+    }),
+  );
+
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (!code.trim() || !name.trim()) {
+        if (!submit({ code, name })) {
           return;
         }
 
@@ -138,14 +153,28 @@ function AddWarehouse({
       }}
     >
       <div className="form-grid">
-        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-        <MasterField label={t('masters.name')} value={name} onChange={setName} />
-        <MasterField
+        <TextField
+          label={t('masters.code')}
+          required
+          autoFocus
+          value={code}
+          onChange={setCode}
+          error={errors['code']}
+        />
+        <TextField
+          label={t('masters.name')}
+          required
+          value={name}
+          onChange={setName}
+          error={errors['name']}
+        />
+        <ArabicNameField
           label={t('masters.nameArabic')}
+          source={name}
           value={nameArabic}
           onChange={setNameArabic}
         />
-        <MasterField
+        <TextField
           label={t('warehouses.address')}
           value={address}
           onChange={setAddress}
@@ -154,7 +183,7 @@ function AddWarehouse({
 
       <div className="form-actions">
         <button type="submit" disabled={busy} className="btn-primary">
-          {t('masters.add')}
+          {busy ? t('common.saving') : t('masters.add')}
         </button>
       </div>
     </form>

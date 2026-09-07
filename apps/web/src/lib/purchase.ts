@@ -129,6 +129,21 @@ export interface PurchaseLineInput {
   readonly serialNumbers?: readonly string[];
 }
 
+/**
+ * How a document treats tax, matching the API's TaxMode enum.
+ *
+ * Re-exported here rather than reached for through the sales module: a purchase
+ * screen importing a sales constant is how the two end up coupled by accident.
+ */
+export const PurchaseTaxMode = { nonTax: 1, tax: 2, cst: 3 } as const;
+
+/** One charge on a document being entered. */
+export interface PurchaseChargeInput {
+  readonly ledgerId: string;
+  /** Always positive. The firm's charge matrix decides which way it moves the total. */
+  readonly amount: number;
+}
+
 /** What the list is narrowed by. */
 export interface PurchaseFilter {
   readonly from?: string;
@@ -180,6 +195,10 @@ export async function createPurchaseInvoice(input: {
   readonly warehouseId: string;
   readonly lines: readonly PurchaseLineInput[];
   readonly kind: number;
+  /** Freight, packing, a settlement discount — whatever the document carries. */
+  readonly charges?: readonly PurchaseChargeInput[];
+  /** The tax mode. Omitted, the server defaults it from the firm's regime. */
+  readonly mode?: number | null;
   readonly returnsInvoiceId?: string | null;
   readonly supplierInvoiceNumber?: string | null;
   readonly supplierInvoiceDate?: string | null;

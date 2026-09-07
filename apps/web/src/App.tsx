@@ -42,6 +42,14 @@ const VoucherEntryPage = named(
   () => import('@/pages/VoucherEntryPage'),
   'VoucherEntryPage',
 );
+const PaymentEntryPage = named(
+  () => import('@/pages/VoucherEntryPage'),
+  'PaymentEntryPage',
+);
+const ReceiptEntryPage = named(
+  () => import('@/pages/VoucherEntryPage'),
+  'ReceiptEntryPage',
+);
 const ProfitAndLossPage = named(
   () => import('@/pages/ProfitAndLossPage'),
   'ProfitAndLossPage',
@@ -74,6 +82,20 @@ const CustomersPage = named(() => import('@/pages/CustomersPage'), 'CustomersPag
 const ProductsPage = named(() => import('@/pages/ProductsPage'), 'ProductsPage');
 const SalesPage = named(() => import('@/pages/SalesPage'), 'SalesPage');
 const PurchasePage = named(() => import('@/pages/PurchasePage'), 'PurchasePage');
+const PurchaseReturnsPage = named(
+  () => import('@/pages/PurchasePage'),
+  'PurchaseReturnsPage',
+);
+const PurchaseOrdersPage = named(
+  () => import('@/pages/OrdersPage'),
+  'PurchaseOrdersPage',
+);
+const SalesOrdersPage = named(() => import('@/pages/OrdersPage'), 'SalesOrdersPage');
+const SettingsPage = named(() => import('@/pages/SettingsPage'), 'SettingsPage');
+const OpeningStockPage = named(
+  () => import('@/pages/StockOperationsPage'),
+  'OpeningStockPage',
+);
 const SuppliersPage = named(() => import('@/pages/SuppliersPage'), 'SuppliersPage');
 const TaxReturnsPage = named(() => import('@/pages/TaxReturnsPage'), 'TaxReturnsPage');
 const StockOperationsPage = named(
@@ -184,6 +206,15 @@ export function App(): React.JSX.Element {
           {!mustChangePassword && (
             <>
               <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
+              {/*
+                Payments and receipts have routes of their own, and menu entries to
+                match. They were the journal screen with a voucher type chosen from
+                a dropdown — which is how the two commonest documents in the system
+                ended up being entered as double entries by whoever was at the
+                counter.
+              */}
+              <Route path="/accounting/payments/new" element={<PaymentEntryPage />} />
+              <Route path="/accounting/receipts/new" element={<ReceiptEntryPage />} />
               <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
               <Route
                 path="/accounting/account-group-summary"
@@ -208,14 +239,26 @@ export function App(): React.JSX.Element {
               <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
               <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
               <Route path="/settings/menu" element={<MenuAdministrationPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/sales/invoices" element={<SalesPage />} />
               <Route path="/sales/customers" element={<CustomersPage />} />
               <Route path="/purchase/invoices" element={<PurchasePage />} />
+              {/*
+                Purchase returns get their own route rather than a Kind dropdown on
+                the purchases screen, and the two order screens get the routes the
+                seeded menu has been pointing at since the orders module was
+                written — before these lines existed, both fell through the
+                catch-all below and landed on the trial balance.
+              */}
+              <Route path="/purchase/returns" element={<PurchaseReturnsPage />} />
+              <Route path="/purchase/orders" element={<PurchaseOrdersPage />} />
+              <Route path="/sales/orders" element={<SalesOrdersPage />} />
               <Route path="/purchase/suppliers" element={<SuppliersPage />} />
               <Route path="/inventory/products" element={<ProductsPage />} />
               <Route path="/inventory/stock" element={<StockOperationsPage />} />
+              <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />
               <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
               <Route path="/inventory/item-movement" element={<ItemMovementPage />} />

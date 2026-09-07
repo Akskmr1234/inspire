@@ -519,7 +519,31 @@
     not, and every field the width of its column.
   */
   .form-grid {
-    @apply grid gap-3 sm:grid-cols-2;
+    @apply grid items-start gap-x-4 gap-y-3 sm:grid-cols-2;
+  }
+
+  /* Three across where the form is wide enough to hold three and the fields are
+     short — a document header, where date, kind and warehouse belong on one line. */
+  .form-grid-3 {
+    @apply grid items-start gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /*
+    A screen's own filters, in a card of their own above the list.
+
+    A card rather than a bare strip, and one card rather than two. The product
+    screen had its search in a `ReportFrame` header and the grid's own search box
+    directly beneath it — two boxes, a hand's width apart, that narrowed the same
+    list by different rules. Filters that belong to the screen live here; the grid
+    keeps the controls that arrange what the screen has already fetched.
+  */
+  .filter-card {
+    @apply rounded-xl border border-line bg-surface-2 p-3 sm:p-4;
+  }
+
+  .filter-grid {
+    @apply grid items-end gap-x-3 gap-y-3
+           grid-cols-[repeat(auto-fit,minmax(11rem,1fr))];
   }
 
   /* The row a dialog's form ends with. Ruled off, so the button that commits the
@@ -536,33 +560,80 @@
      Form controls
      ====================================================================== */
 
+  /*
+    A caption. One size, one weight, one distance from the box it names, so a row of
+    fields has a single baseline for its captions and a single one for its controls.
+    The screens used to write their own — `text-xs text-ink-muted` here, a `<span>`
+    with `field-label` there, a bare `<label>` on the purchase entry — and captions
+    that disagreed about their own height cannot line up with each other.
+  */
   .field-label {
-    @apply mb-1.5 block text-xs font-medium tracking-wide text-ink-muted uppercase;
+    @apply mb-1.5 flex items-center gap-0.5 text-xs font-semibold tracking-wide
+           text-ink-muted uppercase;
   }
 
+  /* The marker on a mandatory field. Red, beside the caption, and never the only
+     signal: `aria-required` on the control says the same thing to a screen reader,
+     and colour alone would say nothing to somebody who cannot see it. */
+  .field-required {
+    @apply text-sm leading-none font-bold text-red-600 dark:text-red-400;
+  }
+
+  /*
+    Every box a value is typed or chosen in.
+
+    `min-h` rather than padding alone, and on every variant. A text input, a select
+    and a date input do not agree about their own intrinsic height — the select is
+    taller by its arrow, the date input by its spinner — so a row holding one of
+    each used to sit at three different heights with three different caption
+    baselines above them. A floor height makes the row one row.
+  */
   .field-input,
   .field-input-sm {
     @apply block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm
-           text-ink shadow-xs outline-none
+           leading-5 font-medium text-ink shadow-xs outline-none
            transition duration-150
-           placeholder:text-ink-subtle
+           placeholder:font-normal placeholder:text-ink-subtle
            hover:border-line-strong
            focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15
            disabled:cursor-not-allowed disabled:bg-surface-3 disabled:opacity-60;
   }
 
+  .field-input {
+    @apply min-h-10;
+  }
+
   /* The same control at grid density, for the line-item tables where a full-height
      input would double the height of every row. */
   .field-input-sm {
-    @apply rounded-md px-2 py-1;
+    @apply min-h-8 rounded-md px-2.5 py-1;
+  }
+
+  /* A select carries its own arrow and its own idea of the padding around the text;
+     without this the caret sits against the words on one side and a centimetre of
+     nothing on the other. */
+  .field-input:is(select),
+  .field-input-sm:is(select) {
+    @apply cursor-pointer pe-8;
   }
 
   .field-hint {
     @apply mt-1 text-xs text-ink-subtle;
   }
 
-  .field-error {
-    @apply border-red-400 focus:border-red-500 focus:ring-red-500/15;
+  /* A box the form has something to say about. Red border, red focus ring — never a
+     red fill, which reads as "disabled" as readily as "wrong". */
+  .field-error,
+  .field-invalid {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/15
+           dark:border-red-500/60;
+  }
+
+  /* What is wrong, under the box it is wrong about. A form that collects its
+     complaints into a banner at the top makes the reader work out which of eleven
+     fields each one meant. */
+  .field-message-error {
+    @apply mt-1 text-xs font-medium text-red-600 dark:text-red-400;
   }
 
   /* A checkbox and its label as one hit target, which on a phone is the difference
