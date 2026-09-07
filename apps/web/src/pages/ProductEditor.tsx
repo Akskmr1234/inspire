@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ReportSkeleton } from '@/components/ReportFrame';
+import { PageHeading } from '@/components/PageHeading';
+import { StatusBadge } from '@/components/StatusBadge';
 import clsx from 'clsx';
 import type { ApiError } from '@/lib/api';
 import {
@@ -78,7 +80,10 @@ export function ProductEditor({
   if (product.isPending) {
     return (
       <section className="page" aria-busy="true">
-        <div className="skeleton h-7 w-72 rounded" />
+        {/* Named while it loads, so the bar does not sit empty over a page of grey
+            bars and then change its mind about what screen this is. */}
+        <PageHeading title={t('nav.products')} />
+
         <div className="flex gap-2">
           {Array.from({ length: 4 }, (_, index) => (
             <span key={index} className="skeleton h-8 w-28 rounded" />
@@ -99,6 +104,8 @@ export function ProductEditor({
   if (product.isError || !product.data) {
     return (
       <section className="page">
+        <PageHeading title={t('nav.products')} />
+
         <Alert>
           {product.error?.detail ?? product.error?.code ?? t('products.notFound')}
         </Alert>
@@ -121,32 +128,87 @@ export function ProductEditor({
 
   const row = product.data;
 
+  /*
+    Three states, not two. A discontinued product is still sold and still counted —
+    it is simply not to be reordered — so it is amber rather than filed with the
+    withdrawn ones in grey, exactly as the list draws it.
+  */
+  const status = row.isActive ? (
+    row.isDiscontinued ? (
+      <StatusBadge tone="warn" label={t('products.discontinued')} />
+    ) : (
+      <StatusBadge tone="success" label={t('masters.active')} />
+    )
+  ) : (
+    <StatusBadge tone="neutral" label={t('masters.withdrawn')} struck />
+  );
+
   return (
     <section className="page">
-      <header className="page-header sm:items-center">
-        <div className="min-w-0">
-          <h2 className="page-title">
-            {row.code} — {row.description}
-          </h2>
-          <p className="text-xs text-ink-muted">
-            {row.isActive ? t('masters.active') : t('masters.withdrawn')}
-            {row.isDiscontinued ? ` · ${t('products.discontinued')}` : ''}
-          </p>
-        </div>
+      {/*
+        The one screen in the application that kept its title in the page while every
+        other one puts it in the bar — so the bar read "Aider ERP" over a product
+        called something else, and a row of the content area went on saying what the
+        bar had room for. The status comes with it: it belongs beside the name of the
+        thing it describes, not in a caption under it.
+      */}
+      <PageHeading
+        title={`${row.code} — ${row.description}`}
+        actions={
+          <>
+            <span className="hidden sm:inline-flex">{status}</span>
 
-        <div className="flex items-center gap-2">
-          {saved && (
-            <span className="text-xs text-emerald-600">{t('products.saved')}</span>
-          )}
-          <button type="button" onClick={onClose} className="btn-secondary">
-            {t('products.backToList')}
-          </button>
-        </div>
-      </header>
+            {saved && (
+              <span className="text-xs text-emerald-600">{t('products.saved')}</span>
+            )}
+
+            {/*
+              Two spellings of one control. A phone's bar has room for a title or a
+              worded button, not both: at 390px the label pushed the product's name
+              out of the bar entirely and was itself clipped mid-word. Above `sm`
+              there is room, and a worded button is the better one — an arrow alone
+              is ambiguous next to a browser that has its own.
+            */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('products.backToList')}
+              title={t('products.backToList')}
+              className="icon-button sm:hidden"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="size-5 rtl:rotate-180"
+              >
+                <path d="M15 5 8 12l7 7" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary hidden sm:inline-flex"
+            >
+              {t('products.backToList')}
+            </button>
+          </>
+        }
+      />
 
       {error && <Alert>{error}</Alert>}
 
-      <nav className="flex gap-1 border-b border-line">
+      {/*
+        Scrolls rather than wraps below `sm`. Three tabs and a badge do not fit
+        across 390px, and a tab strip that becomes two rows of buttons stops
+        reading as a strip.
+      */}
+      <nav className="flex items-center gap-1 overflow-x-auto border-b border-line">
         <Tab active={tab === 'description'} onClick={() => setTab('description')}>
           {t('products.tabDescription')}
         </Tab>
@@ -156,6 +218,11 @@ export function ProductEditor({
         <Tab active={tab === 'barcodes'} onClick={() => setTab('barcodes')}>
           {t('products.tabBarcodes')} ({row.barcodes.length})
         </Tab>
+
+        {/* Where the status goes on a phone, since the bar could not hold it. On
+            the end of the tab strip rather than a row of its own: it is one badge,
+            and a line to itself would cost more height than it is worth. */}
+        <span className="shrink-0 pb-1.5 ps-2 sm:hidden">{status}</span>
       </nav>
 
       {/*
@@ -459,9 +526,11 @@ function DescriptionTab({
         </Field>
       </Section>
 
-      <button type="submit" disabled={busy} className="btn-primary">
-        {t('products.save')}
-      </button>
+      <div className="page-actions">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('products.save')}
+        </button>
+      </div>
     </form>
   );
 }
@@ -642,13 +711,10 @@ function DetailsTab({
         )}
       </Section>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={busy} className="btn-primary">
-          {t('products.save')}
-        </button>
-
+      <div className="page-actions">
         {/* The two flags mean different things and are routinely confused, so they
-            are two buttons with their own words rather than one toggle. */}
+            are two buttons with their own words rather than one toggle. They come
+            before Save so the commit keeps the corner it has everywhere else. */}
         <button
           type="button"
           disabled={busy}
@@ -673,6 +739,10 @@ function DetailsTab({
           }
         >
           {product.isActive ? t('masters.withdraw') : t('masters.restore')}
+        </button>
+
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('products.save')}
         </button>
       </div>
     </form>
@@ -949,7 +1019,7 @@ function Tab({
       type="button"
       onClick={onClick}
       className={clsx(
-        '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
+        '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition sm:px-4',
         active
           ? 'border-brand-600 text-brand-700 dark:text-brand-100'
           : 'border-transparent text-ink-muted hover:border-line-strong hover:text-ink',

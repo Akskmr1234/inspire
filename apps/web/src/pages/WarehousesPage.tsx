@@ -4,6 +4,7 @@ import { MasterFrame, RowAction } from '@/components/MasterFrame';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { TextField } from '@/components/Form';
 import type { GridColumn } from '@/components/DataGrid';
+import { ActiveBadge } from '@/components/StatusBadge';
 import {
   createMaster,
   listMaster,
@@ -58,6 +59,7 @@ export function WarehousesPage(): React.JSX.Element {
       key: 'status',
       header: t('masters.status'),
       value: (row) => (row.isActive ? t('masters.active') : t('masters.withdrawn')),
+      render: (row) => <ActiveBadge isActive={row.isActive} />,
     },
     {
       key: 'actions',

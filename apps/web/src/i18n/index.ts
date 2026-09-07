@@ -19,6 +19,7 @@ const en = {
     password: 'Password',
     submit: 'Sign in',
     working: 'Signing in…',
+    passwordChanged: 'Your password has been changed. Sign in with the new one.',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -70,6 +71,15 @@ const en = {
     collapseSidebar: 'Collapse',
     expandSidebar: 'Expand',
     skipToContent: 'Skip to content',
+  },
+  palette: {
+    title: 'Go to a screen',
+    open: 'Search the menu',
+    shortcut: 'Ctrl K',
+    placeholder: 'Type a screen name…',
+    nothing: 'No screen matches that.',
+    more: '{{count}} more — keep typing to narrow it',
+    hint: '↑↓ to move · ↵ to open · Esc to close',
   },
   reports: {
     from: 'From',
@@ -282,6 +292,9 @@ const en = {
     Bank: 'Bank',
     Customer: 'Customer',
     Supplier: 'Supplier',
+    Employee: 'Employee',
+    Tax: 'Tax head',
+    AdditionalCharge: 'Charge',
   },
   accountNatures: {
     Asset: 'Asset',
@@ -289,6 +302,20 @@ const en = {
     Equity: 'Equity',
     Income: 'Income',
     Expense: 'Expense',
+  },
+  attention: {
+    title: 'Waiting for you',
+    hint: 'Counted from the same lists these open. A row appears only when it has something on it.',
+    purchaseDrafts_one: '{{count}} purchase draft not yet posted',
+    purchaseDrafts_other: '{{count}} purchase drafts not yet posted',
+    purchaseOrders_one: '{{count}} purchase order with goods still owed',
+    purchaseOrders_other: '{{count}} purchase orders with goods still owed',
+    salesOrders_one: '{{count}} sales order still to fill',
+    salesOrders_other: '{{count}} sales orders still to fill',
+    belowReorder_one: '{{count}} product below its reorder level',
+    belowReorder_other: '{{count}} products below their reorder level',
+    chequesDue_one: '{{count}} post-dated cheque in hand',
+    chequesDue_other: '{{count}} post-dated cheques in hand',
   },
   dashboard: {
     none: 'No dashboard has been assigned to you.',
@@ -1007,6 +1034,7 @@ const ar = {
     password: 'كلمة المرور',
     submit: 'تسجيل الدخول',
     working: 'جارٍ تسجيل الدخول…',
+    passwordChanged: 'تم تغيير كلمة المرور. سجّل الدخول بالكلمة الجديدة.',
   },
   nav: {
     dashboard: 'لوحة المعلومات',
@@ -1058,6 +1086,15 @@ const ar = {
     collapseSidebar: 'طي',
     expandSidebar: 'توسيع',
     skipToContent: 'تخطٍّ إلى المحتوى',
+  },
+  palette: {
+    title: 'الانتقال إلى شاشة',
+    open: 'البحث في القائمة',
+    shortcut: 'Ctrl K',
+    placeholder: 'اكتب اسم الشاشة…',
+    nothing: 'لا توجد شاشة مطابقة.',
+    more: '{{count}} نتيجة أخرى — تابع الكتابة لتضييق البحث',
+    hint: '↑↓ للتنقل · ↵ للفتح · Esc للإغلاق',
   },
   reports: {
     from: 'من',
@@ -1270,6 +1307,9 @@ const ar = {
     billWise: 'حسب الفاتورة',
   },
   ledgerKinds: {
+    Employee: 'موظف',
+    Tax: 'بند ضريبي',
+    AdditionalCharge: 'مصروف إضافي',
     General: 'عام',
     Cash: 'نقدي',
     Bank: 'بنكي',
@@ -1282,6 +1322,40 @@ const ar = {
     Equity: 'حقوق ملكية',
     Income: 'إيرادات',
     Expense: 'مصروفات',
+  },
+  attention: {
+    title: 'في انتظارك',
+    hint: 'محسوبة من القوائم نفسها التي تفتحها. لا يظهر السطر إلا إذا كان به شيء.',
+    purchaseDrafts_zero: 'لا توجد مسودات مشتريات',
+    purchaseDrafts_one: 'مسودة مشتريات واحدة لم تُرحّل',
+    purchaseDrafts_two: 'مسودتا مشتريات لم تُرحّلا',
+    purchaseDrafts_few: '{{count}} مسودات مشتريات لم تُرحّل',
+    purchaseDrafts_many: '{{count}} مسودة مشتريات لم تُرحّل',
+    purchaseDrafts_other: '{{count}} مسودة مشتريات لم تُرحّل',
+    purchaseOrders_zero: 'لا توجد أوامر شراء معلقة',
+    purchaseOrders_one: 'أمر شراء واحد بانتظار البضاعة',
+    purchaseOrders_two: 'أمرا شراء بانتظار البضاعة',
+    purchaseOrders_few: '{{count}} أوامر شراء بانتظار البضاعة',
+    purchaseOrders_many: '{{count}} أمر شراء بانتظار البضاعة',
+    purchaseOrders_other: '{{count}} أمر شراء بانتظار البضاعة',
+    salesOrders_zero: 'لا توجد أوامر بيع معلقة',
+    salesOrders_one: 'أمر بيع واحد بانتظار التنفيذ',
+    salesOrders_two: 'أمرا بيع بانتظار التنفيذ',
+    salesOrders_few: '{{count}} أوامر بيع بانتظار التنفيذ',
+    salesOrders_many: '{{count}} أمر بيع بانتظار التنفيذ',
+    salesOrders_other: '{{count}} أمر بيع بانتظار التنفيذ',
+    belowReorder_zero: 'لا توجد أصناف تحت حد إعادة الطلب',
+    belowReorder_one: 'صنف واحد تحت حد إعادة الطلب',
+    belowReorder_two: 'صنفان تحت حد إعادة الطلب',
+    belowReorder_few: '{{count}} أصناف تحت حد إعادة الطلب',
+    belowReorder_many: '{{count}} صنفاً تحت حد إعادة الطلب',
+    belowReorder_other: '{{count}} صنف تحت حد إعادة الطلب',
+    chequesDue_zero: 'لا توجد شيكات مؤجلة',
+    chequesDue_one: 'شيك مؤجل واحد في اليد',
+    chequesDue_two: 'شيكان مؤجلان في اليد',
+    chequesDue_few: '{{count}} شيكات مؤجلة في اليد',
+    chequesDue_many: '{{count}} شيكاً مؤجلاً في اليد',
+    chequesDue_other: '{{count}} شيك مؤجل في اليد',
   },
   dashboard: {
     none: 'لم يتم تعيين أي لوحة لك.',
@@ -1983,6 +2057,38 @@ const ar = {
   },
 } as const;
 
+/**
+ * What is shown when a key cannot be resolved.
+ *
+ * The default is the key itself, and a dotted path is a worse thing to show
+ * somebody than almost anything else: the chart of accounts printed
+ * `ledgerKinds.undefined` in a column for every charge account a firm has, and the
+ * day book printed `reports.voucherCount` whenever the count it interpolates was
+ * absent — both read as breakage to the person in front of them and as nothing at
+ * all to the person reading a screenshot of it.
+ *
+ * So an unresolved key degrades to its last segment, spaced out and capitalised.
+ * `ledgerKinds.AdditionalCharge` becomes "Additional charge", which is very nearly
+ * right; `reports.voucherCount` becomes "Voucher count", which is at least a
+ * phrase. Neither is a substitute for the key existing — the console still says so
+ * in development — but neither is a bug report from a user either.
+ */
+function readableFallback(key: string): string {
+  const last = key.split('.').pop() ?? key;
+
+  if (last === 'undefined' || last === 'null' || last === '') {
+    return '—';
+  }
+
+  const spaced = last
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .trim();
+
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 await i18next.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -1990,6 +2096,14 @@ await i18next.use(initReactI18next).init({
   },
   lng: localStorage.getItem('erp.language') === 'ar' ? 'ar' : 'en',
   fallbackLng: 'en',
+  parseMissingKeyHandler: readableFallback,
+  // Says so where a developer will see it, and nowhere the user will.
+  saveMissing: import.meta.env.DEV,
+  missingKeyHandler: (_languages, _namespace, key) => {
+    if (import.meta.env.DEV) {
+      console.warn(`[i18n] no translation for "${key}"`);
+    }
+  },
   interpolation: {
     // React escapes for us; letting i18next escape as well double-encodes any
     // apostrophe in a ledger name.

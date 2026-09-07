@@ -13,6 +13,7 @@ import {
   type SupplierSummary,
 } from '@/lib/suppliers';
 import { stateName, statesFor, TaxRegime } from '@/lib/states';
+import { ActiveBadge } from '@/components/StatusBadge';
 import {
   collect,
   maxLength,
@@ -92,6 +93,7 @@ export function SuppliersPage(): React.JSX.Element {
       key: 'status',
       header: t('masters.status'),
       value: (row) => (row.isActive ? t('masters.active') : t('masters.withdrawn')),
+      render: (row) => <ActiveBadge isActive={row.isActive} />,
     },
     {
       key: 'actions',

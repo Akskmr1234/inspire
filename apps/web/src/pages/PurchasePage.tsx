@@ -13,6 +13,7 @@ import {
   TextField,
 } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
   ChargesPanel,
   DocumentTotals,
@@ -239,17 +240,11 @@ export function PurchasePage({
       header: t('purchase.status'),
       value: (row) => statusLabel(row.status, t),
       render: (row) => (
-        <span
-          className={clsx(
-            row.status === PurchaseInvoiceStatus.posted
-              ? 'badge-success'
-              : row.status === PurchaseInvoiceStatus.cancelled
-                ? 'badge-danger'
-                : 'badge-warn',
-          )}
-        >
-          {statusLabel(row.status, t)}
-        </span>
+        <StatusBadge
+          tone={statusTone(row.status)}
+          label={statusLabel(row.status, t)}
+          struck={row.status === PurchaseInvoiceStatus.cancelled}
+        />
       ),
     },
     {
@@ -1169,10 +1164,18 @@ function DocumentDialog({
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('purchase.documentNumber')} value={document.header.number} />
             <Detail label={t('purchase.date')} value={document.date} />
-            <Detail
-              label={t('purchase.status')}
-              value={statusLabel(document.header.status, t)}
-            />
+            {/* The one field on this panel that is a state rather than a fact, so it
+                gets the badge the list uses rather than the mono type the rest do. */}
+            <div>
+              <span className="text-xs text-ink-muted">{t('purchase.status')}</span>
+              <div className="mt-0.5">
+                <StatusBadge
+                  tone={statusTone(document.header.status)}
+                  label={statusLabel(document.header.status, t)}
+                  struck={document.header.status === PurchaseInvoiceStatus.cancelled}
+                />
+              </div>
+            </div>
             <Detail label={t('purchase.currency')} value={document.currency} />
             <Detail
               label={t('purchase.supplierInvoice')}
@@ -1294,6 +1297,14 @@ function statusLabel(status: number, t: (key: string) => string): string {
   if (status === PurchaseInvoiceStatus.cancelled) return t('purchase.cancelled');
 
   return t('purchase.draft');
+}
+
+/** Posted is done, cancelled did not happen, and a draft is still somebody's to finish. */
+function statusTone(status: number): StatusTone {
+  if (status === PurchaseInvoiceStatus.posted) return 'success';
+  if (status === PurchaseInvoiceStatus.cancelled) return 'danger';
+
+  return 'warn';
 }
 
 function Detail({

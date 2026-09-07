@@ -7,6 +7,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
   ChargesPanel,
   DocumentTotals,
@@ -307,7 +308,11 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       header: t('orders.status'),
       value: (row) => statusLabel(row.status, t),
       render: (row) => (
-        <span className={clsx(statusTone(row.status))}>{statusLabel(row.status, t)}</span>
+        <StatusBadge
+          tone={statusTone(row.status)}
+          label={statusLabel(row.status, t)}
+          struck={row.status === OrderStatus.cancelled}
+        />
       ),
     },
     {
@@ -1042,7 +1047,16 @@ function OrderDialog({
             <Detail label={t('orders.number')} value={order.number} />
             <Detail label={t('orders.date')} value={order.date} />
             <Detail label={t('orders.expectedOn')} value={order.expectedOn ?? '—'} />
-            <Detail label={t('orders.status')} value={statusLabel(order.status, t)} />
+            <div>
+              <span className="text-xs text-ink-muted">{t('orders.status')}</span>
+              <div className="mt-0.5">
+                <StatusBadge
+                  tone={statusTone(order.status)}
+                  label={statusLabel(order.status, t)}
+                  struck={order.status === OrderStatus.cancelled}
+                />
+              </div>
+            </div>
             <Detail label={t('orders.reference')} value={order.referenceNumber ?? '—'} />
             <Detail label={t('orders.currency')} value={order.currency} />
             <Detail label={t('orders.taxable')} value={order.taxable.toFixed(2)} />
@@ -1168,12 +1182,12 @@ function statusLabel(status: number, t: (key: string) => string): string {
   return t('orders.draft');
 }
 
-function statusTone(status: number): string {
-  if (status === OrderStatus.confirmed) return 'badge-info';
-  if (status === OrderStatus.completed) return 'badge-success';
-  if (status === OrderStatus.cancelled) return 'badge-danger';
+function statusTone(status: number): StatusTone {
+  if (status === OrderStatus.confirmed) return 'info';
+  if (status === OrderStatus.completed) return 'success';
+  if (status === OrderStatus.cancelled) return 'danger';
 
-  return 'badge-warn';
+  return 'warn';
 }
 
 function Detail({

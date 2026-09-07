@@ -416,6 +416,30 @@
   }
 
   /*
+    The save bar on a long form.
+
+    The product editor asks for sixty fields across two tabs and puts Save at the
+    bottom of them, which on a laptop is two screens down: an edit to the retail rate
+    means changing one field and then scrolling past fifty-nine to commit it, and the
+    button is not visible at the moment the decision is made. Pinning the row to the
+    foot of the viewport keeps the commit where the hand is, and keeps the form's own
+    end-of-content position when the form is short enough to fit — `sticky` costs
+    nothing until there is something to scroll.
+
+    The negative inline margins pull the bar out to the main region's padding so its
+    rule spans the content rather than stopping short of both edges, and the surface
+    is opaque so the fields scrolling under it do not show through the gap. Actions
+    sit at the end of the row, where `.form-actions` already puts a dialog's — the
+    commit is in the same corner whether the record is being edited in a dialog or on
+    a page of its own.
+  */
+  .page-actions {
+    @apply sticky bottom-0 z-20 -mx-3 flex flex-wrap items-center justify-end gap-2
+           border-t border-line bg-surface/95 px-3 py-3 backdrop-blur-sm sm:-mx-4
+           sm:px-4 lg:-mx-6 lg:px-6;
+  }
+
+  /*
     The strip of filters under a report's title. A defined surface rather than
     controls floating on the canvas, so the eye has somewhere to land between the
     heading and the figures.

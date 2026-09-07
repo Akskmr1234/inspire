@@ -12,6 +12,12 @@ const KIND_NAME: Record<number, string> = {
   3: 'Bank',
   4: 'Customer',
   5: 'Supplier',
+  // The three that were missing. Every firm has charge ledgers — freight, packing,
+  // round off are seeded with the standard chart — so the chart of accounts was
+  // printing `ledgerKinds.undefined` in the Kind column on a fresh installation.
+  6: 'Employee',
+  7: 'Tax',
+  8: 'AdditionalCharge',
 };
 
 /** The account natures, keyed by the wire value. */

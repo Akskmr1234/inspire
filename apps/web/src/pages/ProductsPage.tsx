@@ -6,6 +6,7 @@ import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
@@ -155,6 +156,16 @@ export function ProductsPage(): React.JSX.Element {
           : row.isDiscontinued
             ? t('products.discontinued')
             : t('masters.active'),
+      render: (row) =>
+        !row.isActive ? (
+          <StatusBadge tone="neutral" label={t('masters.withdrawn')} struck />
+        ) : row.isDiscontinued ? (
+          // Amber, not grey: the product is still sold and still counted, it is just
+          // not to be reordered, and grey would file it with the withdrawn ones.
+          <StatusBadge tone="warn" label={t('products.discontinued')} />
+        ) : (
+          <StatusBadge tone="success" label={t('masters.active')} />
+        ),
     },
   ];
 

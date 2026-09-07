@@ -7,6 +7,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
@@ -171,6 +172,13 @@ export function SalesPage(): React.JSX.Element {
       key: 'status',
       header: t('sales.status'),
       value: (row) => statusLabel(row.status, t),
+      render: (row) => (
+        <StatusBadge
+          tone={statusTone(row.status)}
+          label={statusLabel(row.status, t)}
+          struck={row.status === SalesInvoiceStatus.cancelled}
+        />
+      ),
     },
     {
       key: 'actions',
@@ -911,10 +919,16 @@ function DocumentDialog({
         <>
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('sales.date')} value={document.date} />
-            <Detail
-              label={t('sales.status')}
-              value={statusLabel(document.header.status, t)}
-            />
+            <div>
+              <span className="text-xs text-ink-muted">{t('sales.status')}</span>
+              <div className="mt-0.5">
+                <StatusBadge
+                  tone={statusTone(document.header.status)}
+                  label={statusLabel(document.header.status, t)}
+                  struck={document.header.status === SalesInvoiceStatus.cancelled}
+                />
+              </div>
+            </div>
             <Detail label={t('sales.currency')} value={document.currency} />
             <Detail
               label={t('sales.taxable')}
@@ -1001,6 +1015,14 @@ function statusLabel(status: number, t: (key: string) => string): string {
   if (status === SalesInvoiceStatus.cancelled) return t('sales.cancelled');
 
   return t('sales.draft');
+}
+
+/** Posted is done, cancelled did not happen, and a draft is still somebody's to finish. */
+function statusTone(status: number): StatusTone {
+  if (status === SalesInvoiceStatus.posted) return 'success';
+  if (status === SalesInvoiceStatus.cancelled) return 'danger';
+
+  return 'warn';
 }
 
 function Detail({

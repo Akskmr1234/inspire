@@ -13,6 +13,7 @@ import {
   type CustomerSummary,
 } from '@/lib/customers';
 import { stateName, statesFor, TaxRegime } from '@/lib/states';
+import { ActiveBadge } from '@/components/StatusBadge';
 import {
   collect,
   maxLength,
@@ -97,6 +98,7 @@ export function CustomersPage(): React.JSX.Element {
       key: 'status',
       header: t('masters.status'),
       value: (row) => (row.isActive ? t('masters.active') : t('masters.withdrawn')),
+      render: (row) => <ActiveBadge isActive={row.isActive} />,
     },
     {
       key: 'actions',
