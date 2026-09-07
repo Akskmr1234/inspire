@@ -911,6 +911,61 @@
     @apply border-t border-line transition-colors duration-100;
   }
 
+  /*
+    Below `sm`, the first column stays put while the figures scroll past it.
+
+    Every report in this application is wider than a phone and scrolls inside its
+    box, which works — but what scrolls away first is the ledger name, and what is
+    left is six columns of figures belonging to nothing. Anchoring the first
+    column means a number is always beside the account it is about, which is the
+    whole reason a trial balance is laid out in rows.
+
+    Only where the table is genuinely the only option: the data grid becomes a
+    list of cards at this width and never reaches this rule, and above `sm` there
+    is room for the columns and no reason to pin anything.
+  */
+  @media (max-width: 639px) {
+    .table thead th:first-child,
+    .table tbody td:first-child,
+    /* Not a totals label that spans columns: `max-width` loses to the span, so
+       pinning one covers most of a phone with the word "Totals" and hides the
+       figures it is introducing. */
+    .table tfoot td:first-child:not([colspan]) {
+      @apply sticky start-0 z-10;
+      /* Capped hard, or the column being held takes half a 390px screen and the
+         figures it is anchoring have nowhere to go. Names longer than this wrap
+         inside the cap rather than widening it. */
+      max-width: 8.5rem;
+    }
+
+    .table thead th:first-child {
+      @apply z-20 bg-surface-3;
+    }
+
+    .table tbody td:first-child {
+      @apply bg-surface;
+    }
+
+    .table tfoot td:first-child:not([colspan]) {
+      @apply bg-surface-2;
+    }
+
+    /* A hairline down the anchored edge, so it reads as a column that has been
+       held rather than one the others happen to be sliding under. */
+    .table thead th:first-child::after,
+    .table tbody td:first-child::after,
+    .table tfoot td:first-child:not([colspan])::after {
+      @apply pointer-events-none absolute inset-y-0 end-0 w-px bg-line;
+      content: '';
+    }
+
+    /* Tighter, because the columns after the anchored one have what is left. */
+    .table thead th,
+    .table tbody td {
+      @apply px-2;
+    }
+  }
+
   .table tbody tr:hover {
     @apply bg-surface-2;
   }

@@ -435,3 +435,53 @@ describe('the page window', () => {
     }
   });
 });
+
+/*
+  A column the card view drops.
+
+  Every list here leads its card with the identifying column, which is already the
+  link into the record — so an actions column offering "Open" underneath is the
+  same action twice, on the screen that can least afford the height.
+*/
+describe('a narrow-hidden column', () => {
+  const withAction: readonly GridColumn<Row>[] = [
+    ...columns.slice(0, 2),
+    {
+      key: 'actions',
+      header: '',
+      value: () => '',
+      hideOnNarrow: true,
+      render: () => <button type="button">Open</button>,
+    },
+  ];
+
+  it('is drawn in the table, where there is room for it', () => {
+    setMatchingMedia();
+    render(
+      <DataGrid
+        gridKey="narrow"
+        rows={rows}
+        columns={withAction}
+        rowKey={(row) => row.id}
+      />,
+    );
+
+    expect(screen.getAllByRole('button', { name: 'Open' }).length).toBe(rows.length);
+  });
+
+  it('is dropped from the cards, where the row already leads with its link', () => {
+    setMatchingMedia('(max-width: 639px)');
+    render(
+      <DataGrid
+        gridKey="narrow"
+        rows={rows}
+        columns={withAction}
+        rowKey={(row) => row.id}
+      />,
+    );
+
+    expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(0);
+    // The rows are still there — the column went, not the data.
+    expect(screen.getAllByRole('listitem')).toHaveLength(rows.length);
+  });
+});

@@ -314,6 +314,9 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       key: 'actions',
       header: '',
       value: () => '',
+      // As on the purchase list: the card leads with the order number, which is
+      // already the way in.
+      hideOnNarrow: true,
       render: (row) => (
         <button
           type="button"
@@ -887,7 +890,7 @@ function OrderEntryDialog({
                           change(index, { taxPercentage: event.target.value })
                         }
                         className={clsx(
-                          'field-input-sm w-24 text-end font-mono tabular-nums',
+                          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
                           errorsForLine['taxPercentage'] && 'field-invalid',
                         )}
                       />
@@ -1199,8 +1202,14 @@ function NumberCell({
   readonly label: string;
   readonly error?: string | undefined;
 }): React.JSX.Element {
+  /*
+    The cell end-aligns its box, because the header above it is end-aligned too.
+    Left as it was, a `w-24` input sat at the start of a wider cell with its
+    caption over the gap to its right — every numeric column on these entry grids
+    was a heading pointing at the space beside the figures.
+  */
   return (
-    <td className="px-2 py-1">
+    <td className="px-2 py-1 text-end">
       <input
         type="number"
         inputMode="decimal"
@@ -1209,7 +1218,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
           error && 'field-invalid',
         )}
       />

@@ -151,3 +151,43 @@ describe('money formatting', () => {
     expect(moneyAlways(-99)).toMatch(/-99\.00/);
   });
 });
+
+/*
+  The filter bar folds away on a phone.
+
+  Five date-and-select fields stack full-width below `sm` — more chrome than a
+  phone's whole viewport, scrolled past on every visit to reach the report they
+  narrow. Folded, the report starts at the top of the screen; the fields are one
+  tap away and identical when they get there.
+*/
+describe('the filter bar', () => {
+  it('offers a way to unfold the filters', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ReportFrame
+        title="Trial balance"
+        controls={<label>From</label>}
+        query={queryIn('success', { rows: ['a'] })}
+      >
+        {(data) => <p>{data.rows.join()}</p>}
+      </ReportFrame>,
+    );
+
+    const toggle = screen.getByRole('button', { name: /filters/i });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('draws no bar at all for a screen that has no filters', () => {
+    render(
+      <ReportFrame title="Trial balance" controls={null} query={queryIn('success')}>
+        {() => <p>figures</p>}
+      </ReportFrame>,
+    );
+
+    expect(screen.queryByRole('button', { name: /filters/i })).toBeNull();
+  });
+});

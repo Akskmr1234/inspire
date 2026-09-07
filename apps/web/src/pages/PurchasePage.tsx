@@ -256,6 +256,11 @@ export function PurchasePage({
       key: 'actions',
       header: '',
       value: () => '',
+      // Withdrawn below `sm`. The grid draws a card there and leads it with the
+      // document number, which is already the link into the document — a button
+      // captioned "Open" underneath is the same action offered twice, and on the
+      // narrowest screen it is the one that costs a row of height.
+      hideOnNarrow: true,
       render: (row) => (
         <button
           type="button"
@@ -561,15 +566,15 @@ function EntryDialog({
       date: required(values.date, t('purchase.dateRequired')),
       supplierId: required(values.supplierId, t('purchase.supplierRequired')),
       warehouseId: required(values.warehouseId, t('purchase.warehouseRequired')),
-      // A tax invoice needs the supplier's own number before its input tax can be
-      // reclaimed, so the screen asks for it rather than letting the omission
-      // surface months later at a return.
-      supplierInvoiceNumber:
-        !isReturn &&
-        mode === PurchaseTaxMode.tax &&
-        values.supplierInvoiceNumber.trim() === ''
-          ? t('purchase.supplierInvoiceRequired')
-          : null,
+      /*
+        Not required to save a draft, on purpose.
+
+        Input tax is only reclaimable against the supplier's own tax invoice, so
+        this number does have to be here eventually — but a draft is precisely the
+        state for a delivery that has arrived before its paperwork, and refusing to
+        record it until the invoice turns up means it does not get recorded at all.
+        The screen says what is still needed, and posting is where it is enforced.
+      */
       supplierInvoiceDate:
         values.supplierInvoiceDate !== '' && values.supplierInvoiceNumber.trim() === ''
           ? t('purchase.invoiceDateNeedsNumber')
@@ -741,9 +746,13 @@ function EntryDialog({
           ]}
         />
 
+        {/*
+          Not marked mandatory, because the draft saves without it. A red marker on
+          a field the form accepts as empty is how a marker stops meaning anything;
+          the notice below says what it is for and posting is where it is needed.
+        */}
         <TextField
           label={t('purchase.supplierInvoice')}
-          required={!isReturn && mode === PurchaseTaxMode.tax}
           value={draft.supplierInvoiceNumber}
           onChange={(value) => set('supplierInvoiceNumber', value)}
           error={errors['supplierInvoiceNumber']}
@@ -782,11 +791,23 @@ function EntryDialog({
         />
       </div>
 
-      {/* Said plainly rather than left to be discovered: reclaiming input tax needs the
-          supplier's own tax invoice, and the same number twice is refused. */}
-      <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
-        {t('purchase.supplierInvoiceHint')}
-      </p>
+      {/*
+        A notice rather than a refusal, and beside the field it is about rather than
+        at the foot of the dialog. The draft saves without the number; posting is
+        where it is needed, and saying so at the point of entry is what stops it
+        being a surprise then.
+      */}
+      {!isReturn &&
+      mode === PurchaseTaxMode.tax &&
+      draft.supplierInvoiceNumber.trim() === '' ? (
+        <p className="alert-warn text-xs">{t('purchase.supplierInvoiceMissing')}</p>
+      ) : (
+        /* Said plainly rather than left to be discovered: reclaiming input tax needs
+           the supplier's own tax invoice, and the same number twice is refused. */
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
+          {t('purchase.supplierInvoiceHint')}
+        </p>
+      )}
 
       {isReturn && <p className="alert-warn text-xs">{t('purchase.returnHint')}</p>}
 
@@ -1004,7 +1025,7 @@ function LineRow({
               value={line.taxPercentage}
               onChange={(event) => onChange({ taxPercentage: event.target.value })}
               className={clsx(
-                'field-input-sm w-24 text-end font-mono tabular-nums',
+                'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
                 errors['taxPercentage'] && 'field-invalid',
               )}
             />
@@ -1218,11 +1239,27 @@ function DocumentDialog({
           )}
 
           {document.header.status === PurchaseInvoiceStatus.draft && (
-            <div className="flex justify-end">
-              <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
-                {t('purchase.post')}
-              </ModalButton>
-            </div>
+            <>
+              {/*
+                Where the supplier's invoice number is actually needed. The draft
+                was allowed to exist without it; posting is what makes the input
+                tax reclaimable, and a purchase posted without the number is one
+                somebody has to find again at a return.
+              */}
+              {document.kind !== PurchaseDocumentKind.return &&
+                document.mode === PurchaseTaxMode.tax &&
+                !document.supplierInvoiceNumber && (
+                  <p className="alert-warn text-xs">
+                    {t('purchase.supplierInvoiceMissing')}
+                  </p>
+                )}
+
+              <div className="flex justify-end">
+                <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
+                  {t('purchase.post')}
+                </ModalButton>
+              </div>
+            </>
           )}
 
           {document.header.status === PurchaseInvoiceStatus.posted && (
@@ -1285,8 +1322,14 @@ function NumberCell({
   readonly label: string;
   readonly error?: string | undefined;
 }): React.JSX.Element {
+  /*
+    The cell end-aligns its box, because the header above it is end-aligned too.
+    Left as it was, a `w-24` input sat at the start of a wider cell with its
+    caption over the gap to its right — every numeric column on these entry grids
+    was a heading pointing at the space beside the figures.
+  */
   return (
-    <td className="px-2 py-1">
+    <td className="px-2 py-1 text-end">
       <input
         type="number"
         inputMode="decimal"
@@ -1295,7 +1338,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
           error && 'field-invalid',
         )}
       />

@@ -145,7 +145,22 @@ export function VoucherEntryPage(): React.JSX.Element {
     // perfectly balanced voucher as unbalanced.
     const difference = Math.round((debit - credit) * 100) / 100;
 
-    return { debit, credit, difference, isBalanced: difference === 0 && debit > 0 };
+    /*
+      Three states, not two.
+
+      A voucher nobody has typed in yet has a difference of zero and is not
+      balanced, and the badge treated that as the unbalanced case — so an empty
+      screen opened by announcing "Difference 0.00 (credit heavy)", which is not
+      true, not actionable, and the first thing anybody sees on the screen. Empty
+      is its own state and says so.
+    */
+    return {
+      debit,
+      credit,
+      difference,
+      isEmpty: debit === 0 && credit === 0,
+      isBalanced: difference === 0 && debit > 0,
+    };
   }, [lines]);
 
   const canSubmit =
@@ -443,26 +458,34 @@ export function VoucherEntryPage(): React.JSX.Element {
           <span
             className={clsx(
               'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
-              totals.isBalanced
-                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
-                : 'bg-amber-50 text-amber-900 dark:bg-amber-500/12 dark:text-amber-200',
+              totals.isEmpty
+                ? 'bg-surface-3 text-ink-muted'
+                : totals.isBalanced
+                  ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
+                  : 'bg-amber-50 text-amber-900 dark:bg-amber-500/12 dark:text-amber-200',
             )}
           >
             <span
               aria-hidden="true"
               className={clsx(
                 'size-2 shrink-0 rounded-full',
-                totals.isBalanced ? 'bg-emerald-500' : 'animate-breathe bg-amber-500',
+                totals.isEmpty
+                  ? 'bg-ink-subtle'
+                  : totals.isBalanced
+                    ? 'bg-emerald-500'
+                    : 'animate-breathe bg-amber-500',
               )}
             />
-            {totals.isBalanced
-              ? t('vouchers.balanced')
-              : t(
-                  totals.difference > 0
-                    ? 'vouchers.differenceDebit'
-                    : 'vouchers.differenceCredit',
-                  { amount: money(Math.abs(totals.difference)) },
-                )}
+            {totals.isEmpty
+              ? t('vouchers.nothingEntered')
+              : totals.isBalanced
+                ? t('vouchers.balanced')
+                : t(
+                    totals.difference > 0
+                      ? 'vouchers.differenceDebit'
+                      : 'vouchers.differenceCredit',
+                    { amount: money(Math.abs(totals.difference)) },
+                  )}
           </span>
 
           <button

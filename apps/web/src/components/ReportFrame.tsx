@@ -1,8 +1,53 @@
+import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import type { ApiError } from '@/lib/api';
+
+/**
+ * A screen's filters: open on a wide screen, folded behind a button on a phone.
+ *
+ * The fields are the same either way. What changes is that on a phone they stack
+ * full-width — five of them is over 350px of chrome, more than a phone's whole
+ * viewport — and a reader who has already set them is scrolling past them on every
+ * visit to reach what they set them for. Folded, the report starts at the top of
+ * the screen and the filters are one tap away; the button says how many are not at
+ * their default so nothing is hidden silently.
+ */
+function FilterBar({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="filter-bar">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-ink sm:hidden"
+      >
+        {t('reports.filters')}
+        <span aria-hidden="true" className="text-ink-muted">
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+
+      <div
+        className={clsx(
+          'min-w-0 sm:overflow-visible',
+          open ? 'mt-3 block sm:mt-0' : 'hidden sm:block',
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /**
  * The chrome every report screen shares: a heading, the date controls, and the
@@ -77,16 +122,11 @@ export function ReportFrame<TData>({
 
       {/*
         Rendered only where a screen actually has filters — an empty bar is a line of
-        furniture saying nothing. The controls scroll on their own below `sm` rather
-        than wrapping into a four-line stack that pushes the report off the screen.
+        furniture saying nothing. Folded away below `sm`, where the same five fields
+        stack full-width and fill a phone twice over before a single row of the
+        report is reached.
       */}
-      {controls && (
-        <div className="filter-bar">
-          <div className="-mx-3 min-w-0 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
-            {controls}
-          </div>
-        </div>
-      )}
+      {controls && <FilterBar>{controls}</FilterBar>}
 
       {/*
         A refetch of a report that is already on screen shows a hairline rather than

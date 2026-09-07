@@ -34,6 +34,15 @@ export interface GridColumn<TRow> {
    */
   readonly wide?: boolean;
   /**
+   * Dropped where the grid draws cards rather than a table.
+   *
+   * For an action the card already offers another way: every list here leads its
+   * card with the identifying column, which is the link into the record, so a
+   * button captioned "Open" beneath it is the same action twice and a row of
+   * height on the screen that can least afford one.
+   */
+  readonly hideOnNarrow?: boolean;
+  /**
    * A `module:resource:verb` code the user must hold to see this column at all.
    *
    * The specification's role-based column visibility. Unlike hiding a column, this is
@@ -212,9 +221,10 @@ export function DataGrid<TRow>({
     return ordered.filter(
       (column) =>
         !hidden.has(column.key) &&
-        !(column.hiddenByDefault && !order.includes(column.key)),
+        !(column.hiddenByDefault && !order.includes(column.key)) &&
+        !(column.hideOnNarrow && narrow),
     );
-  }, [permitted, order, hidden]);
+  }, [permitted, order, hidden, narrow]);
 
   const shown = useMemo(() => {
     const needle = search.trim().toLowerCase();

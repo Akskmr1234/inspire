@@ -70,7 +70,11 @@ export function DashboardPage(): React.JSX.Element {
     queryFn: () => request('/dashboards'),
   });
 
-  const dashboard = dashboards.data?.dashboards[0];
+  // Indexed through the optional chain, not after it. `data?.dashboards[0]` stops
+  // guarding at `data` and then indexes whatever `dashboards` happens to be — so a
+  // response missing the field takes the whole screen down with a TypeError rather
+  // than showing the "no dashboard assigned" state written for exactly that case.
+  const dashboard = dashboards.data?.dashboards?.[0];
 
   const data = useQuery<DashboardData, ApiError>({
     queryKey: ['dashboard-data', dashboard?.id],
