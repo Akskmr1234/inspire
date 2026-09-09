@@ -8,6 +8,7 @@ import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
 import type { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
+import { CommandPalette, opensPalette } from '@/components/CommandPalette';
 import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import {
@@ -42,6 +43,7 @@ export function AppShell(): React.JSX.Element {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   // The bar carries the active screen's title. See `PageHeading` for the half of
   // this that lives at the other end.
   const { slot, setElement, occupied } = useHeadingSlot();
@@ -69,6 +71,25 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  /*
+    Ctrl-K, or Cmd-K on a Mac, opens the palette.
+
+    Registered on the window rather than on a focused element, because the whole
+    point is that it works wherever you are. `opensPalette` declines while the caret
+    is in a field, so it never eats the keystroke from somebody typing.
+  */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (opensPalette(event)) {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // A drawer that survives a rotation to landscape would sit as a permanent overlay
   // beside the sidebar it duplicates, so crossing into desktop width dismisses it.
@@ -160,6 +181,14 @@ export function AppShell(): React.JSX.Element {
 
       {drawerOpen && <NavDrawer onClose={() => setDrawerOpen(false)}>{nav}</NavDrawer>}
 
+      {paletteOpen && (
+        <CommandPalette
+          menu={menu.data}
+          language={language}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
+
       <div className="flex min-w-0 flex-1 flex-col">
         {/*
           Sticky, so the theme switch and the sign-out stay reachable at the bottom
@@ -200,6 +229,35 @@ export function AppShell(): React.JSX.Element {
           <div ref={setElement} className="flex min-w-0 flex-1 items-center gap-2" />
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {/*
+              The palette's own doorway. A shortcut nobody is told about is a
+              shortcut nobody uses, and a button is also the only way to reach it
+              on a phone, where there is no Ctrl to hold.
+            */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              aria-label={t('palette.open')}
+              title={t('palette.open')}
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-2 px-2 text-ink-muted transition duration-150 hover:border-line-strong hover:text-ink active:scale-95 sm:px-2.5"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                aria-hidden="true"
+                className="size-4"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.6-3.6" />
+              </svg>
+              <kbd className="hidden font-sans text-[0.7rem] font-medium tracking-wide lg:inline">
+                {t('palette.shortcut')}
+              </kbd>
+            </button>
+
             {/*
               Withdrawn until `xl` rather than `sm`. The screen's name has the
               middle of the bar now, and on a laptop it is the more useful of the

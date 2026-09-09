@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MasterField, MasterFrame, RowAction } from '@/components/MasterFrame';
+import { MasterFrame, RowAction } from '@/components/MasterFrame';
+import { ArabicNameField } from '@/components/ArabicNameField';
+import { SelectField, TextField } from '@/components/Form';
 import type { GridColumn } from '@/components/DataGrid';
+import { ActiveBadge } from '@/components/StatusBadge';
 import {
   createMaster,
   listMaster,
@@ -9,6 +12,7 @@ import {
   type BrandSummary,
   type CategorySummary,
 } from '@/lib/inventory';
+import { collect, maxLength, required, useValidation } from '@/lib/validation';
 
 /**
  * Product categories and sub-classes.
@@ -40,6 +44,7 @@ export function CategoriesPage(): React.JSX.Element {
       key: 'status',
       header: t('masters.status'),
       value: (row) => (row.isActive ? t('masters.active') : t('masters.withdrawn')),
+      render: (row) => <ActiveBadge isActive={row.isActive} />,
     },
     {
       key: 'actions',
@@ -48,6 +53,7 @@ export function CategoriesPage(): React.JSX.Element {
       render: (row) => (
         <RowAction
           label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
+          tone={row.isActive ? 'danger' : 'neutral'}
           disabled={busy}
           onClick={() =>
             run(async () => {
@@ -89,13 +95,24 @@ function AddCategory({
   const [nameArabic, setNameArabic] = useState('');
   const [parentId, setParentId] = useState('');
 
+  const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
+    collect({
+      code:
+        required(values.code, t('categories.codeRequired')) ??
+        maxLength(values.code, 20, t('categories.codeTooLong')),
+      name:
+        required(values.name, t('categories.nameRequired')) ??
+        maxLength(values.name, 100, t('categories.nameTooLong')),
+    }),
+  );
+
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (!code.trim() || !name.trim()) {
+        if (!submit({ code, name })) {
           return;
         }
 
@@ -110,36 +127,51 @@ function AddCategory({
       }}
     >
       <div className="form-grid">
-        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-        <MasterField label={t('masters.name')} value={name} onChange={setName} />
-        <MasterField
+        <TextField
+          label={t('masters.code')}
+          required
+          autoFocus
+          value={code}
+          onChange={setCode}
+          error={errors['code']}
+        />
+        <TextField
+          label={t('masters.name')}
+          required
+          value={name}
+          onChange={setName}
+          error={errors['name']}
+        />
+
+        {/*
+          Filled in from the English name where the firm has turned translation on
+          in Settings, and an ordinary editable box either way. A machine
+          translation of a category name is a first draft — the firm printing it on
+          an invoice decides whether it is right.
+        */}
+        <ArabicNameField
           label={t('masters.nameArabic')}
+          source={name}
           value={nameArabic}
           onChange={setNameArabic}
         />
 
-        <label className="field">
-          <span className="field-label">{t('categories.parent')}</span>
-          <select
-            value={parentId}
-            onChange={(event) => setParentId(event.target.value)}
-            className="field-input-sm"
-          >
-            <option value="">{t('categories.topLevel')}</option>
-            {rows
+        <SelectField
+          label={t('categories.parent')}
+          value={parentId}
+          onChange={setParentId}
+          options={[
+            { value: '', label: t('categories.topLevel') },
+            ...rows
               .filter((row) => row.isActive)
-              .map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.code} — {row.name}
-                </option>
-              ))}
-          </select>
-        </label>
+              .map((row) => ({ value: row.id, label: `${row.code} — ${row.name}` })),
+          ]}
+        />
       </div>
 
       <div className="form-actions">
         <button type="submit" disabled={busy} className="btn-primary">
-          {t('masters.add')}
+          {busy ? t('common.saving') : t('masters.add')}
         </button>
       </div>
     </form>
@@ -170,6 +202,7 @@ export function BrandsPage(): React.JSX.Element {
       key: 'status',
       header: t('masters.status'),
       value: (row) => (row.isActive ? t('masters.active') : t('masters.withdrawn')),
+      render: (row) => <ActiveBadge isActive={row.isActive} />,
     },
     {
       key: 'actions',
@@ -178,6 +211,7 @@ export function BrandsPage(): React.JSX.Element {
       render: (row) => (
         <RowAction
           label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
+          tone={row.isActive ? 'danger' : 'neutral'}
           disabled={busy}
           onClick={() =>
             run(async () => {
@@ -214,13 +248,24 @@ function AddBrand({
   const [name, setName] = useState('');
   const [nameArabic, setNameArabic] = useState('');
 
+  const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
+    collect({
+      code:
+        required(values.code, t('categories.codeRequired')) ??
+        maxLength(values.code, 20, t('categories.codeTooLong')),
+      name:
+        required(values.name, t('categories.nameRequired')) ??
+        maxLength(values.name, 100, t('categories.nameTooLong')),
+    }),
+  );
+
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (!code.trim() || !name.trim()) {
+        if (!submit({ code, name })) {
           return;
         }
 
@@ -234,10 +279,24 @@ function AddBrand({
       }}
     >
       <div className="form-grid">
-        <MasterField label={t('masters.code')} value={code} onChange={setCode} />
-        <MasterField label={t('masters.name')} value={name} onChange={setName} />
-        <MasterField
+        <TextField
+          label={t('masters.code')}
+          required
+          autoFocus
+          value={code}
+          onChange={setCode}
+          error={errors['code']}
+        />
+        <TextField
+          label={t('masters.name')}
+          required
+          value={name}
+          onChange={setName}
+          error={errors['name']}
+        />
+        <ArabicNameField
           label={t('masters.nameArabic')}
+          source={name}
           value={nameArabic}
           onChange={setNameArabic}
         />
@@ -245,7 +304,7 @@ function AddBrand({
 
       <div className="form-actions">
         <button type="submit" disabled={busy} className="btn-primary">
-          {t('masters.add')}
+          {busy ? t('common.saving') : t('masters.add')}
         </button>
       </div>
     </form>

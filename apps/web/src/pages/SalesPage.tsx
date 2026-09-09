@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
+import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
+import { SearchSelect } from '@/components/SearchSelect';
+import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
+import { productOption, stockByProduct } from '@/components/DocumentLines';
+import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
+import { collect, numeric, required, useValidation } from '@/lib/validation';
+import { useSettings } from '@/stores/settings';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -165,6 +172,13 @@ export function SalesPage(): React.JSX.Element {
       key: 'status',
       header: t('sales.status'),
       value: (row) => statusLabel(row.status, t),
+      render: (row) => (
+        <StatusBadge
+          tone={statusTone(row.status)}
+          label={statusLabel(row.status, t)}
+          struck={row.status === SalesInvoiceStatus.cancelled}
+        />
+      ),
     },
     {
       key: 'actions',
@@ -183,49 +197,48 @@ export function SalesPage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="toolbar">
-      <Field label={t('sales.from')}>
-        <DateInput value={from} onChange={narrow(setFrom)} />
-      </Field>
+    <div className="filter-grid">
+      <DateField
+        label={t('sales.from')}
+        value={from}
+        onChange={narrow(setFrom)}
+        size="sm"
+      />
+      <DateField label={t('sales.to')} value={to} onChange={narrow(setTo)} size="sm" />
 
-      <Field label={t('sales.to')}>
-        <DateInput value={to} onChange={narrow(setTo)} />
-      </Field>
+      <SelectField<number | ''>
+        label={t('sales.kind')}
+        value={kindFilter}
+        onChange={narrow<number | ''>(setKindFilter)}
+        size="sm"
+        options={[
+          { value: '', label: t('sales.allKinds') },
+          { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
+          { value: SalesDocumentKind.return, label: t('sales.return') },
+        ]}
+      />
 
-      <Field label={t('sales.kind')}>
-        <Select
-          value={kindFilter}
-          onChange={narrow<number | ''>(setKindFilter)}
-          options={[
-            { value: '', label: t('sales.allKinds') },
-            { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
-            { value: SalesDocumentKind.return, label: t('sales.return') },
-          ]}
-        />
-      </Field>
+      <SelectField<number | ''>
+        label={t('sales.status')}
+        value={statusFilter}
+        onChange={narrow<number | ''>(setStatusFilter)}
+        size="sm"
+        options={[
+          { value: '', label: t('sales.allStatuses') },
+          { value: SalesInvoiceStatus.draft, label: t('sales.draft') },
+          { value: SalesInvoiceStatus.posted, label: t('sales.posted') },
+          { value: SalesInvoiceStatus.cancelled, label: t('sales.cancelled') },
+        ]}
+      />
 
-      <Field label={t('sales.status')}>
-        <Select
-          value={statusFilter}
-          onChange={narrow<number | ''>(setStatusFilter)}
-          options={[
-            { value: '', label: t('sales.allStatuses') },
-            { value: SalesInvoiceStatus.draft, label: t('sales.draft') },
-            { value: SalesInvoiceStatus.posted, label: t('sales.posted') },
-            { value: SalesInvoiceStatus.cancelled, label: t('sales.cancelled') },
-          ]}
-        />
-      </Field>
-
-      <Field label={t('sales.search')}>
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => narrow(setSearch)(event.target.value)}
-          placeholder={t('sales.searchHint')}
-          className="field-input-sm"
-        />
-      </Field>
+      <TextField
+        label={t('sales.search')}
+        type="search"
+        value={search}
+        onChange={(value) => narrow(setSearch)(value)}
+        placeholder={t('sales.searchHint')}
+        size="sm"
+      />
     </div>
   );
 
@@ -315,6 +328,7 @@ function EntryDialog({
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const preferredWarehouseId = useSettings((state) => state.preferredWarehouseId);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -341,6 +355,46 @@ function EntryDialog({
     queryKey: ['products', 'picker'],
     queryFn: () => listProducts('', '', false),
   });
+
+  // What is on the shelf, so the picker can say it. A counter choosing what to sell
+  // wants the figure in front of them, not in the stock report in another tab.
+  const valuation = useQuery<StockValuationReport, ApiError>({
+    queryKey: ['stock-valuation', 'picker', warehouseId],
+    queryFn: () => fetchStockValuation(warehouseId, '', true),
+    staleTime: 60 * 1000,
+  });
+
+  const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
+
+  const productOptions = useMemo(
+    () =>
+      (products.data ?? []).map((product) =>
+        productOption(product, onHand.get(product.id) ?? 0),
+      ),
+    [products.data, onHand],
+  );
+
+  /*
+    The warehouse a sale ships from.
+
+    The master already records which one is the default and Settings can override it
+    for a workstation that ships from somewhere else. Applied once, and only while
+    the field is empty, so it never overwrites a choice somebody has made.
+  */
+  useEffect(() => {
+    if (warehouseId !== '' || !warehouses.data) {
+      return;
+    }
+
+    const chosen =
+      warehouses.data.find((warehouse) => warehouse.id === preferredWarehouseId) ??
+      warehouses.data.find((warehouse) => warehouse.isDefault) ??
+      (warehouses.data.length === 1 ? warehouses.data[0] : undefined);
+
+    if (chosen) {
+      setWarehouseId(chosen.id);
+    }
+  }, [warehouses.data, preferredWarehouseId, warehouseId]);
 
   // Only posted invoices can be returned against, and only the ones this customer
   // actually has: offering somebody else's would be offering a mistake.
@@ -380,7 +434,56 @@ function EntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  /*
+    What the form has to say about itself.
+
+    It used to say nothing: the Save button was disabled until a customer, a
+    warehouse and a line were all present, so a half-filled invoice met a dead
+    button and no explanation of which of the three it was waiting for. The button
+    is live now and pressing it marks what is missing.
+  */
+  const { errors, submit } = useValidation<{
+    date: string;
+    customerId: string;
+    warehouseId: string;
+  }>((values) =>
+    collect({
+      date: required(values.date, t('sales.dateRequired')),
+      customerId: required(values.customerId, t('sales.customerRequired')),
+      warehouseId: required(values.warehouseId, t('sales.warehouseRequired')),
+      lines: lines.some((line) => line.productId && Number(line.quantity) > 0)
+        ? null
+        : t('sales.linesRequired'),
+    }),
+  );
+
+  const lineErrors = useMemo(
+    () =>
+      lines.map((line) =>
+        collect({
+          quantity: line.productId
+            ? numeric(line.quantity, t('sales.quantityInvalid'), { min: 0.000001 })
+            : null,
+          rate: line.productId
+            ? numeric(line.rate, t('sales.rateInvalid'), { min: 0 })
+            : null,
+          taxPercentage: numeric(line.taxPercentage, t('sales.taxInvalid'), {
+            min: 0,
+            max: 100,
+          }),
+        }),
+      ),
+    [lines, t],
+  );
+
   const save = async (): Promise<void> => {
+    if (
+      !submit({ date, customerId, warehouseId }) ||
+      lineErrors.some((line) => Object.keys(line).length > 0)
+    ) {
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -417,82 +520,96 @@ function EntryDialog({
     }
   };
 
-  const ready =
-    customerId !== '' &&
-    warehouseId !== '' &&
-    lines.some((line) => line.productId && Number(line.quantity) > 0);
-
   return (
     <Modal
       title={isReturn(kind) ? t('sales.newReturn') : t('sales.newInvoice')}
       onClose={onClose}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label={t('sales.kind')}>
-          <Select
-            value={kind}
-            onChange={(value) => setKind(Number(value))}
-            options={[
-              { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
-              { value: SalesDocumentKind.return, label: t('sales.return') },
-            ]}
-          />
-        </Field>
+      <div className="form-grid-3">
+        <SelectField
+          label={t('sales.kind')}
+          required
+          value={kind}
+          onChange={(value) => setKind(Number(value))}
+          options={[
+            { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
+            { value: SalesDocumentKind.return, label: t('sales.return') },
+          ]}
+        />
 
-        <Field label={t('sales.date')}>
-          <DateInput value={date} onChange={setDate} />
-        </Field>
+        <DateField
+          label={t('sales.date')}
+          required
+          value={date}
+          onChange={setDate}
+          error={errors['date']}
+        />
 
-        <Field label={t('sales.customer')}>
-          <Select
+        {/*
+          Searchable, like every other picker that reaches a master. A customer
+          list is thousands of rows and the native control could only be scrolled —
+          and its type-ahead matched the account code rather than the name the
+          person at the counter is being told.
+        */}
+        <FormField label={t('sales.customer')} required error={errors['customerId']}>
+          <SearchSelect
             value={customerId}
-            onChange={(value) => setCustomerId(String(value))}
-            options={[
-              { value: '', label: t('sales.chooseCustomer') },
-              ...(customers.data ?? []).map((customer) => ({
-                value: customer.customerId,
-                label: `${customer.code} — ${customer.name}`,
-              })),
-            ]}
+            onChange={setCustomerId}
+            options={(customers.data ?? []).map((customer) => ({
+              value: customer.customerId,
+              label: `${customer.code} — ${customer.name}`,
+              ...(customer.contact.mobileNumber
+                ? { detail: customer.contact.mobileNumber }
+                : {}),
+            }))}
+            invalid={errors['customerId'] !== undefined}
+            label={t('sales.customer')}
+            placeholder={t('sales.chooseCustomer')}
           />
-        </Field>
+        </FormField>
 
-        <Field label={t('sales.warehouse')}>
-          <Select
+        <FormField
+          label={t('sales.warehouse')}
+          required
+          error={errors['warehouseId']}
+          hint={t('purchase.warehouseDefaulted')}
+        >
+          <SearchSelect
             value={warehouseId}
-            onChange={(value) => setWarehouseId(String(value))}
-            options={[
-              { value: '', label: t('sales.chooseWarehouse') },
-              ...(warehouses.data ?? []).map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.name,
-              })),
-            ]}
+            onChange={setWarehouseId}
+            options={(warehouses.data ?? []).map((warehouse) => ({
+              value: warehouse.id,
+              label: `${warehouse.code} — ${warehouse.name}`,
+              ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+            }))}
+            invalid={errors['warehouseId'] !== undefined}
+            label={t('sales.warehouse')}
+            placeholder={t('sales.chooseWarehouse')}
           />
-        </Field>
+        </FormField>
 
-        <Field label={t('sales.reference')}>
-          <input
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            className="field-input-sm"
-          />
-        </Field>
+        <TextField
+          label={t('sales.reference')}
+          value={reference}
+          onChange={setReference}
+        />
 
         {isReturn(kind) && (
-          <Field label={t('sales.againstInvoice')}>
-            <Select
+          <FormField label={t('sales.againstInvoice')}>
+            <SearchSelect
               value={returnsInvoiceId}
-              onChange={(value) => setReturnsInvoiceId(String(value))}
-              options={[
-                { value: '', label: t('sales.noInvoice') },
-                ...(returnable.data?.items ?? []).map((invoice) => ({
-                  value: invoice.salesInvoiceId,
-                  label: `${invoice.number} — ${invoice.total.toFixed(2)}`,
-                })),
-              ]}
+              onChange={setReturnsInvoiceId}
+              clearable
+              label={t('sales.againstInvoice')}
+              placeholder={t('sales.noInvoice')}
+              options={(returnable.data?.items ?? []).map((invoice) => ({
+                value: invoice.salesInvoiceId,
+                label: invoice.number,
+                detail: invoice.date,
+                meta: invoice.total.toFixed(2),
+              }))}
             />
-          </Field>
+          </FormField>
         )}
       </div>
 
@@ -522,7 +639,9 @@ function EntryDialog({
                 key={index}
                 line={line}
                 products={products.data ?? []}
+                productOptions={productOptions}
                 warehouseId={warehouseId}
+                errors={lineErrors[index] ?? {}}
                 removable={lines.length > 1}
                 onChange={(patch) => change(index, patch)}
                 onRemove={() =>
@@ -563,7 +682,7 @@ function EntryDialog({
 
       <div className="flex justify-end gap-2">
         <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
-        <ModalButton primary disabled={!ready || busy} onClick={() => void save()}>
+        <ModalButton primary disabled={busy} onClick={() => void save()}>
           {t('sales.saveDraft')}
         </ModalButton>
       </div>
@@ -583,14 +702,18 @@ function EntryDialog({
 function LineRow({
   line,
   products,
+  productOptions,
   warehouseId,
+  errors,
   removable,
   onChange,
   onRemove,
 }: {
   readonly line: DraftLine;
   readonly products: readonly ProductSummary[];
+  readonly productOptions: ReturnType<typeof productOption>[];
   readonly warehouseId: string;
+  readonly errors: Readonly<Record<string, string>>;
   readonly removable: boolean;
   readonly onChange: (patch: Partial<DraftLine>) => void;
   readonly onRemove: () => void;
@@ -633,34 +756,47 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td className="px-2 py-1">
-          <Select
+        <td className="min-w-64 px-2 py-1">
+          {/* Typeable, and showing what is on the shelf — the two things the native
+              select over the whole product master could not do. */}
+          <SearchSelect
             value={line.productId}
-            onChange={(value) =>
-              // The batch and the units belong to the product that was chosen before,
-              // so they are dropped rather than carried onto a different one.
-              onChange({ productId: String(value), batchNumber: '', serialNumbers: [] })
-            }
-            options={[
-              { value: '', label: t('sales.chooseProduct') },
-              ...products.map((candidate) => ({
-                value: candidate.id,
-                label: `${candidate.code} — ${candidate.description}`,
-              })),
-            ]}
+            onChange={(value) => {
+              const chosen = products.find((candidate) => candidate.id === value);
+
+              // The batch and the units belong to the product that was chosen
+              // before, so they are dropped rather than carried onto a different
+              // one. The rate starts at the product's own retail price.
+              onChange({
+                productId: value,
+                batchNumber: '',
+                serialNumbers: [],
+                ...(chosen ? { rate: String(chosen.retailRate) } : {}),
+              });
+            }}
+            options={productOptions}
+            size="sm"
+            label={t('sales.product')}
+            placeholder={t('sales.chooseProduct')}
           />
         </td>
         <NumberCell
           value={line.quantity}
+          error={errors['quantity']}
           onChange={(value) => onChange({ quantity: value })}
         />
-        <NumberCell value={line.rate} onChange={(value) => onChange({ rate: value })} />
+        <NumberCell
+          value={line.rate}
+          error={errors['rate']}
+          onChange={(value) => onChange({ rate: value })}
+        />
         <NumberCell
           value={line.discount}
           onChange={(value) => onChange({ discount: value })}
         />
         <NumberCell
           value={line.taxPercentage}
+          error={errors['taxPercentage']}
           onChange={(value) => onChange({ taxPercentage: value })}
         />
         <td className="px-2 py-1 text-end font-mono">
@@ -783,10 +919,16 @@ function DocumentDialog({
         <>
           <div className="grid gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('sales.date')} value={document.date} />
-            <Detail
-              label={t('sales.status')}
-              value={statusLabel(document.header.status, t)}
-            />
+            <div>
+              <span className="text-xs text-ink-muted">{t('sales.status')}</span>
+              <div className="mt-0.5">
+                <StatusBadge
+                  tone={statusTone(document.header.status)}
+                  label={statusLabel(document.header.status, t)}
+                  struck={document.header.status === SalesInvoiceStatus.cancelled}
+                />
+              </div>
+            </div>
             <Detail label={t('sales.currency')} value={document.currency} />
             <Detail
               label={t('sales.taxable')}
@@ -875,6 +1017,14 @@ function statusLabel(status: number, t: (key: string) => string): string {
   return t('sales.draft');
 }
 
+/** Posted is done, cancelled did not happen, and a draft is still somebody's to finish. */
+function statusTone(status: number): StatusTone {
+  if (status === SalesInvoiceStatus.posted) return 'success';
+  if (status === SalesInvoiceStatus.cancelled) return 'danger';
+
+  return 'warn';
+}
+
 function Detail({
   label,
   value,
@@ -905,37 +1055,33 @@ function Field({
   );
 }
 
-function DateInput({
-  value,
-  onChange,
-}: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-}): React.JSX.Element {
-  return (
-    <input
-      type="date"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="field-input-sm"
-    />
-  );
-}
-
 function NumberCell({
   value,
   onChange,
+  error,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
+  readonly error?: string | undefined;
 }): React.JSX.Element {
+  /*
+    The cell end-aligns its box, because the header above it is end-aligned too.
+    Left as it was, a `w-24` input sat at the start of a wider cell with its
+    caption over the gap to its right — every numeric column on these entry grids
+    was a heading pointing at the space beside the figures.
+  */
   return (
-    <td className="px-2 py-1">
+    <td className="px-2 py-1 text-end">
       <input
         type="number"
+        inputMode="decimal"
         value={value}
+        aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className="field-input-sm w-24 text-end font-mono tabular-nums"
+        className={clsx(
+          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          error && 'field-invalid',
+        )}
       />
     </td>
   );

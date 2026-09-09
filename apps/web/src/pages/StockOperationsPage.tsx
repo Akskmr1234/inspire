@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
+import { SearchSelect } from '@/components/SearchSelect';
+import { productOption, stockByProduct } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
   allowsNegative,
   cancelStockDocument,
+  fetchStockValuation,
   carriesRate,
   createStockDocument,
   fetchProductBatches,
@@ -29,6 +32,7 @@ import {
   type StockDocumentDetail,
   type StockDocumentSummary,
   type StockLineInput,
+  type StockValuationReport,
 } from '@/lib/stock';
 
 /**
@@ -43,7 +47,18 @@ import {
  * refused by the server, because what an issue costs was decided by the position it
  * comes out of, so offering the box would be offering something that cannot be saved.
  */
-export function StockOperationsPage(): React.JSX.Element {
+export function StockOperationsPage({
+  lockedType,
+  title,
+}: {
+  /**
+   * One kind of document, when this screen is standing in for a menu entry of its
+   * own — the opening stock register does not want a type filter offering six
+   * kinds it will never show.
+   */
+  readonly lockedType?: number;
+  readonly title?: string;
+} = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -52,7 +67,7 @@ export function StockOperationsPage(): React.JSX.Element {
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
-  const [typeFilter, setTypeFilter] = useState<number | ''>('');
+  const [typeFilter, setTypeFilter] = useState<number | ''>(lockedType ?? '');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -186,22 +201,26 @@ export function StockOperationsPage(): React.JSX.Element {
         />
       </Labelled>
 
-      <Labelled label={t('stock.type')}>
-        <select
-          value={typeFilter}
-          onChange={(event) =>
-            setTypeFilter(event.target.value === '' ? '' : Number(event.target.value))
-          }
-          className="field-input-sm"
-        >
-          <option value="">{t('stock.allTypes')}</option>
-          {STOCK_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(typeKey(type))}
-            </option>
-          ))}
-        </select>
-      </Labelled>
+      {/* Withdrawn where the screen is one kind of document: a filter with one
+          option is furniture. */}
+      {lockedType === undefined && (
+        <Labelled label={t('stock.type')}>
+          <select
+            value={typeFilter}
+            onChange={(event) =>
+              setTypeFilter(event.target.value === '' ? '' : Number(event.target.value))
+            }
+            className="field-input-sm"
+          >
+            <option value="">{t('stock.allTypes')}</option>
+            {STOCK_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {t(typeKey(type))}
+              </option>
+            ))}
+          </select>
+        </Labelled>
+      )}
 
       <Labelled label={t('stock.warehouse')}>
         <select
@@ -248,7 +267,11 @@ export function StockOperationsPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame title={t('nav.stockOperations')} controls={controls} query={query}>
+      <ReportFrame
+        title={title ?? t('nav.stockOperations')}
+        controls={controls}
+        query={query}
+      >
         {(rows) => (
           <div className="space-y-3">
             {error && !entering && <Alert tone="error">{error}</Alert>}
@@ -261,7 +284,17 @@ export function StockOperationsPage(): React.JSX.Element {
               rowKey={(row) => row.id}
               emptyMessage={t('stock.noneFound')}
               actions={
-                <GridAction label={t('stock.new')} onClick={() => setEntering(true)} />
+                <GridAction
+                  // Named for what it makes. On the opening-stock screen the button
+                  // said "New document", which is the caption of a screen that
+                  // enters seven kinds and not of one that enters this one.
+                  label={
+                    lockedType === undefined
+                      ? t('stock.new')
+                      : t('stock.newOf', { type: t(typeKey(lockedType)).toLowerCase() })
+                  }
+                  onClick={() => setEntering(true)}
+                />
               }
             />
           </div>
@@ -277,11 +310,19 @@ export function StockOperationsPage(): React.JSX.Element {
         not be lost to a refetch.
       */}
       {entering && (
-        <Modal title={t('stock.new')} onClose={() => setEntering(false)}>
+        <Modal
+          title={
+            lockedType === undefined
+              ? t('stock.new')
+              : t('stock.newOf', { type: t(typeKey(lockedType)).toLowerCase() })
+          }
+          onClose={() => setEntering(false)}
+        >
           {error && <Alert tone="error">{error}</Alert>}
 
           <StockEntry
             warehouses={warehouses.data ?? []}
+            {...(lockedType === undefined ? {} : { lockedType })}
             busy={mutation.isPending}
             onCancel={() => setEntering(false)}
             onSubmit={(body) =>
@@ -350,11 +391,14 @@ function parseSerials(entered: string): readonly string[] {
 /** The entry form: a header, a grid of products, and one Save. */
 function StockEntry({
   warehouses,
+  lockedType,
   busy,
   onCancel,
   onSubmit,
 }: {
   readonly warehouses: readonly WarehouseSummary[];
+  /** The one kind this form enters, where the screen is for one kind. */
+  readonly lockedType?: number;
   readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (body: {
@@ -370,7 +414,9 @@ function StockEntry({
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  const [type, setType] = useState<number>(StockDocumentType.materialReceipt);
+  const [type, setType] = useState<number>(
+    lockedType ?? StockDocumentType.materialReceipt,
+  );
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [warehouseId, setWarehouseId] = useState(
     warehouses.find((warehouse) => warehouse.isDefault)?.id ?? warehouses[0]?.id ?? '',
@@ -388,6 +434,25 @@ function StockEntry({
     queryKey: ['products', '', '', false],
     queryFn: () => listProducts('', '', false),
   });
+
+  // What is on the shelf, for the product picker. A storekeeper choosing what to
+  // issue or write off is asking exactly this, and was opening the stock report in
+  // another tab to find out.
+  const valuation = useQuery<StockValuationReport, ApiError>({
+    queryKey: ['stock-valuation', 'picker', warehouseId],
+    queryFn: () => fetchStockValuation(warehouseId, '', true),
+    staleTime: 60 * 1000,
+  });
+
+  const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
+
+  const productOptions = useMemo(
+    () =>
+      (products.data ?? []).map((product) =>
+        productOption(product, onHand.get(product.id) ?? 0),
+      ),
+    [products.data, onHand],
+  );
 
   const showRate = carriesRate(type);
   const transfer = isTransfer(type);
@@ -464,26 +529,32 @@ function StockEntry({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="field-label">{t('stock.type')}</span>
-          <select
-            value={type}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              setType(next);
+          {/* Shown as text rather than as a select of one where the screen is for
+              one kind: a dropdown that cannot be changed is a control that lies. */}
+          {lockedType === undefined ? (
+            <select
+              value={type}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setType(next);
 
-              // A destination only means something on a transfer, and the server
-              // refuses one anywhere else.
-              if (!isTransfer(next)) {
-                setDestinationId('');
-              }
-            }}
-            className="field-input"
-          >
-            {STOCK_TYPES.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {t(typeKey(candidate))}
-              </option>
-            ))}
-          </select>
+                // A destination only means something on a transfer, and the server
+                // refuses one anywhere else.
+                if (!isTransfer(next)) {
+                  setDestinationId('');
+                }
+              }}
+              className="field-input"
+            >
+              {STOCK_TYPES.map((candidate) => (
+                <option key={candidate} value={candidate}>
+                  {t(typeKey(candidate))}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input value={t(typeKey(lockedType))} disabled className="field-input" />
+          )}
         </label>
 
         <label className="block">
@@ -590,14 +661,21 @@ function StockEntry({
           <tbody>
             {lines.map((line) => (
               <tr key={line.key} className="border-t border-line">
-                <td className="px-2 py-1">
-                  <select
+                <td className="min-w-64 px-2 py-1">
+                  {/*
+                    A picker that can be typed into, showing what each product is
+                    and what is on the shelf. It was a native select of the whole
+                    master — tens of thousands of rows that can only be scrolled,
+                    with the browser's type-ahead matching the code rather than the
+                    name anybody looks a product up by.
+                  */}
+                  <SearchSelect
                     value={line.productId}
-                    onChange={(event) =>
+                    onChange={(productId) =>
                       // The batch goes with the product it belonged to. Keeping it
                       // would offer a lot of the old product against the new one.
                       update(line.key, {
-                        productId: event.target.value,
+                        productId,
                         batchId: '',
                         batchNumber: '',
                         expiresOn: '',
@@ -605,15 +683,11 @@ function StockEntry({
                         warrantyUntil: '',
                       })
                     }
-                    className="field-input-sm"
-                  >
-                    <option value="">{t('stock.choose')}</option>
-                    {(products.data ?? []).map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.code} — {product.description}
-                      </option>
-                    ))}
-                  </select>
+                    options={productOptions}
+                    size="sm"
+                    label={t('stock.product')}
+                    placeholder={t('stock.choose')}
+                  />
                 </td>
                 <td className="px-2 py-1">
                   <input
@@ -800,23 +874,30 @@ function BatchCell({
   }
 
   return (
-    <select
-      value={line.batchId}
-      onChange={(event) => onChange({ batchId: event.target.value })}
-      className="field-input-sm w-full sm:w-56"
-    >
-      <option value="">{t('stock.chooseBatch')}</option>
-      {available.map((batch) => (
-        <option key={batch.batchId} value={batch.batchId}>
-          {batch.batchNumber} —{' '}
-          {t('stock.batchAvailable', {
+    <div className="w-full sm:w-64">
+      {/*
+        The same picker the products use. A warehouse holding forty batches of one
+        product is ordinary, and picking the right one means reading the quantity
+        and the expiry — which a single line of option text truncates and this
+        lays out.
+      */}
+      <SearchSelect
+        value={line.batchId}
+        onChange={(batchId) => onChange({ batchId })}
+        options={available.map((batch) => ({
+          value: batch.batchId,
+          label: batch.batchNumber,
+          detail: t('stock.batchAvailable', {
             quantity: trim(batch.quantity),
             rate: trim(batch.unitCost),
-          })}
-          {batch.expiresOn ? ` — ${batch.expiresOn}` : ''}
-        </option>
-      ))}
-    </select>
+          }),
+          ...(batch.expiresOn ? { meta: batch.expiresOn } : {}),
+        }))}
+        size="sm"
+        label={t('stock.batch')}
+        placeholder={t('stock.chooseBatch')}
+      />
+    </div>
   );
 }
 
@@ -1265,5 +1346,31 @@ function Alert({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * Product opening stock.
+ *
+ * A menu entry and a screen of its own, because it is a job rather than a document
+ * type: a firm taking the system on states what it holds, once, and then never uses
+ * this again. It was reachable only by opening Stock operations and choosing
+ * "Opening stock" from a dropdown of seven — the last of the seven, because the
+ * register lists it last — which is a poor way to present the first thing a new
+ * installation has to do.
+ *
+ * The same screen underneath, locked to the one kind. Everything an opening entry
+ * needs is what a receipt needs and the register already handles it: the rate is
+ * asked for, because opening stock is the one movement whose cost the firm states
+ * rather than derives.
+ */
+export function OpeningStockPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <StockOperationsPage
+      lockedType={StockDocumentType.openingStock}
+      title={t('nav.openingStock')}
+    />
   );
 }

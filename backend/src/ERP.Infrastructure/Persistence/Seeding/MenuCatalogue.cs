@@ -110,6 +110,18 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/warehouses",
                     "inventory:warehouse:view"),
+
+                // The stock a firm holds on the day it starts. A job rather than a
+                // document type - stated once and then never again - so it earns an
+                // entry rather than being the seventh option of a dropdown on the
+                // stock register, which is where it was.
+                new(
+                    "masters.opening-stock",
+                    "Opening stock",
+                    "المخزون الافتتاحي",
+                    "inventory",
+                    "/inventory/opening-stock",
+                    "inventory:stock-adjustment:view"),
             ]),
 
         new(
@@ -119,6 +131,29 @@ public static class MenuCatalogue
             "accounting",
             Children:
             [
+                // Payments and receipts lead, and each has an entry of its own.
+                // They are the two commonest documents in the system and the least
+                // like a journal - one party, one cash or bank account, one amount -
+                // and putting them behind a voucher-type dropdown on the journal
+                // screen made a cashier build a double entry to record a customer
+                // handing over a note. The journal is still here for the entries
+                // that really are journals.
+                new(
+                    "transactions.receipts",
+                    "Receipt",
+                    "سند قبض",
+                    "accounting",
+                    "/accounting/receipts/new",
+                    "accounting:voucher:create"),
+
+                new(
+                    "transactions.payments",
+                    "Payment",
+                    "سند صرف",
+                    "accounting",
+                    "/accounting/payments/new",
+                    "accounting:voucher:create"),
+
                 new(
                     "transactions.voucher-entry",
                     "Voucher entry",
@@ -169,14 +204,25 @@ public static class MenuCatalogue
                     "/purchase/orders",
                     "purchase:order:view"),
 
-                // Purchases and debit notes on one entry, for the reason sales are on one:
-                // they are one kind of document, and a supplier's history wants both.
+                // Purchases and purchase returns on two entries rather than one.
+                // They are one kind of document running in opposite directions, which
+                // is why one screen serves both - but somebody sending goods back is
+                // doing one of the two, and a single entry meant opening a list of
+                // purchases and switching a dropdown to find the returns among them.
                 new(
                     "transactions.purchase",
                     "Purchases",
                     "المشتريات",
                     "purchase",
                     "/purchase/invoices",
+                    "purchase:invoice:view"),
+
+                new(
+                    "transactions.purchase-returns",
+                    "Purchase returns",
+                    "مرتجعات المشتريات",
+                    "purchase",
+                    "/purchase/returns",
                     "purchase:invoice:view"),
             ]),
 
@@ -401,6 +447,17 @@ public static class MenuCatalogue
                     "platform",
                     "/settings/menu",
                     "platform:menu:view"),
+
+                // No permission: everything behind it is a preference about how this
+                // browser behaves - the tax rates a picker offers, whether Arabic
+                // names are translated, how many rows a page holds - and none of it
+                // changes what a saved document means.
+                new(
+                    "settings.preferences",
+                    "Preferences",
+                    "التفضيلات",
+                    "platform",
+                    "/settings"),
             ]),
     ];
 }

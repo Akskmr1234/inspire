@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
+import { TextField } from '@/components/Form';
 import type { ApiError } from '@/lib/api';
 
 /**
@@ -29,25 +30,47 @@ import type { ApiError } from '@/lib/api';
 export function MasterFrame<TRow>({
   title,
   addTitle,
+  editTitle,
   queryKey,
   fetchRows,
   columns,
   rowKey,
   addForm,
+  editForm,
 }: {
   readonly title: string;
   /** Names the record being created — "New supplier", not "Add". */
   readonly addTitle: string;
+  /** Names the record being changed — "Edit unit". Required where `editForm` is. */
+  readonly editTitle?: string;
   readonly queryKey: string;
   readonly fetchRows: (includeInactive: boolean) => Promise<readonly TRow[]>;
-  /** Built with a runner, so a row's own actions can invoke a mutation. */
+  /**
+   * Built with a runner, so a row's own actions can invoke a mutation, and with the
+   * opener for the edit dialog where this master has one.
+   */
   readonly columns: (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
+    edit: (row: TRow) => void,
   ) => readonly GridColumn<TRow>[];
   readonly rowKey: (row: TRow) => string;
   /** The fields this master asks for when adding a record. */
   readonly addForm: (
+    run: (action: () => Promise<void>) => void,
+    busy: boolean,
+    rows: readonly TRow[],
+  ) => React.ReactNode;
+  /**
+   * The fields this master offers when changing one.
+   *
+   * Optional, because not every master can be changed: the API exposes a rename for
+   * a unit and a full update for a customer, and nothing at all for a brand. A
+   * master without this simply has no Edit action, which is honest — an Edit button
+   * that opens a form the server will refuse is worse than no button.
+   */
+  readonly editForm?: (
+    row: TRow,
     run: (action: () => Promise<void>) => void,
     busy: boolean,
     rows: readonly TRow[],
@@ -57,6 +80,7 @@ export function MasterFrame<TRow>({
   const queryClient = useQueryClient();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<TRow | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const query = useQuery<readonly TRow[], ApiError>({
@@ -72,6 +96,7 @@ export function MasterFrame<TRow>({
       // had to say. Closing also discards the fields, which is why no form here
       // resets itself — a second record starts from a fresh one.
       setAdding(false);
+      setEditing(null);
       await queryClient.invalidateQueries({ queryKey: [queryKey] });
     },
     // The server owns the rules — a default warehouse refusing withdrawal, a code
@@ -110,7 +135,7 @@ export function MasterFrame<TRow>({
               of the fields that caused it, not behind the dialog still covering
               them — the same message is rendered there instead.
             */}
-            {error && !adding && (
+            {error && !adding && !editing && (
               <div role="alert" className="alert-error">
                 {error}
               </div>
@@ -119,7 +144,10 @@ export function MasterFrame<TRow>({
             <DataGrid
               gridKey={queryKey}
               rows={rows}
-              columns={columns(run, mutation.isPending)}
+              columns={columns(run, mutation.isPending, (row) => {
+                setError(null);
+                setEditing(row);
+              })}
               rowKey={rowKey}
               filters={includeWithdrawn}
               actions={<GridAction label={addTitle} onClick={() => setAdding(true)} />}
@@ -147,6 +175,33 @@ export function MasterFrame<TRow>({
           )}
 
           {addForm(run, mutation.isPending, query.data ?? [])}
+        </Modal>
+      )}
+
+      {/*
+        Outside the frame for the reason the add dialog is: the frame swaps its
+        children for a skeleton whenever the list refetches, and a form mounted
+        inside would lose whatever had been typed into it.
+
+        Keyed on the row, so opening a second record after a first starts from that
+        record's own values rather than the previous one's — a form component that
+        stays mounted keeps its state, and the state here is the record.
+      */}
+      {editing && editForm && (
+        <Modal
+          title={editTitle ?? t('common.edit')}
+          size="form"
+          onClose={() => setEditing(null)}
+        >
+          {error && (
+            <div role="alert" className="alert-error">
+              {error}
+            </div>
+          )}
+
+          <div key={rowKey(editing)}>
+            {editForm(editing, run, mutation.isPending, query.data ?? [])}
+          </div>
         </Modal>
       )}
     </>
@@ -184,32 +239,34 @@ export function RowAction({
 /**
  * A labelled input for a master's add form.
  *
- * It used to name the width it wanted — `w-20` for a symbol, `w-44` for a name —
- * which is how a filter strip is built. In the dialog the form now lives in, the
- * cell decides and every field fills it: a panel of boxes each stopping at a
- * different point is harder to read down than one column of equal ones, and a
- * two-character field is no easier to type into for being two characters wide.
+ * Now a thin wrapper over the shared `TextField`, which is where the caption
+ * placement, the mandatory marker and the error message live. It stays because the
+ * simpler masters read better with it, and because a screen that only needs a label
+ * and a value should not have to know about the rest.
  */
 export function MasterField({
   label,
   value,
   onChange,
   placeholder,
+  required,
+  error,
 }: {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly placeholder?: string;
+  readonly required?: boolean;
+  readonly error?: string | undefined;
 }): React.JSX.Element {
   return (
-    <label className="field w-full">
-      <span className="field-label">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder ?? ''}
-        className="field-input-sm"
-      />
-    </label>
+    <TextField
+      label={label}
+      value={value}
+      onChange={onChange}
+      error={error}
+      {...(required === undefined ? {} : { required })}
+      {...(placeholder === undefined ? {} : { placeholder })}
+    />
   );
 }

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@/i18n';
 import { blobText, setMatchingMedia, objectUrls } from '@/test/setup';
-import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { DataGrid, pageWindow, type GridColumn } from '@/components/DataGrid';
 import { useSession } from '@/stores/session';
 
 /*
@@ -286,5 +286,202 @@ describe('the empty result', () => {
     await user.type(screen.getByPlaceholderText(/search/i), 'nothing matches this');
 
     await waitFor(() => expect(screen.getByText('No such ledger')).toBeTruthy());
+  });
+});
+
+/*
+  The footer.
+
+  How many records there are and which of them is on screen was a line of small type
+  wedged into the top of the toolbar between the filters and the column picker, and
+  the pager was two buttons offered only where the server had already paged the list.
+  A list of four thousand rows drew all four thousand and said so in a place nobody
+  reads. These pin the arrangement that replaced it.
+*/
+describe('the footer', () => {
+  const many = Array.from({ length: 57 }, (_, index) => ({
+    id: String(index),
+    code: `C-${String(index).padStart(3, '0')}`,
+    name: `Row ${index}`,
+    amount: index,
+  }));
+
+  it('says how many records there are when they all fit', () => {
+    render(
+      <DataGrid gridKey="small" rows={rows} columns={columns} rowKey={(row) => row.id} />,
+    );
+
+    expect(screen.getByText(/3 records/i)).toBeTruthy();
+  });
+
+  it('pages a long list in the browser and names the range on screen', () => {
+    render(
+      <DataGrid
+        gridKey="long"
+        rows={many}
+        columns={columns}
+        rowKey={(row) => row.id}
+        pageSize={25}
+      />,
+    );
+
+    expect(screen.getByText(/showing 1–25 of 57/i)).toBeTruthy();
+    // The header row and its filter row are rows too, which is why this counts the
+    // body rather than the table.
+    expect(screen.getAllByRole('row').length).toBe(25 + 2);
+  });
+
+  it('offers numbered pages, and goes to the one that is pressed', async () => {
+    const user = userEvent.setup();
+    render(
+      <DataGrid
+        gridKey="long"
+        rows={many}
+        columns={columns}
+        rowKey={(row) => row.id}
+        pageSize={25}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /go to page 3/i }));
+
+    expect(screen.getByText(/showing 51–57 of 57/i)).toBeTruthy();
+    expect(screen.getByText('C-056')).toBeTruthy();
+  });
+
+  it('says how much of the list a search left, without losing the total', async () => {
+    const user = userEvent.setup();
+    render(
+      <DataGrid
+        gridKey="long"
+        rows={many}
+        columns={columns}
+        rowKey={(row) => row.id}
+        pageSize={25}
+      />,
+    );
+
+    await user.type(screen.getByPlaceholderText(/search/i), 'C-04');
+
+    // Ten rows match: C-040 to C-049. The count is what matched, and the total it
+    // came out of is kept beside it — a filtered count on its own is a number
+    // nobody can calibrate.
+    await waitFor(() => expect(screen.getByText(/10 records/i)).toBeTruthy());
+    expect(screen.getByText(/filtered from 57/i)).toBeTruthy();
+  });
+
+  it('takes the page back to the start when a search narrows the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <DataGrid
+        gridKey="long"
+        rows={many}
+        columns={columns}
+        rowKey={(row) => row.id}
+        pageSize={10}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /go to page 5/i }));
+    expect(screen.getByText(/showing 41–50 of 57/i)).toBeTruthy();
+
+    await user.type(screen.getByPlaceholderText(/search/i), 'Row 3');
+
+    // Eleven match — Row 3 and Row 30 to Row 39 — which is two pages, not five.
+    await waitFor(() => expect(screen.getByText(/showing 1–10 of 11/i)).toBeTruthy());
+  });
+
+  it('withdraws its own search where the screen owns one', () => {
+    render(
+      <DataGrid
+        gridKey="server-searched"
+        rows={rows}
+        columns={columns}
+        rowKey={(row) => row.id}
+        hideSearch
+      />,
+    );
+
+    // Two boxes narrowing the same list by different rules is one more than
+    // anybody can use, and neither said which was which.
+    expect(screen.queryByPlaceholderText(/search all columns/i)).toBeNull();
+  });
+});
+
+describe('the page window', () => {
+  it('draws every page while they fit', () => {
+    expect(pageWindow(1, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('keeps the ends reachable and elides the middle', () => {
+    expect(pageWindow(50, 100)).toEqual([1, 'gap', 49, 50, 51, 'gap', 100]);
+  });
+
+  it('holds its width as the current page moves off an end', () => {
+    // A pager that changed width as it was used would shift the button under the
+    // pointer between one press and the next.
+    expect(pageWindow(1, 100)).toHaveLength(pageWindow(2, 100).length);
+    expect(pageWindow(100, 100)).toHaveLength(pageWindow(99, 100).length);
+  });
+
+  it('never names a page that does not exist', () => {
+    for (const page of [1, 2, 8, 9]) {
+      for (const entry of pageWindow(page, 9)) {
+        if (entry !== 'gap') {
+          expect(entry).toBeGreaterThanOrEqual(1);
+          expect(entry).toBeLessThanOrEqual(9);
+        }
+      }
+    }
+  });
+});
+
+/*
+  A column the card view drops.
+
+  Every list here leads its card with the identifying column, which is already the
+  link into the record — so an actions column offering "Open" underneath is the
+  same action twice, on the screen that can least afford the height.
+*/
+describe('a narrow-hidden column', () => {
+  const withAction: readonly GridColumn<Row>[] = [
+    ...columns.slice(0, 2),
+    {
+      key: 'actions',
+      header: '',
+      value: () => '',
+      hideOnNarrow: true,
+      render: () => <button type="button">Open</button>,
+    },
+  ];
+
+  it('is drawn in the table, where there is room for it', () => {
+    setMatchingMedia();
+    render(
+      <DataGrid
+        gridKey="narrow"
+        rows={rows}
+        columns={withAction}
+        rowKey={(row) => row.id}
+      />,
+    );
+
+    expect(screen.getAllByRole('button', { name: 'Open' }).length).toBe(rows.length);
+  });
+
+  it('is dropped from the cards, where the row already leads with its link', () => {
+    setMatchingMedia('(max-width: 639px)');
+    render(
+      <DataGrid
+        gridKey="narrow"
+        rows={rows}
+        columns={withAction}
+        rowKey={(row) => row.id}
+      />,
+    );
+
+    expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(0);
+    // The rows are still there — the column went, not the data.
+    expect(screen.getAllByRole('listitem')).toHaveLength(rows.length);
   });
 });

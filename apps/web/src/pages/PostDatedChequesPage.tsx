@@ -3,17 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { DirectionBadge } from '@/components/ChequeBadges';
-import { request, type ApiError } from '@/lib/api';
-import { CHEQUE_DIRECTIONS, type ChequeReportLine } from '@/lib/cheques';
-
-interface PostDatedCheques {
-  readonly asAt: string;
-  readonly currency: string;
-  readonly cheques: readonly ChequeReportLine[];
-  readonly totalReceivable: number;
-  readonly totalPayable: number;
-  readonly currencies: readonly string[];
-}
+import { type ApiError } from '@/lib/api';
+import {
+  CHEQUE_DIRECTIONS,
+  fetchPostDatedCheques,
+  type PostDatedCheques,
+} from '@/lib/cheques';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -35,17 +30,7 @@ export function PostDatedChequesPage(): React.JSX.Element {
 
   const query = useQuery<PostDatedCheques, ApiError>({
     queryKey: ['post-dated-cheques', criteria.asAt, criteria.direction],
-    queryFn: () => {
-      const params = new URLSearchParams({ asAt: criteria.asAt });
-
-      if (criteria.direction) {
-        params.set('direction', criteria.direction);
-      }
-
-      return request<PostDatedCheques>(
-        `/accounting/reports/post-dated-cheques?${params.toString()}`,
-      );
-    },
+    queryFn: () => fetchPostDatedCheques(criteria.asAt, criteria.direction),
   });
 
   const controls = (

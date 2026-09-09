@@ -1,3 +1,5 @@
+import { request } from '@/lib/api';
+
 /**
  * Shared shapes for the three cheque reports: the post-dated cheque report, the
  * PDC calendar, and the cheque register.
@@ -76,4 +78,36 @@ export interface ChequeReportLine {
   readonly closedOn: string | null;
   readonly closureReason: string | null;
   readonly daysUntilDue: number;
+}
+
+/**
+ * The post-dated cheque report: what is in hand and has not yet fallen due.
+ *
+ * Lifted out of the screen that drew it once the dashboard wanted the same figure.
+ * Two callers asking one endpoint through one function is also two callers that
+ * cannot disagree about the shape that comes back.
+ */
+export interface PostDatedCheques {
+  readonly asAt: string;
+  readonly currency: string;
+  readonly cheques: readonly ChequeReportLine[];
+  readonly totalReceivable: number;
+  readonly totalPayable: number;
+  readonly currencies: readonly string[];
+}
+
+/** Reads the post-dated cheques as at a date, optionally one direction only. */
+export function fetchPostDatedCheques(
+  asAt: string,
+  direction = '',
+): Promise<PostDatedCheques> {
+  const params = new URLSearchParams({ asAt });
+
+  if (direction) {
+    params.set('direction', direction);
+  }
+
+  return request<PostDatedCheques>(
+    `/accounting/reports/post-dated-cheques?${params.toString()}`,
+  );
 }

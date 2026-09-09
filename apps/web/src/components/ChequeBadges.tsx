@@ -6,6 +6,7 @@ import {
   type ChequeDirection,
   type ChequeStatus,
 } from '@/lib/cheques';
+import { StatusBadge as Badge, type StatusTone } from '@/components/StatusBadge';
 
 /**
  * The small coloured pills that carry a cheque's direction and status.
@@ -16,6 +17,11 @@ import {
  */
 
 /*
+  Direction keeps a pill of its own rather than going through `StatusBadge`: it is
+  not a state — a cheque does not move from received to issued — and giving it the
+  same dotted badge as the status beside it would make two different kinds of fact
+  look like one, on the one screen that shows both in adjacent columns.
+
   The dark half of each pill is a low-alpha tint of the same hue rather than the
   darkest step of its ramp. A `red-950` slab reads as a dark grey rectangle with
   faint warmth, which is the wrong signal for "bounced": the point of the colour is
@@ -42,26 +48,23 @@ export function DirectionBadge({
   );
 }
 
-const STATUS_STYLES: Record<ChequeStatus, string> = {
-  1: 'bg-surface-3 text-ink-muted',
-  2: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-  3: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  4: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  5: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  6: 'bg-surface-3 text-ink-subtle line-through',
+/**
+ * Where a cheque stands, green through red as it resolves well or badly.
+ *
+ * Six states rather than the usual three, but they map onto the same weights every
+ * other list here uses: pending is merely waiting, deposited is under way, cleared
+ * is done, bounced is the one that needs somebody today, stopped is the one somebody
+ * decided about, and a cancelled cheque is struck through as a cancelled invoice is.
+ */
+const STATUS_TONES: Record<ChequeStatus, StatusTone> = {
+  1: 'neutral',
+  2: 'info',
+  3: 'success',
+  4: 'danger',
+  5: 'warn',
+  6: 'neutral',
 };
 
-/** A dot the colour of the status, so the state survives a colour-blind reader. */
-const STATUS_DOTS: Record<ChequeStatus, string> = {
-  1: 'bg-ink-subtle',
-  2: 'bg-sky-500',
-  3: 'bg-emerald-500',
-  4: 'bg-red-500',
-  5: 'bg-amber-500',
-  6: 'bg-ink-subtle',
-};
-
-/** Where a cheque stands, coloured green through red as it resolves well or badly. */
 export function StatusBadge({
   status,
 }: {
@@ -70,12 +73,10 @@ export function StatusBadge({
   const { t } = useTranslation();
 
   return (
-    <span className={clsx('badge', STATUS_STYLES[status])}>
-      <span
-        aria-hidden="true"
-        className={clsx('size-1.5 shrink-0 rounded-full', STATUS_DOTS[status])}
-      />
-      {t(`cheques.status.${STATUS_NAME[status]}`)}
-    </span>
+    <Badge
+      tone={STATUS_TONES[status]}
+      label={t(`cheques.status.${STATUS_NAME[status]}`)}
+      struck={status === 6}
+    />
   );
 }

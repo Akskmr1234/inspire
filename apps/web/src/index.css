@@ -416,6 +416,30 @@
   }
 
   /*
+    The save bar on a long form.
+
+    The product editor asks for sixty fields across two tabs and puts Save at the
+    bottom of them, which on a laptop is two screens down: an edit to the retail rate
+    means changing one field and then scrolling past fifty-nine to commit it, and the
+    button is not visible at the moment the decision is made. Pinning the row to the
+    foot of the viewport keeps the commit where the hand is, and keeps the form's own
+    end-of-content position when the form is short enough to fit — `sticky` costs
+    nothing until there is something to scroll.
+
+    The negative inline margins pull the bar out to the main region's padding so its
+    rule spans the content rather than stopping short of both edges, and the surface
+    is opaque so the fields scrolling under it do not show through the gap. Actions
+    sit at the end of the row, where `.form-actions` already puts a dialog's — the
+    commit is in the same corner whether the record is being edited in a dialog or on
+    a page of its own.
+  */
+  .page-actions {
+    @apply sticky bottom-0 z-20 -mx-3 flex flex-wrap items-center justify-end gap-2
+           border-t border-line bg-surface/95 px-3 py-3 backdrop-blur-sm sm:-mx-4
+           sm:px-4 lg:-mx-6 lg:px-6;
+  }
+
+  /*
     The strip of filters under a report's title. A defined surface rather than
     controls floating on the canvas, so the eye has somewhere to land between the
     heading and the figures.
@@ -519,7 +543,31 @@
     not, and every field the width of its column.
   */
   .form-grid {
-    @apply grid gap-3 sm:grid-cols-2;
+    @apply grid items-start gap-x-4 gap-y-3 sm:grid-cols-2;
+  }
+
+  /* Three across where the form is wide enough to hold three and the fields are
+     short — a document header, where date, kind and warehouse belong on one line. */
+  .form-grid-3 {
+    @apply grid items-start gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /*
+    A screen's own filters, in a card of their own above the list.
+
+    A card rather than a bare strip, and one card rather than two. The product
+    screen had its search in a `ReportFrame` header and the grid's own search box
+    directly beneath it — two boxes, a hand's width apart, that narrowed the same
+    list by different rules. Filters that belong to the screen live here; the grid
+    keeps the controls that arrange what the screen has already fetched.
+  */
+  .filter-card {
+    @apply rounded-xl border border-line bg-surface-2 p-3 sm:p-4;
+  }
+
+  .filter-grid {
+    @apply grid items-end gap-x-3 gap-y-3
+           grid-cols-[repeat(auto-fit,minmax(11rem,1fr))];
   }
 
   /* The row a dialog's form ends with. Ruled off, so the button that commits the
@@ -536,33 +584,80 @@
      Form controls
      ====================================================================== */
 
+  /*
+    A caption. One size, one weight, one distance from the box it names, so a row of
+    fields has a single baseline for its captions and a single one for its controls.
+    The screens used to write their own — `text-xs text-ink-muted` here, a `<span>`
+    with `field-label` there, a bare `<label>` on the purchase entry — and captions
+    that disagreed about their own height cannot line up with each other.
+  */
   .field-label {
-    @apply mb-1.5 block text-xs font-medium tracking-wide text-ink-muted uppercase;
+    @apply mb-1.5 flex items-center gap-0.5 text-xs font-semibold tracking-wide
+           text-ink-muted uppercase;
   }
 
+  /* The marker on a mandatory field. Red, beside the caption, and never the only
+     signal: `aria-required` on the control says the same thing to a screen reader,
+     and colour alone would say nothing to somebody who cannot see it. */
+  .field-required {
+    @apply text-sm leading-none font-bold text-red-600 dark:text-red-400;
+  }
+
+  /*
+    Every box a value is typed or chosen in.
+
+    `min-h` rather than padding alone, and on every variant. A text input, a select
+    and a date input do not agree about their own intrinsic height — the select is
+    taller by its arrow, the date input by its spinner — so a row holding one of
+    each used to sit at three different heights with three different caption
+    baselines above them. A floor height makes the row one row.
+  */
   .field-input,
   .field-input-sm {
     @apply block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm
-           text-ink shadow-xs outline-none
+           leading-5 font-medium text-ink shadow-xs outline-none
            transition duration-150
-           placeholder:text-ink-subtle
+           placeholder:font-normal placeholder:text-ink-subtle
            hover:border-line-strong
            focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15
            disabled:cursor-not-allowed disabled:bg-surface-3 disabled:opacity-60;
   }
 
+  .field-input {
+    @apply min-h-10;
+  }
+
   /* The same control at grid density, for the line-item tables where a full-height
      input would double the height of every row. */
   .field-input-sm {
-    @apply rounded-md px-2 py-1;
+    @apply min-h-8 rounded-md px-2.5 py-1;
+  }
+
+  /* A select carries its own arrow and its own idea of the padding around the text;
+     without this the caret sits against the words on one side and a centimetre of
+     nothing on the other. */
+  .field-input:is(select),
+  .field-input-sm:is(select) {
+    @apply cursor-pointer pe-8;
   }
 
   .field-hint {
     @apply mt-1 text-xs text-ink-subtle;
   }
 
-  .field-error {
-    @apply border-red-400 focus:border-red-500 focus:ring-red-500/15;
+  /* A box the form has something to say about. Red border, red focus ring — never a
+     red fill, which reads as "disabled" as readily as "wrong". */
+  .field-error,
+  .field-invalid {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/15
+           dark:border-red-500/60;
+  }
+
+  /* What is wrong, under the box it is wrong about. A form that collects its
+     complaints into a banner at the top makes the reader work out which of eleven
+     fields each one meant. */
+  .field-message-error {
+    @apply mt-1 text-xs font-medium text-red-600 dark:text-red-400;
   }
 
   /* A checkbox and its label as one hit target, which on a phone is the difference
@@ -838,6 +933,61 @@
 
   .table tbody tr {
     @apply border-t border-line transition-colors duration-100;
+  }
+
+  /*
+    Below `sm`, the first column stays put while the figures scroll past it.
+
+    Every report in this application is wider than a phone and scrolls inside its
+    box, which works — but what scrolls away first is the ledger name, and what is
+    left is six columns of figures belonging to nothing. Anchoring the first
+    column means a number is always beside the account it is about, which is the
+    whole reason a trial balance is laid out in rows.
+
+    Only where the table is genuinely the only option: the data grid becomes a
+    list of cards at this width and never reaches this rule, and above `sm` there
+    is room for the columns and no reason to pin anything.
+  */
+  @media (max-width: 639px) {
+    .table thead th:first-child,
+    .table tbody td:first-child,
+    /* Not a totals label that spans columns: `max-width` loses to the span, so
+       pinning one covers most of a phone with the word "Totals" and hides the
+       figures it is introducing. */
+    .table tfoot td:first-child:not([colspan]) {
+      @apply sticky start-0 z-10;
+      /* Capped hard, or the column being held takes half a 390px screen and the
+         figures it is anchoring have nowhere to go. Names longer than this wrap
+         inside the cap rather than widening it. */
+      max-width: 8.5rem;
+    }
+
+    .table thead th:first-child {
+      @apply z-20 bg-surface-3;
+    }
+
+    .table tbody td:first-child {
+      @apply bg-surface;
+    }
+
+    .table tfoot td:first-child:not([colspan]) {
+      @apply bg-surface-2;
+    }
+
+    /* A hairline down the anchored edge, so it reads as a column that has been
+       held rather than one the others happen to be sliding under. */
+    .table thead th:first-child::after,
+    .table tbody td:first-child::after,
+    .table tfoot td:first-child:not([colspan])::after {
+      @apply pointer-events-none absolute inset-y-0 end-0 w-px bg-line;
+      content: '';
+    }
+
+    /* Tighter, because the columns after the anchored one have what is left. */
+    .table thead th,
+    .table tbody td {
+      @apply px-2;
+    }
   }
 
   .table tbody tr:hover {

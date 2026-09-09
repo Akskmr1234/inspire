@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import clsx from 'clsx';
 import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
+import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { request, type ApiError } from '@/lib/api';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
@@ -18,11 +18,8 @@ const TYPE_NAME: Record<number, string> = {
   6: 'Contra',
 };
 
-const STATUS_STYLES: Record<number, string> = {
-  1: 'bg-surface-3 text-ink-muted',
-  2: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  3: 'bg-red-50 text-red-700 line-through dark:bg-red-500/15 dark:text-red-300',
-};
+/** Draft is still somebody's to finish, posted is done, cancelled did not happen. */
+const STATUS_TONES: Record<number, StatusTone> = { 1: 'warn', 2: 'success', 3: 'danger' };
 
 interface VoucherReportLine {
   readonly voucherId: string;
@@ -72,14 +69,16 @@ function countFor(counts: Readonly<Record<string, number>>, value: number): numb
   return counts[String(value)] ?? (name === undefined ? undefined : counts[name]) ?? 0;
 }
 
-/** A small coloured pill for a voucher's status. */
-function StatusBadge({ status }: { readonly status: number }): React.JSX.Element {
+/** A voucher's status, in the badge every other list here uses. */
+function VoucherStatus({ status }: { readonly status: number }): React.JSX.Element {
   const { t } = useTranslation();
 
   return (
-    <span className={clsx('badge', STATUS_STYLES[status])}>
-      {t(`voucherStatus.${STATUS_NAME[status]}`)}
-    </span>
+    <StatusBadge
+      tone={STATUS_TONES[status] ?? 'neutral'}
+      label={t(`voucherStatus.${STATUS_NAME[status]}`)}
+      struck={status === 3}
+    />
   );
 }
 
@@ -220,7 +219,7 @@ export function VoucherReportPage(): React.JSX.Element {
                 .filter((value) => countFor(data.countByStatus, value) > 0)
                 .map((value) => (
                   <span key={value} className="flex items-center gap-1">
-                    <StatusBadge status={value} />
+                    <VoucherStatus status={value} />
                     <span className="tabular-nums">
                       {countFor(data.countByStatus, value)}
                     </span>
@@ -255,7 +254,7 @@ export function VoucherReportPage(): React.JSX.Element {
                         {t(`voucherTypes.${TYPE_NAME[voucher.type]}`)}
                       </td>
                       <td className="py-1.5">
-                        <StatusBadge status={voucher.status} />
+                        <VoucherStatus status={voucher.status} />
                       </td>
                       <td className="py-1.5 text-ink-muted">
                         {voucher.referenceNumber ?? ''}

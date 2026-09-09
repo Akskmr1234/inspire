@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
+import { NeedsAttention } from '@/components/NeedsAttention';
 import { EmptyState, moneyAlways } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 import { useSession } from '@/stores/session';
@@ -70,7 +71,11 @@ export function DashboardPage(): React.JSX.Element {
     queryFn: () => request('/dashboards'),
   });
 
-  const dashboard = dashboards.data?.dashboards[0];
+  // Indexed through the optional chain, not after it. `data?.dashboards[0]` stops
+  // guarding at `data` and then indexes whatever `dashboards` happens to be — so a
+  // response missing the field takes the whole screen down with a TypeError rather
+  // than showing the "no dashboard assigned" state written for exactly that case.
+  const dashboard = dashboards.data?.dashboards?.[0];
 
   const data = useQuery<DashboardData, ApiError>({
     queryKey: ['dashboard-data', dashboard?.id],
@@ -140,6 +145,17 @@ export function DashboardPage(): React.JSX.Element {
           />
         ))}
       </div>
+
+      {/*
+        What is waiting, under what is true.
+
+        The tiles say where the firm stands; this says what somebody is meant to do
+        about it, which is the question the screen is actually opened with. It draws
+        nothing at all when there is nothing outstanding — a panel headed "needs
+        attention" listing nothing is a section of screen spent saying "you are up
+        to date".
+      */}
+      <NeedsAttention />
     </section>
   );
 }
@@ -221,16 +237,33 @@ function Panel({
               {moneyAlways(metric.value)}{' '}
               <span className="text-sm font-normal text-ink-subtle">{currency}</span>
             </p>
-            {metric.count > 0 && (
-              <p className="mt-1 text-xs text-ink-muted">
-                {t('dashboard.itemCount', { count: metric.count })}
-              </p>
-            )}
+            {/*
+              The line under the figure keeps its height whether or not it has
+              anything to say. The tiles sit in one row and are bottom-aligned, so
+              a tile with no count drew its figure a line lower than its
+              neighbours — four headline numbers on three different baselines.
+            */}
+            <p className="mt-1 min-h-4 text-xs text-ink-muted">
+              {metric.count > 0 ? t('dashboard.itemCount', { count: metric.count }) : ''}
+            </p>
           </>
         )}
       </div>
     </div>
   );
+}
+
+/**
+ * A series label, short enough for an axis.
+ *
+ * The monthly series labels its points `2026-07`, and twelve four-digit years side
+ * by side at this width is unreadable — so a date keeps its month and everything
+ * else is left alone rather than blindly cut at the fifth character.
+ */
+function shortLabel(label: string): string {
+  const month = /^\d{4}-(\d{2})/.exec(label);
+
+  return month ? (month[1] ?? label) : label;
 }
 
 function Series({
@@ -275,10 +308,15 @@ function Series({
               }}
             />
           </div>
-          {/* Only the month: twelve four-digit years side by side is unreadable at
-              this width. */}
+          {/*
+            Only the month where the label is a month. `label.slice(5)` was doing
+            that unconditionally, which is right for the `2026-07` the monthly
+            series sends and wrong for everything else — a label the server sends
+            as a name came out empty, so the chart lost its axis entirely and
+            became three unlabelled bars.
+          */}
           <span className="truncate text-[10px] text-ink-subtle">
-            {point.label.slice(5)}
+            {shortLabel(point.label)}
           </span>
         </div>
       ))}

@@ -649,6 +649,58 @@ export const fixtures: Readonly<Record<string, unknown>> = {
   },
 
   '/purchase/suppliers': [{ ...party, supplierId: 'su1', code: 'S-220' }],
+
+  '/purchase/orders': {
+    items: [
+      {
+        purchaseOrderId: 'po1',
+        number: 'PO-1',
+        date: '2026-07-02',
+        expectedOn: '2026-07-16',
+        supplierLedgerId: 'su1',
+        supplierCode: 'S-220',
+        supplierName: 'Emirates Paper Co',
+        status: 2,
+        currency: 'AED',
+        referenceNumber: 'Q-9912',
+        lineCount: 2,
+        outstandingLines: 1,
+        taxable: 500,
+        tax: 25,
+        total: 525,
+      },
+    ],
+    page: 1,
+    pageSize: 50,
+    totalCount: 1,
+    totalPages: 1,
+  },
+
+  '/sales/orders': {
+    items: [
+      {
+        salesOrderId: 'so1',
+        number: 'SO-1',
+        date: '2026-07-03',
+        expectedOn: null,
+        customerLedgerId: 'cu1',
+        customerCode: 'C-100',
+        customerName: 'Gulf Trading LLC',
+        status: 1,
+        currency: 'AED',
+        referenceNumber: null,
+        lineCount: 1,
+        outstandingLines: 1,
+        taxable: 120,
+        tax: 6,
+        total: 126,
+      },
+    ],
+    page: 1,
+    pageSize: 50,
+    totalCount: 1,
+    totalPages: 1,
+  },
 };
 
 /** The response for a path, or undefined when nothing is registered for it. */
