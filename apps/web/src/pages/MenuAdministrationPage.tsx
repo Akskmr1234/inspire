@@ -190,7 +190,7 @@ function EntryRows({
           )}
         </td>
 
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 text-end">
           <div className="flex flex-wrap justify-end gap-1">
             <ActionButton
               label="↑"
@@ -357,7 +357,8 @@ function AddEntryForm({
         />
       </label>
 
-      <button type="submit" disabled={busy} className="btn-primary">
+      {/* Small, because the three fields beside it are. */}
+      <button type="submit" disabled={busy} className="btn-primary btn-sm">
         {t('menuAdmin.add')}
       </button>
     </form>

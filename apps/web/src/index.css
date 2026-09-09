@@ -440,6 +440,29 @@
   }
 
   /*
+    The two halves of a document's arithmetic, kept on one right edge.
+
+    A line table ends in a narrow column of row actions, so the money column stops
+    eighty pixels short of the table's edge — and the totals underneath, which are
+    the sum of exactly that column, were flush with the table instead. Two columns
+    of figures, one directly under the other, disagreeing by eighty pixels: the
+    reader's eye runs down the Net column and falls off the end of it.
+
+    These are a pair. The gutter is the action column's width, so the totals land on
+    the money above them; change one and change the other, or they part company
+    again. The trailing header is end-aligned like its cells rather than left at the
+    browser's centred default, so a caption put there later lands where the column
+    reads.
+  */
+  .line-action-column {
+    @apply w-20 text-end;
+  }
+
+  .line-totals {
+    @apply pe-20;
+  }
+
+  /*
     The strip of filters under a report's title. A defined surface rather than
     controls floating on the canvas, so the eye has somewhere to land between the
     heading and the figures.
@@ -612,6 +635,14 @@
     each used to sit at three different heights with three different caption
     baselines above them. A floor height makes the row one row.
   */
+  /*
+    `block w-full` by default, and that is worth knowing before overriding the width
+    in a table cell: a block box does not answer to the cell's `text-align`, so a
+    `w-28` amount box in a right-aligned money column sat at the left of it while its
+    caption and its total sat at the right. Give a control in a column its column's
+    width and the three line up by construction; a fixed width there needs
+    `ms-auto`, not `text-end`.
+  */
   .field-input,
   .field-input-sm {
     @apply block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm
@@ -662,9 +693,16 @@
 
   /* A checkbox and its label as one hit target, which on a phone is the difference
      between a control that can be tapped and one that cannot. */
+  /*
+    `min-h-8` is `.field-input-sm`'s floor, and it is here so a checkbox sitting in
+    a filter bar lines up with the boxes beside it. Without a height of its own the
+    row was only as tall as its label, so an end-aligned toolbar left the tick two,
+    four or six pixels adrift of the fields depending on the screen — different on
+    every one, which is what made it look like a mistake rather than a choice.
+  */
   .field-check {
-    @apply inline-flex cursor-pointer items-center gap-2 text-sm text-ink select-none
-           max-sm:min-h-9;
+    @apply inline-flex min-h-8 cursor-pointer items-center gap-2 text-sm text-ink
+           select-none max-sm:min-h-9;
   }
 
   /* The box itself, which is the part a finger aims at. 14px is a decoration on a
@@ -683,13 +721,21 @@
      Buttons
      ====================================================================== */
 
+  /*
+    `min-h-10` is the same floor `.field-input` stands on, and that is the point of
+    it. Padding alone made a button 36px beside a 40px box, so every filter bar in
+    the application ran a row of inputs with an action four pixels short of them —
+    bottom edges agreeing, tops not, which reads as a button that has slipped. Six
+    screens had already patched it locally with an extra `py-1.5`; a shared floor
+    fixes it for all of them and for the next one.
+  */
   .btn,
   .btn-primary,
   .btn-secondary,
   .btn-ghost,
   .btn-danger {
-    @apply inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-4 py-2
-           text-sm font-semibold whitespace-nowrap
+    @apply inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg
+           px-4 py-2 text-sm font-semibold whitespace-nowrap
            transition duration-150 ease-out
            active:scale-[0.97]
            disabled:pointer-events-none disabled:opacity-50;
@@ -718,8 +764,9 @@
            focus-visible:ring-4 focus-visible:ring-red-500/30;
   }
 
+  /* The small size, on the floor `.field-input-sm` uses, for the same reason. */
   .btn-sm {
-    @apply gap-1.5 rounded-md px-2.5 py-1 text-xs;
+    @apply min-h-8 gap-1.5 rounded-md px-2.5 py-1 text-xs;
   }
 
   /*

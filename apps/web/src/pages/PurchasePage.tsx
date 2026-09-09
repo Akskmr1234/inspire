@@ -833,7 +833,7 @@ function EntryDialog({
                 <th className="px-2 py-1 text-end">{t('purchase.taxAmount')}</th>
               )}
               <th className="px-2 py-1 text-end">{t('purchase.net')}</th>
-              <th className="w-20" />
+              <th className="line-action-column" />
             </tr>
           </thead>
 
@@ -873,7 +873,7 @@ function EntryDialog({
         onChange={setCharges}
       />
 
-      <div className="flex flex-wrap items-end justify-end gap-6">
+      <div className="line-totals flex flex-wrap items-end justify-end gap-6">
         <DocumentTotals
           taxable={totals.taxable}
           tax={totals.tax}
@@ -1002,7 +1002,7 @@ function LineRow({
         )}
 
         {columns.shows('taxPercent') && (
-          <td className="px-2 py-1">
+          <td className="px-2 py-1 text-end">
             {/*
               A list of the rates the firm actually charges, plus whatever is typed.
               Under GST there are seven of them and mistyping 18 as 1.8 is a return

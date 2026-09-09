@@ -823,7 +823,7 @@ function OrderEntryDialog({
                 <th className="px-2 py-1 text-end">{t('orders.taxPercent')}</th>
               )}
               <th className="px-2 py-1 text-end">{t('orders.net')}</th>
-              <th className="w-20" />
+              <th className="line-action-column" />
             </tr>
           </thead>
 
@@ -945,7 +945,7 @@ function OrderEntryDialog({
         onChange={setCharges}
       />
 
-      <div className="flex flex-wrap items-end justify-end gap-6">
+      <div className="line-totals flex flex-wrap items-end justify-end gap-6">
         <DocumentTotals
           taxable={totals.taxable}
           tax={totals.tax}

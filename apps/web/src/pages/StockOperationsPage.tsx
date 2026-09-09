@@ -655,7 +655,7 @@ function StockEntry({
                 <th className="px-3 py-2 text-start font-semibold">{t('stock.units')}</th>
               )}
               <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
-              <th />
+              <th className="text-end" />
             </tr>
           </thead>
           <tbody>
@@ -697,7 +697,7 @@ function StockEntry({
                     onChange={(event) =>
                       update(line.key, { quantity: event.target.value })
                     }
-                    className="field-input-sm w-28 text-end font-mono tabular-nums"
+                    className="field-input-sm text-end font-mono tabular-nums"
                   />
                 </td>
                 {showRate && (
@@ -709,7 +709,7 @@ function StockEntry({
                       value={line.rate}
                       onChange={(event) => update(line.key, { rate: event.target.value })}
                       placeholder={t('stock.ratePlaceholder')}
-                      className="field-input-sm w-28 text-end font-mono tabular-nums"
+                      className="field-input-sm text-end font-mono tabular-nums"
                     />
                   </td>
                 )}
