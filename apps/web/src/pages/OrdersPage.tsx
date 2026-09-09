@@ -47,6 +47,7 @@ import {
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
+import { moneyAlways } from '@/lib/money';
 
 /**
  * Purchase orders and sales orders.
@@ -287,21 +288,21 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       header: t('orders.taxable'),
       value: (row) => row.taxable,
       numeric: true,
-      render: (row) => row.taxable.toFixed(2),
+      render: (row) => moneyAlways(row.taxable),
     },
     {
       key: 'tax',
       header: t('orders.tax'),
       value: (row) => row.tax,
       numeric: true,
-      render: (row) => row.tax.toFixed(2),
+      render: (row) => moneyAlways(row.tax),
     },
     {
       key: 'total',
       header: t('orders.total'),
       value: (row) => row.total,
       numeric: true,
-      render: (row) => row.total.toFixed(2),
+      render: (row) => moneyAlways(row.total),
     },
     {
       key: 'status',
@@ -599,19 +600,33 @@ function OrderEntryDialog({
   const columns = useLineColumns(`orders-${kind}`, lineColumns);
 
   const totals = useMemo(() => {
-    let taxable = 0;
+    let gross = 0;
+    let discount = 0;
     let tax = 0;
 
     for (const line of lines) {
       const net = lineNet(line);
 
       if (net > 0) {
-        taxable += net;
+        // Gross and discount are carried separately rather than recovered from the
+        // net, because a bill has to show what the goods were priced at as well as
+        // what is being charged for them — and on a line whose discount exceeds its
+        // value, which is skipped below, subtracting back would invent a figure.
+        gross += Number(line.quantity) * Number(line.rate);
+        discount += Number(line.discount || 0);
         tax += (net * Number(line.taxPercentage || 0)) / 100;
       }
     }
 
-    return { taxable, tax };
+    return {
+      gross: Number.isFinite(gross) ? gross : 0,
+      discount: Number.isFinite(discount) ? discount : 0,
+      tax,
+      // The taxable value, which is what the net comes to. Kept under its tax name
+      // as well, because that is what the API and the tax return call it.
+      taxable:
+        (Number.isFinite(gross) ? gross : 0) - (Number.isFinite(discount) ? discount : 0),
+    };
   }, [lines]);
 
   const { errors, submit } = useValidation<OrderHeaderDraft>((values) =>
@@ -908,7 +923,7 @@ function OrderEntryDialog({
                   )}
 
                   <td className="px-2 py-1 text-end font-mono tabular-nums">
-                    {lineNet(line).toFixed(2)}
+                    {moneyAlways(lineNet(line))}
                   </td>
 
                   <td className="px-2 py-1 text-end">
@@ -947,7 +962,8 @@ function OrderEntryDialog({
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
         <DocumentTotals
-          taxable={totals.taxable}
+          gross={totals.gross}
+          discount={totals.discount}
           tax={totals.tax}
           charges={chargeTotal(charges, ledgers.data ?? [])}
         />
@@ -1059,9 +1075,6 @@ function OrderDialog({
             </div>
             <Detail label={t('orders.reference')} value={order.referenceNumber ?? '—'} />
             <Detail label={t('orders.currency')} value={order.currency} />
-            <Detail label={t('orders.taxable')} value={order.taxable.toFixed(2)} />
-            <Detail label={t('orders.tax')} value={order.tax.toFixed(2)} />
-            <Detail label={t('orders.total')} value={order.total.toFixed(2)} />
           </div>
 
           {order.closureReason && (
@@ -1110,15 +1123,33 @@ function OrderDialog({
                       {line.outstandingQuantity}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.rate.toFixed(2)}
+                      {moneyAlways(line.rate)}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.taxable.toFixed(2)}
+                      {moneyAlways(line.taxable)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/*
+            The same ladder the order was entered against. Gross and discount are
+            added up from the lines because the header carries neither — it keeps the
+            taxable value, which is what is left after the discount.
+          */}
+          <div className="line-totals flex flex-wrap items-end justify-end gap-6">
+            <DocumentTotals
+              gross={order.lines.reduce(
+                (running, line) => running + line.quantity * line.rate,
+                0,
+              )}
+              discount={order.lines.reduce((running, line) => running + line.discount, 0)}
+              tax={order.tax}
+              charges={order.chargeTotal}
+              currency={order.currency}
+            />
           </div>
 
           {/*

@@ -15,6 +15,7 @@ import {
   type LedgerSummary,
 } from '@/lib/ledgers';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
+import { moneyAlways as money } from '@/lib/money';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -60,13 +61,6 @@ function emptyLine(): DraftLine {
 function parseAmount(raw: string): number {
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-function money(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 /** One ledger as a picker row: the code and name, with its group underneath. */

@@ -10,10 +10,11 @@ import {
   TextField,
 } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
-import type { ApiError } from '@/lib/api';
+import { currentBranchId, type ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { statesFor, TaxRegime } from '@/lib/states';
-import { ratesFor, useSettings } from '@/stores/settings';
+import { useMoney } from '@/lib/money';
+import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
 
 /**
  * The preferences screen.
@@ -28,10 +29,18 @@ import { ratesFor, useSettings } from '@/stores/settings';
  * complete the moment it is on — and a settings screen that can be left with unsaved
  * changes is a settings screen people leave with unsaved changes.
  */
+/** The figure the places are demonstrated on. Big enough to show a grouping separator. */
+const SAMPLE = 1234.5678;
+
 export function SettingsPage(): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
   const [ratesDraft, setRatesDraft] = useState(settings.taxRates.join(', '));
+
+  // The branch this session is working in, which is the one the control below sets.
+  // Null where the user holds none, and then the firm-wide value is what is edited.
+  const branchId = currentBranchId();
+  const { places } = useMoney();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -168,6 +177,66 @@ export function SettingsPage(): React.JSX.Element {
               }))}
             />
           </Field>
+        </SettingsCard>
+
+        <SettingsCard
+          title={t('settings.decimalsTitle')}
+          hint={
+            branchId === null
+              ? t('settings.decimalsHintFirm')
+              : t('settings.decimalsHintBranch')
+          }
+        >
+          <SelectField
+            label={t('settings.decimals')}
+            hint={t('settings.decimalsFieldHint')}
+            value={String(places)}
+            onChange={(value) => {
+              const chosen = Number(value);
+
+              if (!DECIMAL_CHOICES.includes(chosen)) {
+                return;
+              }
+
+              /*
+                A branch keeps its own answer; a session with no branch sets the
+                firm's. Written as a whole new map rather than mutated, because the
+                store compares by identity to decide what to repaint.
+              */
+              if (branchId === null) {
+                settings.update({ decimals: chosen });
+                return;
+              }
+
+              settings.update({
+                decimalsByBranch: { ...settings.decimalsByBranch, [branchId]: chosen },
+              });
+            }}
+            options={DECIMAL_CHOICES.map((choice) => ({
+              value: String(choice),
+              // The places and an example in them, because "3" is a number and
+              // "1,234.568" is the decision being made.
+              label: `${choice} — ${SAMPLE.toLocaleString(undefined, {
+                minimumFractionDigits: choice,
+                maximumFractionDigits: choice,
+              })}`,
+            }))}
+          />
+
+          {branchId !== null && settings.decimalsByBranch[branchId] !== undefined && (
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  const { [branchId]: _removed, ...rest } = settings.decimalsByBranch;
+                  settings.update({ decimalsByBranch: rest });
+                }}
+              >
+                {t('settings.decimalsFollowFirm', { count: settings.decimals })}
+              </button>
+            </div>
+          )}
         </SettingsCard>
 
         <SettingsCard title={t('settings.listsTitle')} hint={t('settings.listsHint')}>

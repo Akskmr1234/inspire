@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { BalanceBadge, ReportFrame, Spinner } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
+import { money } from '@/lib/money';
 
 interface DayBookLine {
   readonly ledgerId: string;
@@ -51,14 +52,6 @@ const VOUCHER_TYPES = [
 ] as const;
 
 /** Formats a figure for a financial column, blanking zero so the eye follows the numbers. */
-function money(value: number): string {
-  return value === 0
-    ? ''
-    : value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);

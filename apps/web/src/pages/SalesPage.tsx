@@ -37,6 +37,7 @@ import {
   type SalesInvoiceSummary,
   type SalesLineInput,
 } from '@/lib/sales';
+import { moneyAlways } from '@/lib/money';
 
 const PAGE_SIZE = 25;
 
@@ -300,7 +301,7 @@ export function SalesPage(): React.JSX.Element {
               return t('sales.postedNotice', {
                 number: posted.number,
                 stock: posted.stockDocumentNumber,
-                total: posted.total.toFixed(2),
+                total: moneyAlways(posted.total),
               });
             })
           }
@@ -415,19 +416,33 @@ function EntryDialog({
   });
 
   const totals = useMemo(() => {
-    let taxable = 0;
+    let gross = 0;
+    let discount = 0;
     let tax = 0;
 
     for (const line of lines) {
       const net = Number(line.quantity) * Number(line.rate) - Number(line.discount || 0);
 
       if (Number.isFinite(net) && net > 0) {
-        taxable += net;
+        // Carried separately rather than recovered from the net: a bill has to show
+        // what the goods were priced at as well as what is being charged for them.
+        gross += Number(line.quantity) * Number(line.rate);
+        discount += Number(line.discount || 0);
         tax += (net * Number(line.taxPercentage || 0)) / 100;
       }
     }
 
-    return { taxable, tax, total: taxable + tax };
+    const safeGross = Number.isFinite(gross) ? gross : 0;
+    const safeDiscount = Number.isFinite(discount) ? discount : 0;
+    const taxable = safeGross - safeDiscount;
+
+    return {
+      gross: safeGross,
+      discount: safeDiscount,
+      tax,
+      taxable,
+      total: taxable + tax,
+    };
   }, [lines]);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
@@ -607,7 +622,7 @@ function EntryDialog({
                 value: invoice.salesInvoiceId,
                 label: invoice.number,
                 detail: invoice.date,
-                meta: invoice.total.toFixed(2),
+                meta: moneyAlways(invoice.total),
               }))}
             />
           </FormField>
@@ -671,7 +686,12 @@ function EntryDialog({
         the money column above them, the arithmetic can be read down the page.
       */}
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
-        <DocumentTotals taxable={totals.taxable} tax={totals.tax} charges={0} />
+        <DocumentTotals
+          gross={totals.gross}
+          discount={totals.discount}
+          tax={totals.tax}
+          charges={0}
+        />
       </div>
 
       {/* What the screen adds up is what the lines come to; the server rounds the total
@@ -799,7 +819,7 @@ function LineRow({
           onChange={(value) => onChange({ taxPercentage: value })}
         />
         <td className="px-2 py-1 text-end font-mono">
-          {Number.isFinite(net) ? net.toFixed(2) : '—'}
+          {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
         <td className="px-2 py-1 text-end">
           {removable && (
@@ -929,12 +949,6 @@ function DocumentDialog({
               </div>
             </div>
             <Detail label={t('sales.currency')} value={document.currency} />
-            <Detail
-              label={t('sales.taxable')}
-              value={document.header.taxable.toFixed(2)}
-            />
-            <Detail label={t('sales.tax')} value={document.header.tax.toFixed(2)} />
-            <Detail label={t('sales.total')} value={document.header.total.toFixed(2)} />
           </div>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -954,18 +968,40 @@ function DocumentDialog({
                     <td className="px-2 py-1">{line.lineNumber}</td>
                     <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.rate.toFixed(2)}
+                      {moneyAlways(line.rate)}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.taxable.toFixed(2)}
+                      {moneyAlways(line.taxable)}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.tax.toFixed(2)}
+                      {moneyAlways(line.tax)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/*
+            The same ladder the draft was entered against. Gross and discount are
+            added up from the lines because the header carries neither — it keeps the
+            taxable value, which is what is left after the discount.
+          */}
+          <div className="line-totals flex flex-wrap items-end justify-end gap-6">
+            <DocumentTotals
+              gross={document.lines.reduce(
+                (running, line) => running + line.quantity * line.rate,
+                0,
+              )}
+              discount={document.lines.reduce(
+                (running, line) => running + line.discount,
+                0,
+              )}
+              tax={document.header.tax}
+              charges={document.header.chargeTotal}
+              rounding={document.header.roundingDifference}
+              currency={document.currency}
+            />
           </div>
 
           {/* What posting produced. A sale leaves two documents on purpose, so the issue

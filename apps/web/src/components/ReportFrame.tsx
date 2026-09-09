@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import type { ApiError } from '@/lib/api';
+import { useMoney } from '@/lib/money';
 
 /**
  * A screen's filters: open on a wide screen, folded behind a button on a phone.
@@ -75,6 +76,12 @@ export function ReportFrame<TData>({
   readonly children: (data: TData) => React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
+
+  // Subscribed to, not read. The report body below is a function this calls, and the
+  // `money` it uses inside reads the setting at call time — so this subscription is
+  // what makes a change to the precision repaint the figures instead of leaving the
+  // old ones until something else happens to re-render the screen.
+  useMoney();
 
   return (
     // `page-lean` where the screen has no filter strip: the list below is sized to
@@ -407,20 +414,14 @@ export function BalanceBadge({
   );
 }
 
-/** Formats a figure for a financial column, blanking zero so the eye follows the numbers. */
-export function money(value: number): string {
-  return value === 0
-    ? ''
-    : value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-}
+/*
+  Re-exported from `lib/money` rather than defined here.
 
-/** Formats a figure that must always show, including zero. */
-export function moneyAlways(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+  Every report in the application already imports these two from this module, and
+  the number of decimal places is now the branch's to decide. Keeping the names
+  where they are means each of those screens follows the setting without being
+  touched — and `ReportFrame` itself subscribes to it below, so a report body, which
+  it calls as a function, is re-rendered when the setting changes rather than
+  showing the old precision until the next navigation.
+*/
+export { money, moneyAlways } from '@/lib/money';

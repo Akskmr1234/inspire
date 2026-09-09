@@ -34,6 +34,7 @@ import {
   type StockLineInput,
   type StockValuationReport,
 } from '@/lib/stock';
+import { moneyAlways } from '@/lib/money';
 
 /**
  * Stock operations.
@@ -154,7 +155,7 @@ export function StockOperationsPage({
       header: t('stock.value'),
       value: (row) => row.totalValue,
       numeric: true,
-      render: (row) => row.totalValue.toFixed(2),
+      render: (row) => moneyAlways(row.totalValue),
       // What the firm paid for the goods, which is not something everybody who may
       // look at a movement should see.
       requiredPermission: 'inventory:report:view',
@@ -1238,7 +1239,7 @@ function StockDocumentView({
                     {trim(movement.quantity)}
                   </td>
                   <td className="cell-numeric">{trim(movement.unitCost)}</td>
-                  <td className="cell-numeric">{movement.value.toFixed(2)}</td>
+                  <td className="cell-numeric">{moneyAlways(movement.value)}</td>
                   <td className="cell-numeric">{trim(movement.balanceQuantity)}</td>
                   <td className="cell-numeric">{trim(movement.balanceAverageCost)}</td>
                   {batchedDocument && (

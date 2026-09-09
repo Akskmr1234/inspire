@@ -21,6 +21,7 @@ import {
   type StockValuationReport,
   type StockValuationRow,
 } from '@/lib/stock';
+import { moneyAlways } from '@/lib/money';
 
 /**
  * The stock valuation.
@@ -85,7 +86,7 @@ export function StockValuationPage(): React.JSX.Element {
       header: t('stock.value'),
       value: (row) => row.value,
       numeric: true,
-      render: (row) => row.value.toFixed(2),
+      render: (row) => moneyAlways(row.value),
     },
   ];
 
@@ -111,10 +112,7 @@ export function StockValuationPage(): React.JSX.Element {
         <div className="space-y-4">
           <p className="inline-block rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-ink">
             {t('stock.totalValue', {
-              value: report.totalValue.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }),
+              value: moneyAlways(report.totalValue),
               currency: report.currency,
             })}
           </p>
@@ -173,10 +171,7 @@ export function BatchStockPage(): React.JSX.Element {
         <div className="space-y-4">
           <p className="inline-block rounded-lg border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-ink">
             {t('stock.totalValue', {
-              value: report.totalValue.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }),
+              value: moneyAlways(report.totalValue),
               currency: report.currency,
             })}
           </p>
@@ -304,7 +299,7 @@ function batchColumns(
       header: t('stock.value'),
       value: (row) => row.value,
       numeric: true,
-      render: (row) => row.value.toFixed(2),
+      render: (row) => moneyAlways(row.value),
     },
     {
       key: 'manufactured',
@@ -486,7 +481,7 @@ export function StockLedgerPage(): React.JSX.Element {
                         {row.quantityOut === 0 ? '' : trim(row.quantityOut)}
                       </td>
                       <td className="cell-numeric">{trim(row.unitCost)}</td>
-                      <td className="cell-numeric">{row.value.toFixed(2)}</td>
+                      <td className="cell-numeric">{moneyAlways(row.value)}</td>
                       <td className="cell-numeric">{trim(row.balanceQuantity)}</td>
                       <td className="cell-numeric">{trim(row.balanceAverageCost)}</td>
                     </tr>
@@ -550,14 +545,14 @@ export function ItemMovementPage(): React.JSX.Element {
       header: t('stock.valueIn'),
       value: (row) => row.valueIn,
       numeric: true,
-      render: (row) => row.valueIn.toFixed(2),
+      render: (row) => moneyAlways(row.valueIn),
     },
     {
       key: 'valueOut',
       header: t('stock.valueOut'),
       value: (row) => row.valueOut,
       numeric: true,
-      render: (row) => row.valueOut.toFixed(2),
+      render: (row) => moneyAlways(row.valueOut),
     },
     {
       key: 'movements',

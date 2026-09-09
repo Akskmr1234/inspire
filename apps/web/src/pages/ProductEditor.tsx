@@ -15,6 +15,7 @@ import {
   type ProductDetail,
 } from '@/lib/products';
 import { listMaster, type BrandSummary, type UnitSummary } from '@/lib/inventory';
+import { moneyAlways } from '@/lib/money';
 
 /**
  * The product editor.
@@ -859,10 +860,10 @@ function BarcodesTab({
               product.barcodes.map((row) => (
                 <tr key={row.id} className="border-t border-line">
                   <td className="px-3 py-1.5 font-mono">{row.barcode}</td>
-                  <td className="cell-numeric">{row.cost.toFixed(2)}</td>
-                  <td className="cell-numeric">{row.retailRate.toFixed(2)}</td>
-                  <td className="cell-numeric">{row.wholesaleRate.toFixed(2)}</td>
-                  <td className="cell-numeric">{row.maximumRetailPrice.toFixed(2)}</td>
+                  <td className="cell-numeric">{moneyAlways(row.cost)}</td>
+                  <td className="cell-numeric">{moneyAlways(row.retailRate)}</td>
+                  <td className="cell-numeric">{moneyAlways(row.wholesaleRate)}</td>
+                  <td className="cell-numeric">{moneyAlways(row.maximumRetailPrice)}</td>
                   <td className="px-3 py-1.5 text-end">
                     <button
                       type="button"

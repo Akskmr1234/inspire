@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { request, type ApiError } from '@/lib/api';
 import { BalanceBadge, DateRangeControls, ReportFrame } from '@/components/ReportFrame';
+import { money } from '@/lib/money';
 
 interface TrialBalanceRow {
   readonly ledgerId: string;
@@ -33,14 +34,6 @@ interface TrialBalance {
 }
 
 /** Formats a figure for a financial column, blanking zero so the eye follows the numbers. */
-function money(value: number): string {
-  return value === 0
-    ? ''
-    : value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-}
 
 function startOfYear(): string {
   return `${new Date().getFullYear()}-01-01`;

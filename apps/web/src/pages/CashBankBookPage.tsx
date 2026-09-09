@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DateRangeControls, ReportFrame } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
+import { money, moneyAlways as balance } from '@/lib/money';
 
 interface BookLine {
   readonly date: string;
@@ -39,22 +40,8 @@ interface CashBankBook {
 }
 
 /** Formats a figure, blanking zero so the eye follows the numbers. */
-function money(value: number): string {
-  return value === 0
-    ? ''
-    : value.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-}
 
 /** Formats a balance, which is worth showing even when it is zero. */
-function balance(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);

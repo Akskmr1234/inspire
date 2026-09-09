@@ -18,6 +18,7 @@ import {
 } from '@/lib/inventory';
 import { createProduct, listProducts, type ProductSummary } from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
+import { moneyAlways } from '@/lib/money';
 
 /**
  * The product master.
@@ -108,7 +109,7 @@ export function ProductsPage(): React.JSX.Element {
       header: t('products.cost'),
       value: (row) => row.cost,
       numeric: true,
-      render: (row) => row.cost.toFixed(2),
+      render: (row) => moneyAlways(row.cost),
       // Cost is what the firm pays, and plenty of people who may see a price list
       // may not see it. A courtesy rather than a boundary — the figure is already in
       // the response — but the right default.
@@ -119,7 +120,7 @@ export function ProductsPage(): React.JSX.Element {
       header: t('products.retailRate'),
       value: (row) => row.retailRate,
       numeric: true,
-      render: (row) => row.retailRate.toFixed(2),
+      render: (row) => moneyAlways(row.retailRate),
     },
     {
       key: 'reorder',

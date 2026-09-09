@@ -47,6 +47,7 @@ import {
   type PurchaseInvoiceSummary,
   type PurchaseLineInput,
 } from '@/lib/purchase';
+import { moneyAlways } from '@/lib/money';
 
 /** A line as the screen holds it, before it is worth sending. */
 interface DraftLine {
@@ -219,21 +220,21 @@ export function PurchasePage({
       header: t('purchase.taxable'),
       value: (row) => row.taxable,
       numeric: true,
-      render: (row) => row.taxable.toFixed(2),
+      render: (row) => moneyAlways(row.taxable),
     },
     {
       key: 'tax',
       header: t('purchase.tax'),
       value: (row) => row.tax,
       numeric: true,
-      render: (row) => row.tax.toFixed(2),
+      render: (row) => moneyAlways(row.tax),
     },
     {
       key: 'total',
       header: t('purchase.total'),
       value: (row) => row.total,
       numeric: true,
-      render: (row) => row.total.toFixed(2),
+      render: (row) => moneyAlways(row.total),
     },
     {
       key: 'status',
@@ -369,7 +370,7 @@ export function PurchasePage({
               return t('purchase.postedNotice', {
                 number: posted.number,
                 stock: posted.stockDocumentNumber,
-                total: posted.total.toFixed(2),
+                total: moneyAlways(posted.total),
               });
             })
           }
@@ -534,19 +535,33 @@ function EntryDialog({
   const columns = useLineColumns('purchase', lineColumns);
 
   const totals = useMemo(() => {
-    let taxable = 0;
+    let gross = 0;
+    let discount = 0;
     let tax = 0;
 
     for (const line of lines) {
       const net = lineNet(line);
 
       if (net > 0) {
-        taxable += net;
+        // Gross and discount are carried separately rather than recovered from the
+        // net, because a bill has to show what the goods were priced at as well as
+        // what is being charged for them — and on a line whose discount exceeds its
+        // value, which is skipped below, subtracting back would invent a figure.
+        gross += Number(line.quantity) * Number(line.rate);
+        discount += Number(line.discount || 0);
         tax += (net * Number(line.taxPercentage || 0)) / 100;
       }
     }
 
-    return { taxable, tax };
+    return {
+      gross: Number.isFinite(gross) ? gross : 0,
+      discount: Number.isFinite(discount) ? discount : 0,
+      tax,
+      // The taxable value, which is what the net comes to. Kept under its tax name
+      // as well, because that is what the API and the tax return call it.
+      taxable:
+        (Number.isFinite(gross) ? gross : 0) - (Number.isFinite(discount) ? discount : 0),
+    };
   }, [lines]);
 
   const chargesTotal = chargeTotal(charges, ledgers.data ?? []);
@@ -772,7 +787,7 @@ function EntryDialog({
                 value: invoice.purchaseInvoiceId,
                 label: invoice.number,
                 detail: invoice.date,
-                meta: invoice.total.toFixed(2),
+                meta: moneyAlways(invoice.total),
               }))}
             />
           </Field>
@@ -875,7 +890,8 @@ function EntryDialog({
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
         <DocumentTotals
-          taxable={totals.taxable}
+          gross={totals.gross}
+          discount={totals.discount}
           tax={totals.tax}
           charges={chargesTotal}
         />
@@ -1034,12 +1050,12 @@ function LineRow({
 
         {columns.shows('taxAmount') && (
           <td className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted">
-            {tax.toFixed(2)}
+            {moneyAlways(tax)}
           </td>
         )}
 
         <td className="px-2 py-1 text-end font-mono tabular-nums">
-          {Number.isFinite(net) ? net.toFixed(2) : '—'}
+          {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
 
         <td className="px-2 py-1 text-end">
@@ -1185,19 +1201,6 @@ function DocumentDialog({
               label={t('purchase.supplierInvoiceDate')}
               value={document.supplierInvoiceDate ?? '—'}
             />
-            <Detail
-              label={t('purchase.taxable')}
-              value={document.header.taxable.toFixed(2)}
-            />
-            <Detail label={t('purchase.tax')} value={document.header.tax.toFixed(2)} />
-            <Detail
-              label={t('purchase.chargeTotal')}
-              value={document.header.chargeTotal.toFixed(2)}
-            />
-            <Detail
-              label={t('purchase.total')}
-              value={document.header.total.toFixed(2)}
-            />
           </div>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -1221,18 +1224,43 @@ function DocumentDialog({
                     </td>
                     <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.rate.toFixed(2)}
+                      {moneyAlways(line.rate)}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.taxable.toFixed(2)}
+                      {moneyAlways(line.taxable)}
                     </td>
                     <td className="px-2 py-1 text-end font-mono">
-                      {line.tax.toFixed(2)}
+                      {moneyAlways(line.tax)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/*
+            The same ladder the draft was entered against, rather than four money
+            figures scattered among the dates and the supplier's reference. A bill
+            reads down: what the goods came to, what came off, what is taxable, the
+            tax, the charges, and what is owed. Gross and discount are added up from
+            the lines because the header carries neither — it keeps the taxable value,
+            which is what is left after the discount.
+          */}
+          <div className="line-totals flex flex-wrap items-end justify-end gap-6">
+            <DocumentTotals
+              gross={document.lines.reduce(
+                (running, line) => running + line.quantity * line.rate,
+                0,
+              )}
+              discount={document.lines.reduce(
+                (running, line) => running + line.discount,
+                0,
+              )}
+              tax={document.header.tax}
+              charges={document.header.chargeTotal}
+              rounding={document.header.roundingDifference}
+              currency={document.currency}
+            />
           </div>
 
           {/* What posting produced. A purchase leaves two documents on purpose, so the
