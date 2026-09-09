@@ -7,6 +7,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { DocumentTotals } from '@/components/DocumentLines';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
@@ -629,7 +630,7 @@ function EntryDialog({
               <th className="px-2 py-1 text-end">{t('sales.discount')}</th>
               <th className="px-2 py-1 text-end">{t('sales.taxPercent')}</th>
               <th className="px-2 py-1 text-end">{t('sales.net')}</th>
-              <th />
+              <th className="line-action-column" />
             </tr>
           </thead>
 
@@ -661,18 +662,16 @@ function EntryDialog({
         >
           {t('sales.addLine')}
         </button>
+      </div>
 
-        <span className="ms-auto text-sm">
-          {t('sales.taxable')}:{' '}
-          <strong className="font-mono">{totals.taxable.toFixed(2)}</strong>
-        </span>
-        <span className="text-sm">
-          {t('sales.tax')}: <strong className="font-mono">{totals.tax.toFixed(2)}</strong>
-        </span>
-        <span className="text-base">
-          {t('sales.total')}:{' '}
-          <strong className="font-mono">{totals.total.toFixed(2)}</strong>
-        </span>
+      {/*
+        The same block the purchase and order editors use, rather than the row of
+        inline figures this screen had. Three numbers running across a line answer
+        "what is the total" but not "does it add up" — stacked and right-aligned on
+        the money column above them, the arithmetic can be read down the page.
+      */}
+      <div className="line-totals flex flex-wrap items-end justify-end gap-6">
+        <DocumentTotals taxable={totals.taxable} tax={totals.tax} charges={0} />
       </div>
 
       {/* What the screen adds up is what the lines come to; the server rounds the total

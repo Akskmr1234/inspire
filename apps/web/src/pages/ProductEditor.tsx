@@ -845,7 +845,7 @@ function BarcodesTab({
               <th className="px-3 py-2 text-end font-semibold">
                 {t('products.maximumRetailPrice')}
               </th>
-              <th />
+              <th className="text-end" />
             </tr>
           </thead>
           <tbody>

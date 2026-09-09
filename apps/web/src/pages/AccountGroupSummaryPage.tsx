@@ -164,7 +164,7 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
         />
       </div>
 
-      <label className="field-check pb-1">
+      <label className="field-check">
         <input
           type="checkbox"
           checked={includeLedgers}
@@ -173,7 +173,7 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
         {t('reports.includeLedgers')}
       </label>
 
-      <label className="field-check pb-1">
+      <label className="field-check">
         <input
           type="checkbox"
           checked={includeZeroBalances}
@@ -182,11 +182,7 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
         {t('reports.includeZeroBalances')}
       </label>
 
-      <button
-        type="submit"
-        disabled={query.isFetching}
-        className="btn-primary btn-sm py-1.5"
-      >
+      <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">
         {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>

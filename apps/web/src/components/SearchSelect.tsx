@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 
@@ -27,13 +28,31 @@ export interface SelectOption {
 /** How many matches the list draws at once. */
 const VISIBLE_LIMIT = 60;
 
-/** Where the popup sits, in viewport coordinates. */
+/** Where the popup sits, in viewport coordinates, ready to be handed to CSS. */
 interface Anchor {
-  readonly top: number;
+  /** Set when the list hangs below the field; `bottom` is set instead when above. */
+  readonly top: number | undefined;
+  readonly bottom: number | undefined;
   readonly left: number;
   readonly width: number;
-  readonly openUpwards: boolean;
+  /** As much height as the side it opened towards can give it. */
+  readonly maxHeight: number;
 }
+
+/** How far the list keeps off the edge of the window. */
+const EDGE = 8;
+
+/** The gap between the field and its list. */
+const GAP = 4;
+
+/** Narrower than this and a two-line row with a figure on the end stops fitting. */
+const MIN_WIDTH = 240;
+
+/** Taller than this and the list is a page rather than a list. */
+const MAX_HEIGHT = 256;
+
+/** Shorter than this and the list is not worth opening; it scrolls instead. */
+const MIN_HEIGHT = 120;
 
 function matches(option: SelectOption, needle: string): boolean {
   if (needle === '') {
@@ -141,13 +160,40 @@ export function SearchSelect({
         return;
       }
 
-      const below = window.innerHeight - box.bottom;
+      /*
+        Widened to a readable minimum, then held inside the window.
+
+        A line-item picker is narrower than a product row needs, so the list grows
+        past the field it belongs to — and a field near the end of a table would
+        have grown straight off the screen, taking half of every row's description
+        with it. In a right-to-left layout it grows the other way, from the field's
+        end edge, for the same reason.
+      */
+      const width = Math.min(
+        Math.max(box.width, MIN_WIDTH),
+        window.innerWidth - EDGE * 2,
+      );
+
+      const rightToLeft = getComputedStyle(document.documentElement).direction === 'rtl';
+      const wanted = rightToLeft ? box.right - width : box.left;
+      const left = Math.min(Math.max(wanted, EDGE), window.innerWidth - width - EDGE);
+
+      /*
+        Downwards unless upwards is genuinely roomier, and never taller than the
+        side it chose. The old rule flipped upwards whenever there was less than
+        240px below and then asked for 256px of list regardless — so a picker near
+        the foot of a phone opened a list whose top was off the top of the screen.
+      */
+      const below = window.innerHeight - box.bottom - GAP - EDGE;
+      const above = box.top - GAP - EDGE;
+      const upwards = below < Math.min(MAX_HEIGHT, above);
 
       setAnchor({
-        top: below < 240 && box.top > below ? box.top : box.bottom,
-        left: box.left,
-        width: box.width,
-        openUpwards: below < 240 && box.top > below,
+        top: upwards ? undefined : box.bottom + GAP,
+        bottom: upwards ? window.innerHeight - box.top + GAP : undefined,
+        left,
+        width,
+        maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, upwards ? above : below)),
       });
     };
 
@@ -261,6 +307,15 @@ export function SearchSelect({
             setOpen(true);
             setActive(0);
           }}
+          // Focus alone is not enough. Escape closes the list and leaves the caret
+          // where it is, so the next click on the field fires no focus event and the
+          // list stayed shut — the box looked live, took typing, and showed nothing.
+          // Clicking always opens and never closes: this is a box to type in, and a
+          // click to put the caret between two words should not take the list away.
+          onClick={() => {
+            setOpen(true);
+            setActive(0);
+          }}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
@@ -288,68 +343,88 @@ export function SearchSelect({
         </svg>
       </div>
 
-      {open && anchor && (
-        <div
-          ref={popup}
-          id={listId}
-          role="listbox"
-          style={{
-            position: 'fixed',
-            top: anchor.openUpwards ? undefined : anchor.top + 4,
-            bottom: anchor.openUpwards ? window.innerHeight - anchor.top + 4 : undefined,
-            left: anchor.left,
-            width: Math.max(anchor.width, 240),
-            zIndex: 70,
-          }}
-          className="animate-drop max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface py-1 shadow-float"
-        >
-          {rows.length === 0 && (
-            <p className="px-3 py-2 text-xs text-ink-muted">{t('common.noMatches')}</p>
-          )}
+      {open &&
+        anchor &&
+        /*
+          Rendered into the body rather than beside the field.
 
-          {rows.map((option, index) => (
-            <button
-              key={option.value === '' ? '__none' : option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              disabled={option.disabled === true}
-              // Focus must not leave the input, or the box would empty itself
-              // mid-click and the choice would be made against a stale list.
-              onMouseDown={(event) => event.preventDefault()}
-              onMouseEnter={() => setActive(index)}
-              onClick={() => pick(option)}
-              className={clsx(
-                'flex w-full items-start gap-3 px-3 py-1.5 text-start text-sm transition-colors',
-                option.disabled === true && 'cursor-not-allowed opacity-50',
-                index === active ? 'bg-brand-50 dark:bg-brand-500/15' : 'bg-transparent',
-                option.value === value ? 'font-semibold text-ink' : 'text-ink',
-              )}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{option.label}</span>
-                {option.detail && (
-                  <span className="block truncate text-xs text-ink-muted">
-                    {option.detail}
+          `position: fixed` is only relative to the window while nothing above it
+          has a transform, a filter or a backdrop-filter — any of those makes an
+          ancestor the containing block, and the coordinates measured off the window
+          are then applied from that ancestor's corner instead. Every dialog in this
+          application has both: a blurred overlay and a panel that animates in. So a
+          picker inside one opened its list three hundred pixels to the side of the
+          field and most of a dialog above it, which is precisely where nobody was
+          looking. The body has no such ancestor, and a portal is the only way to be
+          sure of that from in here — a `fixed` element cannot opt out of a
+          containing block a parent has already established.
+        */
+        createPortal(
+          <div
+            ref={popup}
+            id={listId}
+            role="listbox"
+            style={{
+              position: 'fixed',
+              top: anchor.top,
+              bottom: anchor.bottom,
+              left: anchor.left,
+              width: anchor.width,
+              maxHeight: anchor.maxHeight,
+              zIndex: 70,
+            }}
+            className="animate-drop overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface py-1 shadow-float"
+          >
+            {rows.length === 0 && (
+              <p className="px-3 py-2 text-xs text-ink-muted">{t('common.noMatches')}</p>
+            )}
+
+            {rows.map((option, index) => (
+              <button
+                key={option.value === '' ? '__none' : option.value}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                disabled={option.disabled === true}
+                // Focus must not leave the input, or the box would empty itself
+                // mid-click and the choice would be made against a stale list.
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => pick(option)}
+                className={clsx(
+                  'flex w-full items-start gap-3 px-3 py-1.5 text-start text-sm transition-colors',
+                  option.disabled === true && 'cursor-not-allowed opacity-50',
+                  index === active
+                    ? 'bg-brand-50 dark:bg-brand-500/15'
+                    : 'bg-transparent',
+                  option.value === value ? 'font-semibold text-ink' : 'text-ink',
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{option.label}</span>
+                  {option.detail && (
+                    <span className="block truncate text-xs text-ink-muted">
+                      {option.detail}
+                    </span>
+                  )}
+                </span>
+
+                {option.meta && (
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                    {option.meta}
                   </span>
                 )}
-              </span>
+              </button>
+            ))}
 
-              {option.meta && (
-                <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
-                  {option.meta}
-                </span>
-              )}
-            </button>
-          ))}
-
-          {total > shown.length && (
-            <p className="border-t border-line px-3 py-1.5 text-xs text-ink-subtle">
-              {t('common.moreMatches', { count: total - shown.length })}
-            </p>
-          )}
-        </div>
-      )}
+            {total > shown.length && (
+              <p className="border-t border-line px-3 py-1.5 text-xs text-ink-subtle">
+                {t('common.moreMatches', { count: total - shown.length })}
+              </p>
+            )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

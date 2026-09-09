@@ -324,7 +324,7 @@ export function VoucherEntryPage(): React.JSX.Element {
               <th className="text-start">{t('vouchers.lineNarration')}</th>
               <th className="text-end">{t('reports.debit')}</th>
               <th className="text-end">{t('reports.credit')}</th>
-              <th className="w-10" />
+              <th className="w-10 text-end" />
             </tr>
           </thead>
 
@@ -383,7 +383,11 @@ export function VoucherEntryPage(): React.JSX.Element {
                   amount plus a side, so offering two editable boxes would invite a
                   row with both filled in - which has no meaning.
                 */}
-                <td className="py-2">
+                {/* End-aligned like the caption above and the total below. The
+                    box is a fixed width rather than the cell's, so without this it
+                    floated at the left of a column whose heading and total were
+                    both flush right. */}
+                <td className="py-2 text-end">
                   {line.side === DEBIT ? (
                     <input
                       aria-label={t('vouchers.debitAmount')}
@@ -391,7 +395,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                       inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="field-input-sm w-32 text-end font-mono tabular-nums"
+                      className="field-input-sm text-end font-mono tabular-nums"
                       value={line.amount}
                       onChange={(e) => update(line.key, { amount: e.target.value })}
                     />
@@ -400,7 +404,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                   )}
                 </td>
 
-                <td className="py-2">
+                <td className="py-2 text-end">
                   {line.side === CREDIT ? (
                     <input
                       aria-label={t('vouchers.creditAmount')}
@@ -408,7 +412,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                       inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="field-input-sm w-32 text-end font-mono tabular-nums"
+                      className="field-input-sm text-end font-mono tabular-nums"
                       value={line.amount}
                       onChange={(e) => update(line.key, { amount: e.target.value })}
                     />
@@ -417,7 +421,7 @@ export function VoucherEntryPage(): React.JSX.Element {
                   )}
                 </td>
 
-                <td className="px-2 py-2">
+                <td className="px-2 py-2 text-end">
                   <button
                     type="button"
                     aria-label={t('vouchers.removeLine')}

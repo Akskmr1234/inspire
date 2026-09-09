@@ -188,11 +188,7 @@ export function VoucherReportPage(): React.JSX.Element {
         </select>
       </label>
 
-      <button
-        type="submit"
-        disabled={query.isFetching}
-        className="btn-primary btn-sm py-1.5"
-      >
+      <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">
         {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>

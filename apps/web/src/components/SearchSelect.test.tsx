@@ -180,3 +180,60 @@ describe('SearchSelect', () => {
     expect(onChange).toHaveBeenCalledWith('');
   });
 });
+
+describe('where the list is drawn', () => {
+  /*
+    The list is portalled to the body rather than rendered beside the field, and
+    that placement is the whole reason a picker inside a dialog lands under its
+    field. `position: fixed` is measured from the window only while nothing above
+    it has a transform, a filter or a backdrop-filter; every dialog here has a
+    blurred overlay and a panel that animates in, so a list rendered inside one was
+    positioned from the panel's corner and opened three hundred pixels to the side.
+  */
+  it('renders outside the field it belongs to, so no ancestor can capture it', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Picker />);
+
+    await user.click(screen.getByRole('combobox'));
+
+    const list = screen.getByRole('listbox');
+    expect(list).toBeTruthy();
+    expect(container.contains(list)).toBe(false);
+    expect(document.body.contains(list)).toBe(true);
+  });
+
+  it('escapes a dialog too, which is where it was going wrong', async () => {
+    const user = userEvent.setup();
+    render(
+      <Modal title="New purchase" onClose={vi.fn()}>
+        <Picker />
+      </Modal>,
+    );
+
+    await user.click(screen.getByRole('combobox'));
+
+    const dialog = screen.getByRole('dialog');
+    const list = screen.getByRole('listbox');
+    expect(dialog.contains(list)).toBe(false);
+  });
+});
+
+describe('opening it again', () => {
+  it('reopens on a click, having been shut with Escape', async () => {
+    const user = userEvent.setup();
+    render(<Picker />);
+
+    const box = screen.getByRole('combobox');
+
+    await user.click(box);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    // Escape leaves the caret in the field, so the next click fires no focus event.
+    // Without a click handler of its own the box took typing and showed nothing.
+    await user.click(box);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+});
