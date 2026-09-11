@@ -44,7 +44,29 @@ export interface AppSettings {
   readonly preferredWarehouseId: string;
   /** How many rows a paged list holds. */
   readonly pageSize: number;
+  /**
+   * How many decimal places money is shown to, when a branch says nothing else.
+   *
+   * Two for most of the world, three where a currency subdivides by a thousand —
+   * the dinars of Bahrain, Kuwait, Jordan and Iraq, and the Omani rial — and zero
+   * where it does not subdivide at all, which is how a yen or a franc price list
+   * reads. It is a presentation decision throughout: the server keeps and posts the
+   * full precision it was given, and this decides what a screen prints.
+   */
+  readonly decimals: number;
+  /**
+   * The places a particular branch shows, keyed by branch identifier.
+   *
+   * Branches keep their own numbering and print formats, and a firm running a
+   * wholesale branch beside a retail counter routinely wants different precision on
+   * each: three places where goods are priced by the thousand, two at the till. A
+   * branch with no entry here follows `decimals`.
+   */
+  readonly decimalsByBranch: Readonly<Record<string, number>>;
 }
+
+/** The places a firm can choose between. Nothing sensible lies outside it. */
+export const DECIMAL_CHOICES: readonly number[] = [0, 1, 2, 3, 4];
 
 /** The rates a GST firm charges, and the rates a VAT firm does. */
 export const GST_RATES: readonly number[] = [0, 0.25, 3, 5, 12, 18, 28];
@@ -61,6 +83,8 @@ const DEFAULTS: AppSettings = {
   defaultTaxRate: 5,
   preferredWarehouseId: '',
   pageSize: 25,
+  decimals: 2,
+  decimalsByBranch: {},
 };
 
 const STORAGE_KEY = 'erp.settings';
@@ -102,6 +126,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
       defaultTaxRate: patch.defaultTaxRate ?? get().defaultTaxRate,
       preferredWarehouseId: patch.preferredWarehouseId ?? get().preferredWarehouseId,
       pageSize: patch.pageSize ?? get().pageSize,
+      decimals: patch.decimals ?? get().decimals,
+      decimalsByBranch: patch.decimalsByBranch ?? get().decimalsByBranch,
     };
 
     set(next);

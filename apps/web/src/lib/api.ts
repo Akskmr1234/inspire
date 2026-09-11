@@ -16,6 +16,8 @@
  *   because reuse cannot be distinguished from theft.
  */
 
+import { branchOf } from '@/lib/branch';
+
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
 
@@ -83,6 +85,17 @@ export function setSession(auth: AuthenticationResponse, tenantCode?: string): v
   if (tenantCode) {
     localStorage.setItem(TENANT_CODE_KEY, tenantCode);
   }
+}
+
+/**
+ * The branch the server would scope this session's requests to.
+ *
+ * Read from the access token rather than asked for, because the token is where the
+ * server reads it from too — see `branchOf`. Null before sign-in, and null for a
+ * user who holds no branch.
+ */
+export function currentBranchId(): string | null {
+  return branchOf(accessToken);
 }
 
 /** Clears the session. The company code is kept: it is a convenience, not a secret. */

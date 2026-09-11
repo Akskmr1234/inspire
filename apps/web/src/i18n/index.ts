@@ -768,6 +768,10 @@ const en = {
     chargeDeducts: 'Comes off the total',
     noChargeAccounts:
       'This firm has no accounts classified as additional charges, so there is nothing to add here yet.',
+    gross: 'Gross',
+    discount: 'Discount',
+    net: 'Net',
+    rounding: 'Round off',
     taxable: 'Taxable',
     tax: 'Tax',
     total: 'Total',
@@ -974,6 +978,15 @@ const en = {
       'Leave unset to use whichever warehouse the master marks as the default.',
     warehouseFromMaster: "The master's default",
     masterDefault: 'default',
+    decimalsTitle: 'Decimal places',
+    decimalsHintFirm:
+      'How many places money is shown to. Set for the firm, because this sign-in is not scoped to a branch.',
+    decimalsHintBranch:
+      'How many places money is shown to in this branch. Branches keep their own, and a branch that has not chosen follows the firm.',
+    decimals: 'Places',
+    decimalsFieldHint:
+      'Presentation only: the server keeps and posts the full precision it was given.',
+    decimalsFollowFirm: 'Follow the firm ({{count}})',
     listsTitle: 'Lists',
     listsHint: 'How much of a list is shown at once.',
     pageSize: 'Rows per page',
@@ -1808,6 +1821,10 @@ const ar = {
     chargeAdds: 'يضاف إلى الإجمالي',
     chargeDeducts: 'يخصم من الإجمالي',
     noChargeAccounts: 'لا توجد في هذه المنشأة حسابات مصنفة كمصاريف إضافية بعد.',
+    gross: 'الإجمالي قبل الخصم',
+    discount: 'الخصم',
+    net: 'الصافي',
+    rounding: 'تقريب',
     taxable: 'القيمة الخاضعة',
     tax: 'الضريبة',
     total: 'الإجمالي',
@@ -2008,6 +2025,14 @@ const ar = {
       'اتركه فارغاً لاستخدام المستودع الافتراضي المحدد في البيانات الأساسية.',
     warehouseFromMaster: 'الافتراضي من البيانات الأساسية',
     masterDefault: 'افتراضي',
+    decimalsTitle: 'المنازل العشرية',
+    decimalsHintFirm:
+      'عدد المنازل العشرية لعرض المبالغ. يُضبط للشركة لأن هذا الدخول غير مرتبط بفرع.',
+    decimalsHintBranch:
+      'عدد المنازل العشرية لعرض المبالغ في هذا الفرع. لكل فرع إعداده، والفرع الذي لم يختر يتبع الشركة.',
+    decimals: 'المنازل',
+    decimalsFieldHint: 'للعرض فقط: يحفظ الخادم ويرحّل الدقة الكاملة كما استلمها.',
+    decimalsFollowFirm: 'اتباع الشركة ({{count}})',
     listsTitle: 'القوائم',
     listsHint: 'عدد السجلات المعروضة دفعة واحدة.',
     pageSize: 'عدد السجلات في الصفحة',

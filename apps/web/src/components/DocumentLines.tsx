@@ -5,6 +5,7 @@ import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
 import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
+import { moneyAlways, useMoney } from '@/lib/money';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -30,7 +31,7 @@ export function productOption(
       product.categoryName,
       product.brandName,
       product.stockUnitCode,
-      product.retailRate > 0 ? `@ ${product.retailRate.toFixed(2)}` : '',
+      product.retailRate > 0 ? `@ ${moneyAlways(product.retailRate)}` : '',
     ]
       .filter(Boolean)
       .join(' · '),
@@ -262,7 +263,7 @@ export function ChargesPanel({
 
         <span className="font-mono text-sm tabular-nums text-ink">
           {total >= 0 ? '+' : '−'}
-          {Math.abs(total).toFixed(2)}
+          {moneyAlways(Math.abs(total))}
           {currency ? ` ${currency}` : ''}
         </span>
       </header>
@@ -333,41 +334,114 @@ export function ChargesPanel({
 
 /** The figures a document adds up to, shown the way an invoice states them. */
 export function DocumentTotals({
-  taxable,
+  gross,
+  discount,
   tax,
   charges,
+  rounding = 0,
   currency,
 }: {
-  readonly taxable: number;
+  /** The goods at what they were priced at, before any discount came off. */
+  readonly gross: number;
+  /** What came off the lines. Positive: it is shown as a deduction. */
+  readonly discount: number;
   readonly tax: number;
   readonly charges: number;
+  /** What the server moved the total by to reach a whole unit of the currency. */
+  readonly rounding?: number;
   readonly currency?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const total = taxable + tax + charges;
+  const { moneyAlways } = useMoney();
+
+  const net = gross - discount;
+  const total = net + tax + charges + rounding;
 
   return (
     <dl className="ms-auto grid w-full max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
-      <dt className="text-ink-muted">{t('documents.taxable')}</dt>
-      <dd className="text-end font-mono tabular-nums">{taxable.toFixed(2)}</dd>
+      <Line label={t('documents.gross')} value={moneyAlways(gross)} />
 
-      <dt className="text-ink-muted">{t('documents.tax')}</dt>
-      <dd className="text-end font-mono tabular-nums">{tax.toFixed(2)}</dd>
+      {/*
+        Shown only when there is one, and shown as a deduction: a discount line
+        reading `100.00` between a gross of 1,000 and a net of 900 makes the reader
+        do the subtraction to find out which way it went.
 
-      {charges !== 0 && (
-        <>
-          <dt className="text-ink-muted">{t('documents.chargesShort')}</dt>
-          <dd className="text-end font-mono tabular-nums">{charges.toFixed(2)}</dd>
-        </>
+        The sign is left to `Intl` rather than written in front of the figure. A
+        minus character of our own is a neutral run of its own to the bidirectional
+        algorithm, so in an Arabic document it was laid out on the far side of the
+        digits and read as a trailing sign. Handed a negative number, `Intl` formats
+        the whole thing as one run and it stays in front of the figure in both
+        directions.
+      */}
+      {discount !== 0 && (
+        <Line label={t('documents.discount')} value={moneyAlways(-Math.abs(discount))} />
       )}
 
-      <dt className="border-t border-line pt-1 font-semibold text-ink">
-        {t('documents.total')}
-      </dt>
-      <dd className="border-t border-line pt-1 text-end font-mono font-semibold tabular-nums text-ink">
-        {total.toFixed(2)}
-        {currency ? ` ${currency}` : ''}
-      </dd>
+      {/*
+        Ruled off only when something came off above it. The rule means "the lines
+        above add up to this", and drawn under a gross with no deduction beneath it
+        it would be a line ruled under a single figure to announce the same figure
+        again — which reads as a mistake rather than as arithmetic.
+
+        Shown either way, though. It is the line the tax is worked out on and the
+        line an auditor asks about: the same figure the API calls `taxable` and a
+        tax return calls the taxable value, which on a bill is the net.
+      */}
+      <Line label={t('documents.net')} value={moneyAlways(net)} ruled={discount !== 0} />
+
+      <Line label={t('documents.tax')} value={moneyAlways(tax)} />
+
+      {charges !== 0 && (
+        <Line label={t('documents.chargesShort')} value={moneyAlways(charges)} />
+      )}
+
+      {rounding !== 0 && (
+        <Line label={t('documents.rounding')} value={moneyAlways(rounding)} />
+      )}
+
+      <Line
+        label={t('documents.total')}
+        value={`${moneyAlways(total)}${currency ? ` ${currency}` : ''}`}
+        strong
+      />
     </dl>
+  );
+}
+
+/** One row of the ladder: a word on the left, a figure on the right. */
+function Line({
+  label,
+  value,
+  ruled = false,
+  strong = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  /** A hairline above, for a subtotal the lines above it add up to. */
+  readonly ruled?: boolean;
+  readonly strong?: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      <dt
+        className={clsx(
+          ruled && 'mt-1 border-t border-line pt-1',
+          strong
+            ? 'mt-1 border-t border-line pt-1 font-semibold text-ink'
+            : 'text-ink-muted',
+        )}
+      >
+        {label}
+      </dt>
+      <dd
+        className={clsx(
+          'text-end font-mono tabular-nums',
+          ruled && 'mt-1 border-t border-line pt-1',
+          strong && 'mt-1 border-t border-line pt-1 font-semibold text-ink',
+        )}
+      >
+        {value}
+      </dd>
+    </>
   );
 }
