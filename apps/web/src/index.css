@@ -435,8 +435,23 @@
   */
   .page-actions {
     @apply sticky bottom-0 z-20 -mx-3 flex flex-wrap items-center justify-end gap-2
-           border-t border-line bg-surface/95 px-3 py-3 backdrop-blur-sm sm:-mx-4
-           sm:px-4 lg:-mx-6 lg:px-6;
+           border-t border-line bg-surface px-3 py-3 sm:-mx-4 sm:px-4 lg:-mx-6
+           lg:px-6;
+
+    /*
+      Lifted off the form rather than laid on it. A sticky bar spends most of its
+      life over the middle of a long form, so it has to read as something in front
+      of the fields — at 95% opacity and with a rule only along its top edge it read
+      as a white band ruled across the form instead, with the label of the field
+      underneath ghosting through it. Opaque, and shadowed upwards so the edge it
+      covers is visibly an edge.
+
+      Opaque also means no `backdrop-filter`, which matters for more than the look:
+      a backdrop filter makes an element the containing block for every `fixed`
+      descendant, so a picker opened from inside this bar would measure its list
+      against the window and then be positioned from the bar's corner.
+    */
+    box-shadow: 0 -6px 16px -8px rgb(15 23 42 / 0.18);
   }
 
   /*

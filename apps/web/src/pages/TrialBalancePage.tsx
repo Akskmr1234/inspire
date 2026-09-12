@@ -108,8 +108,13 @@ export function TrialBalancePage(): React.JSX.Element {
                 {data.rows.map((row) => (
                   <tr key={row.ledgerId}>
                     <td>
-                      <span className="font-medium">{row.ledgerCode}</span>
-                      <span className="ms-2 text-ink-muted">{row.ledgerName}</span>
+                      {/* A row with a gap rather than a margin on an inline span: see
+                          `ProfitAndLossPage` — in Arabic the margin lands on the wrong
+                          side of the name and the code runs into it. */}
+                      <span className="flex flex-wrap items-baseline gap-2">
+                        <span className="font-medium">{row.ledgerCode}</span>
+                        <span className="text-ink-muted">{row.ledgerName}</span>
+                      </span>
                     </td>
                     <td className="text-ink-muted">
                       {row.groupCode} {row.groupName}

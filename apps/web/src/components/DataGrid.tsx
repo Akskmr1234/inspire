@@ -691,8 +691,12 @@ export function DataGrid<TRow>({
               {/*
                 The per-column filters do not print: on a sheet they are a row of
                 empty boxes under the headings, and nothing the reader can type in.
+
+                Nor are they drawn over an empty grid. A row of boxes above the
+                words "no documents in this range" offers a way to narrow nothing,
+                and reads as furniture the screen forgot to take away.
               */}
-              {!paging && (
+              {!paging && rows.length > 0 && (
                 <tr className="no-print">
                   {visible.map((column, index) => (
                     <th
@@ -717,7 +721,16 @@ export function DataGrid<TRow>({
                             }));
                             setClientPage(1);
                           }}
-                          className="w-full min-w-24 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                          /*
+                            `min-w-16`, not `min-w-24`. The filter box is the widest
+                            thing in a narrow column's heading, so its minimum became
+                            every column's minimum: at 96px plus padding, a ten-column
+                            report needed 1,120px and had 1,134px to live in, so the
+                            last column was shaved by a sliver — which reads as a
+                            rendering fault rather than as a table that scrolls. Four
+                            characters is what anybody types into one of these.
+                          */
+                          className="w-full min-w-16 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
                         />
                       )}
                     </th>

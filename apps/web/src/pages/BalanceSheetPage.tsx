@@ -73,7 +73,14 @@ export function BalanceSheetPage(): React.JSX.Element {
             what funds them on the other. Stacking them would obscure the single
             fact the statement exists to show, which is that the two sides agree.
           */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          {/*
+            `items-start` so the shorter side keeps its own height. Stretched to
+            match the taller column, a statement with three asset accounts and
+            twelve liabilities drew a card of empty white the depth of the page,
+            which reads as content that failed to load rather than as a side that
+            is simply shorter.
+          */}
+          <div className="grid items-start gap-4 lg:grid-cols-2">
             <Panel
               heading={t('reports.assets')}
               lines={data.assets}
@@ -158,8 +165,13 @@ function Panel({
                   className="border-t border-line transition-colors hover:bg-surface-2"
                 >
                   <td className="px-4 py-2 text-ink">
-                    <span className="font-medium">{line.ledgerCode}</span>
-                    <span className="ms-2 text-ink-muted">{line.ledgerName}</span>
+                    {/* A row with a gap rather than a margin on an inline span: see
+                        `ProfitAndLossPage` — in Arabic the margin lands on the wrong
+                        side of the name and the code runs into it. */}
+                    <span className="flex flex-wrap items-baseline gap-2">
+                      <span className="font-medium">{line.ledgerCode}</span>
+                      <span className="text-ink-muted">{line.ledgerName}</span>
+                    </span>
                   </td>
                   <td className="cell-numeric">{moneyAlways(line.amount)}</td>
                 </tr>

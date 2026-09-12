@@ -167,15 +167,20 @@ function EntryRows({
           className="px-3 py-2"
           style={{ paddingInlineStart: `${0.75 + depth * 1.25}rem` }}
         >
-          <span className={clsx('font-medium', !entry.isEnabled && 'line-through')}>
-            {entry.label}
-          </span>
-          <span className="ms-2 text-xs text-ink-subtle">{entry.code}</span>
-          {entry.isSystem && (
-            <span className="ms-2 rounded bg-surface-3 px-1.5 py-0.5 text-xs text-ink-muted">
-              {t('menuAdmin.system')}
+          {/* A row with a gap rather than margins on inline spans: see
+              `ProfitAndLossPage` — in Arabic the margin lands on the wrong side of
+              the neighbour and the two run together. */}
+          <span className="flex flex-wrap items-baseline gap-2">
+            <span className={clsx('font-medium', !entry.isEnabled && 'line-through')}>
+              {entry.label}
             </span>
-          )}
+            <span className="text-xs text-ink-subtle">{entry.code}</span>
+            {entry.isSystem && (
+              <span className="rounded bg-surface-3 px-1.5 py-0.5 text-xs text-ink-muted">
+                {t('menuAdmin.system')}
+              </span>
+            )}
+          </span>
         </td>
 
         <td className="px-3 py-2 text-ink-muted">

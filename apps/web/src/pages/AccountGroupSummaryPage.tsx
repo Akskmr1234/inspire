@@ -57,11 +57,14 @@ function GroupLabel({
 }: {
   readonly group: AccountGroupSummaryRow;
 }): React.JSX.Element {
+  // A row with a gap rather than margins on inline spans: see `ProfitAndLossPage` —
+  // in Arabic the margin lands on the wrong side of the name and the code runs into
+  // it.
   return (
-    <span className="whitespace-nowrap">
+    <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
       <span>{group.groupCode}</span>
-      <span className="ms-2">{group.groupName}</span>
-      <span className="ms-2 font-normal text-ink-subtle">({group.ledgerCount})</span>
+      <span>{group.groupName}</span>
+      <span className="font-normal text-ink-subtle">({group.ledgerCount})</span>
     </span>
   );
 }
@@ -263,9 +266,11 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
                           group.ledgers.map((ledger) => (
                             <tr key={ledger.ledgerId} className="animate-fade-in">
                               <td className="ps-9">
-                                <span className="font-medium">{ledger.ledgerCode}</span>
-                                <span className="ms-2 text-ink-muted">
-                                  {ledger.ledgerName}
+                                <span className="flex flex-wrap items-baseline gap-2">
+                                  <span className="font-medium">{ledger.ledgerCode}</span>
+                                  <span className="text-ink-muted">
+                                    {ledger.ledgerName}
+                                  </span>
                                 </span>
                               </td>
                               <td className="cell-numeric">
