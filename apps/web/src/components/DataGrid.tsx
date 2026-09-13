@@ -148,6 +148,8 @@ export function DataGrid<TRow>({
   const [frozen, setFrozen] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  /** Held while the arrangement is being written, so it cannot be written twice. */
+  const [saving, setSaving] = useState(false);
 
   // Columns the user is not entitled to never enter the arrangement at all, so they
   // cannot be turned on from the picker or restored by a stale saved layout.
@@ -357,14 +359,28 @@ export function DataGrid<TRow>({
   };
 
   const persist = async (): Promise<void> => {
-    await saveGridLayout(gridKey, {
-      order: visible.map((column) => column.key),
-      hidden: [...hidden],
-      sortKey,
-      sortDescending,
-      frozen,
-    });
+    setSaving(true);
 
+    try {
+      await saveGridLayout(gridKey, {
+        order: visible.map((column) => column.key),
+        hidden: [...hidden],
+        sortKey,
+        sortDescending,
+        frozen,
+      });
+    } finally {
+      setSaving(false);
+    }
+
+    /*
+      The picker closes on a save. Keeping the arrangement is the end of arranging
+      it, and a panel of checkboxes left standing over the list afterwards invites
+      the next click to be another column rather than the record somebody came for —
+      the confirmation below says the arrangement is kept, and the list is what
+      should be under it.
+    */
+    setShowPicker(false);
     setSaved(t('grid.layoutSaved'));
     window.setTimeout(() => setSaved(null), 2000);
   };
@@ -502,12 +518,28 @@ export function DataGrid<TRow>({
 
           {actions && <span aria-hidden="true" className="h-5 w-px bg-line" />}
 
+          {/*
+            Columns, then Save layout, then the rest. Arranging the columns and
+            keeping that arrangement are one task done in two steps, and the button
+            for the second step used to sit two buttons away from the first, past
+            Freeze and Export — so the arrangement was made and then lost, because
+            nothing beside the picker said it could be kept.
+          */}
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
             pressed={showPicker}
+            disabled={saving}
             title={t('grid.columnsHint')}
           >
             {t('grid.columns')}
+          </GridButton>
+
+          <GridButton
+            onClick={() => void persist()}
+            disabled={saving}
+            title={t('grid.saveLayoutHint')}
+          >
+            {t('grid.saveLayout')}
           </GridButton>
 
           {/* Freezing a column means nothing once the columns are gone. */}
@@ -523,9 +555,6 @@ export function DataGrid<TRow>({
 
           <GridButton onClick={exportCsv} title={t('grid.exportHint')}>
             {t('grid.exportCsv')}
-          </GridButton>
-          <GridButton onClick={() => void persist()} title={t('grid.saveLayoutHint')}>
-            {t('grid.saveLayout')}
           </GridButton>
           <GridButton
             onClick={() => void restoreDefaults()}

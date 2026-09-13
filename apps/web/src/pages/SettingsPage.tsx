@@ -11,7 +11,12 @@ import {
 } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { currentBranchId, type ApiError } from '@/lib/api';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import {
+  listMaster,
+  type CategorySummary,
+  type UnitSummary,
+  type WarehouseSummary,
+} from '@/lib/inventory';
 import { statesFor, TaxRegime } from '@/lib/states';
 import { useMoney } from '@/lib/money';
 import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
@@ -45,6 +50,16 @@ export function SettingsPage(): React.JSX.Element {
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
     queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+  });
+
+  const categories = useQuery<readonly CategorySummary[], ApiError>({
+    queryKey: ['categories', false],
+    queryFn: () => listMaster<CategorySummary>('categories', false),
+  });
+
+  const units = useQuery<readonly UnitSummary[], ApiError>({
+    queryKey: ['units', false],
+    queryFn: () => listMaster<UnitSummary>('units', false),
   });
 
   const states = statesFor(settings.taxRegime);
@@ -174,6 +189,45 @@ export function SettingsPage(): React.JSX.Element {
                 value: warehouse.id,
                 label: `${warehouse.code} — ${warehouse.name}`,
                 ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+              }))}
+            />
+          </Field>
+        </SettingsCard>
+
+        <SettingsCard
+          title={t('settings.productsTitle')}
+          hint={t('settings.productsHint')}
+        >
+          <Field
+            label={t('settings.defaultCategory')}
+            hint={t('settings.defaultCategoryHint')}
+          >
+            <SearchSelect
+              value={settings.defaultCategoryId}
+              onChange={(id) => settings.update({ defaultCategoryId: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('settings.defaultCategory')}
+              options={(categories.data ?? []).map((row) => ({
+                value: row.id,
+                label: `${row.code} — ${row.name}`,
+              }))}
+            />
+          </Field>
+
+          <Field
+            label={t('settings.defaultStockUnit')}
+            hint={t('settings.defaultStockUnitHint')}
+          >
+            <SearchSelect
+              value={settings.defaultStockUnitId}
+              onChange={(id) => settings.update({ defaultStockUnitId: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('settings.defaultStockUnit')}
+              options={(units.data ?? []).map((row) => ({
+                value: row.id,
+                label: `${row.code} — ${row.name}`,
               }))}
             />
           </Field>

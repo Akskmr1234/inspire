@@ -46,7 +46,10 @@ export function Field({
 }): React.JSX.Element {
   return (
     <div className={clsx('field', className)}>
-      <label htmlFor={htmlFor} className="field-label">
+      <label
+        htmlFor={htmlFor}
+        className={clsx('field-label', required && 'field-label-required')}
+      >
         {label}
         {required && (
           <span aria-hidden="true" className="field-required">

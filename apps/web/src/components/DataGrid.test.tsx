@@ -485,3 +485,50 @@ describe('a narrow-hidden column', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(rows.length);
   });
 });
+
+describe('keeping an arrangement', () => {
+  /*
+    Arranging the columns and keeping that arrangement are one task in two steps, so
+    the button for the second sits beside the first — and pressing it ends the task
+    rather than leaving a panel of checkboxes standing over the list.
+  */
+  it('offers Save layout next to Columns, not across the toolbar', () => {
+    render(grid());
+
+    const order = screen
+      .getAllByRole('button')
+      .map((button) => button.textContent?.trim() ?? '')
+      .filter((text) =>
+        ['Columns', 'Save layout', 'Freeze first', 'Export CSV', 'Reset'].includes(text),
+      );
+
+    expect(order).toEqual([
+      'Columns',
+      'Save layout',
+      'Freeze first',
+      'Export CSV',
+      'Reset',
+    ]);
+  });
+
+  it('shuts the column picker once the arrangement is kept', async () => {
+    const user = userEvent.setup();
+    render(grid());
+
+    const toggle = (): HTMLElement => screen.getByRole('button', { name: 'Columns' });
+
+    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+
+    await user.click(toggle());
+    expect(toggle().getAttribute('aria-pressed')).toBe('true');
+
+    await user.click(screen.getByRole('button', { name: 'Save layout' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Layout saved')).toBeTruthy();
+    });
+
+    // The toggle is back up, so the panel is down with it.
+    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+  });
+});

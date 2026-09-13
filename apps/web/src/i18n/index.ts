@@ -978,6 +978,14 @@ const en = {
       'Leave unset to use whichever warehouse the master marks as the default.',
     warehouseFromMaster: "The master's default",
     masterDefault: 'default',
+    productsTitle: 'New products',
+    productsHint:
+      'What a new product starts with, so a mandatory field is not asked twice.',
+    defaultCategory: 'Category a new product starts at',
+    defaultCategoryHint: 'Still mandatory — this only fills it in.',
+    defaultStockUnit: 'Stock unit a new product starts at',
+    defaultStockUnitHint: 'Still mandatory — this only fills it in.',
+    askEachTime: 'Ask each time',
     decimalsTitle: 'Decimal places',
     decimalsHintFirm:
       'How many places money is shown to. Set for the firm, because this sign-in is not scoped to a branch.',
@@ -2025,6 +2033,13 @@ const ar = {
       'اتركه فارغاً لاستخدام المستودع الافتراضي المحدد في البيانات الأساسية.',
     warehouseFromMaster: 'الافتراضي من البيانات الأساسية',
     masterDefault: 'افتراضي',
+    productsTitle: 'المنتجات الجديدة',
+    productsHint: 'ما يبدأ به المنتج الجديد، حتى لا يُسأل عن حقل إلزامي مرتين.',
+    defaultCategory: 'الفئة التي يبدأ بها المنتج الجديد',
+    defaultCategoryHint: 'تبقى إلزامية — هذا يملؤها فقط.',
+    defaultStockUnit: 'وحدة المخزون التي يبدأ بها المنتج الجديد',
+    defaultStockUnitHint: 'تبقى إلزامية — هذا يملؤها فقط.',
+    askEachTime: 'اسأل في كل مرة',
     decimalsTitle: 'المنازل العشرية',
     decimalsHintFirm:
       'عدد المنازل العشرية لعرض المبالغ. يُضبط للشركة لأن هذا الدخول غير مرتبط بفرع.',

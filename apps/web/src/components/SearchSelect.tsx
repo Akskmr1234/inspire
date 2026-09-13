@@ -428,3 +428,44 @@ export function SearchSelect({
     </>
   );
 }
+
+/**
+ * Chooses for somebody when there is nothing to choose between.
+ *
+ * A required picker that opens empty asks a question it already knows the answer
+ * to: a firm with one warehouse, one unit of measure or one tax head makes every
+ * new record wait on a dropdown with a single row in it. Where the master offers
+ * exactly one usable option, or names one as its default, the field starts there
+ * and the person filling the form is left to the fields that genuinely need them.
+ *
+ * Only ever fills a field that is empty. A choice already made — by the user, or
+ * by a record being edited — is never overwritten.
+ */
+export function useDefaultChoice(
+  value: string,
+  options: readonly SelectOption[],
+  onChange: (value: string) => void,
+  /** A value the master marks as its default, preferred over the only-one rule. */
+  preferred?: string,
+): void {
+  // Reduced to a string before it reaches the effect. The options are mapped fresh
+  // on every render, so depending on the array itself would re-run this constantly;
+  // depending on what it comes to does not.
+  const fallback = useMemo(() => {
+    const usable = options.filter(
+      (option) => option.disabled !== true && option.value !== '',
+    );
+
+    if (preferred !== undefined && usable.some((option) => option.value === preferred)) {
+      return preferred;
+    }
+
+    return usable.length === 1 ? (usable[0]?.value ?? '') : '';
+  }, [options, preferred]);
+
+  useEffect(() => {
+    if (value === '' && fallback !== '') {
+      onChange(fallback);
+    }
+  }, [value, fallback, onChange]);
+}
