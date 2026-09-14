@@ -62,22 +62,35 @@ export function ProfitAndLossPage(): React.JSX.Element {
       }
     >
       {(data) => (
-        <div className="max-w-2xl space-y-4">
-          <Section
-            heading={t('reports.income')}
-            lines={data.income}
-            total={data.totalIncome}
-            totalLabel={t('reports.totalIncome')}
-            currency={data.currency}
-          />
+        <div className="space-y-4">
+          {/*
+            Facing columns, as the balance sheet has. The statement used to be held
+            at `max-w-2xl` under a filter strip that spanned the screen, so the two
+            disagreed about where the page ended by most of half a metre — and the
+            reader's eye, running down a column of figures, fell off it. Side by
+            side the two halves fit the same width the filters do, and what the
+            period earned sits beside what it spent.
 
-          <Section
-            heading={t('reports.expenses')}
-            lines={data.expenses}
-            total={data.totalExpenses}
-            totalLabel={t('reports.totalExpenses')}
-            currency={data.currency}
-          />
+            `items-start`, because income and expenses rarely run to the same
+            number of accounts and the shorter one should stop where it stops.
+          */}
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <Section
+              heading={t('reports.income')}
+              lines={data.income}
+              total={data.totalIncome}
+              totalLabel={t('reports.totalIncome')}
+              currency={data.currency}
+            />
+
+            <Section
+              heading={t('reports.expenses')}
+              lines={data.expenses}
+              total={data.totalExpenses}
+              totalLabel={t('reports.totalExpenses')}
+              currency={data.currency}
+            />
+          </div>
 
           {/*
             A loss is stated as a loss, in red, not as a negative profit. An
@@ -140,9 +153,18 @@ function Section({
                   className="border-t border-line transition-colors hover:bg-surface-2"
                 >
                   <td className="px-4 py-2 text-ink">
-                    <span className="font-medium">{line.ledgerCode}</span>
-                    <span className="ms-2 text-ink-muted">{line.ledgerName}</span>
-                    <span className="ms-2 text-xs text-ink-subtle">{line.groupName}</span>
+                    {/* Laid out as a row with a gap, not inline spans with a logical
+                        margin. A margin on an inline box is placed at the start of its
+                        own fragment, and the bidirectional algorithm reorders fragments
+                        of Latin text inside an Arabic line — so in Arabic the gap landed
+                        on the far side of the name and the account code ran straight
+                        into it. Flex items are laid out in the container's direction and
+                        are not reordered, so the gap holds both ways. */}
+                    <span className="flex flex-wrap items-baseline gap-2">
+                      <span className="font-medium">{line.ledgerCode}</span>
+                      <span className="text-ink-muted">{line.ledgerName}</span>
+                      <span className="text-xs text-ink-subtle">{line.groupName}</span>
+                    </span>
                   </td>
                   <td className="cell-numeric">{moneyAlways(line.amount)}</td>
                 </tr>

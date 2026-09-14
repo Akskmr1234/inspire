@@ -200,7 +200,15 @@ export function ChequeCalendarPage(): React.JSX.Element {
               <p className="font-semibold text-ink">
                 {data.from} — {data.to}
               </p>
-              <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
+              {/*
+                Pairs, not cells. At `sm:grid-cols-3` the six children of three
+                label-and-figure pairs filled three columns two rows deep, so every
+                label ended up over the wrong figure: "Total payable" sat at the end
+                of the first row with its amount at the start of the second. The
+                track list is written in pairs — a label column and a figure column,
+                three of them across — so a pair can only ever wrap together.
+              */}
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 sm:grid-cols-[repeat(3,auto_1fr)]">
                 <dt className="text-ink-muted">{t('cheques.totalReceivable')}</dt>
                 <dd className="text-end font-mono tabular-nums">
                   {moneyAlways(data.totalReceivable)}

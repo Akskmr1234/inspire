@@ -86,7 +86,23 @@ describe('the add form', () => {
 
     const dialog = screen.getByRole('dialog');
 
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    /*
+      Modal is asserted by what it does, not by the hint it used to carry. The
+      dialog used to say `aria-modal="true"`, which asks a screen reader to ignore
+      the page behind it; Radix instead marks the page behind it hidden, which takes
+      it out of the accessibility tree whether or not the reader honours the hint.
+      The stronger of the two, so the test follows it.
+    */
+    const behind = [...document.body.children].filter(
+      (element) => !element.contains(dialog),
+    );
+
+    expect(behind.length).toBeGreaterThan(0);
+    expect(
+      behind.every((element) => element.getAttribute('aria-hidden') === 'true'),
+    ).toBe(true);
+
+    expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add' })).toBeTruthy();
   });
 

@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import '@/i18n';
 import { Modal } from '@/components/Modal';
-import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import {
+  SearchSelect,
+  useDefaultChoice,
+  type SelectOption,
+} from '@/components/SearchSelect';
 
 /*
   The picker that replaced every `<select>` reaching a master.
@@ -235,5 +239,60 @@ describe('opening it again', () => {
     // Without a click handler of its own the box took typing and showed nothing.
     await user.click(box);
     expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+});
+
+describe('a field that already knows its answer', () => {
+  /*
+    A required picker that opens empty asks a question it sometimes already knows the
+    answer to — a firm with one unit of measure, or one the firm has named in
+    Settings. What must not happen is it answering over the top of a choice somebody
+    has already made.
+  */
+  function Defaulted({
+    initial = '',
+    only = false,
+    preferred,
+  }: {
+    readonly initial?: string;
+    readonly only?: boolean;
+    readonly preferred?: string;
+  }): React.JSX.Element {
+    const [value, setValue] = useState(initial);
+    const list = only ? options.slice(0, 1) : options;
+
+    useDefaultChoice(value, list, setValue, preferred);
+
+    return <output>{value === '' ? 'nothing chosen' : value}</output>;
+  }
+
+  it('chooses the only option there is', () => {
+    render(<Defaulted only />);
+
+    expect(screen.getByRole('status').textContent).toBe('p1');
+  });
+
+  it('asks where there is more than one and no default is named', () => {
+    render(<Defaulted />);
+
+    expect(screen.getByRole('status').textContent).toBe('nothing chosen');
+  });
+
+  it('takes the default the firm named, out of many', () => {
+    render(<Defaulted preferred="p3" />);
+
+    expect(screen.getByRole('status').textContent).toBe('p3');
+  });
+
+  it('ignores a named default the master no longer offers', () => {
+    render(<Defaulted preferred="gone" />);
+
+    expect(screen.getByRole('status').textContent).toBe('nothing chosen');
+  });
+
+  it('never writes over a choice already made', () => {
+    render(<Defaulted initial="p2" only preferred="p3" />);
+
+    expect(screen.getByRole('status').textContent).toBe('p2');
   });
 });

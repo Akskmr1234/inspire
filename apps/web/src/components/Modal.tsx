@@ -1,7 +1,7 @@
+import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { IconClose } from '@/components/icons';
-import { useModalBehaviour } from '@/components/useModalBehaviour';
 
 /**
  * A form over the screen rather than above the list.
@@ -14,10 +14,15 @@ import { useModalBehaviour } from '@/components/useModalBehaviour';
  * fields cost nothing until they are asked for, and the whole content area is the
  * list.
  *
- * Written once here rather than per screen. It began as two identical copies in
- * the sales and purchase screens, and the third caller is what makes that a
- * component: the focus handling in `useModalBehaviour` is the part nobody
- * remembers to repeat, and a dialog missing it is one a keyboard cannot escape.
+ * Built on Radix rather than by hand. The markup here was always the easy half; the
+ * hard half was a hundred and twenty lines of focus management — move focus in, cycle
+ * Tab within, put it back on whatever opened the dialog, lock the body's scroll, and
+ * decide what Escape means when a picker inside the dialog is also listening for it.
+ * All of that is behaviour with a correct answer that somebody else maintains, and
+ * every one of those lines was a line that could be wrong without looking wrong.
+ *
+ * The props are unchanged, so the fifteen screens that open one of these did not
+ * have to learn anything.
  */
 export function Modal({
   title,
@@ -35,48 +40,57 @@ export function Modal({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const panel = useModalBehaviour(onClose);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/50 backdrop-blur-[2px] sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      {/*
-        `tabIndex={-1}` so the panel itself can take focus while a document is still
-        loading and has no control to give it to yet.
+    /*
+      Always open: this component is mounted when the dialog should exist and
+      unmounted when it should not, which is how every caller already uses it.
+      `onOpenChange` therefore only ever fires to close.
+    */
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-950/50 backdrop-blur-[2px]">
+          {/*
+            The panel is inside the overlay so the two scroll as one: a document
+            taller than the window is scrolled by dragging anywhere over the dim,
+            not only over the card.
+          */}
+          <div className="flex min-h-full items-start justify-center sm:p-6">
+            <Dialog.Content
+              aria-describedby={undefined}
+              /*
+                Radix returns focus to the opener by itself, and would do it after
+                our own `onClose` has already re-rendered the list underneath. The
+                opener is still there — these dialogs are opened from a toolbar
+                button or a row that survives the close — so the default is right and
+                only needs to not fight the animation.
+              */
+              className={clsx(
+                'animate-rise flex min-h-full w-full flex-col gap-4 border-line bg-surface p-4',
+                'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-5',
+                size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <Dialog.Title className="truncate text-lg font-semibold tracking-tight text-ink">
+                  {title}
+                </Dialog.Title>
 
-        Full height and square-cornered on a phone, where a floating card with the
-        page showing round its edges is a worse use of 390px than a sheet.
-      */}
-      <div
-        ref={panel as React.RefObject<HTMLDivElement>}
-        tabIndex={-1}
-        className={clsx(
-          'animate-rise flex min-h-full w-full flex-col gap-4 border-line bg-surface p-4',
-          'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-5',
-          size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
-        )}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="truncate text-lg font-semibold tracking-tight text-ink">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-icon"
-            aria-label={t('common.close')}
-            title={t('common.close')}
-          >
-            <IconClose />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+                <Dialog.Close
+                  className="btn-icon"
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                >
+                  <IconClose />
+                </Dialog.Close>
+              </div>
+
+              {children}
+            </Dialog.Content>
+          </div>
+        </Dialog.Overlay>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

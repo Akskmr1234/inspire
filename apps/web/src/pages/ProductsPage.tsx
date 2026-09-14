@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
-import { SearchSelect } from '@/components/SearchSelect';
+import { SearchSelect, useDefaultChoice } from '@/components/SearchSelect';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
@@ -18,6 +18,7 @@ import {
 } from '@/lib/inventory';
 import { createProduct, listProducts, type ProductSummary } from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
+import { useSettings } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
 
 /**
@@ -56,15 +57,20 @@ export function ProductsPage(): React.JSX.Element {
 
   const mutation = useMutation<string, ApiError, () => Promise<string>>({
     mutationFn: (action) => action(),
-    onSuccess: async (id) => {
+    onSuccess: async () => {
       setError(null);
       setAdding(false);
-      await queryClient.invalidateQueries({ queryKey: ['products'] });
 
-      // Straight into the editor. A product created from the minimum fields still
-      // needs its rates and its levels, and making somebody find it again first is
-      // how a master fills up with half-entered records.
-      setEditingId(id);
+      /*
+        Back to the list, as every other master here does on a save.
+
+        This used to open the new product's editor, on the reasoning that a product
+        created from the minimum fields still wants its rates and its levels. That
+        is true, and it is still one click away — but it made this one master behave
+        unlike all the others, so somebody adding six products in a row was thrown
+        into an editor and had to find their way back out five times.
+      */
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (failure) => setError(failure.detail || failure.code),
   });
@@ -182,8 +188,18 @@ export function ProductsPage(): React.JSX.Element {
     reaches.
   */
   const controls = (
+    /*
+      A row that fills its width, rather than a grid of equal columns.
+
+      `filter-grid` lays out tracks of a fixed minimum and fits as many as it can,
+      so four controls in a row with room for six left a column and a half of empty
+      card at the end — on the one master where the search box is what the screen is
+      for, and where a product code, a description and a barcode all have to fit in
+      it. Here the box takes whatever the other three do not, and the buttons are
+      held at the end, so the card is full at every width.
+    */
     <form
-      className="filter-grid"
+      className="toolbar"
       onSubmit={(event) => {
         event.preventDefault();
         setApplied(search);
@@ -197,10 +213,10 @@ export function ProductsPage(): React.JSX.Element {
         value={search}
         onChange={setSearch}
         placeholder={t('products.searchPlaceholder')}
-        className="sm:col-span-2"
+        className="min-w-56 flex-1"
       />
 
-      <Field label={t('products.category')}>
+      <Field label={t('products.category')} className="w-52 shrink-0">
         <SearchSelect
           value={categoryId}
           onChange={setCategoryId}
@@ -219,9 +235,10 @@ export function ProductsPage(): React.JSX.Element {
         label={t('masters.includeWithdrawn')}
         checked={includeInactive}
         onChange={setIncludeInactive}
+        className="shrink-0"
       />
 
-      <div className="flex items-center gap-2">
+      <div className="ms-auto flex shrink-0 items-center gap-2">
         <button type="submit" className="btn-primary btn-sm">
           {t('products.find')}
         </button>
@@ -340,6 +357,35 @@ function AddProduct({
   const [brandId, setBrandId] = useState('');
   const [itemType, setItemType] = useState('1');
 
+  const categoryOptions = useMemo(
+    () =>
+      categories.map((row) => ({
+        value: row.id,
+        label: `${row.code} — ${row.name}`,
+        ...(row.parentName ? { detail: row.parentName } : {}),
+      })),
+    [categories],
+  );
+
+  const unitOptions = useMemo(
+    () =>
+      (units.data ?? []).map((row) => ({
+        value: row.id,
+        label: `${row.code} — ${row.name}`,
+      })),
+    [units.data],
+  );
+
+  /*
+    The firm's own answer where it has set one in Settings, and otherwise the only
+    one there is. A mandatory field holding the right answer already is one fewer
+    dropdown between somebody and the product they came to add.
+  */
+  const { defaultCategoryId, defaultStockUnitId } = useSettings();
+
+  useDefaultChoice(categoryId, categoryOptions, setCategoryId, defaultCategoryId);
+  useDefaultChoice(stockUnitId, unitOptions, setStockUnitId, defaultStockUnitId);
+
   const draft = { code, description, categoryId, stockUnitId };
 
   const { errors, submit } = useValidation<typeof draft>((values) =>
@@ -418,11 +464,7 @@ function AddProduct({
           <SearchSelect
             value={categoryId}
             onChange={setCategoryId}
-            options={categories.map((row) => ({
-              value: row.id,
-              label: `${row.code} — ${row.name}`,
-              ...(row.parentName ? { detail: row.parentName } : {}),
-            }))}
+            options={categoryOptions}
             invalid={errors['categoryId'] !== undefined}
             label={t('products.category')}
             placeholder={t('products.choose')}
@@ -433,10 +475,7 @@ function AddProduct({
           <SearchSelect
             value={stockUnitId}
             onChange={setStockUnitId}
-            options={(units.data ?? []).map((row) => ({
-              value: row.id,
-              label: `${row.code} — ${row.name}`,
-            }))}
+            options={unitOptions}
             invalid={errors['stockUnitId'] !== undefined}
             label={t('products.stockUnit')}
             placeholder={t('products.choose')}

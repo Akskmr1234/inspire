@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { labelFor, type Menu, type MenuEntry } from '@/lib/menu';
 import { iconFor } from '@/components/icons';
 
@@ -102,7 +102,6 @@ export function CommandPalette({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const panel = useModalBehaviour(onClose);
 
   const [needle, setNeedle] = useState('');
   const [active, setActive] = useState(0);
@@ -126,9 +125,9 @@ export function CommandPalette({
   useEffect(() => setActive(0), [needle]);
 
   // Keeps the highlighted row in view when it is reached with the arrow keys.
-  // Guarded like `checkVisibility` in `useModalBehaviour`: the method is optional in
-  // the DOM specifications and absent in jsdom, and a palette that threw rather than
-  // scrolled would be a worse trade than one that occasionally does not scroll.
+  // Guarded because the method is optional in the DOM specifications and absent in
+  // jsdom, and a palette that threw rather than scrolled would be a worse trade than
+  // one that occasionally does not scroll.
   useEffect(() => {
     const row = list.current?.querySelector(`[data-index="${active}"]`);
 
@@ -147,124 +146,129 @@ export function CommandPalette({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-950/50 p-4 backdrop-blur-[2px] sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('palette.title')}
-    >
-      {/*
-        Held a little above the middle rather than centred. A palette that grows
-        downwards as it fills should not also move, and the eye is already at the top
-        of the screen where the search began.
-      */}
-      <div
-        ref={panel as React.RefObject<HTMLDivElement>}
-        tabIndex={-1}
-        className="animate-drop mt-[8vh] w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-surface shadow-float outline-none"
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            aria-hidden="true"
-            className="size-4 shrink-0 text-ink-subtle"
+    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-950/50 p-4 backdrop-blur-[2px] sm:p-6">
+          {/*
+            Held a little above the middle rather than centred. A palette that grows
+            downwards as it fills should not also move, and the eye is already at the
+            top of the screen where the search began.
+          */}
+          <Dialog.Content
+            aria-describedby={undefined}
+            /*
+              The input below carries `autoFocus`, and it is the right thing to focus:
+              a palette exists to be typed into. Letting Radix focus the panel first
+              would put the caret nowhere for a frame.
+            */
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            className="animate-drop mt-[8vh] w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-surface shadow-float outline-none"
           >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.6-3.6" />
-          </svg>
-
-          <input
-            // eslint-disable-next-line jsx-a11y/no-autofocus
-            autoFocus
-            type="text"
-            role="combobox"
-            aria-expanded
-            aria-controls="palette-list"
-            aria-label={t('palette.title')}
-            value={needle}
-            placeholder={t('palette.placeholder')}
-            onChange={(event) => setNeedle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                setActive((index) => Math.min(index + 1, shown.length - 1));
-              } else if (event.key === 'ArrowUp') {
-                event.preventDefault();
-                setActive((index) => Math.max(index - 1, 0));
-              } else if (event.key === 'Enter') {
-                event.preventDefault();
-                go(shown[active]);
-              }
-            }}
-            className="w-full border-0 bg-transparent py-3.5 text-sm text-ink outline-none placeholder:text-ink-subtle"
-          />
-        </div>
-
-        <div
-          ref={list}
-          id="palette-list"
-          role="listbox"
-          className="max-h-80 overflow-y-auto p-2"
-        >
-          {shown.length === 0 && (
-            <p className="px-3 py-6 text-center text-sm text-ink-muted">
-              {t('palette.nothing')}
-            </p>
-          )}
-
-          {shown.map((destination, index) => {
-            const Icon = iconFor(destination.icon, destination.route);
-
-            return (
-              <button
-                key={destination.id}
-                type="button"
-                role="option"
-                data-index={index}
-                aria-selected={index === active}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => go(destination)}
-                className={clsx(
-                  'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors',
-                  index === active
-                    ? 'bg-brand-50 dark:bg-brand-500/15'
-                    : 'bg-transparent',
-                )}
+            <Dialog.Title className="sr-only">{t('palette.title')}</Dialog.Title>
+            <div className="flex items-center gap-2 border-b border-line px-4">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                aria-hidden="true"
+                className="size-4 shrink-0 text-ink-subtle"
               >
-                <Icon />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink">
-                    {destination.label}
-                  </span>
-                  {destination.path && (
-                    <span className="block truncate text-xs text-ink-muted">
-                      {destination.path}
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.6-3.6" />
+              </svg>
+
+              <input
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+                type="text"
+                role="combobox"
+                aria-expanded
+                aria-controls="palette-list"
+                aria-label={t('palette.title')}
+                value={needle}
+                placeholder={t('palette.placeholder')}
+                onChange={(event) => setNeedle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setActive((index) => Math.min(index + 1, shown.length - 1));
+                  } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setActive((index) => Math.max(index - 1, 0));
+                  } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    go(shown[active]);
+                  }
+                }}
+                className="w-full border-0 bg-transparent py-3.5 text-sm text-ink outline-none placeholder:text-ink-subtle"
+              />
+            </div>
+
+            <div
+              ref={list}
+              id="palette-list"
+              role="listbox"
+              className="max-h-80 overflow-y-auto p-2"
+            >
+              {shown.length === 0 && (
+                <p className="px-3 py-6 text-center text-sm text-ink-muted">
+                  {t('palette.nothing')}
+                </p>
+              )}
+
+              {shown.map((destination, index) => {
+                const Icon = iconFor(destination.icon, destination.route);
+
+                return (
+                  <button
+                    key={destination.id}
+                    type="button"
+                    role="option"
+                    data-index={index}
+                    aria-selected={index === active}
+                    onMouseEnter={() => setActive(index)}
+                    onClick={() => go(destination)}
+                    className={clsx(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors',
+                      index === active
+                        ? 'bg-brand-50 dark:bg-brand-500/15'
+                        : 'bg-transparent',
+                    )}
+                  >
+                    <Icon />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink">
+                        {destination.label}
+                      </span>
+                      {destination.path && (
+                        <span className="block truncate text-xs text-ink-muted">
+                          {destination.path}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                {index === active && (
-                  <span className="shrink-0 text-xs text-ink-subtle">↵</span>
-                )}
-              </button>
-            );
-          })}
+                    {index === active && (
+                      <span className="shrink-0 text-xs text-ink-subtle">↵</span>
+                    )}
+                  </button>
+                );
+              })}
 
-          {total > shown.length && (
-            <p className="px-3 pt-2 text-xs text-ink-subtle">
-              {t('palette.more', { count: total - shown.length })}
+              {total > shown.length && (
+                <p className="px-3 pt-2 text-xs text-ink-subtle">
+                  {t('palette.more', { count: total - shown.length })}
+                </p>
+              )}
+            </div>
+
+            <p className="border-t border-line px-4 py-2 text-xs text-ink-subtle">
+              {t('palette.hint')}
             </p>
-          )}
-        </div>
-
-        <p className="border-t border-line px-4 py-2 text-xs text-ink-subtle">
-          {t('palette.hint')}
-        </p>
-      </div>
-    </div>
+          </Dialog.Content>
+        </Dialog.Overlay>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

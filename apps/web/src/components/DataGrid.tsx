@@ -148,6 +148,8 @@ export function DataGrid<TRow>({
   const [frozen, setFrozen] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  /** Held while the arrangement is being written, so it cannot be written twice. */
+  const [saving, setSaving] = useState(false);
 
   // Columns the user is not entitled to never enter the arrangement at all, so they
   // cannot be turned on from the picker or restored by a stale saved layout.
@@ -357,14 +359,28 @@ export function DataGrid<TRow>({
   };
 
   const persist = async (): Promise<void> => {
-    await saveGridLayout(gridKey, {
-      order: visible.map((column) => column.key),
-      hidden: [...hidden],
-      sortKey,
-      sortDescending,
-      frozen,
-    });
+    setSaving(true);
 
+    try {
+      await saveGridLayout(gridKey, {
+        order: visible.map((column) => column.key),
+        hidden: [...hidden],
+        sortKey,
+        sortDescending,
+        frozen,
+      });
+    } finally {
+      setSaving(false);
+    }
+
+    /*
+      The picker closes on a save. Keeping the arrangement is the end of arranging
+      it, and a panel of checkboxes left standing over the list afterwards invites
+      the next click to be another column rather than the record somebody came for —
+      the confirmation below says the arrangement is kept, and the list is what
+      should be under it.
+    */
+    setShowPicker(false);
     setSaved(t('grid.layoutSaved'));
     window.setTimeout(() => setSaved(null), 2000);
   };
@@ -502,12 +518,28 @@ export function DataGrid<TRow>({
 
           {actions && <span aria-hidden="true" className="h-5 w-px bg-line" />}
 
+          {/*
+            Columns, then Save layout, then the rest. Arranging the columns and
+            keeping that arrangement are one task done in two steps, and the button
+            for the second step used to sit two buttons away from the first, past
+            Freeze and Export — so the arrangement was made and then lost, because
+            nothing beside the picker said it could be kept.
+          */}
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
             pressed={showPicker}
+            disabled={saving}
             title={t('grid.columnsHint')}
           >
             {t('grid.columns')}
+          </GridButton>
+
+          <GridButton
+            onClick={() => void persist()}
+            disabled={saving}
+            title={t('grid.saveLayoutHint')}
+          >
+            {t('grid.saveLayout')}
           </GridButton>
 
           {/* Freezing a column means nothing once the columns are gone. */}
@@ -523,9 +555,6 @@ export function DataGrid<TRow>({
 
           <GridButton onClick={exportCsv} title={t('grid.exportHint')}>
             {t('grid.exportCsv')}
-          </GridButton>
-          <GridButton onClick={() => void persist()} title={t('grid.saveLayoutHint')}>
-            {t('grid.saveLayout')}
           </GridButton>
           <GridButton
             onClick={() => void restoreDefaults()}
@@ -691,8 +720,12 @@ export function DataGrid<TRow>({
               {/*
                 The per-column filters do not print: on a sheet they are a row of
                 empty boxes under the headings, and nothing the reader can type in.
+
+                Nor are they drawn over an empty grid. A row of boxes above the
+                words "no documents in this range" offers a way to narrow nothing,
+                and reads as furniture the screen forgot to take away.
               */}
-              {!paging && (
+              {!paging && rows.length > 0 && (
                 <tr className="no-print">
                   {visible.map((column, index) => (
                     <th
@@ -717,7 +750,16 @@ export function DataGrid<TRow>({
                             }));
                             setClientPage(1);
                           }}
-                          className="w-full min-w-24 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+                          /*
+                            `min-w-16`, not `min-w-24`. The filter box is the widest
+                            thing in a narrow column's heading, so its minimum became
+                            every column's minimum: at 96px plus padding, a ten-column
+                            report needed 1,120px and had 1,134px to live in, so the
+                            last column was shaved by a sliver — which reads as a
+                            rendering fault rather than as a table that scrolls. Four
+                            characters is what anybody types into one of these.
+                          */
+                          className="w-full min-w-16 rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs font-normal text-ink normal-case outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
                         />
                       )}
                     </th>
@@ -742,7 +784,15 @@ export function DataGrid<TRow>({
                       <td
                         key={column.key}
                         className={clsx(
-                          'py-1.5',
+                          // `overflow-wrap: anywhere` so no single token can set a
+                          // column's width. A table sizes a column to the longest
+                          // thing in it that cannot be broken, and the codes here are
+                          // routinely one unbroken run — a barcode, a serial number,
+                          // an SKU. One of those in a description column stretched it
+                          // by a hundred and eighty pixels and sent the whole table
+                          // into its scrollbar, on a screen where every column had
+                          // fitted a moment earlier.
+                          'py-1.5 [overflow-wrap:anywhere]',
                           column.numeric &&
                             'text-end font-mono whitespace-nowrap tabular-nums',
                           // An actions column, kept against the end of the row so
@@ -981,8 +1031,19 @@ function CardList<TRow>({
     <ul className="space-y-2">
       {rows.map((row) => (
         <li key={rowKey(row)} className="card card-body space-y-3 py-3">
+          {/*
+            `overflow-wrap: anywhere`, not `break-word`, on both halves of a card.
+
+            A card is a grid of two tracks, and a track sizes itself to the longest
+            thing that cannot be broken. Codes in this application are routinely one
+            unbroken run — a barcode, a serial number, an SKU — so a fifty-character
+            one with nowhere to wrap pushed the card two hundred pixels past the
+            screen. `break-word` would wrap the text but still report the whole token
+            as the track's minimum; `anywhere` is the one that also lets the track
+            shrink, which is what a card on a phone needs.
+          */}
           {lead && (
-            <div className="text-sm font-semibold text-ink">
+            <div className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">
               {lead.render ? lead.render(row) : (lead.value(row) ?? '')}
             </div>
           )}
@@ -1003,7 +1064,7 @@ function CardList<TRow>({
                   </dt>
                   <dd
                     className={clsx(
-                      'min-w-0 text-end text-ink',
+                      'min-w-0 text-end text-ink [overflow-wrap:anywhere]',
                       column.numeric && 'font-mono tabular-nums',
                     )}
                   >

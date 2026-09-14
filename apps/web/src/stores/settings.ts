@@ -42,6 +42,18 @@ export interface AppSettings {
    * own or the user prefers another.
    */
   readonly preferredWarehouseId: string;
+  /**
+   * The category and the unit of measure a new product starts at.
+   *
+   * A firm that sells one kind of thing enters the same category on every product
+   * it ever adds, and the same unit on most of them. Both stay mandatory — the
+   * server needs them and the form still marks them — but a mandatory field that
+   * already holds the right answer is one fewer dropdown between somebody and the
+   * product they came to add. Blank means "ask", which is what a firm with a real
+   * catalogue wants.
+   */
+  readonly defaultCategoryId: string;
+  readonly defaultStockUnitId: string;
   /** How many rows a paged list holds. */
   readonly pageSize: number;
   /**
@@ -82,6 +94,8 @@ const DEFAULTS: AppSettings = {
   taxRates: VAT_RATES,
   defaultTaxRate: 5,
   preferredWarehouseId: '',
+  defaultCategoryId: '',
+  defaultStockUnitId: '',
   pageSize: 25,
   decimals: 2,
   decimalsByBranch: {},
@@ -125,6 +139,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
       taxRates: patch.taxRates ?? get().taxRates,
       defaultTaxRate: patch.defaultTaxRate ?? get().defaultTaxRate,
       preferredWarehouseId: patch.preferredWarehouseId ?? get().preferredWarehouseId,
+      defaultCategoryId: patch.defaultCategoryId ?? get().defaultCategoryId,
+      defaultStockUnitId: patch.defaultStockUnitId ?? get().defaultStockUnitId,
       pageSize: patch.pageSize ?? get().pageSize,
       decimals: patch.decimals ?? get().decimals,
       decimalsByBranch: patch.decimalsByBranch ?? get().decimalsByBranch,

@@ -1174,12 +1174,17 @@ function StockDocumentView({
                 <td className="cell-numeric">{line.rate === 0 ? '' : trim(line.rate)}</td>
                 {batchedDocument && (
                   <td className="px-3 py-1.5">
-                    {line.batchNumber ?? ''}
-                    {line.expiresOn && (
-                      <span className="ms-2 text-xs text-ink-muted">
-                        {t('stock.expiresOn')} {line.expiresOn}
-                      </span>
-                    )}
+                    {/* A row with a gap rather than a margin on an inline span: see
+                        `ProfitAndLossPage` — in Arabic the margin lands on the wrong
+                        side and the batch number runs into its expiry. */}
+                    <span className="flex flex-wrap items-baseline gap-2">
+                      <span>{line.batchNumber ?? ''}</span>
+                      {line.expiresOn && (
+                        <span className="text-xs text-ink-muted">
+                          {t('stock.expiresOn')} {line.expiresOn}
+                        </span>
+                      )}
+                    </span>
                   </td>
                 )}
                 <td className="px-3 py-1.5">{line.remarks ?? ''}</td>
