@@ -532,3 +532,48 @@ describe('keeping an arrangement', () => {
     expect(toggle().getAttribute('aria-pressed')).toBe('false');
   });
 });
+
+describe('a value with nowhere to wrap', () => {
+  /*
+    Codes in this application are routinely one unbroken run — a barcode, a serial
+    number, an SKU. A table sizes a column to the longest unbreakable thing in it and
+    a card's grid track does the same, so one of those with no wrapping rule pushed a
+    phone card two hundred pixels past the screen and sent three tables that had
+    fitted a moment earlier into their scrollbars.
+  */
+  const long = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOP';
+
+  const oneRow: readonly Row[] = [{ id: '1', code: long, name: long, amount: 1 }];
+
+  it('lets a table cell break the token rather than widen the column', () => {
+    render(
+      <DataGrid
+        gridKey="wrap"
+        rows={oneRow}
+        columns={columns}
+        rowKey={(row) => row.id}
+        emptyMessage="none"
+      />,
+    );
+
+    const cell = screen.getAllByRole('cell')[0];
+    expect(cell?.className).toContain('[overflow-wrap:anywhere]');
+  });
+
+  it('lets a card break it too, where there is least room for it', () => {
+    setMatchingMedia('(max-width: 639px)'); // the cards, not the table
+    render(
+      <DataGrid
+        gridKey="wrap-card"
+        rows={oneRow}
+        columns={columns}
+        rowKey={(row) => row.id}
+        emptyMessage="none"
+      />,
+    );
+
+    for (const value of screen.getAllByRole('definition')) {
+      expect(value.className).toContain('[overflow-wrap:anywhere]');
+    }
+  });
+});

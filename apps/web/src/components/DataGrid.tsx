@@ -784,7 +784,15 @@ export function DataGrid<TRow>({
                       <td
                         key={column.key}
                         className={clsx(
-                          'py-1.5',
+                          // `overflow-wrap: anywhere` so no single token can set a
+                          // column's width. A table sizes a column to the longest
+                          // thing in it that cannot be broken, and the codes here are
+                          // routinely one unbroken run — a barcode, a serial number,
+                          // an SKU. One of those in a description column stretched it
+                          // by a hundred and eighty pixels and sent the whole table
+                          // into its scrollbar, on a screen where every column had
+                          // fitted a moment earlier.
+                          'py-1.5 [overflow-wrap:anywhere]',
                           column.numeric &&
                             'text-end font-mono whitespace-nowrap tabular-nums',
                           // An actions column, kept against the end of the row so
@@ -1023,8 +1031,19 @@ function CardList<TRow>({
     <ul className="space-y-2">
       {rows.map((row) => (
         <li key={rowKey(row)} className="card card-body space-y-3 py-3">
+          {/*
+            `overflow-wrap: anywhere`, not `break-word`, on both halves of a card.
+
+            A card is a grid of two tracks, and a track sizes itself to the longest
+            thing that cannot be broken. Codes in this application are routinely one
+            unbroken run — a barcode, a serial number, an SKU — so a fifty-character
+            one with nowhere to wrap pushed the card two hundred pixels past the
+            screen. `break-word` would wrap the text but still report the whole token
+            as the track's minimum; `anywhere` is the one that also lets the track
+            shrink, which is what a card on a phone needs.
+          */}
           {lead && (
-            <div className="text-sm font-semibold text-ink">
+            <div className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">
               {lead.render ? lead.render(row) : (lead.value(row) ?? '')}
             </div>
           )}
@@ -1045,7 +1064,7 @@ function CardList<TRow>({
                   </dt>
                   <dd
                     className={clsx(
-                      'min-w-0 text-end text-ink',
+                      'min-w-0 text-end text-ink [overflow-wrap:anywhere]',
                       column.numeric && 'font-mono tabular-nums',
                     )}
                   >
