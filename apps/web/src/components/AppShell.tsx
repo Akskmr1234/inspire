@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import i18next from '@/i18n';
@@ -9,7 +10,6 @@ import type { ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { CommandPalette, opensPalette } from '@/components/CommandPalette';
-import { useModalBehaviour } from '@/components/useModalBehaviour';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import {
   IconChevron,
@@ -105,9 +105,9 @@ export function AppShell(): React.JSX.Element {
     return () => query.removeEventListener('change', onChange);
   }, []);
 
-  // Escape, the scroll lock and the focus handling all live in `useModalBehaviour`,
-  // which the drawer component below calls — it mounts only while the drawer is
-  // open, so the hook's own mount/unmount is the drawer's lifetime.
+  // Escape, the scroll lock and the focus handling are Radix's, in the drawer
+  // component below — it mounts only while the drawer is open, so its own
+  // mount and unmount are the drawer's lifetime.
 
   const changeLanguage = async (next: Language): Promise<void> => {
     setLanguage(next);
@@ -348,9 +348,12 @@ export function AppShell(): React.JSX.Element {
  * The navigation as a drawer, with the backdrop that dismisses it.
  *
  * A component of its own rather than markup inline in the shell, because it is
- * mounted only while open — which is what lets `useModalBehaviour` treat its own
- * mount and unmount as the drawer opening and closing, and so move focus in and
- * hand it back afterwards.
+ * mounted only while open — so its own mount and unmount are the drawer opening and
+ * closing, which is what `Dialog.Root open` reads.
+ *
+ * A sheet is a dialog: it takes the screen, the page behind it should not be
+ * reachable while it is there, Escape should shut it and focus should come back to
+ * whatever opened it. All of that is Radix's now rather than a hundred lines here.
  */
 function NavDrawer({
   onClose,
@@ -360,39 +363,28 @@ function NavDrawer({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const panel = useModalBehaviour(onClose);
 
   return (
-    <div className="no-print fixed inset-0 z-50 lg:hidden">
-      <button
-        type="button"
-        aria-label={t('nav.closeMenu')}
-        onClick={onClose}
-        className="absolute inset-0 animate-fade-in bg-slate-950/50 backdrop-blur-[2px]"
-      />
+    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="no-print fixed inset-0 z-50 animate-fade-in bg-slate-950/50 backdrop-blur-[2px] lg:hidden" />
 
-      <aside
-        ref={panel as React.RefObject<HTMLElement>}
-        tabIndex={-1}
-        className="absolute inset-y-0 start-0 flex w-[17rem] max-w-[85vw] animate-sheet-in flex-col border-e border-line bg-surface shadow-float outline-none"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('nav.menu')}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-line pe-2">
-          <Brand collapsed={false} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-icon"
-            aria-label={t('nav.closeMenu')}
-          >
-            <IconClose />
-          </button>
-        </div>
-        {children}
-      </aside>
-    </div>
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="no-print fixed inset-y-0 start-0 z-50 flex w-[17rem] max-w-[85vw] animate-sheet-in flex-col border-e border-line bg-surface shadow-float outline-none lg:hidden"
+        >
+          <Dialog.Title className="sr-only">{t('nav.menu')}</Dialog.Title>
+
+          <div className="flex items-center justify-between gap-2 border-b border-line pe-2">
+            <Brand collapsed={false} />
+            <Dialog.Close className="btn-icon" aria-label={t('nav.closeMenu')}>
+              <IconClose />
+            </Dialog.Close>
+          </div>
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

@@ -1,5 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 
@@ -27,32 +27,6 @@ export interface SelectOption {
 
 /** How many matches the list draws at once. */
 const VISIBLE_LIMIT = 60;
-
-/** Where the popup sits, in viewport coordinates, ready to be handed to CSS. */
-interface Anchor {
-  /** Set when the list hangs below the field; `bottom` is set instead when above. */
-  readonly top: number | undefined;
-  readonly bottom: number | undefined;
-  readonly left: number;
-  readonly width: number;
-  /** As much height as the side it opened towards can give it. */
-  readonly maxHeight: number;
-}
-
-/** How far the list keeps off the edge of the window. */
-const EDGE = 8;
-
-/** The gap between the field and its list. */
-const GAP = 4;
-
-/** Narrower than this and a two-line row with a figure on the end stops fitting. */
-const MIN_WIDTH = 240;
-
-/** Taller than this and the list is a page rather than a list. */
-const MAX_HEIGHT = 256;
-
-/** Shorter than this and the list is not worth opening; it scrolls instead. */
-const MIN_HEIGHT = 120;
 
 function matches(option: SelectOption, needle: string): boolean {
   if (needle === '') {
@@ -122,10 +96,8 @@ export function SearchSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const [anchor, setAnchor] = useState<Anchor | null>(null);
 
   const input = useRef<HTMLInputElement>(null);
-  const popup = useRef<HTMLDivElement>(null);
 
   const selected = options.find((option) => option.value === value);
 
@@ -142,91 +114,6 @@ export function SearchSelect({
       ? options.length
       : options.filter((option) => matches(option, needle)).length;
   }, [options, query]);
-
-  // Measured rather than laid out, so the list escapes whatever `overflow` the
-  // control happens to be sitting inside. Recomputed on every scroll and resize
-  // while open: a page that scrolls under a popup pinned to the viewport would
-  // otherwise leave it hanging over the wrong row.
-  useLayoutEffect(() => {
-    if (!open) {
-      setAnchor(null);
-      return;
-    }
-
-    const place = (): void => {
-      const box = input.current?.getBoundingClientRect();
-
-      if (!box) {
-        return;
-      }
-
-      /*
-        Widened to a readable minimum, then held inside the window.
-
-        A line-item picker is narrower than a product row needs, so the list grows
-        past the field it belongs to — and a field near the end of a table would
-        have grown straight off the screen, taking half of every row's description
-        with it. In a right-to-left layout it grows the other way, from the field's
-        end edge, for the same reason.
-      */
-      const width = Math.min(
-        Math.max(box.width, MIN_WIDTH),
-        window.innerWidth - EDGE * 2,
-      );
-
-      const rightToLeft = getComputedStyle(document.documentElement).direction === 'rtl';
-      const wanted = rightToLeft ? box.right - width : box.left;
-      const left = Math.min(Math.max(wanted, EDGE), window.innerWidth - width - EDGE);
-
-      /*
-        Downwards unless upwards is genuinely roomier, and never taller than the
-        side it chose. The old rule flipped upwards whenever there was less than
-        240px below and then asked for 256px of list regardless — so a picker near
-        the foot of a phone opened a list whose top was off the top of the screen.
-      */
-      const below = window.innerHeight - box.bottom - GAP - EDGE;
-      const above = box.top - GAP - EDGE;
-      const upwards = below < Math.min(MAX_HEIGHT, above);
-
-      setAnchor({
-        top: upwards ? undefined : box.bottom + GAP,
-        bottom: upwards ? window.innerHeight - box.top + GAP : undefined,
-        left,
-        width,
-        maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, upwards ? above : below)),
-      });
-    };
-
-    place();
-
-    window.addEventListener('scroll', place, true);
-    window.addEventListener('resize', place);
-
-    return () => {
-      window.removeEventListener('scroll', place, true);
-      window.removeEventListener('resize', place);
-    };
-  }, [open]);
-
-  // A click anywhere else closes. Registered on mousedown rather than click so the
-  // list is gone before whatever was clicked reacts to it.
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onPointerDown = (event: MouseEvent): void => {
-      const target = event.target as Node;
-
-      if (!input.current?.contains(target) && !popup.current?.contains(target)) {
-        setOpen(false);
-        setQuery('');
-      }
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [open]);
 
   const rows: readonly SelectOption[] = clearable
     ? [{ value: '', label: placeholder ?? t('common.none') }, ...shown]
@@ -288,144 +175,144 @@ export function SearchSelect({
   };
 
   return (
-    <>
-      <div className={clsx('relative', className)}>
-        <input
-          ref={input}
-          id={inputId}
-          type="text"
-          role="combobox"
-          autoComplete="off"
-          aria-expanded={open}
-          aria-controls={open ? listId : undefined}
-          aria-autocomplete="list"
-          {...(label === undefined ? {} : { 'aria-label': label })}
-          disabled={disabled}
-          value={open ? query : (selected?.label ?? '')}
-          placeholder={selected ? selected.label : (placeholder ?? t('common.choose'))}
-          onFocus={() => {
-            setOpen(true);
-            setActive(0);
-          }}
-          // Focus alone is not enough. Escape closes the list and leaves the caret
-          // where it is, so the next click on the field fires no focus event and the
-          // list stayed shut — the box looked live, took typing, and showed nothing.
-          // Clicking always opens and never closes: this is a box to type in, and a
-          // click to put the caret between two words should not take the list away.
-          onClick={() => {
-            setOpen(true);
-            setActive(0);
-          }}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
-            setActive(0);
-          }}
-          onKeyDown={onKeyDown}
-          className={clsx(
-            size === 'sm' ? 'field-input-sm' : 'field-input',
-            'pe-7',
-            invalid && 'field-invalid',
-          )}
-        />
-
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 end-2 my-auto size-4 text-ink-subtle"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </div>
-
-      {open &&
-        anchor &&
-        /*
-          Rendered into the body rather than beside the field.
-
-          `position: fixed` is only relative to the window while nothing above it
-          has a transform, a filter or a backdrop-filter — any of those makes an
-          ancestor the containing block, and the coordinates measured off the window
-          are then applied from that ancestor's corner instead. Every dialog in this
-          application has both: a blurred overlay and a panel that animates in. So a
-          picker inside one opened its list three hundred pixels to the side of the
-          field and most of a dialog above it, which is precisely where nobody was
-          looking. The body has no such ancestor, and a portal is the only way to be
-          sure of that from in here — a `fixed` element cannot opt out of a
-          containing block a parent has already established.
-        */
-        createPortal(
-          <div
-            ref={popup}
-            id={listId}
-            role="listbox"
-            style={{
-              position: 'fixed',
-              top: anchor.top,
-              bottom: anchor.bottom,
-              left: anchor.left,
-              width: anchor.width,
-              maxHeight: anchor.maxHeight,
-              zIndex: 70,
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Anchor asChild>
+        <div className={clsx('relative', className)}>
+          <input
+            ref={input}
+            id={inputId}
+            type="text"
+            role="combobox"
+            autoComplete="off"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-autocomplete="list"
+            {...(label === undefined ? {} : { 'aria-label': label })}
+            disabled={disabled}
+            value={open ? query : (selected?.label ?? '')}
+            placeholder={selected ? selected.label : (placeholder ?? t('common.choose'))}
+            onFocus={() => {
+              setOpen(true);
+              setActive(0);
             }}
-            className="animate-drop overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface py-1 shadow-float"
-          >
-            {rows.length === 0 && (
-              <p className="px-3 py-2 text-xs text-ink-muted">{t('common.noMatches')}</p>
+            // Focus alone is not enough. Escape closes the list and leaves the caret
+            // where it is, so the next click on the field fires no focus event and the
+            // list stayed shut — the box looked live, took typing, and showed nothing.
+            // Clicking always opens and never closes: this is a box to type in, and a
+            // click to put the caret between two words should not take the list away.
+            onClick={() => {
+              setOpen(true);
+              setActive(0);
+            }}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpen(true);
+              setActive(0);
+            }}
+            onKeyDown={onKeyDown}
+            className={clsx(
+              size === 'sm' ? 'field-input-sm' : 'field-input',
+              'pe-7',
+              invalid && 'field-invalid',
             )}
+          />
 
-            {rows.map((option, index) => (
-              <button
-                key={option.value === '' ? '__none' : option.value}
-                type="button"
-                role="option"
-                aria-selected={option.value === value}
-                disabled={option.disabled === true}
-                // Focus must not leave the input, or the box would empty itself
-                // mid-click and the choice would be made against a stale list.
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => pick(option)}
-                className={clsx(
-                  'flex w-full items-start gap-3 px-3 py-1.5 text-start text-sm transition-colors',
-                  option.disabled === true && 'cursor-not-allowed opacity-50',
-                  index === active
-                    ? 'bg-brand-50 dark:bg-brand-500/15'
-                    : 'bg-transparent',
-                  option.value === value ? 'font-semibold text-ink' : 'text-ink',
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{option.label}</span>
-                  {option.detail && (
-                    <span className="block truncate text-xs text-ink-muted">
-                      {option.detail}
-                    </span>
-                  )}
-                </span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 end-2 my-auto size-4 text-ink-subtle"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+      </Popover.Anchor>
 
-                {option.meta && (
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
-                    {option.meta}
+      {/*
+        Portalled, as the hand-rolled list was. Radix positions with Floating UI, so
+        it would land in the right place either way — but a list left inline is still
+        clipped by whatever `overflow` it sits inside, and the product picker lives
+        in a line-item table that scrolls sideways. Out at the body there is nothing
+        to clip it, and Radix keeps it inside the dialog's own layer, so a picker
+        opened from a form stays reachable while everything behind the form is inert.
+      */}
+      <Popover.Portal>
+        <Popover.Content
+          id={listId}
+          role="listbox"
+          align="start"
+          sideOffset={4}
+          /*
+          Focus stays in the box. A popover takes focus by default, which for a list
+          hanging off a field somebody is typing into would move the caret out of it
+          on the first keystroke.
+        */
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          /*
+          And the box keeps it when the list closes. Radix would otherwise return
+          focus to the anchor — which is this field's own wrapper, not the input —
+          and the caret would land nowhere.
+        */
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          /*
+          Typing is the point of this control, so the keys go to the input rather
+          than to the list: Radix's own typeahead would otherwise swallow them.
+        */
+          onKeyDown={(event) => event.stopPropagation()}
+          className="animate-drop z-[70] max-h-64 w-[var(--radix-popover-trigger-width)] min-w-60 overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface py-1 shadow-float"
+        >
+          {rows.length === 0 && (
+            <p className="px-3 py-2 text-xs text-ink-muted">{t('common.noMatches')}</p>
+          )}
+
+          {rows.map((option, index) => (
+            <button
+              key={option.value === '' ? '__none' : option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              disabled={option.disabled === true}
+              // Focus must not leave the input, or the box would empty itself
+              // mid-click and the choice would be made against a stale list.
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => pick(option)}
+              className={clsx(
+                'flex w-full items-start gap-3 px-3 py-1.5 text-start text-sm transition-colors',
+                option.disabled === true && 'cursor-not-allowed opacity-50',
+                index === active ? 'bg-brand-50 dark:bg-brand-500/15' : 'bg-transparent',
+                option.value === value ? 'font-semibold text-ink' : 'text-ink',
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{option.label}</span>
+                {option.detail && (
+                  <span className="block truncate text-xs text-ink-muted">
+                    {option.detail}
                   </span>
                 )}
-              </button>
-            ))}
+              </span>
 
-            {total > shown.length && (
-              <p className="border-t border-line px-3 py-1.5 text-xs text-ink-subtle">
-                {t('common.moreMatches', { count: total - shown.length })}
-              </p>
-            )}
-          </div>,
-          document.body,
-        )}
-    </>
+              {option.meta && (
+                <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                  {option.meta}
+                </span>
+              )}
+            </button>
+          ))}
+
+          {total > shown.length && (
+            <p className="border-t border-line px-3 py-1.5 text-xs text-ink-subtle">
+              {t('common.moreMatches', { count: total - shown.length })}
+            </p>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
