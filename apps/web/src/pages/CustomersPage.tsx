@@ -327,13 +327,12 @@ function CustomerForm({
     >
       <div className="form-grid">
         {existing ? (
-          <Field label={t('masters.code')} hint={t('customers.codeFixed')}>
+          <Field label={t('masters.code')}>
             <input value={existing.code} disabled className="field-input" />
           </Field>
         ) : (
           <TextField
             label={t('masters.code')}
-            hint={t('customers.codeAuto')}
             value={draft.code}
             onChange={(value) => set('code', value)}
             error={errors['code']}
@@ -401,9 +400,6 @@ function CustomerForm({
           label={t('customers.state')}
           required={regime === TaxRegime.indiaGst}
           error={errors['stateCode']}
-          hint={
-            states.length === 0 ? t('customers.stateNoRegime') : t('customers.stateHint')
-          }
         >
           <SearchSelect
             value={draft.stateCode}
@@ -447,7 +443,6 @@ function CustomerForm({
         {!existing && (
           <NumberField
             label={t('customers.openingBalance')}
-            hint={t('customers.openingHint')}
             min={0}
             value={draft.openingBalance}
             onChange={(value) => set('openingBalance', value)}

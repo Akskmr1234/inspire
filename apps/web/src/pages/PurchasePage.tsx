@@ -20,6 +20,7 @@ import {
   chargeTotal,
   productOption,
   stockByProduct,
+  useDefaultCharges,
   useLineColumns,
   type DraftCharge,
   type LineColumn,
@@ -457,6 +458,12 @@ function EntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  useDefaultCharges(
+    isReturn ? 'purchaseReturn' : 'purchase',
+    ledgers.data ?? [],
+    setCharges,
+  );
+
   // What is on the shelf, for the product picker. One call for the whole master
   // rather than one per line, and stale for a minute: a purchase being keyed in is
   // not a stock take, and the figure is context rather than a control.
@@ -690,7 +697,7 @@ function EntryDialog({
           discarded. The supplier's number, which the firm does not issue, is a
           field further down and mandatory on a tax invoice.
         */}
-        <Field label={t('purchase.documentNumber')} hint={t('purchase.numberAuto')}>
+        <Field label={t('purchase.documentNumber')}>
           <input value={t('purchase.numberOnSave')} disabled className="field-input" />
         </Field>
 
@@ -719,12 +726,7 @@ function EntryDialog({
           />
         </Field>
 
-        <Field
-          label={t('purchase.warehouse')}
-          required
-          error={errors['warehouseId']}
-          hint={t('purchase.warehouseDefaulted')}
-        >
+        <Field label={t('purchase.warehouse')} required error={errors['warehouseId']}>
           <SearchSelect
             value={draft.warehouseId}
             onChange={(value) => set('warehouseId', value)}
@@ -776,7 +778,7 @@ function EntryDialog({
         />
 
         {isReturn && (
-          <Field label={t('purchase.againstInvoice')} hint={t('purchase.againstHint')}>
+          <Field label={t('purchase.againstInvoice')}>
             <SearchSelect
               value={draft.returnsInvoiceId}
               onChange={(value) => set('returnsInvoiceId', value)}
@@ -1300,7 +1302,6 @@ function DocumentDialog({
                 size="sm"
                 value={reason}
                 onChange={setReason}
-                hint={t('purchase.cancelHint')}
               />
               <ModalButton
                 disabled={busy || reason.trim() === ''}

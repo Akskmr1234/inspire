@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { request, type ApiError } from '@/lib/api';
+import { SearchSelect } from '@/components/SearchSelect';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
 const STATUS_NAME: Record<number, string> = { 1: 'Draft', 2: 'Posted', 3: 'Cancelled' };
@@ -20,6 +22,23 @@ const TYPE_NAME: Record<number, string> = {
 
 /** Draft is still somebody's to finish, posted is done, cancelled did not happen. */
 const STATUS_TONES: Record<number, StatusTone> = { 1: 'warn', 2: 'success', 3: 'danger' };
+
+/**
+ * The screen a voucher of each type is entered on.
+ *
+ * Posting now leaves the entry screen for this list, which is what somebody asked
+ * for and also what loses them the next entry: a cashier taking twenty receipts over
+ * a counter would be walking back through the menu nineteen times. The banner the
+ * redirect arrives with carries the way back, so the round trip is one click.
+ */
+const ENTRY_PATH: Record<number, string> = {
+  1: '/accounting/receipts/new',
+  2: '/accounting/receipts/new',
+  3: '/accounting/payments/new',
+  4: '/accounting/payments/new',
+  5: '/accounting/vouchers/new',
+  6: '/accounting/vouchers/new',
+};
 
 interface VoucherReportLine {
   readonly voucherId: string;
@@ -92,14 +111,25 @@ function VoucherStatus({ status }: { readonly status: number }): React.JSX.Eleme
  */
 export function VoucherReportPage(): React.JSX.Element {
   const { t } = useTranslation();
+
+  /*
+    An entry screen sends somebody here on a successful post: `type` narrows the list
+    to the kind of voucher they were entering, and `posted` names the one they just
+    made, which is the only way they can tell the redirect worked rather than that
+    they lost the entry.
+  */
+  const [params, setParams] = useSearchParams();
+  const arrivedFrom = params.get('type') ?? '';
+  const justPosted = params.get('posted');
+
   const [from, setFrom] = useState(startOfMonth());
   const [to, setTo] = useState(today());
-  const [type, setType] = useState('');
+  const [type, setType] = useState(arrivedFrom);
   const [status, setStatus] = useState('');
   const [criteria, setCriteria] = useState({
     from: startOfMonth(),
     to: today(),
-    type: '',
+    type: arrivedFrom,
     status: '',
   });
 
@@ -158,34 +188,34 @@ export function VoucherReportPage(): React.JSX.Element {
 
       <label className="field">
         <span className="field-label">{t('reports.voucherType')}</span>
-        <select
+        <SearchSelect
           value={type}
-          onChange={(event) => setType(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('reports.allTypes')}</option>
-          {Object.entries(TYPE_NAME).map(([value, name]) => (
-            <option key={value} value={value}>
-              {t(`voucherTypes.${name}`)}
-            </option>
-          ))}
-        </select>
+          onChange={setType}
+          clearable
+          size="sm"
+          label={t('reports.voucherType')}
+          placeholder={t('reports.allTypes')}
+          options={Object.entries(TYPE_NAME).map(([value, name]) => ({
+            value,
+            label: t(`voucherTypes.${name}`),
+          }))}
+        />
       </label>
 
       <label className="field">
         <span className="field-label">{t('reports.status')}</span>
-        <select
+        <SearchSelect
           value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('reports.allStatuses')}</option>
-          {Object.entries(STATUS_NAME).map(([value, name]) => (
-            <option key={value} value={value}>
-              {t(`voucherStatus.${name}`)}
-            </option>
-          ))}
-        </select>
+          onChange={setStatus}
+          clearable
+          size="sm"
+          label={t('reports.status')}
+          placeholder={t('reports.allStatuses')}
+          options={Object.entries(STATUS_NAME).map(([value, name]) => ({
+            value,
+            label: t(`voucherStatus.${name}`),
+          }))}
+        />
       </label>
 
       <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">
@@ -196,7 +226,37 @@ export function VoucherReportPage(): React.JSX.Element {
   );
 
   return (
-    <ReportFrame title={t('nav.voucherReport')} controls={controls} query={query}>
+    <ReportFrame
+      title={t('nav.voucherReport')}
+      controls={controls}
+      query={query}
+      banner={
+        justPosted === null ? undefined : (
+          <p className="alert-success flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>{t('vouchers.postedAndListed', { number: justPosted })}</span>
+
+            <Link
+              to={ENTRY_PATH[Number(arrivedFrom)] ?? '/accounting/vouchers/new'}
+              className="font-semibold underline underline-offset-2"
+            >
+              {t('vouchers.enterAnother')}
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                const next = new URLSearchParams(params);
+                next.delete('posted');
+                setParams(next, { replace: true });
+              }}
+              className="ms-auto text-xs font-medium underline underline-offset-2"
+            >
+              {t('common.dismiss')}
+            </button>
+          </p>
+        )
+      }
+    >
       {(data) =>
         data.vouchers.length === 0 ? (
           <EmptyState message={t('reports.noData')} />

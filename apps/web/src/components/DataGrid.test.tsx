@@ -220,7 +220,8 @@ describe('the narrow viewport', () => {
     const user = userEvent.setup();
     render(grid());
 
-    await user.selectOptions(screen.getByRole('combobox'), 'code');
+    await user.click(screen.getByRole('combobox', { name: /sort/i }));
+    await user.click(screen.getByRole('option', { name: 'Code' }));
 
     const codes = screen.getAllByRole('listitem').map((item) => item.textContent ?? '');
     expect(codes[0]).toContain('A-001');

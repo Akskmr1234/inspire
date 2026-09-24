@@ -7,9 +7,17 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
-import { DocumentTotals } from '@/components/DocumentLines';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
-import { productOption, stockByProduct } from '@/components/DocumentLines';
+import {
+  ChargesPanel,
+  DocumentTotals,
+  chargeTotal,
+  productOption,
+  stockByProduct,
+  useDefaultCharges,
+  type DraftCharge,
+} from '@/components/DocumentLines';
+import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
@@ -341,6 +349,7 @@ function EntryDialog({
   const [reference, setReference] = useState('');
   const [returnsInvoiceId, setReturnsInvoiceId] = useState('');
   const [lines, setLines] = useState<readonly DraftLine[]>([{ ...emptyLine }]);
+  const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
   const [busy, setBusy] = useState(false);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
@@ -357,6 +366,18 @@ function EntryDialog({
     queryKey: ['products', 'picker'],
     queryFn: () => listProducts('', '', false),
   });
+
+  const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(true),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useDefaultCharges(
+    isReturn(kind) ? 'salesReturn' : 'sales',
+    ledgers.data ?? [],
+    setCharges,
+  );
 
   // What is on the shelf, so the picker can say it. A counter choosing what to sell
   // wants the figure in front of them, not in the stock report in another tab.
@@ -445,6 +466,8 @@ function EntryDialog({
     };
   }, [lines]);
 
+  const chargesTotal = chargeTotal(charges, ledgers.data ?? []);
+
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
@@ -525,6 +548,14 @@ function EntryDialog({
         kind,
         returnsInvoiceId: isReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
         referenceNumber: reference || null,
+        // Only the rows somebody finished. A head chosen and left without a figure
+        // is the firm's standing charge waiting to be priced, not a zero to post.
+        charges: charges
+          .filter((charge) => charge.ledgerId !== '' && Number(charge.amount) > 0)
+          .map((charge) => ({
+            ledgerId: charge.ledgerId,
+            amount: Number(charge.amount),
+          })),
       });
 
       onSaved(t('sales.savedNotice', { number: header.number }));
@@ -584,12 +615,7 @@ function EntryDialog({
           />
         </FormField>
 
-        <FormField
-          label={t('sales.warehouse')}
-          required
-          error={errors['warehouseId']}
-          hint={t('purchase.warehouseDefaulted')}
-        >
+        <FormField label={t('sales.warehouse')} required error={errors['warehouseId']}>
           <SearchSelect
             value={warehouseId}
             onChange={setWarehouseId}
@@ -685,12 +711,18 @@ function EntryDialog({
         "what is the total" but not "does it add up" — stacked and right-aligned on
         the money column above them, the arithmetic can be read down the page.
       */}
+      <ChargesPanel
+        charges={charges}
+        ledgers={ledgers.data ?? []}
+        onChange={setCharges}
+      />
+
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
         <DocumentTotals
           gross={totals.gross}
           discount={totals.discount}
           tax={totals.tax}
-          charges={0}
+          charges={chargesTotal}
         />
       </div>
 
@@ -841,6 +873,7 @@ function LineRow({
               {needsBatch && (
                 <Field label={t('sales.batch')}>
                   <Select
+                    label={t('sales.batch')}
                     value={line.batchNumber}
                     onChange={(value) => onChange({ batchNumber: String(value) })}
                     options={[
@@ -1126,28 +1159,25 @@ function Select<TValue extends string | number>({
   value,
   onChange,
   options,
+  label,
 }: {
   readonly value: TValue;
   readonly onChange: (value: TValue) => void;
   readonly options: readonly { readonly value: TValue; readonly label: string }[];
+  readonly label?: string | undefined;
 }): React.JSX.Element {
   return (
-    <select
-      value={value}
-      onChange={(event) =>
-        onChange(
-          (typeof value === 'number'
-            ? Number(event.target.value)
-            : event.target.value) as TValue,
-        )
+    <SearchSelect
+      value={String(value)}
+      onChange={(next) =>
+        onChange((typeof value === 'number' ? Number(next) : next) as TValue)
       }
-      className="field-input-sm"
-    >
-      {options.map((option) => (
-        <option key={String(option.value)} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      size="sm"
+      label={label}
+      options={options.map((option) => ({
+        value: String(option.value),
+        label: option.label,
+      }))}
+    />
   );
 }

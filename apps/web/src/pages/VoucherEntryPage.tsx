@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -16,12 +17,28 @@ import {
 } from '@/lib/ledgers';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { moneyAlways as money } from '@/lib/money';
+import { isKnownPaymentMode, PAYMENT_MODES } from '@/lib/paymentModes';
+import { useSettings } from '@/stores/settings';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
   readonly number: string;
   readonly status: number;
   readonly totalDebit: number;
+}
+
+/**
+ * Where a posted voucher sends somebody: the list it now appears on.
+ *
+ * Every entry screen here used to stay put and say "posted" in a green line, which
+ * reads as an unsaved form to anybody who looks away and back — the fields are empty
+ * again and the banner scrolls off. Landing on the list that now holds the document
+ * is the confirmation, and the list carries the way back to enter another.
+ */
+function listedAt(type: number, number: string): string {
+  const params = new URLSearchParams({ type: String(type), posted: number });
+
+  return `/accounting/voucher-report?${params.toString()}`;
 }
 
 /** Debit is 1 and Credit is 2, matching the API's EntrySide enum. */
@@ -105,6 +122,7 @@ function useLedgers(): ReturnType<typeof useQuery<readonly LedgerSummary[], ApiE
 export function VoucherEntryPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [type, setType] = useState<number>(VoucherType.journal);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -112,7 +130,6 @@ export function VoucherEntryPage(): React.JSX.Element {
   const [referenceNumber, setReferenceNumber] = useState('');
   const [partyId, setPartyId] = useState('');
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(), emptyLine()]);
-  const [posted, setPosted] = useState<CreateVoucherResponse | null>(null);
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
@@ -221,7 +238,6 @@ export function VoucherEntryPage(): React.JSX.Element {
         },
       }),
     onSuccess: (response) => {
-      setPosted(response);
       setLines([emptyLine(), emptyLine()]);
       setNarration('');
       setReferenceNumber('');
@@ -230,21 +246,15 @@ export function VoucherEntryPage(): React.JSX.Element {
       // The trial balance is now stale by definition, so it is invalidated rather
       // than left showing a position that predates this posting.
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+
+      navigate(listedAt(type, response.number));
     },
   });
 
   return (
     <section className="page">
       <PageHeading title={t('vouchers.entryTitle')} />
-
-      {posted && (
-        <p className="alert-success">
-          {t('vouchers.postedNotice', {
-            number: posted.number,
-            total: money(posted.totalDebit),
-          })}
-        </p>
-      )}
 
       {post.isError && (
         <div role="alert" className="alert-error">
@@ -280,7 +290,7 @@ export function VoucherEntryPage(): React.JSX.Element {
           account. This narrows to the parties, and what it fills in is an ordinary
           line somebody can still change.
         */}
-        <Field label={t('vouchers.party')} hint={t('vouchers.partyHint')}>
+        <Field label={t('vouchers.party')}>
           <SearchSelect
             value={partyId}
             onChange={chooseParty}
@@ -326,19 +336,21 @@ export function VoucherEntryPage(): React.JSX.Element {
             {lines.map((line) => (
               <tr key={line.key}>
                 <td className="py-2">
-                  <select
-                    aria-label={t('vouchers.side')}
-                    className="field-input-sm w-28"
-                    value={line.side}
-                    onChange={(e) =>
+                  <SearchSelect
+                    label={t('vouchers.side')}
+                    className="w-28"
+                    size="sm"
+                    value={String(line.side)}
+                    onChange={(value) =>
                       update(line.key, {
-                        side: Number(e.target.value) === CREDIT ? CREDIT : DEBIT,
+                        side: Number(value) === CREDIT ? CREDIT : DEBIT,
                       })
                     }
-                  >
-                    <option value={DEBIT}>{t('reports.debit')}</option>
-                    <option value={CREDIT}>{t('reports.credit')}</option>
-                  </select>
+                    options={[
+                      { value: String(DEBIT), label: t('reports.debit') },
+                      { value: String(CREDIT), label: t('reports.credit') },
+                    ]}
+                  />
                 </td>
 
                 <td className="min-w-56 py-2">
@@ -546,18 +558,39 @@ function MoneyEntry({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
 
   const [through, setThrough] = useState<'cash' | 'bank'>('bank');
-  const [posted, setPosted] = useState<CreateVoucherResponse | null>(null);
   const [draft, setDraft] = useState<MoneyDraft>(() => ({
     date: new Date().toISOString().slice(0, 10),
     partyId: '',
     accountId: '',
     amount: '',
     reference: '',
-    paymentMode: '',
+    paymentMode: defaultPaymentMode,
     narration: '',
   }));
+
+  /*
+    The modes, with whatever the voucher already holds kept at the end of the list
+    when it is not one of them. Without that row an older voucher reading "By cash"
+    opens with an empty picker and saves as empty — the editor would quietly throw
+    away a field nobody touched.
+  */
+  const paymentModeOptions = useMemo((): readonly SelectOption[] => {
+    const known = PAYMENT_MODES.map((mode) => ({
+      value: mode.value,
+      label: t(mode.labelKey),
+    }));
+
+    if (draft.paymentMode === '' || isKnownPaymentMode(draft.paymentMode)) {
+      return known;
+    }
+
+    return [...known, { value: draft.paymentMode, label: draft.paymentMode }];
+  }, [draft.paymentMode, t]);
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
@@ -643,7 +676,6 @@ function MoneyEntry({
       });
     },
     onSuccess: (response) => {
-      setPosted(response);
       reset();
       setDraft((current) => ({
         ...current,
@@ -654,6 +686,9 @@ function MoneyEntry({
       }));
 
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+
+      navigate(listedAt(type, response.number));
     },
   });
 
@@ -674,15 +709,6 @@ function MoneyEntry({
           direction === 'receipt' ? t('vouchers.receiptHint') : t('vouchers.paymentHint')
         }
       />
-
-      {posted && (
-        <p className="alert-success">
-          {t('vouchers.postedNotice', {
-            number: posted.number,
-            total: money(posted.totalDebit),
-          })}
-        </p>
-      )}
 
       {post.isError && (
         <div role="alert" className="alert-error">
@@ -742,7 +768,6 @@ function MoneyEntry({
             }
             required
             error={errors['partyId']}
-            hint={t('vouchers.partyHint')}
           >
             <SearchSelect
               value={draft.partyId}
@@ -779,12 +804,16 @@ function MoneyEntry({
             />
           </Field>
 
-          <TextField
-            label={t('vouchers.paymentMode')}
-            value={draft.paymentMode}
-            onChange={(value) => set('paymentMode', value)}
-            placeholder={t('vouchers.paymentModeHint')}
-          />
+          <Field label={t('vouchers.paymentMode')}>
+            <SearchSelect
+              value={draft.paymentMode}
+              onChange={(value) => set('paymentMode', value)}
+              options={paymentModeOptions}
+              label={t('vouchers.paymentMode')}
+              placeholder={t('vouchers.paymentModeNone')}
+              clearable
+            />
+          </Field>
 
           <TextField
             label={t('vouchers.reference')}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { TaxRegime } from '@/lib/states';
+import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
 
 /**
  * The preferences that decide how the screens behave, rather than what the server
@@ -54,6 +55,24 @@ export interface AppSettings {
    */
   readonly defaultCategoryId: string;
   readonly defaultStockUnitId: string;
+  /**
+   * The payment mode a new receipt or payment starts at.
+   *
+   * A counter that takes cash all day was retyping "Cash" onto every voucher. Blank
+   * means "ask", which is what a firm taking money four different ways wants.
+   */
+  readonly defaultPaymentMode: string;
+  /**
+   * The charge heads a new document starts with, keyed by document kind.
+   *
+   * Freight on every purchase, delivery on every invoice, a standing discount — the
+   * heads a firm puts on the same documents every day and was adding by hand each
+   * time, with the row forgotten often enough to matter. Held here rather than on
+   * the server because the server has no endpoint for it: the charge matrix it does
+   * hold says which way a head moves a total, not which heads a document starts
+   * with.
+   */
+  readonly defaultCharges: Readonly<Record<string, readonly DefaultCharge[]>>;
   /** How many rows a paged list holds. */
   readonly pageSize: number;
   /**
@@ -96,6 +115,8 @@ const DEFAULTS: AppSettings = {
   preferredWarehouseId: '',
   defaultCategoryId: '',
   defaultStockUnitId: '',
+  defaultPaymentMode: '',
+  defaultCharges: NO_DEFAULT_CHARGES,
   pageSize: 25,
   decimals: 2,
   decimalsByBranch: {},
@@ -141,6 +162,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
       preferredWarehouseId: patch.preferredWarehouseId ?? get().preferredWarehouseId,
       defaultCategoryId: patch.defaultCategoryId ?? get().defaultCategoryId,
       defaultStockUnitId: patch.defaultStockUnitId ?? get().defaultStockUnitId,
+      defaultPaymentMode: patch.defaultPaymentMode ?? get().defaultPaymentMode,
+      defaultCharges: patch.defaultCharges ?? get().defaultCharges,
       pageSize: patch.pageSize ?? get().pageSize,
       decimals: patch.decimals ?? get().decimals,
       decimalsByBranch: patch.decimalsByBranch ?? get().decimalsByBranch,

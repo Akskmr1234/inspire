@@ -138,7 +138,7 @@ function EditUnit({
       }}
     >
       <div className="form-grid">
-        <Field label={t('masters.code')} hint={t('units.codeFixed')}>
+        <Field label={t('masters.code')}>
           <input value={unit.code} disabled className="field-input" />
         </Field>
 
@@ -151,7 +151,7 @@ function EditUnit({
           error={errors['name']}
         />
 
-        <Field label={t('units.base')} hint={t('units.factorFixed')}>
+        <Field label={t('units.base')}>
           <input
             value={unit.baseUnitCode ?? t('units.isBase')}
             disabled

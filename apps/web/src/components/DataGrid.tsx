@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { IconPlus } from '@/components/icons';
+import { SearchSelect } from '@/components/SearchSelect';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
 import { fetchGridLayout, resetGridLayout, saveGridLayout } from '@/lib/grid';
@@ -469,26 +470,21 @@ export function DataGrid<TRow>({
           reason it hides the search box.
         */}
         {narrow && !paging && (
-          <label className="flex shrink-0 items-center gap-1.5">
-            <span className="sr-only">{t('grid.sortBy')}</span>
-            <select
+          <div className="flex shrink-0 items-center gap-1.5">
+            <SearchSelect
+              size="sm"
+              className="w-40"
+              label={t('grid.sortBy')}
+              placeholder={t('grid.sortNone')}
               value={sortKey ?? ''}
-              onChange={(event) => {
-                const next = event.target.value;
+              onChange={(next) => {
                 setSortKey(next === '' ? null : next);
                 setSortDescending(false);
               }}
-              className="field-input-sm w-auto py-1 text-xs"
-            >
-              <option value="">{t('grid.sortNone')}</option>
-              {visible
+              options={visible
                 .filter((column) => column.header.trim() !== '')
-                .map((column) => (
-                  <option key={column.key} value={column.key}>
-                    {column.header}
-                  </option>
-                ))}
-            </select>
+                .map((column) => ({ value: column.key, label: column.header }))}
+            />
 
             {sortKey !== null && (
               <GridButton
@@ -498,7 +494,7 @@ export function DataGrid<TRow>({
                 {sortDescending ? '▾' : '▴'}
               </GridButton>
             )}
-          </label>
+          </div>
         )}
 
         {/*

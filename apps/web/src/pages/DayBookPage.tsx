@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { BalanceBadge, ReportFrame, Spinner } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 import { money } from '@/lib/money';
+import { SearchSelect } from '@/components/SearchSelect';
 
 interface DayBookLine {
   readonly ledgerId: string;
@@ -124,18 +125,18 @@ export function DayBookPage(): React.JSX.Element {
 
       <label className="field">
         <span className="field-label">{t('reports.voucherType')}</span>
-        <select
+        <SearchSelect
           value={voucherType}
-          onChange={(event) => setVoucherType(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('reports.allTypes')}</option>
-          {VOUCHER_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {t(`voucherTypes.${type}`)}
-            </option>
-          ))}
-        </select>
+          onChange={setVoucherType}
+          clearable
+          size="sm"
+          label={t('reports.voucherType')}
+          placeholder={t('reports.allTypes')}
+          options={VOUCHER_TYPES.map((type) => ({
+            value: type,
+            label: t(`voucherTypes.${type}`),
+          }))}
+        />
       </label>
 
       <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">

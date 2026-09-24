@@ -634,22 +634,6 @@
            text-ink-muted uppercase;
   }
 
-  /*
-    The caption of a mandatory field, in the same red as its marker.
-
-    An asterisk is four pixels wide in a row of uppercase grey captions, and on a
-    form of a dozen fields it is genuinely easy to miss which three of them have to
-    be filled in before the form will go anywhere. Colouring the word says it at the
-    size the word is.
-
-    Never the only signal, which is why the marker stays and why `aria-required` is
-    on the control: colour alone says nothing to somebody who cannot see it, and the
-    asterisk is the convention a reader already knows.
-  */
-  .field-label-required {
-    @apply text-red-600 dark:text-red-400;
-  }
-
   /* The marker on a mandatory field. Red, beside the caption, and never the only
      signal: `aria-required` on the control says the same thing to a screen reader,
      and colour alone would say nothing to somebody who cannot see it. */

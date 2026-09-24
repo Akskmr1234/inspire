@@ -16,6 +16,7 @@ import {
 } from '@/lib/products';
 import { listMaster, type BrandSummary, type UnitSummary } from '@/lib/inventory';
 import { moneyAlways } from '@/lib/money';
+import { SearchSelect } from '@/components/SearchSelect';
 
 /**
  * The product editor.
@@ -441,14 +442,15 @@ function DescriptionTab({
 
       <Section title={`${t('products.rates')} · ${product.currency}`}>
         <Field label={t('products.costingMethod')}>
-          <select
+          <SearchSelect
             value={rates.costingMethod}
-            onChange={(e) => setRates({ ...rates, costingMethod: e.target.value })}
-            className="field-input"
-          >
-            <option value="1">{t('products.costingLastPurchase')}</option>
-            <option value="2">{t('products.costingAverage')}</option>
-          </select>
+            onChange={(value) => setRates({ ...rates, costingMethod: value })}
+            label={t('products.costingMethod')}
+            options={[
+              { value: '1', label: t('products.costingLastPurchase') },
+              { value: '2', label: t('products.costingAverage') },
+            ]}
+          />
         </Field>
 
         <NumberField
@@ -485,7 +487,6 @@ function DescriptionTab({
           label={t('products.maximumRetailPrice')}
           value={rates.maximumRetailPrice}
           onChange={(value) => setRates({ ...rates, maximumRetailPrice: value })}
-          hint={t('products.mrpHint')}
         />
       </Section>
 
@@ -609,33 +610,31 @@ function DetailsTab({
         </Field>
 
         <Field label={t('products.purchaseUnit')}>
-          <select
+          <SearchSelect
             value={form.purchaseUnitId}
-            onChange={(e) => setForm({ ...form, purchaseUnitId: e.target.value })}
-            className="field-input"
-          >
-            {convertible.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.code} — {unit.name}
-                {unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setForm({ ...form, purchaseUnitId: value })}
+            label={t('products.purchaseUnit')}
+            options={convertible.map((unit) => ({
+              value: unit.id,
+              label: `${unit.code} — ${unit.name}${
+                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
+              }`,
+            }))}
+          />
         </Field>
 
         <Field label={t('products.salesUnit')}>
-          <select
+          <SearchSelect
             value={form.salesUnitId}
-            onChange={(e) => setForm({ ...form, salesUnitId: e.target.value })}
-            className="field-input"
-          >
-            {convertible.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.code} — {unit.name}
-                {unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setForm({ ...form, salesUnitId: value })}
+            label={t('products.salesUnit')}
+            options={convertible.map((unit) => ({
+              value: unit.id,
+              label: `${unit.code} — ${unit.name}${
+                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
+              }`,
+            }))}
+          />
         </Field>
 
         <Field label={t('products.brand')}>
@@ -665,21 +664,21 @@ function DetailsTab({
           label={t('products.maximumLevel')}
           value={form.maximumLevel}
           onChange={(value) => setForm({ ...form, maximumLevel: value })}
-          hint={t('products.maximumLevelHint')}
         />
 
         <Field label={t('products.movement')}>
-          <select
+          <SearchSelect
             value={form.movement}
-            onChange={(e) => setForm({ ...form, movement: e.target.value })}
-            className="field-input"
-          >
-            <option value="0">{t('products.movementUnclassified')}</option>
-            <option value="1">{t('products.movementFast')}</option>
-            <option value="2">{t('products.movementNormal')}</option>
-            <option value="3">{t('products.movementSlow')}</option>
-            <option value="4">{t('products.movementDead')}</option>
-          </select>
+            onChange={(value) => setForm({ ...form, movement: value })}
+            label={t('products.movement')}
+            options={[
+              { value: '0', label: t('products.movementUnclassified') },
+              { value: '1', label: t('products.movementFast') },
+              { value: '2', label: t('products.movementNormal') },
+              { value: '3', label: t('products.movementSlow') },
+              { value: '4', label: t('products.movementDead') },
+            ]}
+          />
         </Field>
       </Section>
 
@@ -707,7 +706,6 @@ function DetailsTab({
             label={t('products.shelfLifeDays')}
             value={form.shelfLifeDays}
             onChange={(value) => setForm({ ...form, shelfLifeDays: value })}
-            hint={t('products.shelfLifeHint')}
           />
         )}
       </Section>

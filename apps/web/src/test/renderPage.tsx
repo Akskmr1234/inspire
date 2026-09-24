@@ -13,7 +13,11 @@ import '@/i18n';
  * a page that throws should be reported as a caught error by the assertion rather
  * than as an unhandled rejection three tests later.
  */
-export function renderPage(element: React.ReactNode): RenderResult {
+export function renderPage(
+  element: React.ReactNode,
+  /** The URL the screen opens at, for a page that reads the query string. */
+  at = '/',
+): RenderResult {
   // Retries would turn one deliberate failure into three, and a stale cache would
   // let a later test read an earlier test's fixture.
   const client = new QueryClient({
@@ -33,7 +37,7 @@ export function renderPage(element: React.ReactNode): RenderResult {
 
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>
         <ErrorBoundary>{element}</ErrorBoundary>
       </MemoryRouter>
     </QueryClientProvider>,

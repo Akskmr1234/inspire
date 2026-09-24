@@ -85,7 +85,7 @@ export function SearchSelect({
   readonly size?: 'default' | 'sm';
   readonly id?: string;
   /** Spoken name, where no visible label is associated with the box. */
-  readonly label?: string;
+  readonly label?: string | undefined;
   readonly className?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();

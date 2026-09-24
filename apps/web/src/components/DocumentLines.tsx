@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
@@ -6,6 +7,8 @@ import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
+import { chargesFor, type ChargeDocument } from '@/lib/charges';
+import { useSettings } from '@/stores/settings';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -137,12 +140,19 @@ export function useLineColumns(
     [columns, hidden],
   );
 
+  /*
+    On a popover rather than a div that is shown and hidden.
+
+    It had no way out but the button that opened it: no Escape, nothing on a click
+    elsewhere. Toggling a column changes the width of the table underneath, which
+    moves the toolbar the button is in — so the one exit could be somewhere other
+    than where it was pressed, and the panel stayed up over the lines it was there
+    to arrange. A popover closes on Escape, on a click outside and on the button
+    again, and Radix keeps it above the dialog this usually opens inside.
+  */
   const picker = (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
         className={clsx(
           'rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition',
           open
@@ -151,10 +161,14 @@ export function useLineColumns(
         )}
       >
         {t('documents.columns')}
-      </button>
+      </Popover.Trigger>
 
-      {open && (
-        <div className="animate-drop absolute end-0 z-40 mt-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-float">
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={4}
+          className="animate-drop z-[70] w-56 rounded-lg border border-line bg-surface p-2 shadow-float"
+        >
           {columns.map((column) => (
             <label
               key={column.key}
@@ -172,9 +186,15 @@ export function useLineColumns(
               {column.label}
             </label>
           ))}
-        </div>
-      )}
-    </div>
+
+          {/* Said plainly, because the panel is a list of checkboxes and nothing in
+              it looks like a way out. */}
+          <Popover.Close className="mt-1 w-full rounded px-1.5 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink">
+            {t('common.close')}
+          </Popover.Close>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 
   return { shows, toggle, picker };
@@ -190,6 +210,46 @@ export interface DraftCharge {
 /** A fresh, empty charge row. */
 export function emptyCharge(): DraftCharge {
   return { key: crypto.randomUUID(), ledgerId: '', amount: '' };
+}
+
+/**
+ * Puts the firm's standing charges onto a document as it opens.
+ *
+ * Applied once, when the chart of accounts arrives rather than when the screen
+ * mounts: the heads are picked from the chart, so seeding before it has loaded would
+ * drop every row that refers to it. Once only, because a second run would put the
+ * freight row back after somebody deliberately took it off.
+ *
+ * A head that has since left the chart is dropped rather than seeded empty — see
+ * {@link chargesFor}.
+ */
+export function useDefaultCharges(
+  document: ChargeDocument,
+  ledgers: readonly LedgerSummary[],
+  apply: (charges: readonly DraftCharge[]) => void,
+): void {
+  const defaults = useSettings((state) => state.defaultCharges);
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    if (seeded.current || ledgers.length === 0) {
+      return;
+    }
+
+    seeded.current = true;
+
+    const rows = chargesFor(document, defaults, ledgers);
+
+    if (rows.length > 0) {
+      apply(
+        rows.map((row) => ({
+          key: crypto.randomUUID(),
+          ledgerId: row.ledgerId,
+          amount: row.amount,
+        })),
+      );
+    }
+  }, [document, defaults, ledgers, apply]);
 }
 
 /**

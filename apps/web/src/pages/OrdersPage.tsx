@@ -14,6 +14,7 @@ import {
   chargeTotal,
   productOption,
   stockByProduct,
+  useDefaultCharges,
   useLineColumns,
   type DraftCharge,
   type LineColumn,
@@ -536,6 +537,12 @@ function OrderEntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  useDefaultCharges(
+    kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
+    ledgers.data ?? [],
+    setCharges,
+  );
+
   const valuation = useQuery<StockValuationReport, ApiError>({
     queryKey: ['stock-valuation', 'picker', draft.warehouseId],
     queryFn: () => fetchStockValuation(draft.warehouseId, '', true),
@@ -732,7 +739,7 @@ function OrderEntryDialog({
       onClose={onClose}
     >
       <div className="form-grid-3">
-        <Field label={t('orders.number')} hint={t('orders.numberAuto')}>
+        <Field label={t('orders.number')}>
           <input value={t('orders.numberOnSave')} disabled className="field-input" />
         </Field>
 
@@ -746,7 +753,6 @@ function OrderEntryDialog({
 
         <DateField
           label={t('orders.expectedOn')}
-          hint={t('orders.expectedHint')}
           value={draft.expectedOn}
           onChange={(value) => set('expectedOn', value)}
           error={errors['expectedOn']}
@@ -767,12 +773,7 @@ function OrderEntryDialog({
           />
         </Field>
 
-        <Field
-          label={t('orders.warehouse')}
-          required
-          error={errors['warehouseId']}
-          hint={t('purchase.warehouseDefaulted')}
-        >
+        <Field label={t('orders.warehouse')} required error={errors['warehouseId']}>
           <SearchSelect
             value={draft.warehouseId}
             onChange={(value) => set('warehouseId', value)}
@@ -800,11 +801,6 @@ function OrderEntryDialog({
 
         <TextField
           label={t('orders.reference')}
-          hint={
-            kind === 'purchase'
-              ? t('orders.referenceSupplier')
-              : t('orders.referenceCustomer')
-          }
           value={draft.referenceNumber}
           onChange={(value) => set('referenceNumber', value)}
         />
@@ -1185,7 +1181,6 @@ function OrderDialog({
                 size="sm"
                 value={reason}
                 onChange={setReason}
-                hint={t('orders.closeHint')}
               />
               <ModalButton
                 disabled={busy || reason.trim() === ''}

@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { SearchSelect } from '@/components/SearchSelect';
 import clsx from 'clsx';
 
 /**
@@ -46,10 +47,7 @@ export function Field({
 }): React.JSX.Element {
   return (
     <div className={clsx('field', className)}>
-      <label
-        htmlFor={htmlFor}
-        className={clsx('field-label', required && 'field-label-required')}
-      >
+      <label htmlFor={htmlFor} className="field-label">
         {label}
         {required && (
           <span aria-hidden="true" className="field-required">
@@ -273,29 +271,31 @@ export function SelectField<TValue extends string | number>({
       htmlFor={id}
       {...(className === undefined ? {} : { className })}
     >
-      <select
+      {/*
+        The searchable picker, not the browser's own control.
+
+        Two dropdowns that look and behave differently on the same form read as two
+        different kinds of field, and until now which one a screen got depended on
+        whether its list came from a master or was written out in the source. They
+        are all this one now. A list of three still opens and closes like a list of
+        three thousand; what it gains is the same box, the same arrow, the same
+        keyboard, and a search that costs nothing when there is nothing to search.
+      */}
+      <SearchSelect
         id={id}
-        value={value}
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) =>
-          onChange(
-            (typeof value === 'number'
-              ? Number(event.target.value)
-              : event.target.value) as TValue,
-          )
+        value={String(value)}
+        onChange={(next) =>
+          onChange((typeof value === 'number' ? Number(next) : next) as TValue)
         }
-        className={clsx(
-          size === 'sm' ? 'field-input-sm' : 'field-input',
-          error && 'field-invalid',
-        )}
-      >
-        {options.map((option) => (
-          <option key={String(option.value)} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        disabled={disabled}
+        invalid={error !== undefined}
+        label={label}
+        size={size}
+        options={options.map((option) => ({
+          value: String(option.value),
+          label: option.label,
+        }))}
+      />
     </Field>
   );
 }
