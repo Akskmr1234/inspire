@@ -15,6 +15,9 @@ import {
   productOption,
   stockByProduct,
   useDefaultCharges,
+  productDetailColumns,
+  ProductDetailCells,
+  ProductDetailHeaders,
   useLineColumns,
   type DraftCharge,
   type LineColumn,
@@ -597,6 +600,7 @@ function OrderEntryDialog({
 
   const lineColumns: readonly LineColumn[] = [
     { key: 'product', label: t('orders.product'), defaultOn: true, fixed: true },
+    ...productDetailColumns(t),
     { key: 'quantity', label: t('orders.quantity'), defaultOn: true, fixed: true },
     { key: 'rate', label: t('orders.rate'), defaultOn: true, fixed: true },
     { key: 'discount', label: t('orders.discount'), defaultOn: true },
@@ -821,10 +825,11 @@ function OrderEntryDialog({
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="w-full min-w-[42rem] text-sm">
+        <table className="line-table sm:min-w-[42rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('orders.product')}</th>
+              <ProductDetailHeaders shows={columns.shows} labels={t} />
               <th className="px-2 py-1 text-end">{t('orders.quantity')}</th>
               <th className="px-2 py-1 text-end">{t('orders.rate')}</th>
               {columns.shows('discount') && (
@@ -844,7 +849,7 @@ function OrderEntryDialog({
 
               return (
                 <tr key={line.key} className="border-t border-line">
-                  <td className="min-w-64 px-2 py-1">
+                  <td data-label={t('orders.product')} className="min-w-64 px-2 py-1">
                     <SearchSelect
                       value={line.productId}
                       onChange={(value) => {
@@ -870,6 +875,14 @@ function OrderEntryDialog({
                     />
                   </td>
 
+                  <ProductDetailCells
+                    product={(products.data ?? []).find(
+                      (candidate) => candidate.id === line.productId,
+                    )}
+                    shows={columns.shows}
+                    labels={t}
+                  />
+
                   <NumberCell
                     value={line.quantity}
                     label={t('orders.quantity')}
@@ -892,7 +905,7 @@ function OrderEntryDialog({
                   )}
 
                   {columns.shows('taxPercent') && (
-                    <td className="px-2 py-1">
+                    <td data-label={t('orders.taxPercent')} className="px-2 py-1">
                       <input
                         type="number"
                         list="erp-order-tax-rates"
@@ -918,7 +931,10 @@ function OrderEntryDialog({
                     </td>
                   )}
 
-                  <td className="px-2 py-1 text-end font-mono tabular-nums">
+                  <td
+                    data-label={t('orders.net')}
+                    className="px-2 py-1 text-end font-mono tabular-nums"
+                  >
                     {moneyAlways(lineNet(line))}
                   </td>
 
@@ -1249,7 +1265,7 @@ function NumberCell({
     was a heading pointing at the space beside the figures.
   */
   return (
-    <td className="px-2 py-1 text-end">
+    <td data-label={label} className="px-2 py-1 text-end">
       <input
         type="number"
         inputMode="decimal"

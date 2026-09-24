@@ -662,7 +662,7 @@ function EntryDialog({
       )}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="w-full min-w-[46rem] text-sm">
+        <table className="line-table sm:min-w-[46rem]">
           <thead className="text-start text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('sales.product')}</th>
@@ -807,7 +807,7 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td className="min-w-64 px-2 py-1">
+        <td data-label={t('sales.product')} className="min-w-64 px-2 py-1">
           {/* Typeable, and showing what is on the shelf — the two things the native
               select over the whole product master could not do. */}
           <SearchSelect
@@ -832,25 +832,29 @@ function LineRow({
           />
         </td>
         <NumberCell
+          label={t('sales.quantity')}
           value={line.quantity}
           error={errors['quantity']}
           onChange={(value) => onChange({ quantity: value })}
         />
         <NumberCell
+          label={t('sales.rate')}
           value={line.rate}
           error={errors['rate']}
           onChange={(value) => onChange({ rate: value })}
         />
         <NumberCell
+          label={t('sales.discount')}
           value={line.discount}
           onChange={(value) => onChange({ discount: value })}
         />
         <NumberCell
+          label={t('sales.taxPercent')}
           value={line.taxPercentage}
           error={errors['taxPercentage']}
           onChange={(value) => onChange({ taxPercentage: value })}
         />
-        <td className="px-2 py-1 text-end font-mono">
+        <td data-label={t('sales.net')} className="px-2 py-1 text-end font-mono">
           {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
         <td className="px-2 py-1 text-end">
@@ -1126,10 +1130,19 @@ function Field({
 function NumberCell({
   value,
   onChange,
+  label,
   error,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
+  /**
+   * The column's heading.
+   *
+   * Spoken by the box, which had no name of its own at all — four numeric inputs a
+   * line, announced as four numeric inputs — and printed above it on a phone, where
+   * the heading it belongs to is a card away.
+   */
+  readonly label: string;
   readonly error?: string | undefined;
 }): React.JSX.Element {
   /*
@@ -1139,10 +1152,11 @@ function NumberCell({
     was a heading pointing at the space beside the figures.
   */
   return (
-    <td className="px-2 py-1 text-end">
+    <td data-label={label} className="px-2 py-1 text-end">
       <input
         type="number"
         inputMode="decimal"
+        aria-label={label}
         value={value}
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}

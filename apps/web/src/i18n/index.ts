@@ -215,6 +215,21 @@ const en = {
     Posted: 'Posted',
     Cancelled: 'Cancelled',
   },
+  /*
+    The product's own figures, shown beside a document line.
+
+    One set of captions rather than one per screen: a purchase, an order and an
+    invoice all show the same four things off the same master, and three copies would
+    be three chances for them to disagree.
+  */
+  lineDetails: {
+    code: 'Code',
+    unit: 'Unit',
+    retail: 'Retail',
+    wholesale: 'Wholesale',
+    mrp: 'MRP',
+    fromMaster: 'From the product master. Change it on the product.',
+  },
   paymentModes: {
     cash: 'Cash',
     cheque: 'Cheque',
@@ -1288,6 +1303,14 @@ const ar = {
     Draft: 'مسودة',
     Posted: 'مرحّل',
     Cancelled: 'ملغى',
+  },
+  lineDetails: {
+    code: 'الرمز',
+    unit: 'الوحدة',
+    retail: 'التجزئة',
+    wholesale: 'الجملة',
+    mrp: 'السعر المطبوع',
+    fromMaster: 'من بيانات المنتج. يُعدَّل من بطاقة المنتج.',
   },
   paymentModes: {
     cash: 'نقداً',

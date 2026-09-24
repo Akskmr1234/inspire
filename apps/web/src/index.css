@@ -478,6 +478,25 @@
   }
 
   /*
+    The document lines, as a table on a screen and as a stack of cards on a phone.
+
+    Entered on every billing screen there is, and on a phone every one of them was a
+    672px table inside a sideways scroller: a supplier's order was keyed in by
+    choosing a product, scrolling right to reach the quantity, scrolling right again
+    for the rate, and scrolling back to add the next line. The columns are the same
+    columns either way — what changes is that below `sm` each row becomes a card and
+    each cell carries its own heading, taken from `data-label`, since the one across
+    the top is four scroll positions away from most of what it names.
+
+    A cell with no `data-label` is one with nothing to caption — the running net, the
+    remove button — and its empty `::before` collapses to nothing, which is what puts
+    those two on a line of their own at the foot of the card.
+  */
+  .line-table {
+    @apply w-full text-sm;
+  }
+
+  /*
     The strip of filters under a report's title. A defined surface rather than
     controls floating on the canvas, so the eye has somewhere to land between the
     heading and the figures.
@@ -1280,6 +1299,70 @@
 }
 
 @layer utilities {
+  /*
+    The document lines as a stack of cards, below `sm`. See `.line-table`.
+
+    In the utilities layer rather than beside the class it belongs to, because the
+    boxes inside these cells carry a `w-24` of their own: Tailwind puts utilities
+    after components, so a rule in the components layer loses to it however specific
+    it is. Here specificity decides, and `.line-table tbody td input` outranks a
+    single class.
+  */
+  @media (width < 40rem) {
+    .line-table,
+    .line-table tbody,
+    .line-table tr {
+      @apply block;
+    }
+
+    .line-table thead {
+      @apply hidden;
+    }
+
+    .line-table tbody tr {
+      @apply mb-2 rounded-xl border border-line bg-surface-2 p-2;
+      /* The border on the row itself; the hairline between rows would draw twice. */
+      border-top-width: 1px;
+    }
+
+    .line-table tbody td {
+      @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] items-center gap-2 px-0 py-1;
+      min-width: 0;
+    }
+
+    /*
+      On the reading edge, whatever the cell is. The cells that hold figures are
+      `text-end` so the column shares a decimal point, and a caption generated inside
+      one inherits that — so QUANTITY and RATE sat hard against their own boxes while
+      PRODUCT sat at the edge of the card, three captions in two places.
+    */
+    .line-table tbody td::before {
+      content: attr(data-label);
+      text-align: start;
+      @apply text-xs font-medium tracking-wide text-ink-muted uppercase;
+    }
+
+    /* The cells that caption nothing sit whole, not in two halves. */
+    .line-table tbody td:not([data-label]) {
+      @apply block text-end;
+    }
+
+    /* A field inside a card has the width of the card, not of a table column. */
+    .line-table tbody td input,
+    .line-table tbody td .field-input-sm {
+      @apply w-full;
+    }
+
+    .line-action-column {
+      @apply w-auto;
+    }
+
+    /* Nothing to keep clear of: the action column is a row of its own down here. */
+    .line-totals {
+      @apply pe-0;
+    }
+  }
+
   /* Applied to a list so its children arrive one after another rather than all at
      once. Six steps, then it stops adding delay — past that the last row is waiting
      long enough to look broken rather than choreographed. */

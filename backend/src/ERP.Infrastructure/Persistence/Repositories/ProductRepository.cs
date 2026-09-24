@@ -155,6 +155,8 @@ public sealed class ProductReader : IProductReader
                 Currency = product.Currency,
                 Cost = product.Rates.Cost,
                 RetailRate = product.Rates.RetailRate,
+                WholesaleRate = product.Rates.WholesaleRate,
+                MaximumRetailPrice = product.Rates.MaximumRetailPrice,
                 ReorderLevel = product.Levels.Reorder,
                 product.TracksBatches,
                 product.TracksSerialNumbers,
@@ -204,7 +206,9 @@ public sealed class ProductReader : IProductReader
                 row.TracksSerialNumbers,
                 row.IsDiscontinued,
                 row.IsActive,
-                row.BarcodeCount)),
+                row.BarcodeCount,
+                row.WholesaleRate,
+                row.MaximumRetailPrice)),
         ];
     }
 

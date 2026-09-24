@@ -200,6 +200,115 @@ export function useLineColumns(
   return { shows, toggle, picker };
 }
 
+/**
+ * The product's own figures, offered as extra line columns.
+ *
+ * A buyer keying an order against a supplier's price list has the code on the
+ * invoice and the printed price on the carton, and had to open the product to check
+ * either — on every line, of every document, on a screen they cannot leave without
+ * losing what they have typed. Off by default, because a firm that does not price
+ * against an MRP wants five columns and not nine; kept as the same four columns on
+ * every entry screen, so a firm turns them on once and recognises them everywhere.
+ *
+ * Read-only on the line. These belong to the master and the document does not
+ * change them: what a line does carry is its own rate, which the picker already
+ * fills from the master and which anybody may type over.
+ */
+export function productDetailColumns(t: (key: string) => string): readonly LineColumn[] {
+  return [
+    { key: 'productCode', label: t('lineDetails.code'), defaultOn: false },
+    { key: 'productUnit', label: t('lineDetails.unit'), defaultOn: false },
+    { key: 'productRetail', label: t('lineDetails.retail'), defaultOn: false },
+    { key: 'productMrp', label: t('lineDetails.mrp'), defaultOn: false },
+  ];
+}
+
+/**
+ * The cells behind {@link productDetailColumns}.
+ *
+ * Rendered as a fragment so a caller drops them into its row at whatever point its
+ * own columns reach, and skipped one at a time by the same `shows` the rest of the
+ * row is gated on.
+ */
+export function ProductDetailCells({
+  product,
+  shows,
+  labels,
+}: {
+  readonly product: ProductSummary | undefined;
+  readonly shows: (key: string) => boolean;
+  readonly labels: (key: string) => string;
+}): React.JSX.Element {
+  const figure = (value: number | undefined): string =>
+    value === undefined || value <= 0 ? '—' : moneyAlways(value);
+
+  return (
+    <>
+      {shows('productCode') && (
+        <td
+          data-label={labels('lineDetails.code')}
+          className="px-2 py-1 font-mono text-xs text-ink-muted"
+        >
+          {product?.code ?? '—'}
+        </td>
+      )}
+
+      {shows('productUnit') && (
+        <td
+          data-label={labels('lineDetails.unit')}
+          className="px-2 py-1 text-xs text-ink-muted"
+        >
+          {product?.stockUnitCode ?? '—'}
+        </td>
+      )}
+
+      {shows('productRetail') && (
+        <td
+          data-label={labels('lineDetails.retail')}
+          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+        >
+          {figure(product?.retailRate)}
+        </td>
+      )}
+
+      {shows('productMrp') && (
+        <td
+          data-label={labels('lineDetails.mrp')}
+          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+        >
+          {figure(product?.maximumRetailPrice)}
+        </td>
+      )}
+    </>
+  );
+}
+
+/** The headings for {@link ProductDetailCells}, in the same order. */
+export function ProductDetailHeaders({
+  shows,
+  labels,
+}: {
+  readonly shows: (key: string) => boolean;
+  readonly labels: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <>
+      {shows('productCode') && (
+        <th className="px-2 py-1 text-start">{labels('lineDetails.code')}</th>
+      )}
+      {shows('productUnit') && (
+        <th className="px-2 py-1 text-start">{labels('lineDetails.unit')}</th>
+      )}
+      {shows('productRetail') && (
+        <th className="px-2 py-1 text-end">{labels('lineDetails.retail')}</th>
+      )}
+      {shows('productMrp') && (
+        <th className="px-2 py-1 text-end">{labels('lineDetails.mrp')}</th>
+      )}
+    </>
+  );
+}
+
 /** One charge on a document being entered. */
 export interface DraftCharge {
   readonly key: string;
