@@ -35,6 +35,16 @@ export interface ProductSummary {
   readonly isDiscontinued: boolean;
   readonly isActive: boolean;
   readonly barcodeCount: number;
+  /**
+   * The wholesale rate and the printed price.
+   *
+   * On the list DTO rather than only on the detail one because a document line is
+   * where they are wanted: somebody keying an order against a price list has the
+   * MRP on the carton in front of them, and reaching it meant opening the product.
+   * Nothing on a list screen shows them — they are for the line columns.
+   */
+  readonly wholesaleRate: number;
+  readonly maximumRetailPrice: number;
 }
 
 /** One barcode of a product. */

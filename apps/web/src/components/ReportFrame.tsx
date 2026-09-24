@@ -63,6 +63,7 @@ export function ReportFrame<TData>({
   title,
   subtitle,
   controls,
+  banner,
   query,
   isEmpty,
   children,
@@ -71,6 +72,14 @@ export function ReportFrame<TData>({
   /** A line under the heading, for a period or a scope the title cannot carry. */
   readonly subtitle?: string;
   readonly controls: React.ReactNode;
+  /**
+   * A notice above the filters, for something that happened before the screen opened.
+   *
+   * Above them and outside the query's own states on purpose: a screen somebody was
+   * redirected to has to say why while the report under it is still loading, and a
+   * notice inside the body would not appear until the figures did.
+   */
+  readonly banner?: React.ReactNode;
   readonly query: UseQueryResult<TData, ApiError>;
   readonly isEmpty?: (data: TData) => boolean;
   readonly children: (data: TData) => React.ReactNode;
@@ -133,6 +142,8 @@ export function ReportFrame<TData>({
         stack full-width and fill a phone twice over before a single row of the
         report is reached.
       */}
+      {banner}
+
       {controls && <FilterBar>{controls}</FilterBar>}
 
       {/*

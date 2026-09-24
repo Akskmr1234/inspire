@@ -6,6 +6,7 @@ import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/Repo
 import { DirectionBadge } from '@/components/ChequeBadges';
 import { request, type ApiError } from '@/lib/api';
 import { CHEQUE_DIRECTIONS, type ChequeReportLine } from '@/lib/cheques';
+import { SearchSelect } from '@/components/SearchSelect';
 
 interface ChequeCalendarDay {
   readonly date: string;
@@ -114,18 +115,18 @@ export function ChequeCalendarPage(): React.JSX.Element {
 
       <label className="field">
         <span className="field-label">{t('cheques.direction.label')}</span>
-        <select
+        <SearchSelect
           value={direction}
-          onChange={(event) => setDirection(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('cheques.allDirections')}</option>
-          {CHEQUE_DIRECTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {t(`cheques.direction.${option.name}`)}
-            </option>
-          ))}
-        </select>
+          onChange={setDirection}
+          clearable
+          size="sm"
+          label={t('cheques.direction.label')}
+          placeholder={t('cheques.allDirections')}
+          options={CHEQUE_DIRECTIONS.map((option) => ({
+            value: String(option.value),
+            label: t(`cheques.direction.${option.name}`),
+          }))}
+        />
       </label>
 
       <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">

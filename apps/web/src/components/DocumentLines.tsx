@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
@@ -6,6 +7,8 @@ import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
+import { chargesFor, type ChargeDocument } from '@/lib/charges';
+import { useSettings } from '@/stores/settings';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -137,12 +140,19 @@ export function useLineColumns(
     [columns, hidden],
   );
 
+  /*
+    On a popover rather than a div that is shown and hidden.
+
+    It had no way out but the button that opened it: no Escape, nothing on a click
+    elsewhere. Toggling a column changes the width of the table underneath, which
+    moves the toolbar the button is in — so the one exit could be somewhere other
+    than where it was pressed, and the panel stayed up over the lines it was there
+    to arrange. A popover closes on Escape, on a click outside and on the button
+    again, and Radix keeps it above the dialog this usually opens inside.
+  */
   const picker = (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
         className={clsx(
           'rounded-lg border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition',
           open
@@ -151,10 +161,14 @@ export function useLineColumns(
         )}
       >
         {t('documents.columns')}
-      </button>
+      </Popover.Trigger>
 
-      {open && (
-        <div className="animate-drop absolute end-0 z-40 mt-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-float">
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={4}
+          className="animate-drop z-[70] w-56 rounded-lg border border-line bg-surface p-2 shadow-float"
+        >
           {columns.map((column) => (
             <label
               key={column.key}
@@ -172,12 +186,127 @@ export function useLineColumns(
               {column.label}
             </label>
           ))}
-        </div>
-      )}
-    </div>
+
+          {/* Said plainly, because the panel is a list of checkboxes and nothing in
+              it looks like a way out. */}
+          <Popover.Close className="mt-1 w-full rounded px-1.5 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink">
+            {t('common.close')}
+          </Popover.Close>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 
   return { shows, toggle, picker };
+}
+
+/**
+ * The product's own figures, offered as extra line columns.
+ *
+ * A buyer keying an order against a supplier's price list has the code on the
+ * invoice and the printed price on the carton, and had to open the product to check
+ * either — on every line, of every document, on a screen they cannot leave without
+ * losing what they have typed. Off by default, because a firm that does not price
+ * against an MRP wants five columns and not nine; kept as the same four columns on
+ * every entry screen, so a firm turns them on once and recognises them everywhere.
+ *
+ * Read-only on the line. These belong to the master and the document does not
+ * change them: what a line does carry is its own rate, which the picker already
+ * fills from the master and which anybody may type over.
+ */
+export function productDetailColumns(t: (key: string) => string): readonly LineColumn[] {
+  return [
+    { key: 'productCode', label: t('lineDetails.code'), defaultOn: false },
+    { key: 'productUnit', label: t('lineDetails.unit'), defaultOn: false },
+    { key: 'productRetail', label: t('lineDetails.retail'), defaultOn: false },
+    { key: 'productMrp', label: t('lineDetails.mrp'), defaultOn: false },
+  ];
+}
+
+/**
+ * The cells behind {@link productDetailColumns}.
+ *
+ * Rendered as a fragment so a caller drops them into its row at whatever point its
+ * own columns reach, and skipped one at a time by the same `shows` the rest of the
+ * row is gated on.
+ */
+export function ProductDetailCells({
+  product,
+  shows,
+  labels,
+}: {
+  readonly product: ProductSummary | undefined;
+  readonly shows: (key: string) => boolean;
+  readonly labels: (key: string) => string;
+}): React.JSX.Element {
+  const figure = (value: number | undefined): string =>
+    value === undefined || value <= 0 ? '—' : moneyAlways(value);
+
+  return (
+    <>
+      {shows('productCode') && (
+        <td
+          data-label={labels('lineDetails.code')}
+          className="px-2 py-1 font-mono text-xs text-ink-muted"
+        >
+          {product?.code ?? '—'}
+        </td>
+      )}
+
+      {shows('productUnit') && (
+        <td
+          data-label={labels('lineDetails.unit')}
+          className="px-2 py-1 text-xs text-ink-muted"
+        >
+          {product?.stockUnitCode ?? '—'}
+        </td>
+      )}
+
+      {shows('productRetail') && (
+        <td
+          data-label={labels('lineDetails.retail')}
+          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+        >
+          {figure(product?.retailRate)}
+        </td>
+      )}
+
+      {shows('productMrp') && (
+        <td
+          data-label={labels('lineDetails.mrp')}
+          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+        >
+          {figure(product?.maximumRetailPrice)}
+        </td>
+      )}
+    </>
+  );
+}
+
+/** The headings for {@link ProductDetailCells}, in the same order. */
+export function ProductDetailHeaders({
+  shows,
+  labels,
+}: {
+  readonly shows: (key: string) => boolean;
+  readonly labels: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <>
+      {shows('productCode') && (
+        <th className="px-2 py-1 text-start">{labels('lineDetails.code')}</th>
+      )}
+      {shows('productUnit') && (
+        <th className="px-2 py-1 text-start">{labels('lineDetails.unit')}</th>
+      )}
+      {shows('productRetail') && (
+        <th className="px-2 py-1 text-end">{labels('lineDetails.retail')}</th>
+      )}
+      {shows('productMrp') && (
+        <th className="px-2 py-1 text-end">{labels('lineDetails.mrp')}</th>
+      )}
+    </>
+  );
 }
 
 /** One charge on a document being entered. */
@@ -190,6 +319,46 @@ export interface DraftCharge {
 /** A fresh, empty charge row. */
 export function emptyCharge(): DraftCharge {
   return { key: crypto.randomUUID(), ledgerId: '', amount: '' };
+}
+
+/**
+ * Puts the firm's standing charges onto a document as it opens.
+ *
+ * Applied once, when the chart of accounts arrives rather than when the screen
+ * mounts: the heads are picked from the chart, so seeding before it has loaded would
+ * drop every row that refers to it. Once only, because a second run would put the
+ * freight row back after somebody deliberately took it off.
+ *
+ * A head that has since left the chart is dropped rather than seeded empty — see
+ * {@link chargesFor}.
+ */
+export function useDefaultCharges(
+  document: ChargeDocument,
+  ledgers: readonly LedgerSummary[],
+  apply: (charges: readonly DraftCharge[]) => void,
+): void {
+  const defaults = useSettings((state) => state.defaultCharges);
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    if (seeded.current || ledgers.length === 0) {
+      return;
+    }
+
+    seeded.current = true;
+
+    const rows = chargesFor(document, defaults, ledgers);
+
+    if (rows.length > 0) {
+      apply(
+        rows.map((row) => ({
+          key: crypto.randomUUID(),
+          ledgerId: row.ledgerId,
+          amount: row.amount,
+        })),
+      );
+    }
+  }, [document, defaults, ledgers, apply]);
 }
 
 /**

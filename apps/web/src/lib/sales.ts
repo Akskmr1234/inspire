@@ -66,6 +66,13 @@ export interface SalesInvoiceLineDetail {
   readonly serialNumberIds: readonly string[];
 }
 
+/** One charge on a document being entered. */
+export interface SalesChargeInput {
+  readonly ledgerId: string;
+  /** Always positive. The firm's charge matrix decides which way it moves the total. */
+  readonly amount: number;
+}
+
 /** A charge carried beside the goods. */
 export interface SalesInvoiceChargeDetail {
   readonly ledgerId: string;
@@ -185,6 +192,8 @@ export async function createSalesInvoice(input: {
   readonly returnsInvoiceId?: string | null;
   readonly referenceNumber?: string | null;
   readonly narration?: string | null;
+  /** Freight, delivery, a discount off the whole document. */
+  readonly charges?: readonly SalesChargeInput[];
 }): Promise<SalesInvoiceHeader> {
   return request<SalesInvoiceHeader>('/sales/invoices', {
     method: 'POST',

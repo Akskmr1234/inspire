@@ -18,8 +18,12 @@ import {
   ChargesPanel,
   DocumentTotals,
   chargeTotal,
+  productDetailColumns,
+  ProductDetailCells,
+  ProductDetailHeaders,
   productOption,
   stockByProduct,
+  useDefaultCharges,
   useLineColumns,
   type DraftCharge,
   type LineColumn,
@@ -457,6 +461,12 @@ function EntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  useDefaultCharges(
+    isReturn ? 'purchaseReturn' : 'purchase',
+    ledgers.data ?? [],
+    setCharges,
+  );
+
   // What is on the shelf, for the product picker. One call for the whole master
   // rather than one per line, and stale for a minute: a purchase being keyed in is
   // not a stock take, and the figure is context rather than a control.
@@ -524,6 +534,7 @@ function EntryDialog({
 
   const lineColumns: readonly LineColumn[] = [
     { key: 'product', label: t('purchase.product'), defaultOn: true, fixed: true },
+    ...productDetailColumns(t),
     { key: 'quantity', label: t('purchase.quantity'), defaultOn: true, fixed: true },
     { key: 'rate', label: t('purchase.rate'), defaultOn: true, fixed: true },
     { key: 'discount', label: t('purchase.discount'), defaultOn: true },
@@ -690,7 +701,7 @@ function EntryDialog({
           discarded. The supplier's number, which the firm does not issue, is a
           field further down and mandatory on a tax invoice.
         */}
-        <Field label={t('purchase.documentNumber')} hint={t('purchase.numberAuto')}>
+        <Field label={t('purchase.documentNumber')}>
           <input value={t('purchase.numberOnSave')} disabled className="field-input" />
         </Field>
 
@@ -719,12 +730,7 @@ function EntryDialog({
           />
         </Field>
 
-        <Field
-          label={t('purchase.warehouse')}
-          required
-          error={errors['warehouseId']}
-          hint={t('purchase.warehouseDefaulted')}
-        >
+        <Field label={t('purchase.warehouse')} required error={errors['warehouseId']}>
           <SearchSelect
             value={draft.warehouseId}
             onChange={(value) => set('warehouseId', value)}
@@ -776,7 +782,7 @@ function EntryDialog({
         />
 
         {isReturn && (
-          <Field label={t('purchase.againstInvoice')} hint={t('purchase.againstHint')}>
+          <Field label={t('purchase.againstInvoice')}>
             <SearchSelect
               value={draft.returnsInvoiceId}
               onChange={(value) => set('returnsInvoiceId', value)}
@@ -832,10 +838,11 @@ function EntryDialog({
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="w-full min-w-[44rem] text-sm">
+        <table className="line-table sm:min-w-[44rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('purchase.product')}</th>
+              <ProductDetailHeaders shows={columns.shows} labels={t} />
               <th className="px-2 py-1 text-end">{t('purchase.quantity')}</th>
               <th className="px-2 py-1 text-end">{t('purchase.rate')}</th>
               {columns.shows('discount') && (
@@ -953,16 +960,28 @@ function LineRow({
   const needsSerials = product?.tracksSerialNumbers === true;
   const named = splitSerials(line.serialNumbers).length;
 
+  /*
+    How far the batch and serial sub-row reaches: product, quantity, rate, net and
+    the action column, plus whichever optional columns are on. Counted rather than
+    fixed because the row above it is counted too, and a sub-row that stops short
+    leaves a gap in the middle of a line somebody is filling in.
+  */
   const span =
     4 +
-    (columns.shows('discount') ? 1 : 0) +
-    (columns.shows('taxPercent') ? 1 : 0) +
-    (columns.shows('taxAmount') ? 1 : 0);
+    [
+      'productCode',
+      'productUnit',
+      'productRetail',
+      'productMrp',
+      'discount',
+      'taxPercent',
+      'taxAmount',
+    ].filter((key) => columns.shows(key)).length;
 
   return (
     <>
       <tr className="border-t border-line">
-        <td className="min-w-64 px-2 py-1">
+        <td data-label={t('purchase.product')} className="min-w-64 px-2 py-1">
           {/*
             The picker shows what each product is and what is on the shelf, and it
             can be typed into. It was a native select listing `code — description`
@@ -995,6 +1014,8 @@ function LineRow({
           />
         </td>
 
+        <ProductDetailCells product={product} shows={columns.shows} labels={t} />
+
         <NumberCell
           value={line.quantity}
           error={errors['quantity']}
@@ -1018,7 +1039,7 @@ function LineRow({
         )}
 
         {columns.shows('taxPercent') && (
-          <td className="px-2 py-1 text-end">
+          <td data-label={t('purchase.taxPercent')} className="px-2 py-1 text-end">
             {/*
               A list of the rates the firm actually charges, plus whatever is typed.
               Under GST there are seven of them and mistyping 18 as 1.8 is a return
@@ -1049,12 +1070,18 @@ function LineRow({
         )}
 
         {columns.shows('taxAmount') && (
-          <td className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted">
+          <td
+            data-label={t('purchase.taxAmount')}
+            className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+          >
             {moneyAlways(tax)}
           </td>
         )}
 
-        <td className="px-2 py-1 text-end font-mono tabular-nums">
+        <td
+          data-label={t('purchase.net')}
+          className="px-2 py-1 text-end font-mono tabular-nums"
+        >
           {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
 
@@ -1300,7 +1327,6 @@ function DocumentDialog({
                 size="sm"
                 value={reason}
                 onChange={setReason}
-                hint={t('purchase.cancelHint')}
               />
               <ModalButton
                 disabled={busy || reason.trim() === ''}
@@ -1368,7 +1394,7 @@ function NumberCell({
     was a heading pointing at the space beside the figures.
   */
   return (
-    <td className="px-2 py-1 text-end">
+    <td data-label={label} className="px-2 py-1 text-end">
       <input
         type="number"
         inputMode="decimal"

@@ -117,6 +117,24 @@ describe('sorting', () => {
     expect(cell.getAttribute('aria-sort')).toBe('descending');
   });
 
+  /*
+    jsdom lays nothing out, so this pins the rule rather than the pixels: the caret is
+    in the layout at all times so the heading does not jump when a column is first
+    sorted, and on an end-aligned column that put it between the word and the edge
+    the figures are against — COST stopped ten pixels short of where 10.00 stopped,
+    on every money column of every list. The browser measurement that found it is not
+    something this suite can run.
+  */
+  it('puts the sort caret outside an end-aligned heading, not between it and the edge', () => {
+    render(grid());
+
+    const amount = screen.getByRole('button', { name: /amount/i });
+    const name = screen.getByRole('button', { name: /^name$/i });
+
+    expect(amount.className).toContain('flex-row-reverse');
+    expect(name.className).not.toContain('flex-row-reverse');
+  });
+
   it('orders by the underlying value, not the rendered text', async () => {
     const user = userEvent.setup();
     render(grid());
@@ -220,7 +238,8 @@ describe('the narrow viewport', () => {
     const user = userEvent.setup();
     render(grid());
 
-    await user.selectOptions(screen.getByRole('combobox'), 'code');
+    await user.click(screen.getByRole('combobox', { name: /sort/i }));
+    await user.click(screen.getByRole('option', { name: 'Code' }));
 
     const codes = screen.getAllByRole('listitem').map((item) => item.textContent ?? '');
     expect(codes[0]).toContain('A-001');
@@ -530,6 +549,55 @@ describe('keeping an arrangement', () => {
 
     // The toggle is back up, so the panel is down with it.
     expect(toggle().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  /*
+    A grid somebody arranged and saved is finished being arranged. Leaving the picker
+    one click away means the next stray click reorders a list that was set on
+    purpose, so the arrangement is shut and Edit layout is what opens it again.
+  */
+  it('shuts the columns once the arrangement is kept, and opens them again on request', async () => {
+    const user = userEvent.setup();
+    render(grid());
+
+    const toggle = (): HTMLElement => screen.getByRole('button', { name: 'Columns' });
+
+    expect((toggle() as HTMLButtonElement).disabled).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Save layout' }));
+
+    await waitFor(() => {
+      expect((toggle() as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    // Save layout has become the way back in, rather than a second button beside it.
+    expect(screen.queryByRole('button', { name: 'Save layout' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit layout' }));
+
+    expect((toggle() as HTMLButtonElement).disabled).toBe(false);
+    expect(toggle().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('opens the columns again when the arrangement is thrown away', async () => {
+    const user = userEvent.setup();
+    render(grid());
+
+    await user.click(screen.getByRole('button', { name: 'Save layout' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit layout' })).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save layout' })).toBeTruthy();
+    });
+
+    expect(
+      (screen.getByRole('button', { name: 'Columns' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });
 

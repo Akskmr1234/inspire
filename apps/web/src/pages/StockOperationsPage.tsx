@@ -206,36 +206,34 @@ export function StockOperationsPage({
           option is furniture. */}
       {lockedType === undefined && (
         <Labelled label={t('stock.type')}>
-          <select
-            value={typeFilter}
-            onChange={(event) =>
-              setTypeFilter(event.target.value === '' ? '' : Number(event.target.value))
-            }
-            className="field-input-sm"
-          >
-            <option value="">{t('stock.allTypes')}</option>
-            {STOCK_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {t(typeKey(type))}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            value={typeFilter === '' ? '' : String(typeFilter)}
+            onChange={(next) => setTypeFilter(next === '' ? '' : Number(next))}
+            clearable
+            size="sm"
+            label={t('stock.type')}
+            placeholder={t('stock.allTypes')}
+            options={STOCK_TYPES.map((type) => ({
+              value: String(type),
+              label: t(typeKey(type)),
+            }))}
+          />
         </Labelled>
       )}
 
       <Labelled label={t('stock.warehouse')}>
-        <select
+        <SearchSelect
           value={warehouseFilter}
-          onChange={(event) => setWarehouseFilter(event.target.value)}
-          className="field-input-sm"
-        >
-          <option value="">{t('stock.allWarehouses')}</option>
-          {(warehouses.data ?? []).map((warehouse) => (
-            <option key={warehouse.id} value={warehouse.id}>
-              {warehouse.name}
-            </option>
-          ))}
-        </select>
+          onChange={setWarehouseFilter}
+          clearable
+          size="sm"
+          label={t('stock.warehouse')}
+          placeholder={t('stock.allWarehouses')}
+          options={(warehouses.data ?? []).map((warehouse) => ({
+            value: warehouse.id,
+            label: warehouse.name,
+          }))}
+        />
       </Labelled>
     </div>
   );
@@ -533,10 +531,10 @@ function StockEntry({
           {/* Shown as text rather than as a select of one where the screen is for
               one kind: a dropdown that cannot be changed is a control that lies. */}
           {lockedType === undefined ? (
-            <select
-              value={type}
-              onChange={(event) => {
-                const next = Number(event.target.value);
+            <SearchSelect
+              value={String(type)}
+              onChange={(value) => {
+                const next = Number(value);
                 setType(next);
 
                 // A destination only means something on a transfer, and the server
@@ -545,14 +543,12 @@ function StockEntry({
                   setDestinationId('');
                 }
               }}
-              className="field-input"
-            >
-              {STOCK_TYPES.map((candidate) => (
-                <option key={candidate} value={candidate}>
-                  {t(typeKey(candidate))}
-                </option>
-              ))}
-            </select>
+              label={t('stock.type')}
+              options={STOCK_TYPES.map((candidate) => ({
+                value: String(candidate),
+                label: t(typeKey(candidate)),
+              }))}
+            />
           ) : (
             <input value={t(typeKey(lockedType))} disabled className="field-input" />
           )}
@@ -573,39 +569,30 @@ function StockEntry({
           <span className="field-label">
             {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
           </span>
-          <select
+          <SearchSelect
             value={warehouseId}
-            onChange={(event) => setWarehouseId(event.target.value)}
-            className="field-input"
-            required
-          >
-            <option value="">{t('stock.choose')}</option>
-            {warehouses.map((warehouse) => (
-              <option key={warehouse.id} value={warehouse.id}>
-                {warehouse.name}
-              </option>
-            ))}
-          </select>
+            onChange={setWarehouseId}
+            label={t('stock.warehouse')}
+            placeholder={t('stock.choose')}
+            options={warehouses.map((warehouse) => ({
+              value: warehouse.id,
+              label: warehouse.name,
+            }))}
+          />
         </label>
 
         {transfer && (
           <label className="block">
             <span className="field-label">{t('stock.toWarehouse')}</span>
-            <select
+            <SearchSelect
               value={destinationId}
-              onChange={(event) => setDestinationId(event.target.value)}
-              className="field-input"
-              required
-            >
-              <option value="">{t('stock.choose')}</option>
-              {warehouses
+              onChange={setDestinationId}
+              label={t('stock.toWarehouse')}
+              placeholder={t('stock.choose')}
+              options={warehouses
                 .filter((warehouse) => warehouse.id !== warehouseId)
-                .map((warehouse) => (
-                  <option key={warehouse.id} value={warehouse.id}>
-                    {warehouse.name}
-                  </option>
-                ))}
-            </select>
+                .map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
+            />
           </label>
         )}
 

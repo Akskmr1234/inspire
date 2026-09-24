@@ -43,6 +43,8 @@ public sealed record ListProductsQuery(
 /// <param name="IsDiscontinued">Whether the firm has stopped buying it.</param>
 /// <param name="IsActive">Whether it may be used on new documents.</param>
 /// <param name="BarcodeCount">How many barcodes it carries.</param>
+/// <param name="WholesaleRate">What one stock unit sells at wholesale.</param>
+/// <param name="MaximumRetailPrice">The printed price, where the goods carry one.</param>
 public sealed record ProductSummary(
     Guid Id,
     string Code,
@@ -61,7 +63,9 @@ public sealed record ProductSummary(
     bool TracksSerialNumbers,
     bool IsDiscontinued,
     bool IsActive,
-    int BarcodeCount);
+    int BarcodeCount,
+    decimal WholesaleRate,
+    decimal MaximumRetailPrice);
 
 /// <summary>Reads one product in full, for the edit screen.</summary>
 /// <param name="ProductId">The product.</param>

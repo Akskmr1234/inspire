@@ -16,6 +16,7 @@ import {
 } from '@/lib/products';
 import { listMaster, type BrandSummary, type UnitSummary } from '@/lib/inventory';
 import { moneyAlways } from '@/lib/money';
+import { SearchSelect } from '@/components/SearchSelect';
 
 /**
  * The product editor.
@@ -348,15 +349,15 @@ function DescriptionTab({
         });
       }}
     >
-      <Section title={t('products.identity')}>
+      <Section title={t('products.identity')} columns={6}>
         {/* Read-only, and not merely disabled in the UI: nothing on the server
             changes it either. The code is how this product is named on every
             document already entered. */}
-        <Field label={t('masters.code')}>
+        <Field label={t('masters.code')} span={2}>
           <input value={product.code} readOnly className="field-input opacity-60" />
         </Field>
 
-        <Field label={t('products.description')}>
+        <Field label={t('products.description')} span={4}>
           <input
             value={text.description}
             onChange={(e) => setText({ ...text, description: e.target.value })}
@@ -365,7 +366,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.descriptionArabic')}>
+        <Field label={t('products.descriptionArabic')} span={2}>
           <input
             dir="rtl"
             value={text.descriptionArabic}
@@ -374,7 +375,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.shortDescription')}>
+        <Field label={t('products.shortDescription')} span={2}>
           <input
             value={text.shortDescription}
             onChange={(e) => setText({ ...text, shortDescription: e.target.value })}
@@ -382,7 +383,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.itemName')}>
+        <Field label={t('products.itemName')} span={2}>
           <input
             value={text.itemName}
             onChange={(e) => setText({ ...text, itemName: e.target.value })}
@@ -390,7 +391,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.manufacturer')}>
+        <Field label={t('products.manufacturer')} span={2}>
           <input
             value={text.manufacturer}
             onChange={(e) => setText({ ...text, manufacturer: e.target.value })}
@@ -398,7 +399,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.label')}>
+        <Field label={t('products.label')} span={2}>
           <input
             value={text.label}
             onChange={(e) => setText({ ...text, label: e.target.value })}
@@ -406,7 +407,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.size')}>
+        <Field label={t('products.size')} span={2}>
           <input
             value={text.size}
             onChange={(e) => setText({ ...text, size: e.target.value })}
@@ -414,7 +415,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.origin')}>
+        <Field label={t('products.origin')} span={2}>
           <input
             value={text.origin}
             onChange={(e) => setText({ ...text, origin: e.target.value })}
@@ -422,7 +423,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.rack')}>
+        <Field label={t('products.rack')} span={2}>
           <input
             value={text.rack}
             onChange={(e) => setText({ ...text, rack: e.target.value })}
@@ -430,7 +431,7 @@ function DescriptionTab({
           />
         </Field>
 
-        <Field label={t('products.bin')}>
+        <Field label={t('products.bin')} span={2}>
           <input
             value={text.bin}
             onChange={(e) => setText({ ...text, bin: e.target.value })}
@@ -441,14 +442,15 @@ function DescriptionTab({
 
       <Section title={`${t('products.rates')} · ${product.currency}`}>
         <Field label={t('products.costingMethod')}>
-          <select
+          <SearchSelect
             value={rates.costingMethod}
-            onChange={(e) => setRates({ ...rates, costingMethod: e.target.value })}
-            className="field-input"
-          >
-            <option value="1">{t('products.costingLastPurchase')}</option>
-            <option value="2">{t('products.costingAverage')}</option>
-          </select>
+            onChange={(value) => setRates({ ...rates, costingMethod: value })}
+            label={t('products.costingMethod')}
+            options={[
+              { value: '1', label: t('products.costingLastPurchase') },
+              { value: '2', label: t('products.costingAverage') },
+            ]}
+          />
         </Field>
 
         <NumberField
@@ -485,7 +487,6 @@ function DescriptionTab({
           label={t('products.maximumRetailPrice')}
           value={rates.maximumRetailPrice}
           onChange={(value) => setRates({ ...rates, maximumRetailPrice: value })}
-          hint={t('products.mrpHint')}
         />
       </Section>
 
@@ -609,33 +610,31 @@ function DetailsTab({
         </Field>
 
         <Field label={t('products.purchaseUnit')}>
-          <select
+          <SearchSelect
             value={form.purchaseUnitId}
-            onChange={(e) => setForm({ ...form, purchaseUnitId: e.target.value })}
-            className="field-input"
-          >
-            {convertible.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.code} — {unit.name}
-                {unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setForm({ ...form, purchaseUnitId: value })}
+            label={t('products.purchaseUnit')}
+            options={convertible.map((unit) => ({
+              value: unit.id,
+              label: `${unit.code} — ${unit.name}${
+                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
+              }`,
+            }))}
+          />
         </Field>
 
         <Field label={t('products.salesUnit')}>
-          <select
+          <SearchSelect
             value={form.salesUnitId}
-            onChange={(e) => setForm({ ...form, salesUnitId: e.target.value })}
-            className="field-input"
-          >
-            {convertible.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.code} — {unit.name}
-                {unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setForm({ ...form, salesUnitId: value })}
+            label={t('products.salesUnit')}
+            options={convertible.map((unit) => ({
+              value: unit.id,
+              label: `${unit.code} — ${unit.name}${
+                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
+              }`,
+            }))}
+          />
         </Field>
 
         <Field label={t('products.brand')}>
@@ -665,21 +664,21 @@ function DetailsTab({
           label={t('products.maximumLevel')}
           value={form.maximumLevel}
           onChange={(value) => setForm({ ...form, maximumLevel: value })}
-          hint={t('products.maximumLevelHint')}
         />
 
         <Field label={t('products.movement')}>
-          <select
+          <SearchSelect
             value={form.movement}
-            onChange={(e) => setForm({ ...form, movement: e.target.value })}
-            className="field-input"
-          >
-            <option value="0">{t('products.movementUnclassified')}</option>
-            <option value="1">{t('products.movementFast')}</option>
-            <option value="2">{t('products.movementNormal')}</option>
-            <option value="3">{t('products.movementSlow')}</option>
-            <option value="4">{t('products.movementDead')}</option>
-          </select>
+            onChange={(value) => setForm({ ...form, movement: value })}
+            label={t('products.movement')}
+            options={[
+              { value: '0', label: t('products.movementUnclassified') },
+              { value: '1', label: t('products.movementFast') },
+              { value: '2', label: t('products.movementNormal') },
+              { value: '3', label: t('products.movementSlow') },
+              { value: '4', label: t('products.movementDead') },
+            ]}
+          />
         </Field>
       </Section>
 
@@ -707,7 +706,6 @@ function DetailsTab({
             label={t('products.shelfLifeDays')}
             value={form.shelfLifeDays}
             onChange={(value) => setForm({ ...form, shelfLifeDays: value })}
-            hint={t('products.shelfLifeHint')}
           />
         )}
       </Section>
@@ -905,30 +903,66 @@ function optional(value: string): number | null {
   return value.trim() ? number(value) : null;
 }
 
+/**
+ * A block of the editor, on a grid of its own.
+ *
+ * Six columns where one field deserves more room than the rest, three where they are
+ * all alike. The identity block is the case that needs it: a code is six characters
+ * and the description is the product's name, and on an even three-column grid the
+ * two were given the same 384px — a box with five characters in it and four fifths
+ * of it empty, beside the one field on the screen a long name will not fit in.
+ *
+ * Six and not four, so the wide field is still a whole number of the same tracks
+ * everything else sits on. The description takes four of six and the code takes two,
+ * which leaves every column boundary on the page where the rows below it put theirs:
+ * a form whose second row does not line up with its first is the thing that reads as
+ * broken, whatever the fields are worth.
+ */
 function Section({
   title,
+  columns = 3,
   children,
 }: {
   readonly title: string;
+  readonly columns?: 3 | 6;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <fieldset className="space-y-3">
       <legend className="text-sm font-semibold text-ink-muted uppercase">{title}</legend>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+
+      <div
+        className={clsx(
+          'grid gap-4 sm:grid-cols-2',
+          columns === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-3',
+        )}
+      >
+        {children}
+      </div>
     </fieldset>
   );
 }
 
+/** The span classes, written out so the stylesheet's scanner can see them. */
+const SPAN: Record<number, string> = {
+  1: 'lg:col-span-1',
+  2: 'lg:col-span-2',
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+};
+
 function Field({
   label,
+  span,
   children,
 }: {
   readonly label: string;
+  /** How many of a six-column section this field takes, above `lg`. */
+  readonly span?: 1 | 2 | 3 | 4;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <label className="block">
+    <label className={clsx('block', span !== undefined && SPAN[span])}>
       <span className="field-label">{label}</span>
       {children}
     </label>

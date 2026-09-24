@@ -27,7 +27,7 @@ vi.mock('@/lib/api', async () => {
   };
 });
 
-const { VoucherEntryPage } = await import('@/pages/VoucherEntryPage');
+const { PaymentEntryPage, VoucherEntryPage } = await import('@/pages/VoucherEntryPage');
 
 describe('the balance badge', () => {
   it('says nothing has been entered rather than naming a difference of zero', async () => {
@@ -65,10 +65,62 @@ describe('the balance badge', () => {
     await user.type(screen.getAllByLabelText(/debit amount/i)[0]!, '250');
 
     // Turn the second line over to credit, then enter the matching amount.
-    const sides = screen.getAllByLabelText(/dr \/ cr/i);
-    await user.selectOptions(sides[1]!, '2');
+    const sides = screen.getAllByRole('combobox', { name: /dr \/ cr/i });
+    await user.click(sides[1]!);
+    await user.click(screen.getByRole('option', { name: /^credit$/i }));
     await user.type(screen.getAllByLabelText(/credit amount/i)[0]!, '250');
 
     await waitFor(() => expect(screen.getByText(/^balanced$/i)).toBeTruthy());
+  });
+});
+
+describe('the payment mode', () => {
+  it('offers the modes rather than a box to type one into', async () => {
+    setMatchingMedia();
+    const user = userEvent.setup();
+    renderPage(<PaymentEntryPage />);
+
+    const field = await screen.findByRole('combobox', { name: /payment mode/i });
+    await user.click(field);
+
+    /*
+      The field this replaced was free text, which is how "Cash", "cash" and "By
+      cash" became three modes to a report and one to the cashier. The list is the
+      fix, so what it is worth pinning is that the list is there at all.
+    */
+    expect(screen.getByRole('option', { name: 'Cheque' })).toBeTruthy();
+
+    await user.click(screen.getByRole('option', { name: 'Bank transfer' }));
+
+    expect((field as HTMLInputElement).value).toBe('Bank transfer');
+  });
+});
+
+const { VoucherReportPage } = await import('@/pages/VoucherReportPage');
+
+describe('the list a posted voucher lands on', () => {
+  it('names the voucher and narrows to its type', async () => {
+    setMatchingMedia();
+    renderPage(
+      <VoucherReportPage />,
+      '/accounting/voucher-report?type=3&posted=CPV-0007',
+    );
+
+    /*
+      The redirect is the only confirmation a posting now gets: the entry screen no
+      longer stays put with a green line on it. If the number does not arrive here,
+      somebody who looked away sees an empty form and re-enters the voucher.
+    */
+    expect(await screen.findByText(/CPV-0007/)).toBeTruthy();
+
+    const type = screen.getByRole('combobox', { name: /voucher type/i });
+    expect((type as HTMLInputElement).value).toBe('Cash payment');
+  });
+
+  it('says nothing when somebody opens the list on its own', () => {
+    setMatchingMedia();
+    renderPage(<VoucherReportPage />, '/accounting/voucher-report');
+
+    expect(screen.queryByText(/is posted, and is in the list below/i)).toBeNull();
   });
 });

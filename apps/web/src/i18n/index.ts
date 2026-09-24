@@ -180,6 +180,8 @@ const en = {
     post: 'Post voucher',
     posting: 'Posting…',
     postedNotice: 'Posted {{number}} for {{total}}.',
+    postedAndListed: '{{number}} is posted, and is in the list below.',
+    enterAnother: 'Enter another',
     paymentTitle: 'Payment',
     paymentHint:
       'Money going out: a supplier paid, an expense settled, an advance given.',
@@ -194,7 +196,7 @@ const en = {
     cashAccount: 'Cash account',
     bankAccount: 'Bank account',
     paymentMode: 'Payment mode',
-    paymentModeHint: 'Cash, cheque, transfer, card…',
+    paymentModeNone: 'Not stated',
     postPayment: 'Post payment',
     postReceipt: 'Post receipt',
     paymentEffect:
@@ -212,6 +214,29 @@ const en = {
     Draft: 'Draft',
     Posted: 'Posted',
     Cancelled: 'Cancelled',
+  },
+  /*
+    The product's own figures, shown beside a document line.
+
+    One set of captions rather than one per screen: a purchase, an order and an
+    invoice all show the same four things off the same master, and three copies would
+    be three chances for them to disagree.
+  */
+  lineDetails: {
+    code: 'Code',
+    unit: 'Unit',
+    retail: 'Retail',
+    wholesale: 'Wholesale',
+    mrp: 'MRP',
+    fromMaster: 'From the product master. Change it on the product.',
+  },
+  paymentModes: {
+    cash: 'Cash',
+    cheque: 'Cheque',
+    bankTransfer: 'Bank transfer',
+    card: 'Card',
+    online: 'Online',
+    credit: 'Credit',
   },
   cashFlow: {
     Operating: 'Operating activities',
@@ -915,6 +940,7 @@ const en = {
     unfreeze: 'Unfreeze',
     exportCsv: 'Export CSV',
     saveLayout: 'Save layout',
+    editLayout: 'Edit layout',
     resetLayout: 'Reset',
     layoutSaved: 'Layout saved',
     layoutReset: 'Layout reset',
@@ -932,6 +958,8 @@ const en = {
     freezeHint: 'Keep the first column in view while the table scrolls',
     exportHint: 'Download what is on screen as a CSV file',
     saveLayoutHint: 'Remember this arrangement for this list',
+    columnsLockedHint: 'The arrangement is kept. Press Edit layout to change it.',
+    editLayoutHint: 'Open the columns again to change the kept arrangement',
     resetLayoutHint: 'Put the columns back to their defaults',
     showingRange: 'Showing {{first}}–{{last}} of {{total}}',
     totalRows_one: '{{count}} record',
@@ -978,6 +1006,9 @@ const en = {
       'Leave unset to use whichever warehouse the master marks as the default.',
     warehouseFromMaster: "The master's default",
     masterDefault: 'default',
+    defaultPaymentMode: 'Payment mode a receipt or payment starts at',
+    defaultPaymentModeHint:
+      'Leave unset to ask each time. A counter that only takes cash need not say so on every voucher.',
     productsTitle: 'New products',
     productsHint:
       'What a new product starts with, so a mandatory field is not asked twice.',
@@ -985,6 +1016,22 @@ const en = {
     defaultCategoryHint: 'Still mandatory — this only fills it in.',
     defaultStockUnit: 'Stock unit a new product starts at',
     defaultStockUnitHint: 'Still mandatory — this only fills it in.',
+    chargesTitle: 'Charges a new document starts with',
+    chargesHint:
+      'Freight, packing, delivery, a standing discount — set once per kind of document and applied to every new one, so the row is not added by hand a hundred times a week.',
+    chargesDocument: 'Kind of document',
+    chargeAmount: 'Amount',
+    chargeAmountBlank: 'Ask',
+    chargesNoneSet: 'No document kind starts with a charge yet.',
+    chargesSetOn: 'Set on: {{kinds}}.',
+    chargeDocuments: {
+      sales: 'Sales invoice',
+      salesReturn: 'Sales return',
+      salesOrder: 'Sales order',
+      purchase: 'Purchase invoice',
+      purchaseReturn: 'Purchase return',
+      purchaseOrder: 'Purchase order',
+    },
     askEachTime: 'Ask each time',
     decimalsTitle: 'Decimal places',
     decimalsHintFirm:
@@ -1024,6 +1071,7 @@ const en = {
   },
   common: {
     retry: 'Try again',
+    dismiss: 'Dismiss',
     yes: 'Yes',
     no: 'No',
     loading: 'Loading…',
@@ -1222,6 +1270,8 @@ const ar = {
     post: 'ترحيل القيد',
     posting: 'جارٍ الترحيل…',
     postedNotice: 'تم ترحيل {{number}} بمبلغ {{total}}.',
+    postedAndListed: 'تم ترحيل {{number}}، وهو ضمن القائمة أدناه.',
+    enterAnother: 'إدخال سند آخر',
     paymentTitle: 'سند صرف',
     paymentHint: 'أموال صادرة: سداد مورد، مصروف، أو سلفة.',
     receiptTitle: 'سند قبض',
@@ -1235,7 +1285,7 @@ const ar = {
     cashAccount: 'حساب الصندوق',
     bankAccount: 'الحساب البنكي',
     paymentMode: 'طريقة الدفع',
-    paymentModeHint: 'نقد، شيك، تحويل، بطاقة…',
+    paymentModeNone: 'غير محدد',
     postPayment: 'ترحيل سند الصرف',
     postReceipt: 'ترحيل سند القبض',
     paymentEffect:
@@ -1253,6 +1303,22 @@ const ar = {
     Draft: 'مسودة',
     Posted: 'مرحّل',
     Cancelled: 'ملغى',
+  },
+  lineDetails: {
+    code: 'الرمز',
+    unit: 'الوحدة',
+    retail: 'التجزئة',
+    wholesale: 'الجملة',
+    mrp: 'السعر المطبوع',
+    fromMaster: 'من بيانات المنتج. يُعدَّل من بطاقة المنتج.',
+  },
+  paymentModes: {
+    cash: 'نقداً',
+    cheque: 'شيك',
+    bankTransfer: 'تحويل بنكي',
+    card: 'بطاقة',
+    online: 'دفع إلكتروني',
+    credit: 'آجل',
   },
   cashFlow: {
     Operating: 'الأنشطة التشغيلية',
@@ -1975,6 +2041,7 @@ const ar = {
     unfreeze: 'إلغاء التثبيت',
     exportCsv: 'تصدير CSV',
     saveLayout: 'حفظ التخطيط',
+    editLayout: 'تعديل التخطيط',
     resetLayout: 'إعادة تعيين',
     layoutSaved: 'تم حفظ التخطيط',
     layoutReset: 'تمت إعادة التعيين',
@@ -1992,6 +2059,8 @@ const ar = {
     freezeHint: 'إبقاء العمود الأول ظاهراً أثناء التمرير',
     exportHint: 'تنزيل ما يظهر على الشاشة كملف CSV',
     saveLayoutHint: 'حفظ هذا الترتيب لهذه القائمة',
+    columnsLockedHint: 'الترتيب محفوظ. اضغط «تعديل التخطيط» لتغييره.',
+    editLayoutHint: 'فتح الأعمدة مجدداً لتغيير الترتيب المحفوظ',
     resetLayoutHint: 'إعادة الأعمدة إلى وضعها الافتراضي',
     showingRange: 'عرض {{first}}–{{last}} من {{total}}',
     totalRows_one: 'سجل واحد',
@@ -2033,12 +2102,31 @@ const ar = {
       'اتركه فارغاً لاستخدام المستودع الافتراضي المحدد في البيانات الأساسية.',
     warehouseFromMaster: 'الافتراضي من البيانات الأساسية',
     masterDefault: 'افتراضي',
+    defaultPaymentMode: 'طريقة الدفع التي يبدأ بها سند القبض أو الصرف',
+    defaultPaymentModeHint:
+      'اتركه فارغاً ليُسأل في كل مرة. الصندوق الذي يتعامل نقداً فقط لا يحتاج إلى تحديدها في كل سند.',
     productsTitle: 'المنتجات الجديدة',
     productsHint: 'ما يبدأ به المنتج الجديد، حتى لا يُسأل عن حقل إلزامي مرتين.',
     defaultCategory: 'الفئة التي يبدأ بها المنتج الجديد',
     defaultCategoryHint: 'تبقى إلزامية — هذا يملؤها فقط.',
     defaultStockUnit: 'وحدة المخزون التي يبدأ بها المنتج الجديد',
     defaultStockUnitHint: 'تبقى إلزامية — هذا يملؤها فقط.',
+    chargesTitle: 'الرسوم التي يبدأ بها المستند الجديد',
+    chargesHint:
+      'الشحن، التغليف، التوصيل، خصم ثابت — تُحدَّد مرة واحدة لكل نوع مستند وتُطبَّق على كل مستند جديد، فلا يُضاف السطر يدوياً في كل مرة.',
+    chargesDocument: 'نوع المستند',
+    chargeAmount: 'المبلغ',
+    chargeAmountBlank: 'يُسأل',
+    chargesNoneSet: 'لا يوجد نوع مستند يبدأ برسوم بعد.',
+    chargesSetOn: 'محدّدة على: {{kinds}}.',
+    chargeDocuments: {
+      sales: 'فاتورة مبيعات',
+      salesReturn: 'مرتجع مبيعات',
+      salesOrder: 'أمر بيع',
+      purchase: 'فاتورة مشتريات',
+      purchaseReturn: 'مرتجع مشتريات',
+      purchaseOrder: 'أمر شراء',
+    },
     askEachTime: 'اسأل في كل مرة',
     decimalsTitle: 'المنازل العشرية',
     decimalsHintFirm:
@@ -2077,6 +2165,7 @@ const ar = {
   },
   common: {
     retry: 'أعد المحاولة',
+    dismiss: 'إخفاء',
     yes: 'نعم',
     no: 'لا',
     loading: 'جارٍ التحميل…',

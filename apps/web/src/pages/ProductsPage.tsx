@@ -207,7 +207,6 @@ export function ProductsPage(): React.JSX.Element {
     >
       <TextField
         label={t('products.search')}
-        hint={t('products.searchHint')}
         type="search"
         size="sm"
         value={search}
@@ -425,7 +424,6 @@ function AddProduct({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          hint={t('products.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}

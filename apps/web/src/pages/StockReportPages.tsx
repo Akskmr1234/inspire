@@ -22,6 +22,7 @@ import {
   type StockValuationRow,
 } from '@/lib/stock';
 import { moneyAlways } from '@/lib/money';
+import { SearchSelect } from '@/components/SearchSelect';
 
 /**
  * The stock valuation.
@@ -217,20 +218,18 @@ export function ExpiryReportPage(): React.JSX.Element {
 
       <label className="field">
         <span className="field-label">{t('stock.expiringWithin')}</span>
-        <select
-          value={withinDays}
-          onChange={(event) =>
-            setWithinDays(event.target.value === '' ? '' : Number(event.target.value))
-          }
-          className="field-input-sm"
-        >
-          <option value="">{t('stock.onlyExpired')}</option>
-          {[30, 60, 90, 180, 365].map((days) => (
-            <option key={days} value={days}>
-              {days} {t('stock.days')}
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          value={withinDays === '' ? '' : String(withinDays)}
+          onChange={(next) => setWithinDays(next === '' ? '' : Number(next))}
+          clearable
+          size="sm"
+          label={t('stock.expiringWithin')}
+          placeholder={t('stock.onlyExpired')}
+          options={[30, 60, 90, 180, 365].map((days) => ({
+            value: String(days),
+            label: `${days} ${t('stock.days')}`,
+          }))}
+        />
       </label>
 
       <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
@@ -373,18 +372,19 @@ export function StockLedgerPage(): React.JSX.Element {
     <div className="toolbar">
       <label className="field">
         <span className="field-label">{t('stock.product')}</span>
-        <select
+        <SearchSelect
           value={productId}
-          onChange={(event) => setProductId(event.target.value)}
-          className="field-input-sm w-full sm:w-72"
-        >
-          <option value="">{t('stock.choose')}</option>
-          {(products.data ?? []).map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.code} — {product.description}
-            </option>
-          ))}
-        </select>
+          onChange={setProductId}
+          clearable
+          size="sm"
+          className="w-full sm:w-72"
+          label={t('stock.product')}
+          placeholder={t('stock.choose')}
+          options={(products.data ?? []).map((product) => ({
+            value: product.id,
+            label: `${product.code} — ${product.description}`,
+          }))}
+        />
       </label>
 
       <DateBox label={t('reports.from')} value={from} onChange={setFrom} />
@@ -608,18 +608,18 @@ function WarehousePicker({
   return (
     <label className="field">
       <span className="field-label">{t('stock.warehouse')}</span>
-      <select
+      <SearchSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="field-input-sm"
-      >
-        <option value="">{t('stock.allWarehouses')}</option>
-        {(warehouses.data ?? []).map((warehouse) => (
-          <option key={warehouse.id} value={warehouse.id}>
-            {warehouse.name}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        clearable
+        size="sm"
+        label={t('stock.warehouse')}
+        placeholder={t('stock.allWarehouses')}
+        options={(warehouses.data ?? []).map((warehouse) => ({
+          value: warehouse.id,
+          label: warehouse.name,
+        }))}
+      />
     </label>
   );
 }
@@ -641,18 +641,18 @@ function CategoryPicker({
   return (
     <label className="field">
       <span className="field-label">{t('products.category')}</span>
-      <select
+      <SearchSelect
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="field-input-sm"
-      >
-        <option value="">{t('products.allCategories')}</option>
-        {(categories.data ?? []).map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        clearable
+        size="sm"
+        label={t('products.category')}
+        placeholder={t('products.allCategories')}
+        options={(categories.data ?? []).map((category) => ({
+          value: category.id,
+          label: category.name,
+        }))}
+      />
     </label>
   );
 }

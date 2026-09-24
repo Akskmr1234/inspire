@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { IconPlus } from '@/components/icons';
+import { SearchSelect } from '@/components/SearchSelect';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
 import { fetchGridLayout, resetGridLayout, saveGridLayout } from '@/lib/grid';
@@ -150,6 +151,15 @@ export function DataGrid<TRow>({
   const [saved, setSaved] = useState<string | null>(null);
   /** Held while the arrangement is being written, so it cannot be written twice. */
   const [saving, setSaving] = useState(false);
+  /**
+   * Whether the arrangement is kept and shut.
+   *
+   * A grid somebody has arranged and saved is finished being arranged, and leaving
+   * the picker a click away means the next stray click reorders a list that was
+   * deliberately set. Locked once a layout is saved and once a saved one is loaded;
+   * Edit layout is what opens it again.
+   */
+  const [locked, setLocked] = useState(false);
 
   // Columns the user is not entitled to never enter the arrangement at all, so they
   // cannot be turned on from the picker or restored by a stale saved layout.
@@ -193,6 +203,9 @@ export function DataGrid<TRow>({
       if (typeof state.frozen === 'number') {
         setFrozen(state.frozen);
       }
+
+      // A layout came back, so this grid is one somebody arranged on purpose.
+      setLocked(true);
     })();
 
     return () => {
@@ -381,6 +394,7 @@ export function DataGrid<TRow>({
       should be under it.
     */
     setShowPicker(false);
+    setLocked(true);
     setSaved(t('grid.layoutSaved'));
     window.setTimeout(() => setSaved(null), 2000);
   };
@@ -393,6 +407,8 @@ export function DataGrid<TRow>({
     setSortDescending(false);
     setFrozen(0);
     setColumnSearch({});
+    // Nothing is kept any more, so there is nothing to keep shut.
+    setLocked(false);
     setSaved(t('grid.layoutReset'));
     window.setTimeout(() => setSaved(null), 2000);
   };
@@ -469,26 +485,21 @@ export function DataGrid<TRow>({
           reason it hides the search box.
         */}
         {narrow && !paging && (
-          <label className="flex shrink-0 items-center gap-1.5">
-            <span className="sr-only">{t('grid.sortBy')}</span>
-            <select
+          <div className="flex shrink-0 items-center gap-1.5">
+            <SearchSelect
+              size="sm"
+              className="w-40"
+              label={t('grid.sortBy')}
+              placeholder={t('grid.sortNone')}
               value={sortKey ?? ''}
-              onChange={(event) => {
-                const next = event.target.value;
+              onChange={(next) => {
                 setSortKey(next === '' ? null : next);
                 setSortDescending(false);
               }}
-              className="field-input-sm w-auto py-1 text-xs"
-            >
-              <option value="">{t('grid.sortNone')}</option>
-              {visible
+              options={visible
                 .filter((column) => column.header.trim() !== '')
-                .map((column) => (
-                  <option key={column.key} value={column.key}>
-                    {column.header}
-                  </option>
-                ))}
-            </select>
+                .map((column) => ({ value: column.key, label: column.header }))}
+            />
 
             {sortKey !== null && (
               <GridButton
@@ -498,7 +509,7 @@ export function DataGrid<TRow>({
                 {sortDescending ? '▾' : '▴'}
               </GridButton>
             )}
-          </label>
+          </div>
         )}
 
         {/*
@@ -528,19 +539,31 @@ export function DataGrid<TRow>({
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
             pressed={showPicker}
-            disabled={saving}
-            title={t('grid.columnsHint')}
+            disabled={saving || locked}
+            title={locked ? t('grid.columnsLockedHint') : t('grid.columnsHint')}
           >
             {t('grid.columns')}
           </GridButton>
 
-          <GridButton
-            onClick={() => void persist()}
-            disabled={saving}
-            title={t('grid.saveLayoutHint')}
-          >
-            {t('grid.saveLayout')}
-          </GridButton>
+          {locked ? (
+            <GridButton
+              onClick={() => {
+                setLocked(false);
+                setShowPicker(true);
+              }}
+              title={t('grid.editLayoutHint')}
+            >
+              {t('grid.editLayout')}
+            </GridButton>
+          ) : (
+            <GridButton
+              onClick={() => void persist()}
+              disabled={saving}
+              title={t('grid.saveLayoutHint')}
+            >
+              {t('grid.saveLayout')}
+            </GridButton>
+          )}
 
           {/* Freezing a column means nothing once the columns are gone. */}
           {!narrow && (
@@ -695,6 +718,19 @@ export function DataGrid<TRow>({
                           '-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5',
                           'font-semibold tracking-wide uppercase transition-colors',
                           'hover:text-ink focus-visible:ring-2 focus-visible:ring-brand-500/40',
+                          /*
+                            The caret goes on the outside of the heading, not the
+                            inside. Held in the layout at all times so the header
+                            does not jump when a column is first sorted, it took ten
+                            pixels at the end of every end-aligned heading — so COST
+                            stopped ten pixels short of where 10.00 stopped, on every
+                            money column of every list. Reversed on those, which puts
+                            the word itself against the edge the figures are against.
+                            Reversing the row rather than reordering the markup keeps
+                            it right in Arabic, where the flex start edge is the
+                            right one and `text-end` is the left.
+                          */
+                          column.numeric && 'flex-row-reverse',
                         )}
                       >
                         {column.header}
@@ -730,8 +766,19 @@ export function DataGrid<TRow>({
                   {visible.map((column, index) => (
                     <th
                       key={column.key}
+                      /*
+                        Aligned with the column, not centred.
+
+                        A `th` is centred by default, and an input with no alignment
+                        of its own inherits it — so on the money columns the heading
+                        sat at the right, the figures sat at the right, and what
+                        somebody typed to narrow them sat in the middle. The box
+                        fills the cell either way; it is the text inside it that was
+                        landing in a third place.
+                      */
                       className={clsx(
                         'bg-surface-3 px-2 pt-0 pb-2',
+                        column.numeric ? 'text-end' : 'text-start',
                         index < frozen && 'sticky start-0 z-30',
                       )}
                     >
