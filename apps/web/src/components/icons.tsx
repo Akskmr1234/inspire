@@ -486,6 +486,24 @@ export function IconBell({ className }: IconProps): React.JSX.Element {
   );
 }
 
+export function IconDotsVertical({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="5" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+    </Svg>
+  );
+}
+
+export function IconBarcode({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M4 5v14M7 5v14M10 5v14M13 5v14M17 5v14M20 5v14" />
+    </Svg>
+  );
+}
+
 /**
  * Picks a glyph for a menu entry.
  *

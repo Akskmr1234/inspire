@@ -94,6 +94,41 @@ export interface AppSettings {
    * branch with no entry here follows `decimals`.
    */
   readonly decimalsByBranch: Readonly<Record<string, number>>;
+  /** Number of decimal places for quantity values throughout the system (e.g. 2 or 3). */
+  readonly quantityDecimals: number;
+  /** Whether device attributes (IMEI, Serial Number, Warranty, Model) are enabled. */
+  readonly enableDeviceAttributes: boolean;
+  /** Default sales rate type: retail, wholesale, or maximum retail price (MRP). */
+  readonly defaultSalesRateType: 'retail' | 'wholesale' | 'mrp';
+  /** Default tax mode: NT (Non-Tax), TAX (VAT), or GST. */
+  readonly defaultTaxMode: 'NT' | 'TAX' | 'GST';
+  /** Default customer for sales transactions. */
+  readonly defaultCustomerId: string;
+  /** Default supplier for purchase transactions. */
+  readonly defaultSupplierId: string;
+  /** Default salesman identifier. */
+  readonly defaultSalesman: string;
+  /** Default billingman identifier. */
+  readonly defaultBillingman: string;
+  /** Whether reverse calculation is enabled on transaction entry. */
+  readonly enableReverseCalculation: boolean;
+  /** Whether free quantity column is enabled in sales entry. */
+  readonly enableFreeQuantity: boolean;
+  /** Whether per-item discount column is enabled in sales entry. */
+  readonly enableItemDiscount: boolean;
+  /** Whether automatic FIFO batch assignment is enabled. */
+  readonly enableAutoBatch: boolean;
+  /** Configured default additional ledgers per transaction type. */
+  readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
+}
+
+export interface DefaultAdditionalLedgerConfig {
+  readonly id: string;
+  readonly transactionType: string;
+  readonly ledgerId: string;
+  readonly isAddition: boolean;
+  readonly defaultAmount: string;
+  readonly isDefaultActive: boolean;
 }
 
 /** The places a firm can choose between. Nothing sensible lies outside it. */
@@ -120,6 +155,19 @@ const DEFAULTS: AppSettings = {
   pageSize: 25,
   decimals: 2,
   decimalsByBranch: {},
+  quantityDecimals: 2,
+  enableDeviceAttributes: true,
+  defaultSalesRateType: 'retail',
+  defaultTaxMode: 'TAX',
+  defaultCustomerId: '',
+  defaultSupplierId: '',
+  defaultSalesman: '',
+  defaultBillingman: '',
+  enableReverseCalculation: true,
+  enableFreeQuantity: true,
+  enableItemDiscount: true,
+  enableAutoBatch: true,
+  defaultAdditionalLedgers: [],
 };
 
 const STORAGE_KEY = 'erp.settings';
@@ -153,20 +201,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
   update: (patch) => {
     const next: AppSettings = {
-      autoTranslateArabic: patch.autoTranslateArabic ?? get().autoTranslateArabic,
-      translationApiKey: patch.translationApiKey ?? get().translationApiKey,
-      taxRegime: patch.taxRegime ?? get().taxRegime,
-      firmStateCode: patch.firmStateCode ?? get().firmStateCode,
-      taxRates: patch.taxRates ?? get().taxRates,
-      defaultTaxRate: patch.defaultTaxRate ?? get().defaultTaxRate,
-      preferredWarehouseId: patch.preferredWarehouseId ?? get().preferredWarehouseId,
-      defaultCategoryId: patch.defaultCategoryId ?? get().defaultCategoryId,
-      defaultStockUnitId: patch.defaultStockUnitId ?? get().defaultStockUnitId,
-      defaultPaymentMode: patch.defaultPaymentMode ?? get().defaultPaymentMode,
-      defaultCharges: patch.defaultCharges ?? get().defaultCharges,
-      pageSize: patch.pageSize ?? get().pageSize,
-      decimals: patch.decimals ?? get().decimals,
-      decimalsByBranch: patch.decimalsByBranch ?? get().decimalsByBranch,
+      ...get(),
+      ...patch,
     };
 
     set(next);

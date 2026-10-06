@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ReportSkeleton } from '@/components/ReportFrame';
@@ -14,33 +14,36 @@ import {
   setProductFlag,
   type ProductDetail,
 } from '@/lib/products';
-import { listMaster, type BrandSummary, type UnitSummary } from '@/lib/inventory';
+import { listMaster, type BrandSummary, type UnitSummary, type WarehouseSummary } from '@/lib/inventory';
 import { moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
+import { useSettings } from '@/stores/settings';
+import {
+  createStockDocument,
+  fetchStockLedger,
+  StockDocumentType,
+  type StockLedgerReport,
+} from '@/lib/stock';
 
 /**
  * The product editor.
  *
- * Three tabs, as section 8.1 asks for, and each one saves on its own. That is not
- * only a layout choice: the API takes a product a tab at a time, so repricing sends
- * the rates and nothing else. A single save-everything button would make every edit
- * resend every field and quietly overwrite whatever a colleague changed a minute
- * earlier — on a master this shared, that is a real event rather than a hypothetical.
- *
- * The specification's third tab is Images. It is not here because nothing stores a
- * file yet; showing an empty tab would claim otherwise. Barcodes take the slot in the
- * meantime, since they are a grid of their own with their own add and remove.
+ * Four tabs: Description, Details, Barcodes, and Opening Stock.
  */
 export function ProductEditor({
   productId,
+  initialTab,
   onClose,
 }: {
   readonly productId: string;
+  readonly initialTab?: 'description' | 'details' | 'barcodes' | 'openingStock' | undefined;
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'description' | 'details' | 'barcodes'>('description');
+  const [tab, setTab] = useState<'description' | 'details' | 'barcodes' | 'openingStock'>(
+    initialTab ?? 'description',
+  );
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -220,6 +223,9 @@ export function ProductEditor({
         <Tab active={tab === 'barcodes'} onClick={() => setTab('barcodes')}>
           {t('products.tabBarcodes')} ({row.barcodes.length})
         </Tab>
+        <Tab active={tab === 'openingStock'} onClick={() => setTab('openingStock')}>
+          {t('products.tabOpeningStock')}
+        </Tab>
 
         {/* Where the status goes on a phone, since the bar could not hold it. On
             the end of the tab strip rather than a row of its own: it is one badge,
@@ -249,6 +255,10 @@ export function ProductEditor({
 
       {tab === 'barcodes' && (
         <BarcodesTab product={row} run={run} busy={mutation.isPending} />
+      )}
+
+      {tab === 'openingStock' && (
+        <OpeningStockTab key={row.id} product={row} units={units.data ?? []} />
       )}
     </section>
   );
@@ -305,6 +315,8 @@ function DescriptionTab({
     maximumRetailPrice: String(product.maximumRetailPrice),
   });
 
+  const enableDeviceAttributes = useSettings((s) => s.enableDeviceAttributes);
+
   return (
     <form
       className="space-y-6"
@@ -339,13 +351,15 @@ function DescriptionTab({
             maximumRetailPrice: number(rates.maximumRetailPrice),
           });
 
-          await saveProductTab(product.id, 'device', {
-            device: blank(device.device),
-            colour: blank(device.colour),
-            battery: blank(device.battery),
-            ram: blank(device.ram),
-            storage: blank(device.storage),
-          });
+          if (enableDeviceAttributes) {
+            await saveProductTab(product.id, 'device', {
+              device: blank(device.device),
+              colour: blank(device.colour),
+              battery: blank(device.battery),
+              ram: blank(device.ram),
+              storage: blank(device.storage),
+            });
+          }
         });
       }}
     >
@@ -490,43 +504,45 @@ function DescriptionTab({
         />
       </Section>
 
-      <Section title={t('products.deviceAttributes')}>
-        <Field label={t('products.device')}>
-          <input
-            value={device.device}
-            onChange={(e) => setDevice({ ...device, device: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-        <Field label={t('products.colour')}>
-          <input
-            value={device.colour}
-            onChange={(e) => setDevice({ ...device, colour: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-        <Field label={t('products.battery')}>
-          <input
-            value={device.battery}
-            onChange={(e) => setDevice({ ...device, battery: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-        <Field label={t('products.ram')}>
-          <input
-            value={device.ram}
-            onChange={(e) => setDevice({ ...device, ram: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-        <Field label={t('products.storage')}>
-          <input
-            value={device.storage}
-            onChange={(e) => setDevice({ ...device, storage: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-      </Section>
+      {enableDeviceAttributes && (
+        <Section title={t('products.deviceAttributes')}>
+          <Field label={t('products.device')}>
+            <input
+              value={device.device}
+              onChange={(e) => setDevice({ ...device, device: e.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label={t('products.colour')}>
+            <input
+              value={device.colour}
+              onChange={(e) => setDevice({ ...device, colour: e.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label={t('products.battery')}>
+            <input
+              value={device.battery}
+              onChange={(e) => setDevice({ ...device, battery: e.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label={t('products.ram')}>
+            <input
+              value={device.ram}
+              onChange={(e) => setDevice({ ...device, ram: e.target.value })}
+              className="field-input"
+            />
+          </Field>
+          <Field label={t('products.storage')}>
+            <input
+              value={device.storage}
+              onChange={(e) => setDevice({ ...device, storage: e.target.value })}
+              className="field-input"
+            />
+          </Field>
+        </Section>
+      )}
 
       <div className="page-actions">
         <button type="submit" disabled={busy} className="btn-primary">
@@ -1069,6 +1085,251 @@ function Alert({ children }: { readonly children: React.ReactNode }): React.JSX.
   return (
     <div role="alert" className="alert-error">
       {children}
+    </div>
+  );
+}
+
+function OpeningStockTab({
+  product,
+  units,
+}: {
+  readonly product: ProductDetail;
+  readonly units: readonly UnitSummary[];
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { preferredWarehouseId } = useSettings();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [warehouseId, setWarehouseId] = useState(preferredWarehouseId || '');
+  const [quantity, setQuantity] = useState('1');
+  const [rate, setRate] = useState(String(product.cost || product.retailRate || '0'));
+  const [batchNumber, setBatchNumber] = useState('');
+  const [expiresOn, setExpiresOn] = useState('');
+  const [serialNumbers, setSerialNumbers] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+  });
+
+  useEffect(() => {
+    if (!warehouseId && warehouses.data && warehouses.data.length > 0) {
+      const defaultWh = warehouses.data.find((w) => w.isDefault) ?? warehouses.data[0];
+      if (defaultWh) {
+        setWarehouseId(defaultWh.id);
+      }
+    }
+  }, [warehouseId, warehouses.data]);
+
+  const ledgerQuery = useQuery<StockLedgerReport, ApiError>({
+    queryKey: ['stock-ledger', product.id, today],
+    queryFn: () => fetchStockLedger(product.id, '2000-01-01', today, ''),
+  });
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const qtyNum = Number(quantity);
+      if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+        throw new Error(t('stock.quantityPositive') || 'Quantity must be greater than zero');
+      }
+      const rateNum = Number(rate);
+      if (!Number.isFinite(rateNum) || rateNum < 0) {
+        throw new Error('Rate cannot be negative');
+      }
+      if (!warehouseId) {
+        throw new Error('Warehouse is required');
+      }
+
+      const serials = serialNumbers
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      return createStockDocument({
+        type: StockDocumentType.openingStock,
+        date,
+        warehouseId,
+        postImmediately: true,
+        lines: [
+          {
+            productId: product.id,
+            quantity: qtyNum,
+            rate: rateNum,
+            batchNumber: batchNumber.trim() || null,
+            expiresOn: expiresOn || null,
+            serialNumbers: serials.length > 0 ? serials : null,
+            remarks: remarks.trim() || null,
+          },
+        ],
+      });
+    },
+    onSuccess: async () => {
+      setError(null);
+      setSuccess(t('products.saved') || 'Saved');
+      window.setTimeout(() => setSuccess(null), 4000);
+      setQuantity('1');
+      setBatchNumber('');
+      setExpiresOn('');
+      setSerialNumbers('');
+      setRemarks('');
+      await queryClient.invalidateQueries({ queryKey: ['stock-ledger', product.id] });
+      await queryClient.invalidateQueries({ queryKey: ['stock-valuation'] });
+      await queryClient.invalidateQueries({ queryKey: ['product', product.id] });
+    },
+    onError: (err: any) => {
+      setError(err?.detail || err?.message || err?.code || 'Failed to post opening stock');
+    },
+  });
+
+  const totalValue = (Number(quantity) || 0) * (Number(rate) || 0);
+  const stockUnit = units.find((u) => u.id === product.stockUnitId)?.code ?? '';
+
+  return (
+    <div className="space-y-6">
+      {success && (
+        <div
+          role="status"
+          className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+        >
+          {success}
+        </div>
+      )}
+      {error && <Alert>{error}</Alert>}
+
+      <div className="rounded-xl border border-line bg-surface-2/40 p-4">
+        <h3 className="text-sm font-semibold text-ink">
+          {t('stock.onHand')}: {ledgerQuery.data?.closingQuantity ?? 0} {stockUnit}
+        </h3>
+        <p className="mt-1 text-xs text-ink-muted">
+          {t('stock.opening')}: {ledgerQuery.data?.openingQuantity ?? 0} · {t('stock.totalIn')}: {ledgerQuery.data?.totalIn ?? 0} · {t('stock.totalOut')}: {ledgerQuery.data?.totalOut ?? 0}
+        </p>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+        className="card space-y-4 p-5"
+      >
+        <h4 className="text-sm font-semibold text-ink uppercase tracking-wider">
+          {t('products.tabOpeningStock')}
+        </h4>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label={t('stock.warehouse')}>
+            <SearchSelect
+              value={warehouseId}
+              onChange={setWarehouseId}
+              label={t('stock.warehouse')}
+              placeholder={t('stock.chooseWarehouse') || 'Choose warehouse'}
+              options={(warehouses.data ?? []).map((w) => ({
+                value: w.id,
+                label: `${w.code} — ${w.name}`,
+              }))}
+            />
+          </Field>
+
+          <Field label={t('stock.date')}>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="field-input"
+              required
+            />
+          </Field>
+
+          <Field label={`${t('stock.quantity')} (${stockUnit || 'Units'})`}>
+            <input
+              type="number"
+              step="any"
+              min="0.001"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="field-input text-end"
+              required
+            />
+          </Field>
+
+          <Field label={t('stock.rate')}>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              className="field-input text-end"
+              required
+            />
+          </Field>
+
+          <Field label={t('stock.totalValue', { currency: product.currency, value: '' }) || 'Total Value'}>
+            <div className="field-input bg-surface-2 flex items-center justify-end font-semibold text-ink">
+              {moneyAlways(totalValue)} {product.currency}
+            </div>
+          </Field>
+
+          {product.tracksBatches && (
+            <>
+              <Field label={t('stock.batch')}>
+                <input
+                  type="text"
+                  value={batchNumber}
+                  onChange={(e) => setBatchNumber(e.target.value)}
+                  placeholder="e.g. BATCH-001"
+                  className="field-input"
+                />
+              </Field>
+              <Field label={t('stock.expiresOn')}>
+                <input
+                  type="date"
+                  value={expiresOn}
+                  onChange={(e) => setExpiresOn(e.target.value)}
+                  className="field-input"
+                />
+              </Field>
+            </>
+          )}
+
+          {product.tracksSerialNumbers && (
+            <div className="sm:col-span-2">
+              <Field label={t('stock.units')}>
+                <textarea
+                  rows={2}
+                  value={serialNumbers}
+                  onChange={(e) => setSerialNumbers(e.target.value)}
+                  placeholder={t('stock.unitsPlaceholder') || 'Enter serial numbers separated by commas or lines'}
+                  className="field-input"
+                />
+              </Field>
+            </div>
+          )}
+
+          <div className="sm:col-span-2 lg:col-span-3">
+            <Field label={t('stock.narration') || 'Remarks'}>
+              <input
+                type="text"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Opening stock initial balance"
+                className="field-input"
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button type="submit" disabled={mutation.isPending} className="btn-primary">
+            {mutation.isPending ? t('common.saving') : t('products.tabOpeningStock')}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

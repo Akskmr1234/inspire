@@ -338,6 +338,7 @@ export function useDefaultCharges(
   apply: (charges: readonly DraftCharge[]) => void,
 ): void {
   const defaults = useSettings((state) => state.defaultCharges);
+  const additionalLedgerDefaults = useSettings((state) => state.defaultAdditionalLedgers);
   const seeded = useRef(false);
 
   useEffect(() => {
@@ -346,6 +347,30 @@ export function useDefaultCharges(
     }
 
     seeded.current = true;
+
+    const typeMapping: Record<ChargeDocument, string> = {
+      sales: 'Sales',
+      salesReturn: 'SalesReturn',
+      salesOrder: 'SalesOrder',
+      purchase: 'Purchase',
+      purchaseReturn: 'PurchaseReturn',
+      purchaseOrder: 'PurchaseOrder',
+    };
+    const targetType = typeMapping[document];
+    const usable = new Set(chargeLedgers(ledgers).map((ledger) => ledger.ledgerId));
+
+    const fromAdditional = (additionalLedgerDefaults ?? [])
+      .filter((l) => l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId))
+      .map((l) => ({
+        key: crypto.randomUUID(),
+        ledgerId: l.ledgerId,
+        amount: l.defaultAmount || '',
+      }));
+
+    if (fromAdditional.length > 0) {
+      apply(fromAdditional);
+      return;
+    }
 
     const rows = chargesFor(document, defaults, ledgers);
 
@@ -358,7 +383,7 @@ export function useDefaultCharges(
         })),
       );
     }
-  }, [document, defaults, ledgers, apply]);
+  }, [document, defaults, additionalLedgerDefaults, ledgers, apply]);
 }
 
 /**

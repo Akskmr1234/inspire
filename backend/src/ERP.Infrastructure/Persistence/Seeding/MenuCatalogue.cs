@@ -306,6 +306,13 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/expiry",
                     ViewInventoryReports),
+                new(
+                    "inventory-reports.serials",
+                    "Serial numbers",
+                    "الأرقام التسلسلية",
+                    "inventory",
+                    "/inventory/serials",
+                    ViewInventoryReports),
             ]),
 
         new(

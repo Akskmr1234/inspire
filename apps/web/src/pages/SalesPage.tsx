@@ -8,14 +8,11 @@ import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
+import { IconBarcode, IconClose, IconPlus } from '@/components/icons';
 import {
-  ChargesPanel,
   DocumentTotals,
-  chargeTotal,
   productOption,
   stockByProduct,
-  useDefaultCharges,
-  type DraftCharge,
 } from '@/components/DocumentLines';
 import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
@@ -44,6 +41,7 @@ import {
   type SalesInvoiceDetail,
   type SalesInvoiceSummary,
   type SalesLineInput,
+  type SalesChargeInput,
 } from '@/lib/sales';
 import { moneyAlways } from '@/lib/money';
 
@@ -53,11 +51,14 @@ const PAGE_SIZE = 25;
 interface DraftLine {
   productId: string;
   quantity: string;
+  freeQuantity?: string;
   rate: string;
+  inclusiveRate?: string;
   taxPercentage: string;
   discount: string;
   /** The batch sold, where the product is tracked in batches. */
   batchNumber: string;
+  expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
 }
@@ -65,10 +66,13 @@ interface DraftLine {
 const emptyLine: DraftLine = {
   productId: '',
   quantity: '1',
+  freeQuantity: '0',
   rate: '',
+  inclusiveRate: '',
   taxPercentage: '0',
   discount: '0',
   batchNumber: '',
+  expiresOn: '',
   serialNumbers: [],
 };
 
@@ -94,7 +98,9 @@ export function SalesPage(): React.JSX.Element {
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
-  const [kindFilter, setKindFilter] = useState<number | ''>('');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'returns'>('invoices');
+  const kindFilter =
+    activeTab === 'invoices' ? SalesDocumentKind.invoice : SalesDocumentKind.return;
   const [statusFilter, setStatusFilter] = useState<number | ''>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -110,6 +116,19 @@ export function SalesPage(): React.JSX.Element {
     queryKey: ['sales-invoices', from, to, kindFilter, statusFilter, search, page],
     queryFn: () => listSalesInvoices(filter, page, PAGE_SIZE),
   });
+
+  const nextInvoiceNo = useMemo(() => {
+    const items = query.data?.items ?? [];
+    if (items.length === 0) return 'INV-1001';
+    const nums = items
+      .map((item) => {
+        const match = item.number.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+      })
+      .filter((n) => !isNaN(n));
+    const maxNum = nums.length > 0 ? Math.max(...nums) : 1000;
+    return `INV-${String(maxNum + 1).padStart(4, '0')}`;
+  }, [query.data?.items]);
 
   const mutation = useMutation<string | null, ApiError, () => Promise<string | null>>({
     mutationFn: (action) => action(),
@@ -140,30 +159,12 @@ export function SalesPage(): React.JSX.Element {
   const columns: readonly GridColumn<SalesInvoiceSummary>[] = [
     { key: 'number', header: t('sales.number'), value: (row) => row.number },
     {
-      key: 'kind',
-      header: t('sales.kind'),
-      value: (row) => (isReturn(row.kind) ? t('sales.return') : t('sales.invoice')),
-      render: (row) => (
-        <span
-          className={clsx(
-            'rounded px-2 py-0.5 text-xs',
-            isReturn(row.kind)
-              ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-              : 'bg-surface-3 text-ink-muted',
-          )}
-        >
-          {isReturn(row.kind) ? t('sales.return') : t('sales.invoice')}
-        </span>
-      ),
+      key: 'reference',
+      header: t('sales.referenceNo'),
+      value: (row) => row.referenceNumber ?? '—',
     },
     { key: 'date', header: t('sales.date'), value: (row) => row.date },
     { key: 'customer', header: t('sales.customer'), value: (row) => row.customerName },
-    {
-      key: 'reference',
-      header: t('sales.reference'),
-      value: (row) => row.referenceNumber ?? '',
-      hiddenByDefault: true,
-    },
     {
       key: 'lines',
       header: t('sales.lines'),
@@ -207,25 +208,15 @@ export function SalesPage(): React.JSX.Element {
   ];
 
   const controls = (
-    <div className="filter-grid">
-      <DateField
-        label={t('sales.from')}
-        value={from}
-        onChange={narrow(setFrom)}
+    <div className="filter-grid flex flex-wrap items-end gap-3 w-full">
+      <TextField
+        label={t('sales.search')}
+        type="search"
+        value={search}
+        onChange={(value) => narrow(setSearch)(value)}
+        placeholder={t('sales.searchHint')}
         size="sm"
-      />
-      <DateField label={t('sales.to')} value={to} onChange={narrow(setTo)} size="sm" />
-
-      <SelectField<number | ''>
-        label={t('sales.kind')}
-        value={kindFilter}
-        onChange={narrow<number | ''>(setKindFilter)}
-        size="sm"
-        options={[
-          { value: '', label: t('sales.allKinds') },
-          { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
-          { value: SalesDocumentKind.return, label: t('sales.return') },
-        ]}
+        className="min-w-48 flex-1"
       />
 
       <SelectField<number | ''>
@@ -241,14 +232,15 @@ export function SalesPage(): React.JSX.Element {
         ]}
       />
 
-      <TextField
-        label={t('sales.search')}
-        type="search"
-        value={search}
-        onChange={(value) => narrow(setSearch)(value)}
-        placeholder={t('sales.searchHint')}
-        size="sm"
-      />
+      <div className="ms-auto flex items-end gap-2">
+        <DateField
+          label={t('sales.from')}
+          value={from}
+          onChange={narrow(setFrom)}
+          size="sm"
+        />
+        <DateField label={t('sales.to')} value={to} onChange={narrow(setTo)} size="sm" />
+      </div>
     </div>
   );
 
@@ -261,14 +253,54 @@ export function SalesPage(): React.JSX.Element {
 
             {notice && <p className="alert-success">{notice}</p>}
 
+            <nav className="flex items-center gap-1 border-b border-line mb-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('invoices');
+                  setPage(1);
+                }}
+                className={clsx(
+                  '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
+                  activeTab === 'invoices'
+                    ? 'border-brand-600 text-brand-700 dark:text-brand-100 font-semibold'
+                    : 'border-transparent text-ink-muted hover:text-ink',
+                )}
+              >
+                {t('sales.invoicesTab') || 'Sales Invoices'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('returns');
+                  setPage(1);
+                }}
+                className={clsx(
+                  '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
+                  activeTab === 'returns'
+                    ? 'border-brand-600 text-brand-700 dark:text-brand-100 font-semibold'
+                    : 'border-transparent text-ink-muted hover:text-ink',
+                )}
+              >
+                {t('sales.returnsTab') || 'Sales Returns'}
+              </button>
+            </nav>
+
             <DataGrid
-              gridKey="sales-invoices"
+              gridKey={activeTab === 'invoices' ? 'sales-invoices' : 'sales-returns'}
               rows={result.items}
               columns={columns}
               rowKey={(row) => row.salesInvoiceId}
               emptyMessage={t('sales.none')}
               actions={
-                <GridAction label={t('sales.new')} onClick={() => setEntering(true)} />
+                <GridAction
+                  label={
+                    activeTab === 'invoices'
+                      ? t('sales.newInvoice')
+                      : t('sales.newReturn')
+                  }
+                  onClick={() => setEntering(true)}
+                />
               }
               paging={{
                 page: result.page,
@@ -287,6 +319,12 @@ export function SalesPage(): React.JSX.Element {
           invoice half entered should not go with them. */}
       {entering && (
         <EntryDialog
+          initialKind={
+            activeTab === 'invoices'
+              ? SalesDocumentKind.invoice
+              : SalesDocumentKind.return
+          }
+          nextInvoiceNo={nextInvoiceNo}
           onClose={() => setEntering(false)}
           onSaved={(message) => {
             setEntering(false);
@@ -327,35 +365,215 @@ export function SalesPage(): React.JSX.Element {
   );
 }
 
+interface AdditionalLedgerItem {
+  readonly id: string;
+  readonly ledgerId: string;
+  readonly isAddition: boolean;
+  readonly amount: string;
+}
+
+function AdditionalLedgersSection({
+  rows,
+  ledgers,
+  onChange,
+}: {
+  readonly rows: readonly AdditionalLedgerItem[];
+  readonly ledgers: readonly LedgerSummary[];
+  readonly onChange: (rows: readonly AdditionalLedgerItem[]) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const addRow = (): void => {
+    onChange([
+      ...rows,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        ledgerId: '',
+        isAddition: true,
+        amount: '0.00',
+      },
+    ]);
+  };
+
+  const removeRow = (id: string): void => {
+    onChange(rows.filter((r) => r.id !== id));
+  };
+
+  const updateRow = (
+    id: string,
+    patch: Partial<AdditionalLedgerItem>,
+  ): void => {
+    onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-center justify-between border-b border-line pb-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+          {t('sales.additionalLedgers')}
+        </span>
+        <button
+          type="button"
+          onClick={addRow}
+          className="btn-secondary btn-xs flex items-center gap-1 text-xs"
+        >
+          <IconPlus className="size-3" />
+          {t('sales.addLedger')}
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="py-2 text-center text-xs text-ink-muted">
+          {t('sales.none')}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-ink-muted">
+                <th className="pb-1 text-start">{t('sales.ledger')}</th>
+                <th className="w-24 pb-1 text-center">{t('sales.taxTreatment')}</th>
+                <th className="w-24 pb-1 text-end">{t('sales.amount')}</th>
+                <th className="w-7" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/60">
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td className="pe-2 py-1">
+                    <SearchSelect
+                      value={row.ledgerId}
+                      onChange={(ledgerId) => updateRow(row.id, { ledgerId })}
+                      options={ledgers.map((l) => ({
+                        value: l.ledgerId,
+                        label: `${l.code} — ${l.name}`,
+                      }))}
+                      size="sm"
+                      label={t('sales.chooseLedger')}
+                      placeholder={t('sales.chooseLedger')}
+                    />
+                  </td>
+                  <td className="px-1 py-1 text-center">
+                    <select
+                      value={row.isAddition ? 'add' : 'deduct'}
+                      onChange={(e) =>
+                        updateRow(row.id, { isAddition: e.target.value === 'add' })
+                      }
+                      className="field-input-sm w-full py-0.5 text-xs font-medium"
+                    >
+                      <option value="add">{t('sales.addition')}</option>
+                      <option value="deduct">{t('sales.deduction')}</option>
+                    </select>
+                  </td>
+                  <td className="px-1 py-1 text-end">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={row.amount}
+                      onChange={(e) => updateRow(row.id, { amount: e.target.value })}
+                      className="field-input-sm w-20 text-end font-mono tabular-nums"
+                    />
+                  </td>
+                  <td className="ps-1 py-1 text-end">
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      className="rounded p-1 text-ink-muted transition hover:text-red-600"
+                      aria-label={t('sales.removeLine')}
+                    >
+                      <IconClose className="size-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Enters a draft: the header, then the lines. */
 function EntryDialog({
+  initialKind = SalesDocumentKind.invoice,
+  nextInvoiceNo,
   onClose,
   onSaved,
   onError,
 }: {
+  readonly initialKind?: number;
+  readonly nextInvoiceNo: string;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const preferredWarehouseId = useSettings((state) => state.preferredWarehouseId);
+  const settings = useSettings();
+  const preferredWarehouseId = settings.preferredWarehouseId;
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const [kind, setKind] = useState<number>(SalesDocumentKind.invoice);
+  const [kind] = useState<number>(initialKind);
   const [date, setDate] = useState(today);
-  const [customerId, setCustomerId] = useState('');
+  const [customerId, setCustomerId] = useState(settings.defaultCustomerId || '');
   const [warehouseId, setWarehouseId] = useState('');
   const [reference, setReference] = useState('');
   const [returnsInvoiceId, setReturnsInvoiceId] = useState('');
+  const [paymentMode, setPaymentMode] = useState<string>(settings.defaultPaymentMode || 'Cash');
+  const [salesman, setSalesman] = useState<string>(settings.defaultSalesman || 'Primary');
+  const [billingman, setBillingman] = useState<string>(settings.defaultBillingman || 'Primary');
+  const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(
+    (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
+  );
+  const [rateType, setRateType] = useState<'retail' | 'wholesale' | 'mrp'>(
+    settings.defaultSalesRateType || 'retail',
+  );
+  const [reverseCalc, setReverseCalc] = useState<boolean>(settings.enableReverseCalculation ?? false);
+  const [autoBatch, setAutoBatch] = useState<boolean>(settings.enableAutoBatch ?? true);
+  const [enableFreeQty, setEnableFreeQty] = useState<boolean>(settings.enableFreeQuantity ?? true);
+  const [enableDiscount, setEnableDiscount] = useState<boolean>(settings.enableItemDiscount ?? true);
+
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
+
+  const [narration, setNarration] = useState('');
+  const [paidAmount, setPaidAmount] = useState<string>('');
+  const [cashGiven, setCashGiven] = useState<string>('');
+  const [additionalLedgers, setAdditionalLedgers] = useState<readonly AdditionalLedgerItem[]>(
+    () => {
+      const targetType = isReturn(initialKind) ? 'SalesReturn' : 'Sales';
+      return (settings.defaultAdditionalLedgers ?? [])
+        .filter((l) => l.transactionType === targetType && l.isDefaultActive)
+        .map((l) => ({
+          id: Math.random().toString(36).slice(2, 9),
+          ledgerId: l.ledgerId,
+          isAddition: l.isAddition,
+          amount: l.defaultAmount || '0.00',
+        }));
+    },
+  );
+  const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>('general');
   const [lines, setLines] = useState<readonly DraftLine[]>([{ ...emptyLine }]);
-  const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
   const [busy, setBusy] = useState(false);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
     queryKey: ['customers', 'picker'],
     queryFn: () => listCustomers('', true),
   });
+
+  const selectedCustomer = useMemo(
+    () => customers.data?.find((c) => c.customerId === customerId),
+    [customers.data, customerId],
+  );
+
+  const prevBalance = selectedCustomer?.openingBalance ?? 0;
+
+  useEffect(() => {
+    if (!customerId && settings.defaultCustomerId) {
+      setCustomerId(settings.defaultCustomerId);
+    }
+  }, [customerId, settings.defaultCustomerId]);
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -373,14 +591,6 @@ function EntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
-  useDefaultCharges(
-    isReturn(kind) ? 'salesReturn' : 'sales',
-    ledgers.data ?? [],
-    setCharges,
-  );
-
-  // What is on the shelf, so the picker can say it. A counter choosing what to sell
-  // wants the figure in front of them, not in the stock report in another tab.
   const valuation = useQuery<StockValuationReport, ApiError>({
     queryKey: ['stock-valuation', 'picker', warehouseId],
     queryFn: () => fetchStockValuation(warehouseId, '', true),
@@ -397,13 +607,6 @@ function EntryDialog({
     [products.data, onHand],
   );
 
-  /*
-    The warehouse a sale ships from.
-
-    The master already records which one is the default and Settings can override it
-    for a workstation that ships from somewhere else. Applied once, and only while
-    the field is empty, so it never overwrites a choice somebody has made.
-  */
   useEffect(() => {
     if (warehouseId !== '' || !warehouses.data) {
       return;
@@ -419,8 +622,6 @@ function EntryDialog({
     }
   }, [warehouses.data, preferredWarehouseId, warehouseId]);
 
-  // Only posted invoices can be returned against, and only the ones this customer
-  // actually has: offering somebody else's would be offering a mistake.
   const returnable = useQuery<PagedResult<SalesInvoiceSummary>, ApiError>({
     queryKey: ['sales-invoices', 'returnable', customerId],
     queryFn: () =>
@@ -436,20 +637,31 @@ function EntryDialog({
     enabled: isReturn(kind) && customerId !== '',
   });
 
+  const additionalLedgersTotal = useMemo(() => {
+    return additionalLedgers.reduce((acc, row) => {
+      const amt = Number(row.amount);
+      if (!Number.isFinite(amt) || amt <= 0) return acc;
+      return row.isAddition ? acc + amt : acc - amt;
+    }, 0);
+  }, [additionalLedgers]);
+
   const totals = useMemo(() => {
     let gross = 0;
     let discount = 0;
     let tax = 0;
 
     for (const line of lines) {
-      const net = Number(line.quantity) * Number(line.rate) - Number(line.discount || 0);
+      const lineQty = Number(line.quantity || 0);
+      const lineRate = Number(line.rate || 0);
+      const lineDisc = enableDiscount ? Number(line.discount || 0) : 0;
+      const lineTaxPct = Number(line.taxPercentage || 0);
+
+      const net = lineQty * lineRate - lineDisc;
 
       if (Number.isFinite(net) && net > 0) {
-        // Carried separately rather than recovered from the net: a bill has to show
-        // what the goods were priced at as well as what is being charged for them.
-        gross += Number(line.quantity) * Number(line.rate);
-        discount += Number(line.discount || 0);
-        tax += (net * Number(line.taxPercentage || 0)) / 100;
+        gross += lineQty * lineRate;
+        discount += lineDisc;
+        tax += (net * lineTaxPct) / 100;
       }
     }
 
@@ -464,23 +676,139 @@ function EntryDialog({
       taxable,
       total: taxable + tax,
     };
-  }, [lines]);
+  }, [lines, enableDiscount]);
 
-  const chargesTotal = chargeTotal(charges, ledgers.data ?? []);
+  const grandTotal = useMemo(() => {
+    const raw = totals.total + additionalLedgersTotal;
+    return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+  }, [totals.total, additionalLedgersTotal]);
+
+  const effectivePaid = useMemo(() => {
+    if (paidAmount !== '') {
+      const parsed = Number(paidAmount);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return paymentMode === 'Credit' ? 0 : grandTotal;
+  }, [paidAmount, paymentMode, grandTotal]);
+
+  const balanceDue = useMemo(() => {
+    return Math.max(0, grandTotal - effectivePaid);
+  }, [grandTotal, effectivePaid]);
+
+  const changeBack = useMemo(() => {
+    const cash = Number(cashGiven);
+    if (!Number.isFinite(cash) || cash <= 0) return 0;
+    return Math.max(0, cash - effectivePaid);
+  }, [cashGiven, effectivePaid]);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
-  /*
-    What the form has to say about itself.
+  const handleBarcodeScan = (scannedCode: string): void => {
+    const code = scannedCode.trim();
+    if (!code) return;
 
-    It used to say nothing: the Save button was disabled until a customer, a
-    warehouse and a line were all present, so a half-filled invoice met a dead
-    button and no explanation of which of the three it was waiting for. The button
-    is live now and pressing it marks what is missing.
-  */
+    const found = products.data?.find(
+      (p) =>
+        p.code.toLowerCase() === code.toLowerCase() ||
+        p.id.toLowerCase() === code.toLowerCase() ||
+        p.description.toLowerCase().includes(code.toLowerCase()),
+    );
+
+    if (!found) {
+      setBarcodeNotice(t('sales.scanProductNotFound'));
+      window.setTimeout(() => setBarcodeNotice(null), 3000);
+      return;
+    }
+
+    const defaultTax = taxMode === 'NT' ? 0 : taxMode === 'TAX' ? 5 : 18;
+    const baseRate =
+      rateType === 'wholesale'
+        ? found.wholesaleRate || found.retailRate
+        : rateType === 'mrp'
+        ? found.maximumRetailPrice || found.retailRate
+        : found.retailRate;
+    const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
+
+    const existingIndex = lines.findIndex((l) => l.productId === found.id);
+    const existing = existingIndex >= 0 ? lines[existingIndex] : undefined;
+    if (existingIndex >= 0 && existing) {
+      const nextQty = String(Number(existing.quantity || '0') + 1);
+      change(existingIndex, { quantity: nextQty });
+      setBarcodeNotice(`${found.code} (Qty: ${nextQty})`);
+    } else {
+      const emptyIndex = lines.findIndex((l) => !l.productId);
+      const newLine: DraftLine = {
+        productId: found.id,
+        quantity: '1',
+        freeQuantity: '0',
+        rate: String(baseRate),
+        inclusiveRate: incRate,
+        taxPercentage: String(defaultTax),
+        discount: '0',
+        batchNumber: '',
+        expiresOn: '',
+        serialNumbers: [],
+      };
+      if (emptyIndex >= 0) {
+        setLines((prev) => prev.map((l, idx) => (idx === emptyIndex ? newLine : l)));
+      } else {
+        setLines((prev) => [...prev, newLine]);
+      }
+      setBarcodeNotice(`${t('sales.scanProductSuccess')}: ${found.code}`);
+    }
+
+    setBarcodeInput('');
+    window.setTimeout(() => setBarcodeNotice(null), 3000);
+  };
+
+  const handleTaxModeChange = (newMode: 'NT' | 'TAX' | 'GST'): void => {
+    setTaxMode(newMode);
+    const newTaxPct = newMode === 'NT' ? 0 : newMode === 'TAX' ? 5 : 18;
+    setLines((prev) =>
+      prev.map((l) => {
+        const updated = { ...l, taxPercentage: String(newTaxPct) };
+        if (reverseCalc && l.inclusiveRate) {
+          const inc = Number(l.inclusiveRate);
+          if (Number.isFinite(inc) && inc > 0) {
+            updated.rate = (inc / (1 + newTaxPct / 100)).toFixed(4);
+          }
+        } else if (!reverseCalc && l.rate) {
+          const r = Number(l.rate);
+          if (Number.isFinite(r) && r > 0) {
+            updated.inclusiveRate = (r * (1 + newTaxPct / 100)).toFixed(2);
+          }
+        }
+        return updated;
+      }),
+    );
+  };
+
+  const handleRateTypeChange = (newRateType: 'retail' | 'wholesale' | 'mrp'): void => {
+    setRateType(newRateType);
+    setLines((prev) =>
+      prev.map((l) => {
+        if (!l.productId) return l;
+        const prod = products.data?.find((p) => p.id === l.productId);
+        if (!prod) return l;
+        const baseRate =
+          newRateType === 'wholesale'
+            ? prod.wholesaleRate || prod.retailRate
+            : newRateType === 'mrp'
+            ? prod.maximumRetailPrice || prod.retailRate
+            : prod.retailRate;
+        const taxPct = Number(l.taxPercentage || 0);
+        return {
+          ...l,
+          rate: String(baseRate),
+          inclusiveRate: (baseRate * (1 + taxPct / 100)).toFixed(2),
+        };
+      }),
+    );
+  };
+
   const { errors, submit } = useValidation<{
     date: string;
     customerId: string;
@@ -533,11 +861,20 @@ function EntryDialog({
           quantity: Number(line.quantity),
           rate: Number(line.rate || 0),
           taxPercentage: Number(line.taxPercentage || 0),
-          discount: Number(line.discount || 0),
+          discount: enableDiscount ? Number(line.discount || 0) : 0,
           batchNumber: line.batchNumber || null,
-          // Always sent, empty included: the server reads an empty list as "no units
-          // named", and omitting the field would say the same thing less plainly.
           serialNumbers: line.serialNumbers,
+        }));
+
+      // Requirement 3: if referenceNo is blank then update with Invoice No
+      const finalReference = reference.trim() || nextInvoiceNo;
+
+      // Requirement 7: addition ledgers mapped into charges
+      const chargesPayload: readonly SalesChargeInput[] = additionalLedgers
+        .filter((row) => row.ledgerId !== '' && Number(row.amount) > 0)
+        .map((row) => ({
+          ledgerId: row.ledgerId,
+          amount: Number(row.amount),
         }));
 
       const header = await createSalesInvoice({
@@ -547,15 +884,9 @@ function EntryDialog({
         lines: payload,
         kind,
         returnsInvoiceId: isReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
-        referenceNumber: reference || null,
-        // Only the rows somebody finished. A head chosen and left without a figure
-        // is the firm's standing charge waiting to be priced, not a zero to post.
-        charges: charges
-          .filter((charge) => charge.ledgerId !== '' && Number(charge.amount) > 0)
-          .map((charge) => ({
-            ledgerId: charge.ledgerId,
-            amount: Number(charge.amount),
-          })),
+        referenceNumber: finalReference,
+        narration: narration.trim() || null,
+        charges: chargesPayload,
       });
 
       onSaved(t('sales.savedNotice', { number: header.number }));
@@ -571,104 +902,253 @@ function EntryDialog({
     <Modal
       title={isReturn(kind) ? t('sales.newReturn') : t('sales.newInvoice')}
       onClose={onClose}
+      size="full"
     >
-      <div className="form-grid-3">
-        <SelectField
-          label={t('sales.kind')}
-          required
-          value={kind}
-          onChange={(value) => setKind(Number(value))}
-          options={[
-            { value: SalesDocumentKind.invoice, label: t('sales.invoice') },
-            { value: SalesDocumentKind.return, label: t('sales.return') },
-          ]}
-        />
-
-        <DateField
-          label={t('sales.date')}
-          required
-          value={date}
-          onChange={setDate}
-          error={errors['date']}
-        />
-
-        {/*
-          Searchable, like every other picker that reaches a master. A customer
-          list is thousands of rows and the native control could only be scrolled —
-          and its type-ahead matched the account code rather than the name the
-          person at the counter is being told.
-        */}
-        <FormField label={t('sales.customer')} required error={errors['customerId']}>
-          <SearchSelect
-            value={customerId}
-            onChange={setCustomerId}
-            options={(customers.data ?? []).map((customer) => ({
-              value: customer.customerId,
-              label: `${customer.code} — ${customer.name}`,
-              ...(customer.contact.mobileNumber
-                ? { detail: customer.contact.mobileNumber }
-                : {}),
-            }))}
-            invalid={errors['customerId'] !== undefined}
-            label={t('sales.customer')}
-            placeholder={t('sales.chooseCustomer')}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-surface-2/40 p-3 rounded-xl border border-line">
+        {/* Column 1: Document Numbers */}
+        <div className="space-y-2">
+          <TextField
+            label={t('sales.invoiceNo')}
+            value={nextInvoiceNo}
+            disabled
+            onChange={() => {}}
+            hint="Auto-generated"
+            className="bg-surface-3/50 font-mono font-semibold"
+            size="sm"
           />
-        </FormField>
-
-        <FormField label={t('sales.warehouse')} required error={errors['warehouseId']}>
-          <SearchSelect
-            value={warehouseId}
-            onChange={setWarehouseId}
-            options={(warehouses.data ?? []).map((warehouse) => ({
-              value: warehouse.id,
-              label: `${warehouse.code} — ${warehouse.name}`,
-              ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
-            }))}
-            invalid={errors['warehouseId'] !== undefined}
-            label={t('sales.warehouse')}
-            placeholder={t('sales.chooseWarehouse')}
+          <TextField
+            label={t('sales.referenceNo')}
+            value={reference}
+            onChange={setReference}
+            placeholder={nextInvoiceNo}
+            hint="Defaults to Invoice No"
+            size="sm"
           />
-        </FormField>
+        </div>
 
-        <TextField
-          label={t('sales.reference')}
-          value={reference}
-          onChange={setReference}
-        />
+        {/* Column 2: Customer & Payment Mode */}
+        <div className="space-y-2">
+          <FormField label={t('sales.customer')} required error={errors['customerId']}>
+            <SearchSelect
+              value={customerId}
+              onChange={setCustomerId}
+              options={(customers.data ?? []).map((customer) => ({
+                value: customer.customerId,
+                label: `${customer.code} — ${customer.name}`,
+                ...(customer.contact.mobileNumber
+                  ? { detail: customer.contact.mobileNumber }
+                  : {}),
+              }))}
+              invalid={errors['customerId'] !== undefined}
+              label={t('sales.customer')}
+              placeholder={t('sales.chooseCustomer')}
+              size="sm"
+            />
+          </FormField>
+
+          <SelectField<string>
+            label={t('sales.paymentMode')}
+            value={paymentMode}
+            onChange={(val) => setPaymentMode(String(val))}
+            options={[
+              { value: 'Cash', label: 'Cash' },
+              { value: 'Credit', label: 'Credit' },
+              { value: 'Card', label: 'Card' },
+              { value: 'Bank', label: 'Bank' },
+            ]}
+            size="sm"
+          />
+        </div>
+
+        {/* Column 3: Sales Staff & Barcode Scanner */}
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <TextField
+              label={t('sales.salesman')}
+              value={salesman}
+              onChange={setSalesman}
+              size="sm"
+            />
+            <TextField
+              label={t('sales.billingman')}
+              value={billingman}
+              onChange={setBillingman}
+              size="sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-ink-muted mb-1 font-medium">
+              {t('sales.barcode')}
+            </label>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleBarcodeScan(barcodeInput);
+                  }
+                }}
+                placeholder={t('sales.barcodePlaceholder')}
+                className="field-input-sm w-full pe-8 font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => handleBarcodeScan(barcodeInput)}
+                className="absolute end-1.5 p-1 text-ink-muted hover:text-brand-600 transition"
+                title="Scan / Read Barcode"
+              >
+                <IconBarcode className="size-4" />
+              </button>
+            </div>
+            {barcodeNotice && (
+              <span className="block mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300 truncate">
+                {barcodeNotice}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Column 4: Date, Mode, Rate & Warehouse */}
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <DateField
+              label={t('sales.date')}
+              required
+              value={date}
+              onChange={setDate}
+              error={errors['date']}
+              size="sm"
+            />
+            <SelectField<'NT' | 'TAX' | 'GST'>
+              label={t('sales.taxMode')}
+              value={taxMode}
+              onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
+              options={[
+                { value: 'NT', label: 'NT (0%)' },
+                { value: 'TAX', label: 'TAX (5%)' },
+                { value: 'GST', label: 'GST (18%)' },
+              ]}
+              size="sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <SelectField<'retail' | 'wholesale' | 'mrp'>
+              label={t('sales.salesRateType')}
+              value={rateType}
+              onChange={(val) => handleRateTypeChange(val as 'retail' | 'wholesale' | 'mrp')}
+              options={[
+                { value: 'retail', label: 'Retail' },
+                { value: 'wholesale', label: 'Wholesale' },
+                { value: 'mrp', label: 'MRP' },
+              ]}
+              size="sm"
+            />
+            <FormField label={t('sales.warehouse')} required error={errors['warehouseId']}>
+              <SearchSelect
+                value={warehouseId}
+                onChange={setWarehouseId}
+                options={(warehouses.data ?? []).map((warehouse) => ({
+                  value: warehouse.id,
+                  label: `${warehouse.code} — ${warehouse.name}`,
+                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+                }))}
+                invalid={errors['warehouseId'] !== undefined}
+                label={t('sales.warehouse')}
+                placeholder={t('sales.chooseWarehouse')}
+                size="sm"
+              />
+            </FormField>
+          </div>
+        </div>
+      </div>
+
+      {/* Feature Quick Toggles Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-0.5 text-xs text-ink-muted">
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
+            <input
+              type="checkbox"
+              checked={reverseCalc}
+              onChange={(e) => setReverseCalc(e.target.checked)}
+              className="rounded border-line text-brand-600 focus:ring-brand-500"
+            />
+            {t('sales.reverseCalculation')}
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
+            <input
+              type="checkbox"
+              checked={autoBatch}
+              onChange={(e) => setAutoBatch(e.target.checked)}
+              className="rounded border-line text-brand-600 focus:ring-brand-500"
+            />
+            {t('sales.autoBatch')}
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
+            <input
+              type="checkbox"
+              checked={enableFreeQty}
+              onChange={(e) => setEnableFreeQty(e.target.checked)}
+              className="rounded border-line text-brand-600 focus:ring-brand-500"
+            />
+            {t('sales.freeQuantity')}
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
+            <input
+              type="checkbox"
+              checked={enableDiscount}
+              onChange={(e) => setEnableDiscount(e.target.checked)}
+              className="rounded border-line text-brand-600 focus:ring-brand-500"
+            />
+            {t('sales.itemDiscount')}
+          </label>
+        </div>
 
         {isReturn(kind) && (
-          <FormField label={t('sales.againstInvoice')}>
+          <div className="w-72">
             <SearchSelect
               value={returnsInvoiceId}
               onChange={setReturnsInvoiceId}
               clearable
+              size="sm"
               label={t('sales.againstInvoice')}
               placeholder={t('sales.noInvoice')}
-              options={(returnable.data?.items ?? []).map((invoice) => ({
-                value: invoice.salesInvoiceId,
-                label: invoice.number,
-                detail: invoice.date,
-                meta: moneyAlways(invoice.total),
+              options={(returnable.data?.items ?? []).map((inv) => ({
+                value: inv.salesInvoiceId,
+                label: inv.number,
+                detail: inv.date,
+                meta: moneyAlways(inv.total),
               }))}
             />
-          </FormField>
+          </div>
         )}
       </div>
 
       {isReturn(kind) && (
-        // Said plainly rather than left to be discovered: the cost the goods come back
-        // at, and whether the credit finds a bill, both hang on this.
         <p className="alert-warn text-xs">{t('sales.returnHint')}</p>
       )}
 
+      {/* Line Items Table */}
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <table className="line-table sm:min-w-[46rem]">
           <thead className="text-start text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('sales.product')}</th>
               <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
-              <th className="px-2 py-1 text-end">{t('sales.rate')}</th>
-              <th className="px-2 py-1 text-end">{t('sales.discount')}</th>
+              {enableFreeQty && (
+                <th className="px-2 py-1 text-end">{t('sales.freeQuantity')}</th>
+              )}
+              <th className="px-2 py-1 text-end">
+                {t('sales.rate')}
+                {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
+              </th>
+              {enableDiscount && (
+                <th className="px-2 py-1 text-end">{t('sales.itemDiscount')}</th>
+              )}
               <th className="px-2 py-1 text-end">{t('sales.taxPercent')}</th>
               <th className="px-2 py-1 text-end">{t('sales.net')}</th>
               <th className="line-action-column" />
@@ -683,6 +1163,12 @@ function EntryDialog({
                 products={products.data ?? []}
                 productOptions={productOptions}
                 warehouseId={warehouseId}
+                rateType={rateType}
+                taxMode={taxMode}
+                reverseCalc={reverseCalc}
+                autoBatch={autoBatch}
+                enableFreeQty={enableFreeQty}
+                enableDiscount={enableDiscount}
                 errors={lineErrors[index] ?? {}}
                 removable={lines.length > 1}
                 onChange={(patch) => change(index, patch)}
@@ -705,30 +1191,190 @@ function EntryDialog({
         </button>
       </div>
 
-      {/*
-        The same block the purchase and order editors use, rather than the row of
-        inline figures this screen had. Three numbers running across a line answer
-        "what is the total" but not "does it add up" — stacked and right-aligned on
-        the money column above them, the arithmetic can be read down the page.
-      */}
-      <ChargesPanel
-        charges={charges}
-        ledgers={ledgers.data ?? []}
-        onChange={setCharges}
-      />
+      {/* Bottom Master Section: Customer Details + Additional Ledgers + Partial Payment & Totals */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
+        {/* Panel 1: Customer Details & Narration */}
+        <div className="lg:col-span-4 flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+          <div className="flex items-center gap-2 border-b border-line pb-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveBottomTab('general')}
+              className={clsx(
+                'text-xs font-semibold uppercase tracking-wider transition px-1 py-0.5 border-b-2',
+                activeBottomTab === 'general'
+                  ? 'border-brand-600 text-brand-700 dark:text-brand-300'
+                  : 'border-transparent text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('sales.generalTab')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveBottomTab('shipping')}
+              className={clsx(
+                'text-xs font-semibold uppercase tracking-wider transition px-1 py-0.5 border-b-2',
+                activeBottomTab === 'shipping'
+                  ? 'border-brand-600 text-brand-700 dark:text-brand-300'
+                  : 'border-transparent text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('sales.shippingTab')}
+            </button>
+          </div>
 
-      <div className="line-totals flex flex-wrap items-end justify-end gap-6">
-        <DocumentTotals
-          gross={totals.gross}
-          discount={totals.discount}
-          tax={totals.tax}
-          charges={chargesTotal}
-        />
+          {activeBottomTab === 'general' ? (
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-ink-muted">
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
+                    {t('customers.address')}
+                  </span>
+                  <p className="truncate text-ink font-medium">
+                    {selectedCustomer?.contact.addressLine1 ||
+                      selectedCustomer?.contact.addressLine2 ||
+                      '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
+                    {t('customers.mobile')}
+                  </span>
+                  <p className="truncate font-mono text-ink">
+                    {selectedCustomer?.contact.mobileNumber ||
+                      selectedCustomer?.contact.phone ||
+                      '—'}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-ink-muted/80 mb-1">
+                  {t('sales.narration')}
+                </label>
+                <textarea
+                  rows={2}
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder={t('sales.narration')}
+                  className="w-full rounded-lg border border-line bg-surface p-2 text-xs text-ink focus:border-brand-500 focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
+                    {t('sales.salesman')}
+                  </span>
+                  <p className="text-ink font-medium">{salesman}</p>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
+                    {t('sales.billingman')}
+                  </span>
+                  <p className="text-ink font-medium">{billingman}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Panel 2: Additional Ledgers */}
+        <div className="lg:col-span-4">
+          <AdditionalLedgersSection
+            rows={additionalLedgers}
+            ledgers={ledgers.data ?? []}
+            onChange={setAdditionalLedgers}
+          />
+        </div>
+
+        {/* Panel 3: Partial Payment & Grand Totals */}
+        <div className="lg:col-span-4 rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3">
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between text-ink-muted">
+              <span>{t('sales.prevBalance')}</span>
+              <span className="font-mono tabular-nums">{moneyAlways(prevBalance)}</span>
+            </div>
+            <div className="flex justify-between text-ink-muted">
+              <span>{t('sales.taxable')}</span>
+              <span className="font-mono tabular-nums">{moneyAlways(totals.taxable)}</span>
+            </div>
+            {totals.tax > 0 && (
+              <div className="flex justify-between text-ink-muted">
+                <span>{t('sales.tax')} ({taxMode})</span>
+                <span className="font-mono tabular-nums">{moneyAlways(totals.tax)}</span>
+              </div>
+            )}
+            {additionalLedgersTotal !== 0 && (
+              <div className="flex justify-between text-ink-muted">
+                <span>{t('sales.additionalLedgersTotal')}</span>
+                <span className="font-mono tabular-nums">
+                  {additionalLedgersTotal >= 0 ? '+' : ''}
+                  {moneyAlways(additionalLedgersTotal)}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-line">
+              <span>{t('sales.grandTotal')}</span>
+              <span className="font-mono text-base text-brand-700 dark:text-brand-300 tabular-nums">
+                {moneyAlways(grandTotal)}
+              </span>
+            </div>
+          </div>
+
+          {/* Partial Payment inputs */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line/70">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
+                {t('sales.paidAmount')}
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={paidAmount}
+                placeholder={moneyAlways(effectivePaid)}
+                onChange={(e) => setPaidAmount(e.target.value)}
+                className="field-input-sm w-full text-end font-mono tabular-nums font-semibold"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
+                {t('sales.balanceDue')}
+              </label>
+              <div className="h-8 flex items-center justify-end font-mono text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
+                {moneyAlways(balanceDue)}
+              </div>
+            </div>
+            {paymentMode === 'Cash' && (
+              <>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
+                    {t('sales.cashGiven')}
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={cashGiven}
+                    placeholder="0.00"
+                    onChange={(e) => setCashGiven(e.target.value)}
+                    className="field-input-sm w-full text-end font-mono tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
+                    {t('sales.changeBack')}
+                  </label>
+                  <div className="h-8 flex items-center justify-end font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {moneyAlways(changeBack)}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* What the screen adds up is what the lines come to; the server rounds the total
-          to the currency and may differ in the last place, so this is called an
-          estimate rather than presented as the figure that will be billed. */}
       <p className="text-xs text-ink-muted">{t('sales.totalsHint')}</p>
 
       <div className="flex justify-end gap-2">
@@ -743,18 +1389,18 @@ function EntryDialog({
 
 /**
  * One line, and whatever the product it names needs beyond a quantity and a rate.
- *
- * A row of its own rather than markup in a loop, because a batched product has to ask the
- * warehouse which batches it holds and a serialised one has to ask which units are on the
- * shelf — and a hook cannot be called inside a loop. Without these a firm could not sell a
- * batched or serialised product from this screen at all: the server refuses the line, and
- * rightly, because a batch nobody named is stock nobody can trace.
  */
 function LineRow({
   line,
   products,
   productOptions,
   warehouseId,
+  rateType,
+  taxMode,
+  reverseCalc,
+  autoBatch,
+  enableFreeQty,
+  enableDiscount,
   errors,
   removable,
   onChange,
@@ -764,6 +1410,12 @@ function LineRow({
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly warehouseId: string;
+  readonly rateType: 'retail' | 'wholesale' | 'mrp';
+  readonly taxMode: 'NT' | 'TAX' | 'GST';
+  readonly reverseCalc: boolean;
+  readonly autoBatch: boolean;
+  readonly enableFreeQty: boolean;
+  readonly enableDiscount: boolean;
   readonly errors: Readonly<Record<string, string>>;
   readonly removable: boolean;
   readonly onChange: (patch: Partial<DraftLine>) => void;
@@ -772,7 +1424,7 @@ function LineRow({
   const { t } = useTranslation();
 
   const product = products.find((candidate) => candidate.id === line.productId);
-  const net = Number(line.quantity) * Number(line.rate) - Number(line.discount || 0);
+  const net = Number(line.quantity) * Number(line.rate) - (enableDiscount ? Number(line.discount || 0) : 0);
 
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
@@ -784,13 +1436,30 @@ function LineRow({
     enabled: needsBatch && line.productId !== '' && warehouseId !== '',
   });
 
-  // Only what is on the shelf in this warehouse. A unit already sold is not one that can
-  // be sold again, and offering it would produce a refusal nobody could act on.
   const serials = useQuery<readonly SerialNumberView[], ApiError>({
     queryKey: ['sales-line-serials', line.productId, warehouseId],
     queryFn: () => fetchProductSerials(line.productId, warehouseId),
     enabled: needsSerials && line.productId !== '' && warehouseId !== '',
   });
+
+  // Auto Batch FIFO
+  useEffect(() => {
+    if (
+      autoBatch &&
+      needsBatch &&
+      (!line.batchNumber || line.batchNumber === '') &&
+      batches.data &&
+      batches.data.length > 0
+    ) {
+      const available = batches.data.find((b) => b.quantity > 0) ?? batches.data[0];
+      if (available) {
+        onChange({
+          batchNumber: available.batchNumber,
+          expiresOn: available.expiresOn ?? '',
+        });
+      }
+    }
+  }, [autoBatch, needsBatch, line.batchNumber, batches.data]);
 
   const toggleSerial = (number: string): void => {
     const chosen = new Set(line.serialNumbers);
@@ -804,27 +1473,50 @@ function LineRow({
     onChange({ serialNumbers: [...chosen] });
   };
 
+  const handleProductSelect = (value: string): void => {
+    const chosen = products.find((candidate) => candidate.id === value);
+    if (chosen) {
+      const baseRate =
+        rateType === 'wholesale'
+          ? chosen.wholesaleRate || chosen.retailRate
+          : rateType === 'mrp'
+          ? chosen.maximumRetailPrice || chosen.retailRate
+          : chosen.retailRate;
+      const defaultTax = Number(
+        line.taxPercentage || (taxMode === 'NT' ? 0 : taxMode === 'TAX' ? 5 : 18),
+      );
+      const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
+      onChange({
+        productId: value,
+        rate: String(baseRate),
+        inclusiveRate: incRate,
+        batchNumber: '',
+        expiresOn: '',
+        serialNumbers: [],
+      });
+    } else {
+      onChange({
+        productId: value,
+        batchNumber: '',
+        expiresOn: '',
+        serialNumbers: [],
+      });
+    }
+  };
+
+  const isExpired = line.expiresOn ? new Date(line.expiresOn) < new Date() : false;
+  const isNearExpiry = line.expiresOn
+    ? !isExpired &&
+      (new Date(line.expiresOn).getTime() - Date.now()) / (1000 * 3600 * 24) <= 30
+    : false;
+
   return (
     <>
       <tr className="border-t border-line">
         <td data-label={t('sales.product')} className="min-w-64 px-2 py-1">
-          {/* Typeable, and showing what is on the shelf — the two things the native
-              select over the whole product master could not do. */}
           <SearchSelect
             value={line.productId}
-            onChange={(value) => {
-              const chosen = products.find((candidate) => candidate.id === value);
-
-              // The batch and the units belong to the product that was chosen
-              // before, so they are dropped rather than carried onto a different
-              // one. The rate starts at the product's own retail price.
-              onChange({
-                productId: value,
-                batchNumber: '',
-                serialNumbers: [],
-                ...(chosen ? { rate: String(chosen.retailRate) } : {}),
-              });
-            }}
+            onChange={handleProductSelect}
             options={productOptions}
             size="sm"
             label={t('sales.product')}
@@ -837,17 +1529,51 @@ function LineRow({
           error={errors['quantity']}
           onChange={(value) => onChange({ quantity: value })}
         />
-        <NumberCell
-          label={t('sales.rate')}
-          value={line.rate}
-          error={errors['rate']}
-          onChange={(value) => onChange({ rate: value })}
-        />
-        <NumberCell
-          label={t('sales.discount')}
-          value={line.discount}
-          onChange={(value) => onChange({ discount: value })}
-        />
+        {enableFreeQty && (
+          <NumberCell
+            label={t('sales.freeQuantity')}
+            value={line.freeQuantity ?? '0'}
+            onChange={(value) => onChange({ freeQuantity: value })}
+          />
+        )}
+        {reverseCalc ? (
+          <NumberCell
+            label={`${t('sales.rate')} (${t('sales.inclusiveRate')})`}
+            value={line.inclusiveRate ?? ''}
+            error={errors['rate']}
+            subtitle={line.rate ? `Excl: ${moneyAlways(Number(line.rate))}` : undefined}
+            onChange={(val) => {
+              const inc = Number(val);
+              const taxPct = Number(line.taxPercentage || 0);
+              const exc =
+                Number.isFinite(inc) && inc > 0 ? (inc / (1 + taxPct / 100)).toFixed(4) : '';
+              onChange({ inclusiveRate: val, rate: exc });
+            }}
+          />
+        ) : (
+          <NumberCell
+            label={t('sales.rate')}
+            value={line.rate}
+            error={errors['rate']}
+            subtitle={
+              line.inclusiveRate ? `Incl: ${moneyAlways(Number(line.inclusiveRate))}` : undefined
+            }
+            onChange={(val) => {
+              const r = Number(val);
+              const taxPct = Number(line.taxPercentage || 0);
+              const inc =
+                Number.isFinite(r) && r > 0 ? (r * (1 + taxPct / 100)).toFixed(2) : '';
+              onChange({ rate: val, inclusiveRate: inc });
+            }}
+          />
+        )}
+        {enableDiscount && (
+          <NumberCell
+            label={t('sales.itemDiscount')}
+            value={line.discount}
+            onChange={(value) => onChange({ discount: value })}
+          />
+        )}
         <NumberCell
           label={t('sales.taxPercent')}
           value={line.taxPercentage}
@@ -871,24 +1597,62 @@ function LineRow({
       </tr>
 
       {(needsBatch || needsSerials) && (
-        <tr className="border-t border-dashed border-line">
-          <td colSpan={7} className="px-2 pb-2">
-            <div className="flex flex-wrap items-start gap-4">
+        <tr className="border-t border-dashed border-line bg-surface-2/30">
+          <td colSpan={8} className="px-3 py-2">
+            <div className="flex flex-wrap items-center gap-4">
               {needsBatch && (
-                <Field label={t('sales.batch')}>
-                  <Select
-                    label={t('sales.batch')}
-                    value={line.batchNumber}
-                    onChange={(value) => onChange({ batchNumber: String(value) })}
-                    options={[
-                      { value: '', label: t('sales.chooseBatch') },
-                      ...(batches.data ?? []).map((batch) => ({
-                        value: batch.batchNumber,
-                        label: `${batch.batchNumber} (${batch.quantity})`,
-                      })),
-                    ]}
-                  />
-                </Field>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Field label={t('sales.batch')}>
+                    <Select
+                      label={t('sales.batch')}
+                      value={line.batchNumber}
+                      onChange={(value) => {
+                        const chosen = (batches.data ?? []).find(
+                          (b) => b.batchNumber === String(value),
+                        );
+                        onChange({
+                          batchNumber: String(value),
+                          expiresOn: chosen?.expiresOn ?? '',
+                        });
+                      }}
+                      options={[
+                        { value: '', label: t('sales.chooseBatch') },
+                        ...(batches.data ?? []).map((batch) => ({
+                          value: batch.batchNumber,
+                          label: `${batch.batchNumber} (Qty: ${batch.quantity}${batch.expiresOn ? ` · Exp: ${batch.expiresOn}` : ''})`,
+                        })),
+                      ]}
+                    />
+                  </Field>
+
+                  {line.expiresOn && (
+                    <div className="mt-4">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono font-medium',
+                          isExpired
+                            ? 'bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-300 ring-1 ring-red-500/30'
+                            : isNearExpiry
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 ring-1 ring-amber-500/30'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+                        )}
+                      >
+                        {isExpired
+                          ? t('sales.batchExpired')
+                          : t('sales.batchExpiresOn')}
+                        : {line.expiresOn}
+                      </span>
+                    </div>
+                  )}
+
+                  {autoBatch && (
+                    <div className="mt-4">
+                      <span className="rounded bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                        {t('sales.autoBatch')} (FIFO)
+                      </span>
+                    </div>
+                  )}
+                </div>
               )}
 
               {needsSerials && (
@@ -1132,25 +1896,16 @@ function NumberCell({
   onChange,
   label,
   error,
+  subtitle,
+  placeholder,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
-  /**
-   * The column's heading.
-   *
-   * Spoken by the box, which had no name of its own at all — four numeric inputs a
-   * line, announced as four numeric inputs — and printed above it on a phone, where
-   * the heading it belongs to is a card away.
-   */
   readonly label: string;
   readonly error?: string | undefined;
+  readonly subtitle?: string | undefined;
+  readonly placeholder?: string | undefined;
 }): React.JSX.Element {
-  /*
-    The cell end-aligns its box, because the header above it is end-aligned too.
-    Left as it was, a `w-24` input sat at the start of a wider cell with its
-    caption over the gap to its right — every numeric column on these entry grids
-    was a heading pointing at the space beside the figures.
-  */
   return (
     <td data-label={label} className="px-2 py-1 text-end">
       <input
@@ -1158,6 +1913,7 @@ function NumberCell({
         inputMode="decimal"
         aria-label={label}
         value={value}
+        placeholder={placeholder}
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
@@ -1165,6 +1921,11 @@ function NumberCell({
           error && 'field-invalid',
         )}
       />
+      {subtitle && (
+        <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-ink-muted text-end">
+          {subtitle}
+        </span>
+      )}
     </td>
   );
 }

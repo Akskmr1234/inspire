@@ -1,7 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { IconPlus } from '@/components/icons';
+import {
+  IconColumns,
+  IconDotsVertical,
+  IconDownload,
+  IconPlus,
+  IconRefresh,
+} from '@/components/icons';
 import { SearchSelect } from '@/components/SearchSelect';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
@@ -148,6 +155,7 @@ export function DataGrid<TRow>({
   const [order, setOrder] = useState<readonly string[]>([]);
   const [frozen, setFrozen] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   /** Held while the arrangement is being written, so it cannot be written twice. */
   const [saving, setSaving] = useState(false);
@@ -543,11 +551,7 @@ export function DataGrid<TRow>({
           {actions && <span aria-hidden="true" className="h-5 w-px bg-line" />}
 
           {/*
-            Columns, then Save layout, then the rest. Arranging the columns and
-            keeping that arrangement are one task done in two steps, and the button
-            for the second step used to sit two buttons away from the first, past
-            Freeze and Export — so the arrangement was made and then lost, because
-            nothing beside the picker said it could be kept.
+            Columns, then Save layout, then the rest.
           */}
           <GridButton
             onClick={() => setShowPicker((value) => !value)}
@@ -598,6 +602,106 @@ export function DataGrid<TRow>({
           >
             {t('grid.resetLayout')}
           </GridButton>
+
+          {/*
+            Three-dot Column Options Popover Menu
+          */}
+          <Popover.Root open={showMenu} onOpenChange={setShowMenu}>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                className={clsx(
+                  'grid size-8 shrink-0 place-items-center rounded-lg border transition duration-150',
+                  showMenu
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 shadow-xs dark:bg-brand-500/15 dark:text-brand-200'
+                    : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
+                )}
+                title="Column Options"
+                aria-label="Column Options"
+              >
+                <IconDotsVertical className="size-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                align="end"
+                sideOffset={4}
+                className="animate-drop z-[70] w-52 rounded-xl border border-line bg-surface p-1.5 shadow-float ring-1 ring-black/5 dark:ring-white/10"
+              >
+                <div className="px-2.5 py-1 text-[11px] font-semibold tracking-wider text-ink-subtle uppercase">
+                  Column Options
+                </div>
+
+                <div className="space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (locked) setLocked(false);
+                      setShowPicker((v) => !v);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
+                  >
+                    <IconColumns className="size-4 text-ink-subtle" />
+                    <span>Edit Columns</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      setShowMenu(false);
+                      void persist();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3 disabled:opacity-50"
+                  >
+                    <IconPlus className="size-4 text-ink-subtle" />
+                    <span>Save Layout</span>
+                  </button>
+
+                  {!narrow && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setFrozen((value) => (value === 0 ? 1 : 0));
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
+                    >
+                      <span className="grid size-4 place-items-center text-xs font-bold text-ink-subtle">❄</span>
+                      <span>{frozen > 0 ? 'Unfreeze Columns' : 'Freeze Columns'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      exportCsv();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
+                  >
+                    <IconDownload className="size-4 text-ink-subtle" />
+                    <span>Export CSV</span>
+                  </button>
+
+                  <div className="my-1 border-t border-line" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      void restoreDefaults();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                  >
+                    <IconRefresh className="size-4" />
+                    <span>Reset Layout</span>
+                  </button>
+                </div>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       </div>
 

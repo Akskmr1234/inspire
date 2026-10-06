@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
-import { DateField, Field, NumberField, SelectField, TextField } from '@/components/Form';
+import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import { IconClose, IconPlus } from '@/components/icons';
 import { ApiError, request } from '@/lib/api';
 import {
   isMoneyAccount,
@@ -551,6 +552,14 @@ interface MoneyDraft {
  * cheque handling and the bill settlement to arrive, and one of them would not get
  * it.
  */
+export interface PaymentEntryLine {
+  readonly id: string;
+  paymentType: string;
+  accountId: string;
+  amount: string;
+  reference: string;
+}
+
 function MoneyEntry({
   direction,
 }: {
@@ -561,8 +570,12 @@ function MoneyEntry({
   const navigate = useNavigate();
 
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
+  const defaultSalesman = useSettings((state) => state.defaultSalesman);
 
   const [through, setThrough] = useState<'cash' | 'bank'>('bank');
+  const [salesman, setSalesman] = useState<string>(defaultSalesman || 'Primary');
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
   const [draft, setDraft] = useState<MoneyDraft>(() => ({
     date: new Date().toISOString().slice(0, 10),
     partyId: '',
@@ -573,12 +586,17 @@ function MoneyEntry({
     narration: '',
   }));
 
-  /*
-    The modes, with whatever the voucher already holds kept at the end of the list
-    when it is not one of them. Without that row an older voucher reading "By cash"
-    opens with an empty picker and saves as empty — the editor would quietly throw
-    away a field nobody touched.
-  */
+  const vouchersCount = useQuery<{ readonly lines?: readonly unknown[] }, ApiError>({
+    queryKey: ['voucher-report', 'count', direction],
+    queryFn: () =>
+      request<{ readonly lines?: readonly unknown[] }>('/accounting/voucher-report'),
+    staleTime: 60000,
+  });
+
+  const count = vouchersCount.data?.lines?.length ?? 0;
+  const prefix = direction === 'payment' ? 'PAY' : 'REC';
+  const transactionNo = `${prefix}-${String(1001 + count).padStart(4, '0')}`;
+
   const paymentModeOptions = useMemo((): readonly SelectOption[] => {
     const known = PAYMENT_MODES.map((mode) => ({
       value: mode.value,
@@ -595,12 +613,6 @@ function MoneyEntry({
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
 
-  /*
-    A payment or a receipt is against somebody: a supplier being paid, a customer
-    paying, an employee's advance. Ordinary ledgers are offered too — rent is paid to
-    an expense account and not to a party — but the parties come first, because they
-    are what most of these documents are against.
-  */
   const partyOptions = useMemo(() => {
     const parties = all.filter(isParty).map(ledgerOption);
     const others = all
@@ -620,14 +632,98 @@ function MoneyEntry({
     [all, through],
   );
 
+  const moneyAccountOptions = useMemo(
+    () => all.filter(isMoneyAccount).map(ledgerOption),
+    [all],
+  );
+
+  const [paymentEntries, setPaymentEntries] = useState<readonly PaymentEntryLine[]>([
+    {
+      id: '1',
+      paymentType: defaultPaymentMode || 'Cash',
+      accountId: '',
+      amount: '',
+      reference: '',
+    },
+  ]);
+
+  useEffect(() => {
+    if (paymentEntries.length === 1 && !paymentEntries[0]?.accountId && accounts.length > 0) {
+      const defaultAcc = accounts[0]?.ledgerId ?? '';
+      setPaymentEntries([{ ...paymentEntries[0]!, accountId: defaultAcc }]);
+      setDraft((curr) => ({ ...curr, accountId: defaultAcc }));
+    }
+  }, [accounts, paymentEntries]);
+
+  const totalPaymentAmount = useMemo(() => {
+    return paymentEntries.reduce((sum, entry) => {
+      const val = Number(entry.amount);
+      return Number.isFinite(val) && val > 0 ? sum + val : sum;
+    }, 0);
+  }, [paymentEntries]);
+
+  const addPaymentEntry = (): void => {
+    const defaultAcc = accounts[0]?.ledgerId ?? moneyAccountOptions[0]?.value ?? '';
+    setPaymentEntries((current) => [
+      ...current,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        paymentType: draft.paymentMode || 'Cash',
+        accountId: defaultAcc,
+        amount: '',
+        reference: '',
+      },
+    ]);
+  };
+
+  const updatePaymentEntry = (
+    id: string,
+    patch: Partial<PaymentEntryLine>,
+  ): void => {
+    setPaymentEntries((current) => {
+      const next = current.map((item) => (item.id === id ? { ...item, ...patch } : item));
+      const nextTotal = next.reduce((sum, item) => {
+        const val = Number(item.amount);
+        return Number.isFinite(val) && val > 0 ? sum + val : sum;
+      }, 0);
+      setDraft((curr) => ({
+        ...curr,
+        amount: nextTotal > 0 ? String(nextTotal) : '',
+        ...(next.length === 1 && patch.accountId !== undefined
+          ? { accountId: patch.accountId }
+          : {}),
+      }));
+      return next;
+    });
+  };
+
+  const removePaymentEntry = (id: string): void => {
+    if (paymentEntries.length <= 1) return;
+    setPaymentEntries((current) => {
+      const next = current.filter((item) => item.id !== id);
+      const nextTotal = next.reduce((sum, item) => {
+        const val = Number(item.amount);
+        return Number.isFinite(val) && val > 0 ? sum + val : sum;
+      }, 0);
+      setDraft((curr) => ({
+        ...curr,
+        amount: nextTotal > 0 ? String(nextTotal) : '',
+      }));
+      return next;
+    });
+  };
+
+  const handlePaymentModeChange = (mode: string): void => {
+    set('paymentMode', mode);
+    if (paymentEntries.length > 0 && paymentEntries[0]) {
+      updatePaymentEntry(paymentEntries[0].id, { paymentType: mode });
+    }
+  };
+
   const { errors, submit, reset } = useValidation<MoneyDraft>((values) =>
     collect({
       date: required(values.date, t('vouchers.dateRequired')),
       partyId: required(values.partyId, t('vouchers.partyRequired')),
-      accountId: required(
-        values.accountId,
-        through === 'cash' ? t('vouchers.cashRequired') : t('vouchers.bankRequired'),
-      ),
       amount:
         required(values.amount, t('vouchers.amountRequired')) ??
         numeric(values.amount, t('vouchers.amountInvalid'), { min: 0.01 }),
@@ -645,33 +741,43 @@ function MoneyEntry({
 
   const post = useMutation<CreateVoucherResponse, ApiError, MoneyDraft>({
     mutationFn: (values) => {
-      const amount = Number(values.amount);
-
-      /*
-        Which side each account takes.
-
-        A receipt debits the firm's cash or bank — its money went up — and credits
-        the party, whose debt to the firm went down. A payment is the same sentence
-        read backwards. Deciding it here rather than asking is the whole reason
-        these screens exist: a cashier should not have to know which of two
-        accounts is debited to record a customer handing over a note.
-      */
+      const finalReference = values.reference.trim() || transactionNo;
       const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
       const partySide = direction === 'receipt' ? CREDIT : DEBIT;
+
+      const activeEntries = paymentEntries.filter(
+        (e) => e.accountId !== '' && Number(e.amount) > 0,
+      );
+
+      const effectiveTotal = activeEntries.reduce((sum, e) => sum + Number(e.amount), 0);
+
+      const partyLine = {
+        ledgerId: values.partyId,
+        side: partySide,
+        amount: effectiveTotal,
+        narration: values.narration || null,
+      };
+
+      const moneyLines = activeEntries.map((e) => ({
+        ledgerId: e.accountId,
+        side: moneySide,
+        amount: Number(e.amount),
+        narration: e.reference ? `${e.paymentType} - Ref: ${e.reference}` : e.paymentType,
+      }));
+
+      const lines =
+        direction === 'payment' ? [partyLine, ...moneyLines] : [...moneyLines, partyLine];
 
       return request<CreateVoucherResponse>('/accounting/vouchers', {
         method: 'POST',
         body: {
           type,
           date: values.date,
-          referenceNumber: values.reference || null,
+          referenceNumber: finalReference,
           narration: values.narration || null,
           paymentMode: values.paymentMode || null,
           postImmediately: true,
-          lines: [
-            { ledgerId: values.accountId, side: moneySide, amount },
-            { ledgerId: values.partyId, side: partySide, amount },
-          ],
+          lines,
         },
       });
     },
@@ -684,6 +790,16 @@ function MoneyEntry({
         reference: '',
         narration: '',
       }));
+      setPaymentEntries([
+        {
+          id: Math.random().toString(36).slice(2, 9),
+          paymentType: defaultPaymentMode || 'Cash',
+          accountId: accounts[0]?.ledgerId ?? '',
+          amount: '',
+          reference: '',
+        },
+      ]);
+      setPaymentError(null);
 
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
       void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
@@ -718,30 +834,52 @@ function MoneyEntry({
       )}
 
       <form
-        className="card card-body space-y-4"
+        className="card card-body space-y-5"
         onSubmit={(event) => {
           event.preventDefault();
+          setPaymentError(null);
+
+          if (!draft.partyId) {
+            setPaymentError(t('vouchers.partyRequired'));
+            return;
+          }
+
+          const activeEntries = paymentEntries.filter((e) => Number(e.amount) > 0);
+          if (activeEntries.length === 0 || totalPaymentAmount <= 0) {
+            setPaymentError(t('vouchers.amountRequired'));
+            return;
+          }
+
+          const missingAccount = activeEntries.some((e) => !e.accountId);
+          if (missingAccount) {
+            setPaymentError(t('vouchers.missingAccount'));
+            return;
+          }
 
           if (submit(draft)) {
             post.mutate(draft);
           }
         }}
       >
-        <div className="form-grid-3">
-          <SelectField
-            label={t('vouchers.through')}
-            required
-            value={through}
-            onChange={(value) => {
-              setThrough(value);
-              // The account belongs to the kind that was chosen, so it goes with it
-              // rather than staying behind as a bank account on a cash voucher.
-              set('accountId', '');
-            }}
-            options={[
-              { value: 'bank', label: t('vouchers.throughBank') },
-              { value: 'cash', label: t('vouchers.throughCash') },
-            ]}
+        {/* Transaction Header Grid (Requirements 9 & 15) */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border border-line bg-surface-2/40 p-4">
+          <TextField
+            label={t('vouchers.transactionNo')}
+            value={transactionNo}
+            onChange={() => {}}
+            disabled
+            hint={t('vouchers.autoGenerated')}
+            className="bg-surface-3/50 font-mono font-semibold"
+            size="sm"
+          />
+
+          <TextField
+            label={t('vouchers.referenceNo')}
+            value={draft.reference}
+            onChange={(value) => set('reference', value)}
+            placeholder={transactionNo}
+            hint={t('vouchers.referenceNoHint')}
+            size="sm"
           />
 
           <DateField
@@ -750,64 +888,55 @@ function MoneyEntry({
             value={draft.date}
             onChange={(value) => set('date', value)}
             error={errors['date']}
+            size="sm"
           />
 
-          <NumberField
-            label={t('vouchers.amount')}
-            required
-            min={0}
-            step="0.01"
-            value={draft.amount}
-            onChange={(value) => set('amount', value)}
-            error={errors['amount']}
+          <TextField
+            label={t('vouchers.salesman')}
+            value={salesman}
+            onChange={setSalesman}
+            placeholder={t('vouchers.primarySalesman')}
+            size="sm"
           />
+        </div>
 
-          <Field
-            label={
-              direction === 'receipt' ? t('vouchers.receivedFrom') : t('vouchers.paidTo')
-            }
-            required
-            error={errors['partyId']}
-          >
-            <SearchSelect
-              value={draft.partyId}
-              onChange={(value) => set('partyId', value)}
-              options={partyOptions}
-              disabled={ledgers.isPending}
-              invalid={errors['partyId'] !== undefined}
+        {/* Primary Account & Mode Selection (Requirement 10) */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="sm:col-span-2">
+            <Field
               label={
-                direction === 'receipt'
-                  ? t('vouchers.receivedFrom')
-                  : t('vouchers.paidTo')
+                direction === 'payment'
+                  ? t('vouchers.debitAccount')
+                  : t('vouchers.creditAccount')
               }
-              placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
-            />
-          </Field>
-
-          <Field
-            label={
-              through === 'cash' ? t('vouchers.cashAccount') : t('vouchers.bankAccount')
-            }
-            required
-            error={errors['accountId']}
-          >
-            <SearchSelect
-              value={draft.accountId}
-              onChange={(value) => set('accountId', value)}
-              options={accounts.map(ledgerOption)}
-              disabled={ledgers.isPending}
-              invalid={errors['accountId'] !== undefined}
-              label={
-                through === 'cash' ? t('vouchers.cashAccount') : t('vouchers.bankAccount')
+              required
+              hint={
+                direction === 'payment'
+                  ? t('vouchers.debitAccountHint')
+                  : t('vouchers.creditAccountHint')
               }
-              placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
-            />
-          </Field>
+              error={errors['partyId']}
+            >
+              <SearchSelect
+                value={draft.partyId}
+                onChange={(value) => set('partyId', value)}
+                options={partyOptions}
+                disabled={ledgers.isPending}
+                invalid={errors['partyId'] !== undefined}
+                label={
+                  direction === 'payment'
+                    ? t('vouchers.debitAccount')
+                    : t('vouchers.creditAccount')
+                }
+                placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+              />
+            </Field>
+          </div>
 
           <Field label={t('vouchers.paymentMode')}>
             <SearchSelect
               value={draft.paymentMode}
-              onChange={(value) => set('paymentMode', value)}
+              onChange={handlePaymentModeChange}
               options={paymentModeOptions}
               label={t('vouchers.paymentMode')}
               placeholder={t('vouchers.paymentModeNone')}
@@ -815,29 +944,167 @@ function MoneyEntry({
             />
           </Field>
 
-          <TextField
-            label={t('vouchers.reference')}
-            value={draft.reference}
-            onChange={(value) => set('reference', value)}
-          />
-
-          <TextField
-            label={t('vouchers.narration')}
-            value={draft.narration}
-            onChange={(value) => set('narration', value)}
-            className="sm:col-span-2"
+          <SelectField
+            label={t('vouchers.through')}
+            required
+            value={through}
+            onChange={(value) => {
+              setThrough(value as 'cash' | 'bank');
+              const relevant = all.filter((ledger) =>
+                value === 'cash'
+                  ? ledger.kind === LedgerKind.cash
+                  : ledger.kind === LedgerKind.bank,
+              );
+              if (relevant.length > 0 && paymentEntries.length === 1) {
+                const nextAcc = relevant[0]!.ledgerId;
+                updatePaymentEntry(paymentEntries[0]!.id, { accountId: nextAcc });
+              }
+            }}
+            options={[
+              { value: 'bank', label: t('vouchers.throughBank') },
+              { value: 'cash', label: t('vouchers.throughCash') },
+            ]}
           />
         </div>
 
-        {/*
-          What the screen is about to write, in the words the books will use. A
-          two-line double entry made on somebody's behalf should still be shown to
-          them: it is the only way a mistake in the direction is catchable before it
-          is posted.
-        */}
+        {/* Multiple Payments Table (Requirements 11 & 16) */}
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-ink">
+                {t('vouchers.multiplePayments')}
+              </span>
+              <p className="text-xs text-ink-muted">
+                {t('vouchers.multiplePaymentsHint')}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addPaymentEntry}
+              className="btn-secondary btn-xs flex items-center gap-1 text-xs"
+            >
+              <IconPlus className="size-3" />
+              {t('vouchers.addPaymentEntry')}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="border-b border-line bg-surface-2 text-ink-muted">
+                <tr>
+                  <th className="w-32 px-3 py-2 text-start font-semibold">
+                    {t('vouchers.paymentType')}
+                  </th>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('vouchers.account')}
+                  </th>
+                  <th className="w-36 px-3 py-2 text-end font-semibold">
+                    {t('vouchers.amount')}
+                  </th>
+                  <th className="w-48 px-3 py-2 text-start font-semibold">
+                    {t('vouchers.chequeOrRef')}
+                  </th>
+                  <th className="w-10 px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {paymentEntries.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-surface-2/40">
+                    <td className="px-3 py-1.5">
+                      <select
+                        value={entry.paymentType}
+                        onChange={(e) =>
+                          updatePaymentEntry(entry.id, { paymentType: e.target.value })
+                        }
+                        className="field-input-sm w-full py-1 text-xs font-medium"
+                      >
+                        <option value="Cash">{t('vouchers.cash')}</option>
+                        <option value="Credit">{t('vouchers.credit')}</option>
+                        <option value="Bank">{t('vouchers.bank')}</option>
+                        <option value="Cheque">{t('vouchers.cheque')} payment</option>
+                        <option value="Card">{t('vouchers.card')}</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <SearchSelect
+                        value={entry.accountId}
+                        onChange={(accountId) =>
+                          updatePaymentEntry(entry.id, { accountId })
+                        }
+                        options={moneyAccountOptions}
+                        size="sm"
+                        label={t('vouchers.account')}
+                        placeholder={t('common.choose')}
+                      />
+                    </td>
+                    <td className="px-3 py-1.5 text-end">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={entry.amount}
+                        onChange={(e) =>
+                          updatePaymentEntry(entry.id, { amount: e.target.value })
+                        }
+                        placeholder="0.00"
+                        className="field-input-sm w-32 text-end font-mono tabular-nums"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        type="text"
+                        value={entry.reference}
+                        onChange={(e) =>
+                          updatePaymentEntry(entry.id, { reference: e.target.value })
+                        }
+                        placeholder={t('vouchers.chequeOrRef')}
+                        className="field-input-sm w-full"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-end">
+                      {paymentEntries.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePaymentEntry(entry.id)}
+                          className="rounded p-1 text-ink-muted transition hover:text-red-600"
+                          title="Remove entry"
+                        >
+                          <IconClose className="size-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Total Payment Amount Bar */}
+          <div className="flex items-center justify-between border-t border-line pt-2 text-sm">
+            <span className="font-semibold text-ink-muted">
+              {t('vouchers.totalPaymentAmount')}:
+            </span>
+            <span className="font-mono text-base font-bold text-ink">
+              {money(totalPaymentAmount)}
+            </span>
+          </div>
+        </div>
+
+        <TextField
+          label={t('vouchers.narration')}
+          value={draft.narration}
+          onChange={(value) => set('narration', value)}
+          className="w-full"
+        />
+
+        {paymentError && <p className="alert-error text-xs">{paymentError}</p>}
+
         <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
           {t(
-            direction === 'receipt' ? 'vouchers.receiptEffect' : 'vouchers.paymentEffect',
+            direction === 'receipt'
+              ? 'vouchers.receiptEffect'
+              : 'vouchers.paymentEffect',
           )}
         </p>
 

@@ -124,6 +124,10 @@ const ExpiryReportPage = named(
   () => import('@/pages/StockReportPages'),
   'ExpiryReportPage',
 );
+const SerialStockPage = named(
+  () => import('@/pages/StockReportPages'),
+  'SerialStockPage',
+);
 const ItemMovementPage = named(
   () => import('@/pages/StockReportPages'),
   'ItemMovementPage',
@@ -264,6 +268,7 @@ export function App(): React.JSX.Element {
               <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
               <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
               <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
+              <Route path="/inventory/serials" element={<SerialStockPage />} />
               <Route path="/inventory/units" element={<UnitsPage />} />
               <Route path="/inventory/categories" element={<CategoriesPage />} />
               <Route path="/inventory/brands" element={<BrandsPage />} />

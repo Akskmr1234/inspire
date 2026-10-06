@@ -6,6 +6,7 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
+import { IconBarcode } from '@/components/icons';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -474,6 +475,46 @@ function StockEntry({
   const anyBatched = lines.some((line) => batched(line.productId));
   const anySerialised = lines.some((line) => serialised(line.productId));
 
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
+
+  const handleBarcodeScan = (scanned: string): void => {
+    const query = scanned.trim().toLowerCase();
+    if (!query) return;
+
+    const found = (products.data ?? []).find(
+      (p) =>
+        p.code.toLowerCase() === query ||
+        p.id.toLowerCase() === query ||
+        p.description.toLowerCase().includes(query),
+    );
+
+    if (found) {
+      setLines((current) => {
+        const existingIndex = current.findIndex((l) => l.productId === found.id);
+        if (existingIndex >= 0) {
+          return current.map((l, idx) =>
+            idx === existingIndex
+              ? { ...l, quantity: String((Number(l.quantity) || 0) + 1) }
+              : l,
+          );
+        }
+        if (current.length === 1 && current[0]?.productId === '') {
+          return [{ ...current[0]!, productId: found.id, quantity: '1' }];
+        }
+        return [...current, { ...emptyLine(), productId: found.id, quantity: '1' }];
+      });
+
+      setBarcodeNotice(t('stock.barcodeAdded', { code: found.code, qty: '1' }));
+      window.setTimeout(() => setBarcodeNotice(null), 3000);
+    } else {
+      setBarcodeNotice(t('stock.barcodeNotFound', { barcode: scanned }));
+      window.setTimeout(() => setBarcodeNotice(null), 4000);
+    }
+
+    setBarcodeInput('');
+  };
+
   const update = (key: string, patch: Partial<DraftLine>): void =>
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
@@ -624,6 +665,38 @@ function StockEntry({
       {anyBatched && <p className="text-xs text-ink-muted">{t('stock.batchHint')}</p>}
 
       {anySerialised && <p className="text-xs text-ink-muted">{t('stock.serialHint')}</p>}
+
+      {/* Barcode Scanner (Requirement 14) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2/60 p-2.5">
+        <div className="flex flex-1 items-center gap-2">
+          <IconBarcode className="size-5 shrink-0 text-ink-muted" />
+          <input
+            type="text"
+            value={barcodeInput}
+            onChange={(e) => setBarcodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleBarcodeScan(barcodeInput);
+              }
+            }}
+            placeholder={t('stock.barcodeScanPlaceholder')}
+            className="field-input-sm flex-1 font-mono text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => handleBarcodeScan(barcodeInput)}
+            className="btn-secondary btn-xs text-xs"
+          >
+            Scan
+          </button>
+        </div>
+        {barcodeNotice && (
+          <span className="text-xs font-medium text-accent">
+            {barcodeNotice}
+          </span>
+        )}
+      </div>
 
       <div className="table-wrap max-h-[70vh] overflow-y-auto">
         <table className="table">
@@ -839,19 +912,31 @@ function BatchCell({
 
   if (naming) {
     return (
-      <div className="flex gap-1">
+      <div className="flex items-center gap-1">
         <input
           value={line.batchNumber}
           onChange={(event) => onChange({ batchNumber: event.target.value })}
           placeholder={t('stock.batchAuto')}
-          className="field-input-sm w-28"
+          className="field-input-sm w-28 font-mono text-xs"
         />
+        <button
+          type="button"
+          onClick={() => {
+            const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const rnd = Math.floor(100 + Math.random() * 900);
+            onChange({ batchNumber: `BAT-${todayStr}-${rnd}` });
+          }}
+          className="btn-secondary btn-xs px-1.5 py-0.5 text-[10px]"
+          title={t('stock.batchAutoPrompt')}
+        >
+          Auto
+        </button>
         <input
           type="date"
           value={line.expiresOn}
           onChange={(event) => onChange({ expiresOn: event.target.value })}
           title={t('stock.expiresOn')}
-          className="field-input-sm w-36"
+          className="field-input-sm w-36 text-xs"
         />
       </div>
     );
@@ -946,16 +1031,36 @@ function SerialCell({
           rows={2}
           className="field-input-sm w-full font-mono text-xs sm:w-56"
         />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            placeholder="Scan serial…"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const target = e.target as HTMLInputElement;
+                const val = target.value.trim();
+                if (val) {
+                  const next = line.serialNumbers
+                    ? `${line.serialNumbers.trim()}\n${val}`
+                    : val;
+                  onChange({ serialNumbers: next });
+                  target.value = '';
+                }
+              }
+            }}
+            className="field-input-sm w-full font-mono text-[11px] sm:w-32"
+            title="Scan serial barcode and press Enter"
+          />
           <input
             type="date"
             value={line.warrantyUntil}
             onChange={(event) => onChange({ warrantyUntil: event.target.value })}
             title={t('stock.warrantyUntil')}
-            className="field-input-sm w-full text-xs sm:w-36"
+            className="field-input-sm w-full text-xs sm:w-32"
           />
-          {counter}
         </div>
+        {counter}
       </div>
     );
   }

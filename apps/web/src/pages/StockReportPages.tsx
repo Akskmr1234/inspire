@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { EmptyState, ReportFrame } from '@/components/ReportFrame';
+import { StatusBadge } from '@/components/StatusBadge';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type CategorySummary, type WarehouseSummary } from '@/lib/inventory';
@@ -12,11 +13,14 @@ import {
   fetchBatchStock,
   fetchExpiring,
   fetchItemMovement,
+  fetchProductSerials,
   fetchStockLedger,
   fetchStockValuation,
+  SerialStatus,
   type BatchStockReport,
   type BatchStockRow,
   type ItemMovementRow,
+  type SerialNumberView,
   type StockLedgerReport,
   type StockValuationReport,
   type StockValuationRow,
@@ -585,6 +589,201 @@ export function ItemMovementPage(): React.JSX.Element {
           columns={columns}
           rowKey={(row) => row.productId}
           emptyMessage={t('stock.nothingMoved')}
+        />
+      )}
+    </ReportFrame>
+  );
+}
+
+/**
+ * Serial numbers tracking and register (Requirements 13 & 14).
+ *
+ * Shows all serialised units across warehouses and products,
+ * including warranty status, cost, batch number, and current status.
+ */
+export function SerialStockPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const [warehouseId, setWarehouseId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<number | ''>('');
+
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+  });
+
+  const serials = useQuery<readonly SerialNumberView[], ApiError>({
+    queryKey: ['serials-report', productId, warehouseId],
+    queryFn: () => fetchProductSerials(productId, warehouseId, true),
+  });
+
+  const rows = useMemo(() => {
+    let list = serials.data ?? [];
+    if (statusFilter !== '') {
+      list = list.filter((r) => r.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (r) =>
+          r.number.toLowerCase().includes(q) ||
+          r.productCode.toLowerCase().includes(q) ||
+          r.productDescription.toLowerCase().includes(q) ||
+          (r.batchNumber && r.batchNumber.toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  }, [serials.data, statusFilter, search]);
+
+  const columns: readonly GridColumn<SerialNumberView>[] = [
+    {
+      key: 'number',
+      header: t('stock.serialNumber'),
+      value: (row) => row.number,
+      render: (row) => (
+        <span className="font-mono font-semibold text-ink">{row.number}</span>
+      ),
+    },
+    {
+      key: 'product',
+      header: t('stock.product'),
+      value: (row) => `${row.productCode} — ${row.productDescription}`,
+      render: (row) => (
+        <div>
+          <span className="font-mono text-xs text-ink-muted">{row.productCode}</span>
+          <p className="font-medium text-ink">{row.productDescription}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'batch',
+      header: t('stock.batch'),
+      value: (row) => row.batchNumber ?? '—',
+      render: (row) => (
+        <span className="font-mono text-xs">{row.batchNumber ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'warehouse',
+      header: t('stock.warehouse'),
+      value: (row) => row.warehouseName ?? '—',
+    },
+    {
+      key: 'status',
+      header: t('sales.status'),
+      value: (row) => String(row.status),
+      render: (row) => {
+        const tone =
+          row.status === SerialStatus.inStock
+            ? 'success'
+            : row.status === SerialStatus.issued
+              ? 'neutral'
+              : 'warn';
+        const label =
+          row.status === SerialStatus.inStock
+            ? t('stock.statusInStock')
+            : row.status === SerialStatus.issued
+              ? t('stock.statusIssued')
+              : t('stock.statusReturned');
+        return <StatusBadge tone={tone} label={label} />;
+      },
+    },
+    {
+      key: 'cost',
+      header: t('stock.averageCost'),
+      value: (row) => row.unitCost,
+      numeric: true,
+      render: (row) => moneyAlways(row.unitCost),
+    },
+    {
+      key: 'warranty',
+      header: t('stock.warrantyUntil'),
+      value: (row) => row.warrantyUntil ?? '—',
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          <span>{row.warrantyUntil ?? '—'}</span>
+          {row.warrantyUntil && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                row.isUnderWarranty
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+              }`}
+            >
+              {row.isUnderWarranty
+                ? t('stock.underWarranty')
+                : t('stock.warrantyExpired')}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'receivedOn',
+      header: t('reports.from'),
+      value: (row) => row.receivedOn ?? '—',
+    },
+  ];
+
+  const controls = (
+    <div className="toolbar flex flex-wrap items-end gap-3">
+      <div className="min-w-44">
+        <span className="field-label">{t('sales.search')}</span>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Serial number or product…"
+          className="field-input-sm"
+        />
+      </div>
+
+      <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
+
+      <label className="field">
+        <span className="field-label">{t('stock.product')}</span>
+        <SearchSelect
+          value={productId}
+          onChange={setProductId}
+          clearable
+          size="sm"
+          label={t('stock.product')}
+          placeholder="All products"
+          options={(products.data ?? [])
+            .filter((p) => p.tracksSerialNumbers)
+            .map((p) => ({ value: p.id, label: `${p.code} — ${p.description}` }))}
+        />
+      </label>
+
+      <label className="field">
+        <span className="field-label">{t('sales.status')}</span>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value ? Number(e.target.value) : '')}
+          className="field-input-sm"
+        >
+          <option value="">{t('sales.allStatuses')}</option>
+          <option value={SerialStatus.inStock}>{t('stock.statusInStock')}</option>
+          <option value={SerialStatus.issued}>{t('stock.statusIssued')}</option>
+          <option value={SerialStatus.returnedFromCustomer}>
+            {t('stock.statusReturned')}
+          </option>
+        </select>
+      </label>
+    </div>
+  );
+
+  return (
+    <ReportFrame title={t('stock.serialsRegister')} controls={controls} query={serials}>
+      {() => (
+        <DataGrid
+          gridKey="serials-stock"
+          rows={rows}
+          columns={columns}
+          rowKey={(row) => row.serialNumberId}
+          emptyMessage="No serial numbers found matching filters."
         />
       )}
     </ReportFrame>

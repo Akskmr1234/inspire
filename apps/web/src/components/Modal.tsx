@@ -33,10 +33,9 @@ export function Modal({
   readonly title: string;
   readonly onClose: () => void;
   /**
-   * `wide` for a document with its own lines; `form` for a handful of fields,
-   * which at 5xl would be a row of boxes stranded across a metre of dialog.
+   * `full` for complex wide tables; `wide` for standard documents; `form` for compact forms.
    */
-  readonly size?: 'wide' | 'form';
+  readonly size?: 'full' | 'wide' | 'form';
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -68,7 +67,7 @@ export function Modal({
               className={clsx(
                 'animate-rise flex min-h-full w-full flex-col gap-4 border-line bg-surface p-4',
                 'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-6 ring-1 ring-black/5 dark:ring-white/10',
-                size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
+                size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
               )}
             >
               <div className="flex items-center justify-between gap-3 border-b border-line/60 pb-3">

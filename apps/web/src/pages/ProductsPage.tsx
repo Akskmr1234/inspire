@@ -40,6 +40,9 @@ export function ProductsPage(): React.JSX.Element {
   const [categoryId, setCategoryId] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [initialEditorTab, setInitialEditorTab] = useState<
+    'description' | 'details' | 'barcodes' | 'openingStock' | undefined
+  >(undefined);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,22 +58,23 @@ export function ProductsPage(): React.JSX.Element {
     queryFn: () => listMaster<CategorySummary>('categories', false),
   });
 
-  const mutation = useMutation<string, ApiError, () => Promise<string>>({
-    mutationFn: (action) => action(),
-    onSuccess: async () => {
+  const mutation = useMutation<
+    { id: string; mode: 'save' | 'detail' },
+    ApiError,
+    { action: () => Promise<string>; mode: 'save' | 'detail' }
+  >({
+    mutationFn: async ({ action, mode }) => {
+      const id = await action();
+      return { id, mode };
+    },
+    onSuccess: async ({ id, mode }) => {
       setError(null);
       setAdding(false);
-
-      /*
-        Back to the list, as every other master here does on a save.
-
-        This used to open the new product's editor, on the reasoning that a product
-        created from the minimum fields still wants its rates and its levels. That
-        is true, and it is still one click away — but it made this one master behave
-        unlike all the others, so somebody adding six products in a row was thrown
-        into an editor and had to find their way back out five times.
-      */
       await queryClient.invalidateQueries({ queryKey: ['products'] });
+      if (mode === 'detail') {
+        setInitialEditorTab('openingStock');
+        setEditingId(id);
+      }
     },
     onError: (failure) => setError(failure.detail || failure.code),
   });
@@ -81,7 +85,14 @@ export function ProductsPage(): React.JSX.Element {
       header: t('masters.code'),
       value: (row) => row.code,
       render: (row) => (
-        <button type="button" onClick={() => setEditingId(row.id)} className="cell-link">
+        <button
+          type="button"
+          onClick={() => {
+            setInitialEditorTab(undefined);
+            setEditingId(row.id);
+          }}
+          className="cell-link"
+        >
           {row.code}
         </button>
       ),
@@ -258,14 +269,23 @@ export function ProductsPage(): React.JSX.Element {
   );
 
   if (editingId) {
-    return <ProductEditor productId={editingId} onClose={() => setEditingId(null)} />;
+    return (
+      <ProductEditor
+        productId={editingId}
+        initialTab={initialEditorTab}
+        onClose={() => {
+          setEditingId(null);
+          setInitialEditorTab(undefined);
+        }}
+      />
+    );
   }
 
   return (
     <>
       <ReportFrame title={t('nav.products')} controls={controls} query={query}>
         {(rows) => (
-          <div className="space-y-3">
+          <div className="w-full space-y-3">
             {error && !adding && (
               <div role="alert" className="alert-error">
                 {error}
@@ -306,9 +326,9 @@ export function ProductsPage(): React.JSX.Element {
             categories={categories.data ?? []}
             busy={mutation.isPending}
             onCancel={() => setAdding(false)}
-            onSubmit={(body) => {
+            onSubmit={(body, mode) => {
               setError(null);
-              mutation.mutate(() => createProduct(body));
+              mutation.mutate({ action: () => createProduct(body), mode });
             }}
           />
         </Modal>
@@ -334,7 +354,7 @@ function AddProduct({
   readonly categories: readonly CategorySummary[];
   readonly busy: boolean;
   readonly onCancel: () => void;
-  readonly onSubmit: (body: object) => void;
+  readonly onSubmit: (body: object, mode: 'save' | 'detail') => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -398,27 +418,31 @@ function AddProduct({
     }),
   );
 
+  const doSubmit = (mode: 'save' | 'detail'): void => {
+    if (!submit(draft)) {
+      return;
+    }
+
+    onSubmit(
+      {
+        code: code.trim() || null,
+        description: description.trim(),
+        descriptionArabic: descriptionArabic.trim() || null,
+        categoryId,
+        stockUnitId,
+        brandId: brandId || null,
+        itemType: Number(itemType),
+      },
+      mode,
+    );
+  };
+
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
-
-        if (!submit(draft)) {
-          return;
-        }
-
-        onSubmit({
-          // Blank is not an omission here — it is the instruction to issue the next
-          // code in the firm's own sequence.
-          code: code.trim() || null,
-          description: description.trim(),
-          descriptionArabic: descriptionArabic.trim() || null,
-          categoryId,
-          stockUnitId,
-          brandId: brandId || null,
-          itemType: Number(itemType),
-        });
+        doSubmit('save');
       }}
     >
       <div className="form-grid">
@@ -495,12 +519,25 @@ function AddProduct({
         </Field>
       </div>
 
-      <div className="form-actions">
+      <div className="form-actions flex items-center justify-end gap-2">
         <button type="button" onClick={onCancel} className="btn-secondary">
           {t('common.cancel')}
         </button>
-        <button type="submit" disabled={busy} className="btn-primary">
-          {busy ? t('common.saving') : t('masters.add')}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => doSubmit('save')}
+          className="btn-secondary"
+        >
+          {busy ? t('common.saving') : t('products.save')}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => doSubmit('detail')}
+          className="btn-primary"
+        >
+          {busy ? t('common.saving') : t('products.detail')}
         </button>
       </div>
     </form>

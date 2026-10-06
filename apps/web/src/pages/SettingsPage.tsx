@@ -28,6 +28,7 @@ import { CHARGE_DOCUMENTS, type ChargeDocument, type DefaultCharge } from '@/lib
 import { PAYMENT_MODES } from '@/lib/paymentModes';
 import { useMoney } from '@/lib/money';
 import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
+import { MasterDefaultsSettings } from '@/components/MasterDefaultsSettings';
 
 /**
  * The preferences screen.
@@ -293,12 +294,21 @@ export function SettingsPage(): React.JSX.Element {
             }}
             options={DECIMAL_CHOICES.map((choice) => ({
               value: String(choice),
-              // The places and an example in them, because "3" is a number and
-              // "1,234.568" is the decision being made.
-              label: `${choice} — ${SAMPLE.toLocaleString(undefined, {
-                minimumFractionDigits: choice,
-                maximumFractionDigits: choice,
-              })}`,
+              label:
+                choice === 2
+                  ? `2 decimals (.00) — ${SAMPLE.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`
+                  : choice === 3
+                    ? `3 decimals (.000) — ${SAMPLE.toLocaleString(undefined, {
+                        minimumFractionDigits: 3,
+                        maximumFractionDigits: 3,
+                      })}`
+                    : `${choice} decimals — ${SAMPLE.toLocaleString(undefined, {
+                        minimumFractionDigits: choice,
+                        maximumFractionDigits: choice,
+                      })}`,
             }))}
           />
 
@@ -347,6 +357,10 @@ export function SettingsPage(): React.JSX.Element {
             </button>
           </div>
         </SettingsCard>
+
+        <div className="lg:col-span-2">
+          <MasterDefaultsSettings />
+        </div>
 
         <div className="lg:col-span-2">
           <DefaultChargesCard />
