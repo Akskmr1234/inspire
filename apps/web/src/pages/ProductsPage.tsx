@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
-import { CheckField, Field, SelectField, TextField } from '@/components/Form';
+import { Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, useDefaultChoice } from '@/components/SearchSelect';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
@@ -35,10 +35,6 @@ export function ProductsPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState('');
-  const [applied, setApplied] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [includeInactive, setIncludeInactive] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [initialEditorTab, setInitialEditorTab] = useState<
     'description' | 'details' | 'barcodes' | 'openingStock' | undefined
@@ -47,8 +43,8 @@ export function ProductsPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const query = useQuery<readonly ProductSummary[], ApiError>({
-    queryKey: ['products', applied, categoryId, includeInactive],
-    queryFn: () => listProducts(applied, categoryId, includeInactive),
+    queryKey: ['products'],
+    queryFn: () => listProducts('', '', false),
   });
 
   // Shared cache keys with the master screens, so opening this page after those does
@@ -187,87 +183,6 @@ export function ProductsPage(): React.JSX.Element {
     },
   ];
 
-  /*
-    One search, in one card, with everything that narrows the list beside it.
-
-    The screen had two: this one, which goes to the server and reaches the whole
-    master, and the grid's own box directly beneath it, which filters the rows
-    already fetched. Two boxes a hand's width apart, narrowing the same list by
-    different rules, and no label on either saying which was which — so a search
-    that found nothing might mean the product does not exist or might mean it was
-    not on this page. The grid's box is withdrawn here and this one says what it
-    reaches.
-  */
-  const controls = (
-    /*
-      A row that fills its width, rather than a grid of equal columns.
-
-      `filter-grid` lays out tracks of a fixed minimum and fits as many as it can,
-      so four controls in a row with room for six left a column and a half of empty
-      card at the end — on the one master where the search box is what the screen is
-      for, and where a product code, a description and a barcode all have to fit in
-      it. Here the box takes whatever the other three do not, and the buttons are
-      held at the end, so the card is full at every width.
-    */
-    <form
-      className="toolbar"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setApplied(search);
-      }}
-    >
-      <TextField
-        label={t('products.search')}
-        type="search"
-        size="sm"
-        value={search}
-        onChange={setSearch}
-        placeholder={t('products.searchPlaceholder')}
-        className="min-w-56 flex-1"
-      />
-
-      <Field label={t('products.category')} className="w-52 shrink-0">
-        <SearchSelect
-          value={categoryId}
-          onChange={setCategoryId}
-          clearable
-          size="sm"
-          label={t('products.category')}
-          placeholder={t('products.allCategories')}
-          options={(categories.data ?? []).map((row) => ({
-            value: row.id,
-            label: `${row.code} — ${row.name}`,
-          }))}
-        />
-      </Field>
-
-      <CheckField
-        label={t('masters.includeWithdrawn')}
-        checked={includeInactive}
-        onChange={setIncludeInactive}
-        className="shrink-0"
-      />
-
-      <div className="ms-auto flex shrink-0 items-center gap-2">
-        <button type="submit" className="btn-primary btn-sm">
-          {t('products.find')}
-        </button>
-        {applied !== '' && (
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => {
-              setSearch('');
-              setApplied('');
-            }}
-          >
-            {t('products.clear')}
-          </button>
-        )}
-      </div>
-    </form>
-  );
-
   if (editingId) {
     return (
       <ProductEditor
@@ -283,7 +198,7 @@ export function ProductsPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame title={t('nav.products')} controls={controls} query={query}>
+      <ReportFrame title={t('nav.products')} controls={null} query={query}>
         {(rows) => (
           <div className="w-full space-y-3">
             {error && !adding && (
