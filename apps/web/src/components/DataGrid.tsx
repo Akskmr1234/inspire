@@ -470,8 +470,21 @@ export function DataGrid<TRow>({
                 setClientPage(1);
               }}
               placeholder={t('grid.search')}
-              className="field-input-sm w-44 ps-8 sm:w-56"
+              className="field-input-sm w-44 ps-8 pe-6 sm:w-56"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setClientPage(1);
+                }}
+                className="absolute inset-y-0 end-1.5 my-auto grid size-5 place-items-center rounded text-ink-subtle hover:text-ink text-xs"
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
         )}
 
@@ -818,10 +831,27 @@ export function DataGrid<TRow>({
             <tbody>
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={visible.length} className="px-3 py-10 text-center">
-                    <p className="text-sm text-ink-muted">
-                      {emptyMessage ?? t('grid.noRows')}
-                    </p>
+                  <td colSpan={visible.length} className="px-3 py-12 text-center">
+                    <div className="mx-auto flex flex-col items-center justify-center gap-2">
+                      <div className="grid size-10 place-items-center rounded-full bg-surface-3 text-ink-subtle">
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.6}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="size-5"
+                          aria-hidden="true"
+                        >
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="m20 20-3.6-3.6" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-ink-muted">
+                        {emptyMessage ?? t('grid.noRows')}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -1064,8 +1094,25 @@ function CardList<TRow>({
 }): React.JSX.Element {
   if (rows.length === 0) {
     return (
-      <div className="card px-4 py-10 text-center">
-        <p className="text-sm text-ink-muted">{emptyMessage}</p>
+      <div className="card px-4 py-12 text-center">
+        <div className="mx-auto flex flex-col items-center justify-center gap-2">
+          <div className="grid size-10 place-items-center rounded-full bg-surface-3 text-ink-subtle">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-5"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.6-3.6" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-ink-muted">{emptyMessage}</p>
+        </div>
       </div>
     );
   }

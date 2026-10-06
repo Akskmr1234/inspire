@@ -1,9 +1,11 @@
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import { NeedsAttention } from '@/components/NeedsAttention';
 import { EmptyState, moneyAlways } from '@/components/ReportFrame';
+import { IconCash, IconChart, IconLayers } from '@/components/icons';
 import { request, type ApiError } from '@/lib/api';
 import { useSession } from '@/stores/session';
 
@@ -128,6 +130,38 @@ export function DashboardPage(): React.JSX.Element {
         </div>
       )}
 
+      {/* Quick Navigation Action Chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          to="/accounting/vouchers/new"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
+        >
+          <span className="size-2 rounded-full bg-brand-500" />
+          {t('nav.voucherEntry')}
+        </Link>
+        <Link
+          to="/accounting/day-book"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
+        >
+          <span className="size-2 rounded-full bg-emerald-500" />
+          {t('nav.dayBook')}
+        </Link>
+        <Link
+          to="/sales/invoices"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
+        >
+          <span className="size-2 rounded-full bg-sky-500" />
+          {t('nav.sales')}
+        </Link>
+        <Link
+          to="/inventory/valuation"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
+        >
+          <span className="size-2 rounded-full bg-amber-500" />
+          {t('nav.stockValuation')}
+        </Link>
+      </div>
+
       {/*
         Four across only at `xl`. A dashboard tile carries a currency figure of up
         to twelve characters plus its unit, and at `lg` on a laptop four of them
@@ -206,9 +240,20 @@ function Panel({
         className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.06] to-transparent opacity-0 transition-opacity duration-300 group-hover/panel:opacity-100"
       />
 
-      <p className="relative text-xs font-medium tracking-wide text-ink-muted uppercase">
-        {title}
-      </p>
+      <div className="relative flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">
+          {title}
+        </p>
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-surface-3/80 text-ink-subtle">
+          {widget.kind === KIND.Series ? (
+            <IconChart className="size-3.5" />
+          ) : widget.kind === KIND.Breakdown ? (
+            <IconLayers className="size-3.5" />
+          ) : (
+            <IconCash className="size-3.5" />
+          )}
+        </span>
+      </div>
 
       <div className="relative">
         {loading ? (
@@ -343,21 +388,21 @@ function Breakdown({
   const peak = Math.max(...points.map((point) => Math.abs(point.value)), 1);
 
   return (
-    <ul className="mt-3 space-y-1">
+    <ul className="mt-3 space-y-1.5">
       {points.map((point) => (
         <li
           key={point.label}
-          className="relative flex items-baseline justify-between gap-3 overflow-hidden rounded-md px-2 py-1 text-sm"
+          className="group/item relative flex items-baseline justify-between gap-3 overflow-hidden rounded-lg px-2.5 py-1.5 text-sm transition-colors hover:bg-surface-3/60"
         >
           <span
             aria-hidden="true"
-            className="absolute inset-y-0 start-0 rounded-md bg-brand-500/10"
+            className="absolute inset-y-0 start-0 rounded-lg bg-gradient-to-r from-brand-500/15 to-brand-500/5 transition-all group-hover/item:from-brand-500/25"
             style={{ width: `${(Math.abs(point.value) / peak) * 100}%` }}
           />
-          <span className="relative truncate text-ink">{point.label}</span>
-          <span className="relative shrink-0 font-mono tabular-nums text-ink">
+          <span className="relative truncate font-medium text-ink">{point.label}</span>
+          <span className="relative shrink-0 font-mono tabular-nums font-semibold text-ink">
             {moneyAlways(point.value)}{' '}
-            <span className="text-xs text-ink-subtle">{currency}</span>
+            <span className="text-xs font-normal text-ink-subtle">{currency}</span>
           </span>
         </li>
       ))}

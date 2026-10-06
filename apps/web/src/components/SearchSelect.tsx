@@ -263,10 +263,10 @@ export function SearchSelect({
           than to the list: Radix's own typeahead would otherwise swallow them.
         */
           onKeyDown={(event) => event.stopPropagation()}
-          className="animate-drop z-[70] max-h-64 w-[var(--radix-popover-trigger-width)] min-w-60 overflow-y-auto overscroll-contain rounded-lg border border-line bg-surface py-1 shadow-float"
+          className="animate-drop z-[70] max-h-64 w-[var(--radix-popover-trigger-width)] min-w-60 overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1 shadow-float ring-1 ring-black/5 dark:ring-white/10"
         >
           {rows.length === 0 && (
-            <p className="px-3 py-2 text-xs text-ink-muted">{t('common.noMatches')}</p>
+            <p className="px-3 py-4 text-center text-xs text-ink-muted">{t('common.noMatches')}</p>
           )}
 
           {rows.map((option, index) => (
@@ -282,9 +282,9 @@ export function SearchSelect({
               onMouseEnter={() => setActive(index)}
               onClick={() => pick(option)}
               className={clsx(
-                'flex w-full items-start gap-3 px-3 py-1.5 text-start text-sm transition-colors',
+                'flex w-full items-start gap-3 rounded-lg px-3 py-2 text-start text-sm transition-colors',
                 option.disabled === true && 'cursor-not-allowed opacity-50',
-                index === active ? 'bg-brand-50 dark:bg-brand-500/15' : 'bg-transparent',
+                index === active ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200' : 'bg-transparent',
                 option.value === value ? 'font-semibold text-ink' : 'text-ink',
               )}
             >
@@ -298,7 +298,7 @@ export function SearchSelect({
               </span>
 
               {option.meta && (
-                <span className="shrink-0 font-mono text-xs tabular-nums text-ink-muted">
+                <span className="shrink-0 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-ink-muted">
                   {option.meta}
                 </span>
               )}

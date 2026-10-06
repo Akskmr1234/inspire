@@ -7,6 +7,7 @@ import { listPurchaseInvoices, PurchaseInvoiceStatus } from '@/lib/purchase';
 import { listPurchaseOrders, listSalesOrders } from '@/lib/orders';
 import { fetchStockValuation } from '@/lib/stock';
 import { fetchPostDatedCheques } from '@/lib/cheques';
+import { IconBell } from '@/components/icons';
 
 /**
  * What is waiting to be done, on the screen everybody opens first.
@@ -148,11 +149,16 @@ export function NeedsAttention(): React.JSX.Element | null {
 
   return (
     <section className="card card-body space-y-3">
-      <header>
-        <h2 className="text-sm font-semibold tracking-tight text-ink">
-          {t('attention.title')}
-        </h2>
-        <p className="mt-0.5 text-xs text-ink-muted">{t('attention.hint')}</p>
+      <header className="flex items-center gap-2">
+        <span className="grid size-7 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+          <IconBell className="size-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight text-ink">
+            {t('attention.title')}
+          </h2>
+          <p className="mt-0.5 text-xs text-ink-muted">{t('attention.hint')}</p>
+        </div>
       </header>
 
       <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -160,27 +166,29 @@ export function NeedsAttention(): React.JSX.Element | null {
           <li key={row.key}>
             <Link
               to={row.route}
-              className="group flex items-center gap-3 rounded-lg border border-line bg-surface-2 px-3 py-2.5 transition hover:border-line-strong hover:bg-surface-3"
+              className="group flex items-center gap-3 rounded-xl border border-line bg-surface-2 px-3.5 py-3 transition hover:-translate-y-0.5 hover:border-line-strong hover:bg-surface-3 hover:shadow-xs"
             >
               <span
                 className={clsx(
-                  'grid size-9 shrink-0 place-items-center rounded-lg font-mono text-sm font-semibold tabular-nums',
+                  'grid size-10 shrink-0 place-items-center rounded-xl font-mono text-sm font-bold tabular-nums shadow-xs',
                   row.tone === 'alert' &&
-                    'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+                    'border border-red-200/60 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300',
                   row.tone === 'warn' &&
-                    'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200',
+                    'border border-amber-200/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200',
                   row.tone === 'info' &&
-                    'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200',
+                    'border border-brand-200/60 bg-brand-50 text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/15 dark:text-brand-200',
                 )}
               >
                 {row.count > 99 ? '99+' : row.count}
               </span>
 
-              <span className="min-w-0 flex-1 text-sm text-ink">{row.label}</span>
+              <span className="min-w-0 flex-1 text-sm font-medium text-ink transition-colors group-hover:text-brand-600 dark:group-hover:text-brand-300">
+                {row.label}
+              </span>
 
               <span
                 aria-hidden="true"
-                className="shrink-0 text-ink-subtle transition group-hover:text-ink rtl:rotate-180"
+                className="shrink-0 text-ink-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-ink rtl:rotate-180 rtl:group-hover:-translate-x-0.5"
               >
                 ›
               </span>

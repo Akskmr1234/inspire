@@ -341,6 +341,151 @@ export function IconDot({ className }: IconProps): React.JSX.Element {
   );
 }
 
+export function IconSearch({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6" />
+    </Svg>
+  );
+}
+
+export function IconBuilding({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <path d="M9 22v-4h6v4" />
+      <path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" />
+    </Svg>
+  );
+}
+
+export function IconUser({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M5 20c0-3.87 3.13-7 7-7s7 3.13 7 7" />
+    </Svg>
+  );
+}
+
+export function IconLock({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      <circle cx="12" cy="16" r="1.5" />
+    </Svg>
+  );
+}
+
+export function IconEye({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
+export function IconEyeOff({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.4 0 10 7 10 7a18.3 18.3 0 0 1-4.04 5.06" />
+      <path d="M6.61 6.61A18.8 18.8 0 0 0 2 12s3.6 7 10 7c1.88 0 3.59-.53 5.07-1.42" />
+      <path d="m2 2 20 20" />
+    </Svg>
+  );
+}
+
+export function IconCheck({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="m5 13 4 4L19 7" />
+    </Svg>
+  );
+}
+
+export function IconArrowUp({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </Svg>
+  );
+}
+
+export function IconArrowDown({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M12 5v14M19 12l-7 7-7-7" />
+    </Svg>
+  );
+}
+
+export function IconArrowRight({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </Svg>
+  );
+}
+
+export function IconSparkles({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+      <path d="M19 18l.8 2.2L22 21l-2.2.8L19 24l-.8-2.2L16 21l2.2-.8z" />
+    </Svg>
+  );
+}
+
+export function IconDownload({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M12 3v13M7 11l5 5 5-5" />
+      <path d="M4 20h16" />
+    </Svg>
+  );
+}
+
+export function IconFilter({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </Svg>
+  );
+}
+
+export function IconColumns({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M12 3v18" />
+    </Svg>
+  );
+}
+
+export function IconRefresh({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 21h5v-5" />
+    </Svg>
+  );
+}
+
+export function IconBell({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </Svg>
+  );
+}
+
 /**
  * Picks a glyph for a menu entry.
  *

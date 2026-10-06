@@ -494,7 +494,7 @@ function SettingsCard({
 }): React.JSX.Element {
   return (
     <section className="card card-body space-y-4">
-      <header>
+      <header className="border-b border-line pb-3">
         <h2 className="text-sm font-semibold tracking-tight text-ink">{title}</h2>
         <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>
       </header>

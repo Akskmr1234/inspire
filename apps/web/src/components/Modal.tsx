@@ -67,21 +67,21 @@ export function Modal({
               */
               className={clsx(
                 'animate-rise flex min-h-full w-full flex-col gap-4 border-line bg-surface p-4',
-                'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-5',
+                'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-6 ring-1 ring-black/5 dark:ring-white/10',
                 size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
               )}
             >
-              <div className="flex items-center justify-between gap-3">
-                <Dialog.Title className="truncate text-lg font-semibold tracking-tight text-ink">
+              <div className="flex items-center justify-between gap-3 border-b border-line/60 pb-3">
+                <Dialog.Title className="truncate text-lg font-bold tracking-tight text-ink">
                   {title}
                 </Dialog.Title>
 
                 <Dialog.Close
-                  className="btn-icon"
+                  className="btn-icon size-8 rounded-lg hover:bg-surface-3"
                   aria-label={t('common.close')}
                   title={t('common.close')}
                 >
-                  <IconClose />
+                  <IconClose className="size-4" />
                 </Dialog.Close>
               </div>
 
@@ -112,10 +112,10 @@ export function ModalButton({
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        'btn px-3 py-1.5 text-sm',
+        'btn px-4 py-2 text-sm',
         primary
-          ? 'bg-brand-600 text-white shadow-xs hover:bg-brand-700'
-          : 'border border-line-strong bg-surface text-ink hover:bg-surface-3',
+          ? 'btn-primary'
+          : 'btn-secondary',
       )}
     >
       {children}

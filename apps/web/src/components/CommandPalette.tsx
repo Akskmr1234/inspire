@@ -231,15 +231,24 @@ export function CommandPalette({
                     onMouseEnter={() => setActive(index)}
                     onClick={() => go(destination)}
                     className={clsx(
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start transition-colors',
+                      'group/item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-start transition-all',
                       index === active
-                        ? 'bg-brand-50 dark:bg-brand-500/15'
-                        : 'bg-transparent',
+                        ? 'bg-brand-50 text-brand-700 shadow-xs dark:bg-brand-500/15 dark:text-brand-200'
+                        : 'bg-transparent text-ink hover:bg-surface-3/70',
                     )}
                   >
-                    <Icon />
+                    <span
+                      className={clsx(
+                        'grid size-8 shrink-0 place-items-center rounded-lg transition-colors',
+                        index === active
+                          ? 'bg-brand-600 text-white shadow-xs dark:bg-brand-500'
+                          : 'bg-surface-3 text-ink-subtle group-hover/item:text-ink',
+                      )}
+                    >
+                      <Icon className="size-4" />
+                    </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink">
+                      <span className="block truncate text-sm font-semibold text-ink">
                         {destination.label}
                       </span>
                       {destination.path && (
@@ -249,7 +258,9 @@ export function CommandPalette({
                       )}
                     </span>
                     {index === active && (
-                      <span className="shrink-0 text-xs text-ink-subtle">↵</span>
+                      <kbd className="shrink-0 rounded border border-brand-300/60 bg-white/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-brand-700 shadow-xs dark:border-brand-500/40 dark:bg-slate-900/60 dark:text-brand-300">
+                        ↵
+                      </kbd>
                     )}
                   </button>
                 );
@@ -262,9 +273,10 @@ export function CommandPalette({
               )}
             </div>
 
-            <p className="border-t border-line px-4 py-2 text-xs text-ink-subtle">
-              {t('palette.hint')}
-            </p>
+            <div className="flex items-center justify-between border-t border-line bg-surface-2/60 px-4 py-2 text-xs text-ink-subtle">
+              <span>{t('palette.hint')}</span>
+              <span className="hidden sm:inline text-[11px] font-medium text-ink-subtle">Spotlight</span>
+            </div>
           </Dialog.Content>
         </Dialog.Overlay>
       </Dialog.Portal>

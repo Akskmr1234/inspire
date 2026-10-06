@@ -239,21 +239,24 @@ export function AppShell(): React.JSX.Element {
               onClick={() => setPaletteOpen(true)}
               aria-label={t('palette.open')}
               title={t('palette.open')}
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-2 px-2 text-ink-muted transition duration-150 hover:border-line-strong hover:text-ink active:scale-95 sm:px-2.5"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-2/80 px-2.5 text-xs text-ink-muted transition duration-150 hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95 sm:w-44 sm:justify-between lg:w-56"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                aria-hidden="true"
-                className="size-4"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.6-3.6" />
-              </svg>
-              <kbd className="hidden font-sans text-[0.7rem] font-medium tracking-wide lg:inline">
+              <span className="flex items-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-ink-subtle"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.6-3.6" />
+                </svg>
+                <span className="hidden sm:inline text-xs text-ink-subtle">{t('grid.search')}…</span>
+              </span>
+              <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-sans text-[0.65rem] font-semibold tracking-wide text-ink-muted lg:inline">
                 {t('palette.shortcut')}
               </kbd>
             </button>
@@ -263,9 +266,17 @@ export function AppShell(): React.JSX.Element {
               middle of the bar now, and on a laptop it is the more useful of the
               two — the user knows who they signed in as.
             */}
-            <span className="hidden max-w-40 truncate text-sm text-ink-muted xl:block">
-              {displayName}
-            </span>
+            {displayName && (
+              <div className="hidden items-center gap-2 rounded-lg border border-line/60 bg-surface-2/60 px-2 py-1 xl:flex">
+                <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[10px] font-bold text-white shadow-xs">
+                  {displayName.charAt(0).toUpperCase()}
+                  <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
+                </span>
+                <span className="max-w-32 truncate text-xs font-medium text-ink">
+                  {displayName}
+                </span>
+              </div>
+            )}
 
             <ThemeSwitch theme={theme} onChange={setTheme} />
 
@@ -393,13 +404,18 @@ function Brand({ collapsed }: { readonly collapsed: boolean }): React.JSX.Elemen
 
   return (
     <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-xs">
+      <div className="relative grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 text-xs font-bold text-white shadow-xs ring-1 ring-white/20">
         AE
       </div>
       {!collapsed && (
-        <span className="truncate text-sm font-semibold tracking-tight text-ink">
-          {t('app.name')}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-bold tracking-tight text-ink">
+            {t('app.name')}
+          </span>
+          <span className="rounded bg-brand-500/10 px-1 py-0.5 text-[9px] font-bold text-brand-600 uppercase tracking-wider dark:bg-brand-500/20 dark:text-brand-300">
+            PRO
+          </span>
+        </div>
       )}
     </div>
   );

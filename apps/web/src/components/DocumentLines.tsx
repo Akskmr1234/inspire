@@ -167,13 +167,13 @@ export function useLineColumns(
         <Popover.Content
           align="end"
           sideOffset={4}
-          className="animate-drop z-[70] w-56 rounded-lg border border-line bg-surface p-2 shadow-float"
+          className="animate-drop z-[70] w-56 rounded-xl border border-line bg-surface p-2 shadow-float ring-1 ring-black/5 dark:ring-white/10"
         >
           {columns.map((column) => (
             <label
               key={column.key}
               className={clsx(
-                'field-check w-full rounded px-1.5 py-1 text-xs',
+                'field-check w-full rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-surface-3/70',
                 column.fixed === true && 'opacity-50',
               )}
             >
@@ -189,7 +189,7 @@ export function useLineColumns(
 
           {/* Said plainly, because the panel is a list of checkboxes and nothing in
               it looks like a way out. */}
-          <Popover.Close className="mt-1 w-full rounded px-1.5 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink">
+          <Popover.Close className="mt-2 w-full rounded-lg border border-line bg-surface-2 px-2 py-1.5 text-center text-xs font-semibold text-ink-muted transition hover:bg-surface-3 hover:text-ink">
             {t('common.close')}
           </Popover.Close>
         </Popover.Content>
@@ -527,7 +527,7 @@ export function DocumentTotals({
   const total = net + tax + charges + rounding;
 
   return (
-    <dl className="ms-auto grid w-full max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+    <dl className="ms-auto grid w-full max-w-sm grid-cols-[1fr_auto] gap-x-6 gap-y-1.5 rounded-xl border border-line bg-surface-2/60 p-4 shadow-card text-sm">
       <Line label={t('documents.gross')} value={moneyAlways(gross)} />
 
       {/*
@@ -594,9 +594,9 @@ function Line({
     <>
       <dt
         className={clsx(
-          ruled && 'mt-1 border-t border-line pt-1',
+          ruled && 'mt-1.5 border-t border-line/80 pt-1.5',
           strong
-            ? 'mt-1 border-t border-line pt-1 font-semibold text-ink'
+            ? 'mt-2 border-t-2 border-line-strong pt-2 text-base font-bold text-ink'
             : 'text-ink-muted',
         )}
       >
@@ -605,8 +605,10 @@ function Line({
       <dd
         className={clsx(
           'text-end font-mono tabular-nums',
-          ruled && 'mt-1 border-t border-line pt-1',
-          strong && 'mt-1 border-t border-line pt-1 font-semibold text-ink',
+          ruled && 'mt-1.5 border-t border-line/80 pt-1.5',
+          strong
+            ? 'mt-2 border-t-2 border-line-strong pt-2 text-base font-bold text-brand-600 dark:text-brand-300'
+            : 'text-ink',
         )}
       >
         {value}

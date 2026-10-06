@@ -30,10 +30,22 @@ function FilterBar({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-ink sm:hidden"
+        className="flex w-full items-center justify-between gap-2 py-0.5 text-sm font-semibold text-ink sm:hidden"
       >
-        {t('reports.filters')}
-        <span aria-hidden="true" className="text-ink-muted">
+        <span className="flex items-center gap-2">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            className="size-4 text-ink-muted"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h18m-14 5h10m-7 5h4" />
+          </svg>
+          {t('reports.filters')}
+        </span>
+        <span aria-hidden="true" className="text-xs text-ink-muted">
           {open ? '▲' : '▼'}
         </span>
       </button>
@@ -229,8 +241,8 @@ export function EmptyState({
   readonly hint?: string;
 }): React.JSX.Element {
   return (
-    <div className="card animate-pop flex flex-col items-center gap-2 px-6 py-14 text-center">
-      <div className="grid size-11 place-items-center rounded-full bg-surface-3 text-ink-subtle">
+    <div className="card animate-pop flex flex-col items-center gap-2.5 px-6 py-14 text-center">
+      <div className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-ink-subtle ring-1 ring-line">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -245,7 +257,7 @@ export function EmptyState({
           <path d="m20 20-3.6-3.6" />
         </svg>
       </div>
-      <p className="text-sm font-medium text-ink">{message}</p>
+      <p className="text-sm font-semibold text-ink">{message}</p>
       {hint && <p className="max-w-sm text-xs text-ink-muted">{hint}</p>}
     </div>
   );
@@ -402,10 +414,10 @@ export function BalanceBadge({
   return (
     <p
       className={clsx(
-        'inline-flex animate-pop items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
+        'inline-flex animate-pop items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium',
         isBalanced
-          ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/12 dark:text-emerald-200'
-          : 'bg-red-50 text-red-800 dark:bg-red-500/12 dark:text-red-200',
+          ? 'border-emerald-200/70 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200'
+          : 'border-red-200/70 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/12 dark:text-red-200',
       )}
     >
       {/*
