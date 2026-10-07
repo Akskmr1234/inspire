@@ -147,6 +147,7 @@ const StockValuationPage = named(
   () => import('@/pages/StockReportPages'),
   'StockValuationPage',
 );
+const ProfilePage = named(() => import('@/pages/ProfilePage'), 'ProfilePage');
 
 /* The cash and bank books are one component told which of the two it is. */
 const CashBankBookPage = named(
@@ -211,6 +212,7 @@ export function App(): React.JSX.Element {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           {mustChangePassword && (
             <Route path="*" element={<Navigate to="/change-password" replace />} />
           )}

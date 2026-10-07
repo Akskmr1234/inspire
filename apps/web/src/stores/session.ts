@@ -7,6 +7,7 @@ export type Language = 'en' | 'ar';
 interface SessionState {
   readonly status: 'unknown' | 'signedOut' | 'signedIn';
   readonly displayName: string | null;
+  readonly tenantCode: string | null;
   readonly mustChangePassword: boolean;
   readonly permissions: ReadonlySet<string>;
   readonly theme: Theme;
@@ -17,6 +18,8 @@ interface SessionState {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   setTheme: (theme: Theme) => void;
+  setDefaultTheme: (theme: Theme) => void;
+  setDisplayName: (displayName: string) => void;
   setLanguage: (language: Language) => void;
   /**
    * Whether the user holds a permission, for hiding actions they cannot perform.
@@ -40,16 +43,63 @@ interface SessionState {
 const WILDCARD_PERMISSION = '*';
 
 const THEME_KEY = 'erp.theme';
+const DEFAULT_THEME_KEY = 'erp.defaultTheme';
 const LANGUAGE_KEY = 'erp.language';
 
 function readTheme(): Theme {
-  const stored = localStorage.getItem(THEME_KEY);
+  const userStored = localStorage.getItem(THEME_KEY);
+  if (userStored === 'light' || userStored === 'dark') {
+    return userStored;
+  }
 
-  if (stored === 'light' || stored === 'dark') {
-    return stored;
+  const defaultStored = localStorage.getItem(DEFAULT_THEME_KEY);
+  if (defaultStored === 'light' || defaultStored === 'dark') {
+    return defaultStored;
+  }
+
+  try {
+    const settings = JSON.parse(localStorage.getItem('erp.settings') || '{}') as {
+      defaultTheme?: string;
+    };
+    if (settings.defaultTheme === 'light' || settings.defaultTheme === 'dark') {
+      return settings.defaultTheme;
+    }
+  } catch {
+    // Ignore JSON errors.
   }
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/**
+ * Sets the default theme across the entire application for all users and workstations.
+ * Persists to erp.defaultTheme, erp.theme, and erp.settings, and synchronizes
+ * across all active browser tabs via BroadcastChannel.
+ */
+export function setDefaultAppTheme(theme: Theme): void {
+  try {
+    localStorage.setItem(DEFAULT_THEME_KEY, theme);
+    localStorage.setItem(THEME_KEY, theme);
+
+    const s = JSON.parse(localStorage.getItem('erp.settings') || '{}') as Record<string, unknown>;
+    s['defaultTheme'] = theme;
+    localStorage.setItem('erp.settings', JSON.stringify(s));
+  } catch {
+    // Storage quota or restriction fallback.
+  }
+
+  withThemeTransition(() => applyPresentation(theme, useSession.getState().language));
+  useSession.setState({ theme });
+
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel('erp.theme.sync');
+      channel.postMessage({ theme });
+      channel.close();
+    }
+  } catch {
+    // BroadcastChannel unsupported fallback.
+  }
 }
 
 function readLanguage(): Language {
@@ -110,6 +160,7 @@ function withThemeTransition(apply: () => void): void {
 export const useSession = create<SessionState>((set, get) => ({
   status: 'unknown',
   displayName: null,
+  tenantCode: api.getStoredTenantCode(),
   mustChangePassword: false,
   permissions: new Set<string>(),
   theme: readTheme(),
@@ -124,9 +175,11 @@ export const useSession = create<SessionState>((set, get) => ({
     }
 
     const permissions = await api.fetchPermissions().catch(() => []);
+    const tenantCode = api.getStoredTenantCode();
 
     set({
       status: 'signedIn',
+      tenantCode,
       permissions: new Set(permissions),
     });
   },
@@ -138,6 +191,7 @@ export const useSession = create<SessionState>((set, get) => ({
     set({
       status: 'signedIn',
       displayName: auth.displayName,
+      tenantCode: tenantCode || api.getStoredTenantCode(),
       mustChangePassword: auth.mustChangePassword,
       permissions: new Set(permissions),
     });
@@ -150,6 +204,7 @@ export const useSession = create<SessionState>((set, get) => ({
     set({
       status: 'signedOut',
       displayName: null,
+      tenantCode: null,
       mustChangePassword: false,
       permissions: new Set<string>(),
     });
@@ -161,6 +216,7 @@ export const useSession = create<SessionState>((set, get) => ({
     set({
       status: 'signedOut',
       displayName: null,
+      tenantCode: null,
       mustChangePassword: false,
       permissions: new Set<string>(),
     });
@@ -170,6 +226,14 @@ export const useSession = create<SessionState>((set, get) => ({
     localStorage.setItem(THEME_KEY, theme);
     withThemeTransition(() => applyPresentation(theme, get().language));
     set({ theme });
+  },
+
+  setDefaultTheme: (theme) => {
+    setDefaultAppTheme(theme);
+  },
+
+  setDisplayName: (displayName) => {
+    set({ displayName });
   },
 
   setLanguage: (language) => {
@@ -183,3 +247,27 @@ export const useSession = create<SessionState>((set, get) => ({
     return held.has(WILDCARD_PERMISSION) || held.has(permissionCode);
   },
 }));
+
+// Cross-tab theme synchronization listener
+if (typeof window !== 'undefined') {
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel('erp.theme.sync');
+      channel.onmessage = (event: MessageEvent<{ theme?: Theme }>) => {
+        const theme = event.data?.theme;
+        if (theme === 'light' || theme === 'dark') {
+          const current = useSession.getState().theme;
+          if (theme !== current) {
+            withThemeTransition(() =>
+              applyPresentation(theme, useSession.getState().language),
+            );
+            useSession.setState({ theme });
+          }
+        }
+      };
+    }
+  } catch {
+    // Unsupported fallback.
+  }
+}
+

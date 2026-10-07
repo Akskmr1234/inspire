@@ -2,7 +2,7 @@
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="Aider ERP" />
     <!-- Paints the browser's own chrome to match the app rather than leaving a
          white bar above a dark interface on mobile. -->
@@ -28,7 +28,16 @@
       */
       (function () {
         try {
-          var theme = localStorage.getItem('erp.theme');
+          var theme = localStorage.getItem('erp.theme') || localStorage.getItem('erp.defaultTheme');
+
+          if (!theme) {
+            try {
+              var s = JSON.parse(localStorage.getItem('erp.settings') || '{}');
+              if (s.defaultTheme === 'light' || s.defaultTheme === 'dark') {
+                theme = s.defaultTheme;
+              }
+            } catch (_) {}
+          }
 
           if (theme !== 'light' && theme !== 'dark') {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches

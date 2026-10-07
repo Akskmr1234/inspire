@@ -135,6 +135,17 @@ const party = {
 
 export const fixtures: Readonly<Record<string, unknown>> = {
   '/auth/permissions': ['*'],
+  '/auth/me': {
+    userId: '00000000-0000-0000-0000-000000000001',
+    userName: 'admin',
+    displayName: 'Administrator',
+    email: 'admin@inspire-erp.local',
+    tenantId: '00000000-0000-0000-0000-000000000002',
+    firmId: '00000000-0000-0000-0000-000000000003',
+    branchId: '00000000-0000-0000-0000-000000000004',
+    roles: ['Administrator'],
+    mustChangePassword: false,
+  },
   '/menu': { items: [] },
 
   '/accounting/ledgers': ledgers,

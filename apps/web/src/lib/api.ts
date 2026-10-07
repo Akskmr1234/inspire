@@ -266,3 +266,21 @@ export async function restoreSession(): Promise<boolean> {
 export function fetchPermissions(): Promise<readonly string[]> {
   return request<readonly string[]>('/auth/permissions');
 }
+
+export interface UserProfile {
+  readonly userId: string;
+  readonly userName: string;
+  readonly displayName: string;
+  readonly email: string;
+  readonly tenantId: string;
+  readonly firmId: string | null;
+  readonly branchId: string | null;
+  readonly roles: readonly string[];
+  readonly mustChangePassword: boolean;
+}
+
+/** Returns the signed-in user's profile details. */
+export function fetchCurrentUserProfile(): Promise<UserProfile> {
+  return request<UserProfile>('/auth/me');
+}
+

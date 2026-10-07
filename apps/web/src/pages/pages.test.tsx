@@ -58,6 +58,7 @@ vi.mock('@/lib/grid', () => ({
 }));
 
 const { ChangePasswordPage } = await import('@/pages/ChangePasswordPage');
+const { ProfilePage } = await import('@/pages/ProfilePage');
 const { TrialBalancePage } = await import('@/pages/TrialBalancePage');
 const { VoucherEntryPage } = await import('@/pages/VoucherEntryPage');
 const { ProfitAndLossPage } = await import('@/pages/ProfitAndLossPage');
@@ -139,6 +140,7 @@ const screens: readonly (readonly [string, React.ReactNode, RegExp])[] = [
   ['receipt', <ReceiptEntryPage />, /receipt/i],
   ['opening stock', <OpeningStockPage />, /opening stock/i],
   ['settings', <SettingsPage />, /settings/i],
+  ['profile', <ProfilePage />, /profile/i],
 ];
 
 beforeEach(() => {
@@ -209,6 +211,6 @@ describe('the count', () => {
     // being rendered by anything — which is exactly what happened when the
     // change-password screen landed. The two book variants share one component,
     // and the login page is not reachable from the signed-in router.
-    expect(screens.length).toBe(41);
+    expect(screens.length).toBe(42);
   });
 });

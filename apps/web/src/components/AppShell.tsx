@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery } from '@tanstack/react-query';
@@ -49,6 +49,7 @@ export function AppShell(): React.JSX.Element {
   const { slot, setElement, occupied } = useHeadingSlot();
   const {
     displayName,
+    tenantCode,
     mustChangePassword,
     theme,
     language,
@@ -262,21 +263,13 @@ export function AppShell(): React.JSX.Element {
             </button>
 
             {/*
-              Withdrawn until `xl` rather than `sm`. The screen's name has the
-              middle of the bar now, and on a laptop it is the more useful of the
-              two — the user knows who they signed in as.
+              User profile trigger and menu.
             */}
-            {displayName && (
-              <div className="hidden items-center gap-2 rounded-lg border border-line/60 bg-surface-2/60 px-2 py-1 xl:flex">
-                <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[10px] font-bold text-white shadow-xs">
-                  {displayName.charAt(0).toUpperCase()}
-                  <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
-                </span>
-                <span className="max-w-32 truncate text-xs font-medium text-ink">
-                  {displayName}
-                </span>
-              </div>
-            )}
+            <UserProfileDropdown
+              displayName={displayName}
+              tenantCode={tenantCode}
+              onSignOut={() => void signOut()}
+            />
 
             <ThemeSwitch theme={theme} onChange={setTheme} />
 
@@ -366,6 +359,181 @@ export function AppShell(): React.JSX.Element {
  * reachable while it is there, Escape should shut it and focus should come back to
  * whatever opened it. All of that is Radix's now rather than a hundred lines here.
  */
+function UserProfileDropdown({
+  displayName,
+  tenantCode,
+  onSignOut,
+}: {
+  readonly displayName: string | null;
+  readonly tenantCode: string | null;
+  readonly onSignOut: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const initials = displayName
+    ? displayName
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase() ?? '')
+        .join('') || displayName.slice(0, 2).toUpperCase()
+    : 'U';
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={t('profile.title')}
+        className={clsx(
+          'flex items-center gap-1.5 rounded-lg border border-line/70 bg-surface-2/80 px-2 py-1 text-xs transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 sm:gap-2',
+          open && 'border-brand-500 bg-surface-3 ring-2 ring-brand-500/20',
+        )}
+      >
+        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[10px] font-bold text-white shadow-xs">
+          {initials}
+          <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
+        </span>
+        {displayName && (
+          <span className="hidden max-w-28 truncate font-semibold text-ink sm:inline">
+            {displayName}
+          </span>
+        )}
+        <IconChevron
+          className={clsx(
+            'size-3.5 text-ink-muted transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute end-0 top-full z-50 mt-2 w-64 rounded-xl border border-line bg-surface p-2 shadow-float animate-pop outline-none backdrop-blur-sm"
+        >
+          {/* Header Profile Info */}
+          <div className="flex items-center gap-3 border-b border-line px-2 py-2.5">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-raised">
+              {initials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-ink">
+                {displayName ?? t('profile.anonymous')}
+              </p>
+              <p className="truncate text-[11px] text-ink-muted">
+                {tenantCode ? `${tenantCode}` : 'Inspire ERP'}
+              </p>
+              <span className="inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                {t('profile.active')}
+              </span>
+            </div>
+          </div>
+
+          {/* Links */}
+          <div className="py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/profile');
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+                <circle cx="12" cy="8" r="5" />
+                <path d="M20 21a8 8 0 0 0-16 0" />
+              </svg>
+              <span>{t('profile.myProfile')}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/change-password');
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+                <rect x="5" y="11" width="14" height="10" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+              <span>{t('changePassword.title')}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/settings');
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              <span>{t('settings.title')}</span>
+            </button>
+          </div>
+
+          <div className="border-t border-line pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onSignOut();
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
+            >
+              <IconLogout className="size-4" />
+              <span>{t('nav.signOut')}</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The navigation as a drawer, with the backdrop that dismisses it.
+ *
+ * A component of its own rather than markup inline in the shell, because it is
+ * mounted only while open — so its own mount and unmount are the drawer opening and
+ * closing, which is what `Dialog.Root open` reads.
+ *
+ * A sheet is a dialog: it takes the screen, the page behind it should not be
+ * reachable while it is there, Escape should shut it and focus should come back to
+ * whatever opened it. All of that is Radix's now rather than a hundred lines here.
+ */
 function NavDrawer({
   onClose,
   children,
@@ -374,6 +542,7 @@ function NavDrawer({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const displayName = useSession((s) => s.displayName);
 
   return (
     <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
@@ -393,6 +562,28 @@ function NavDrawer({
             </Dialog.Close>
           </div>
           {children}
+
+          {/* Mobile Profile Footer Link */}
+          <div className="mt-auto border-t border-line p-3">
+            <NavLink
+              to="/profile"
+              onClick={onClose}
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-2.5 transition hover:bg-surface-3"
+            >
+              <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-xs">
+                {(displayName ?? 'U').charAt(0).toUpperCase()}
+                <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-ink">
+                  {displayName ?? t('profile.anonymous')}
+                </p>
+                <p className="truncate text-[11px] text-ink-muted">
+                  {t('profile.myProfile')}
+                </p>
+              </div>
+            </NavLink>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

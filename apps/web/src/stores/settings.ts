@@ -152,6 +152,8 @@ export interface AppSettings {
   readonly paymentVoucherPrefix: string;
   /** Prefix for receipt vouchers (e.g. 'REC-'). */
   readonly receiptVoucherPrefix: string;
+  /** Application-wide default theme ('light' or 'dark') applied for all users. */
+  readonly defaultTheme: 'light' | 'dark';
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -216,6 +218,7 @@ const DEFAULTS: AppSettings = {
   salesOrderSuffix: '',
   paymentVoucherPrefix: 'PAY-',
   receiptVoucherPrefix: 'REC-',
+  defaultTheme: 'light',
 };
 
 const STORAGE_KEY = 'erp.settings';

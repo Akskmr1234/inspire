@@ -324,6 +324,23 @@
   textarea,
   button {
     font: inherit;
+    touch-action: manipulation;
+  }
+
+  /*
+    Prevent iOS Safari and mobile browsers from zooming in when focusing any input.
+    Mobile WebKit automatically zooms the entire screen if an input, select, or textarea
+    has a computed font-size below 16px. Enforcing 16px on mobile screens (< 768px)
+    completely stops the screen from zooming in unexpectedly when entering inputs.
+  */
+  @media screen and (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']),
+    select,
+    textarea,
+    .field-input,
+    .field-input-sm {
+      font-size: 16px !important;
+    }
   }
 
   input[type='checkbox'],

@@ -174,6 +174,63 @@ public sealed class AuthController : ApiControllerBase
 
         return Ok(permissions.OrderBy(p => p, StringComparer.Ordinal).ToArray());
     }
+
+    /// <summary>Returns the current signed-in user's profile and tenancy context.</summary>
+    /// <returns>The user profile.</returns>
+    /// <response code="200">The profile.</response>
+    /// <response code="401">Not signed in.</response>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult GetCurrentUserProfile()
+    {
+        string? subject = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        if (!Guid.TryParse(subject, out Guid userId))
+        {
+            return Unauthorized();
+        }
+
+        string userName = User.FindFirstValue("unique_name")
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? string.Empty;
+
+        string displayName = User.FindFirstValue(ClaimTypes.Name)
+            ?? (string.IsNullOrWhiteSpace(userName) ? "User" : userName);
+
+        string email = User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue("email")
+            ?? string.Empty;
+
+        string? tenantIdStr = User.FindFirstValue("tenant_id");
+        _ = Guid.TryParse(tenantIdStr, out Guid tenantId);
+
+        string? firmIdStr = User.FindFirstValue("firm_id");
+        Guid? firmId = Guid.TryParse(firmIdStr, out Guid fId) ? fId : null;
+
+        string? branchIdStr = User.FindFirstValue("branch_id");
+        Guid? branchId = Guid.TryParse(branchIdStr, out Guid bId) ? bId : null;
+
+        string[] roles = User.FindAll(ClaimTypes.Role)
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        bool mustChangePassword = User.FindFirstValue("must_change_password") == "true";
+
+        return Ok(new UserProfileResponse(
+            UserId: userId,
+            UserName: userName,
+            DisplayName: displayName,
+            Email: email,
+            TenantId: tenantId,
+            FirmId: firmId,
+            BranchId: branchId,
+            Roles: roles,
+            MustChangePassword: mustChangePassword));
+    }
 }
 
 /// <summary>Credentials for signing in.</summary>
@@ -201,3 +258,24 @@ public sealed record RefreshTokenRequest(string RefreshToken, string? TenantCode
 /// <param name="CurrentPassword">The existing password.</param>
 /// <param name="NewPassword">The replacement.</param>
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>Profile details for the currently signed-in user.</summary>
+/// <param name="UserId">The user identifier.</param>
+/// <param name="UserName">The sign-in name.</param>
+/// <param name="DisplayName">The user's display name.</param>
+/// <param name="Email">The user's email address.</param>
+/// <param name="TenantId">The tenant identifier.</param>
+/// <param name="FirmId">The active firm identifier, if any.</param>
+/// <param name="BranchId">The active branch identifier, if any.</param>
+/// <param name="Roles">The assigned roles.</param>
+/// <param name="MustChangePassword">Whether a password reset is required.</param>
+public sealed record UserProfileResponse(
+    Guid UserId,
+    string UserName,
+    string DisplayName,
+    string Email,
+    Guid TenantId,
+    Guid? FirmId,
+    Guid? BranchId,
+    IReadOnlyCollection<string> Roles,
+    bool MustChangePassword);

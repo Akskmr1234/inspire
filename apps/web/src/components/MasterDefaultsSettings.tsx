@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { IconCheck, IconClose, IconMoon, IconPlus, IconSparkles, IconSun } from '@/components/icons';
-import { useSession } from '@/stores/session';
+import { useSession, setDefaultAppTheme } from '@/stores/session';
 import { populateSampleTransactions } from '@/lib/sampleData';
 import { currentBranchId, type ApiError } from '@/lib/api';
 import {
@@ -49,7 +49,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
   const settings = useSettings();
   const branchId = currentBranchId();
   const { places } = useMoney();
-  const { theme, setTheme } = useSession();
+  const { theme } = useSession();
   const queryClient = useQueryClient();
 
   const [selectedTxType, setSelectedTxType] = useState<string>('Sales');
@@ -337,46 +337,57 @@ export function MasterDefaultsSettings(): React.JSX.Element {
       {/* Theme & Appearance */}
       <div className="space-y-3 border-t border-line pt-4">
         <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
-            {t('common.theme')} & Appearance
-          </h4>
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+              {t('common.theme')} & Appearance (Default for All Users)
+            </h4>
+            <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600 dark:bg-brand-500/20 dark:text-brand-300">
+              System Wide
+            </span>
+          </div>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Choose light or dark interface theme across the application.
+            Configure the default interface appearance. The selected theme applies as the default for all users and workstations across the application.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => setTheme('light')}
+            onClick={() => {
+              settings.update({ defaultTheme: 'light' });
+              setDefaultAppTheme('light');
+            }}
             className={clsx(
               'flex items-center gap-2.5 rounded-lg border px-4 py-2 text-sm font-medium transition',
               theme === 'light'
-                ? 'border-accent bg-accent/10 text-accent font-semibold ring-1 ring-accent'
+                ? 'border-brand-600 bg-brand-500/10 text-brand-700 font-semibold ring-1 ring-brand-600 dark:text-brand-300'
                 : 'border-line bg-surface hover:bg-surface-2 text-ink',
             )}
           >
             <IconSun className="size-4.5 text-amber-500" />
-            <span>Light Theme</span>
+            <span>Light Theme (Default)</span>
             {theme === 'light' && (
-              <span className="ms-1 size-1.5 rounded-full bg-accent" />
+              <span className="ms-1 size-1.5 rounded-full bg-brand-600" />
             )}
           </button>
 
           <button
             type="button"
-            onClick={() => setTheme('dark')}
+            onClick={() => {
+              settings.update({ defaultTheme: 'dark' });
+              setDefaultAppTheme('dark');
+            }}
             className={clsx(
               'flex items-center gap-2.5 rounded-lg border px-4 py-2 text-sm font-medium transition',
               theme === 'dark'
-                ? 'border-accent bg-accent/10 text-accent font-semibold ring-1 ring-accent'
+                ? 'border-brand-600 bg-brand-500/10 text-brand-700 font-semibold ring-1 ring-brand-600 dark:text-brand-300'
                 : 'border-line bg-surface hover:bg-surface-2 text-ink',
             )}
           >
             <IconMoon className="size-4.5 text-indigo-400" />
-            <span>Dark Theme</span>
+            <span>Dark Theme (Default)</span>
             {theme === 'dark' && (
-              <span className="ms-1 size-1.5 rounded-full bg-accent" />
+              <span className="ms-1 size-1.5 rounded-full bg-brand-600" />
             )}
           </button>
         </div>
