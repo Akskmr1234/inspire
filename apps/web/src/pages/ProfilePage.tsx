@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -17,12 +17,12 @@ import {
 } from '@/components/icons';
 
 function initials(name: string | null): string {
-  if (!name) return '?';
+  if (!name) return 'SA';
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2 && parts[0] && parts[1]) {
     return ((parts[0][0] ?? '') + (parts[1][0] ?? '')).toUpperCase();
   }
-  return name.slice(0, 2).toUpperCase();
+  return name.slice(0, 2).toUpperCase() || 'SA';
 }
 
 type ProfileTab = 'overview' | 'security' | 'preferences' | 'permissions' | 'session';
@@ -50,6 +50,9 @@ export function ProfilePage(): React.JSX.Element {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwBusy, setPwBusy] = useState(false);
@@ -71,6 +74,20 @@ export function ProfilePage(): React.JSX.Element {
   });
 
   const profile = profileQuery.data;
+
+  useEffect(() => {
+    if (profile?.displayName && profile.displayName !== displayName) {
+      setDisplayName(profile.displayName);
+    }
+  }, [profile?.displayName, displayName, setDisplayName]);
+
+  useEffect(() => {
+    if (displayName) {
+      setNameInput(displayName);
+    } else if (profile?.displayName) {
+      setNameInput(profile.displayName);
+    }
+  }, [displayName, profile?.displayName]);
 
   const handlePasswordSubmit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -124,10 +141,10 @@ export function ProfilePage(): React.JSX.Element {
   };
 
   const isSuperAdmin = permissions.has('*');
-  const effectiveDisplayName = profile?.displayName ?? displayName ?? t('profile.anonymous');
-  const effectiveUserName = profile?.userName ?? displayName ?? 'admin';
+  const effectiveDisplayName = profile?.displayName || displayName || 'System Administrator';
+  const effectiveUserName = profile?.userName || 'admin';
   const effectiveEmail = profile?.email || `${effectiveUserName.toLowerCase()}@inspire-erp.local`;
-  const effectiveTenant = profile?.tenantId ? profile.tenantId.slice(0, 8) : tenantCode ?? 'Default';
+  const effectiveTenant = tenantCode || (profile?.tenantId ? `Tenant #${profile.tenantId.slice(0, 8)}` : 'Inspire ERP Main');
 
   return (
     <div className="page space-y-6">
@@ -174,7 +191,7 @@ export function ProfilePage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => setActiveTab('security')}
-                className="btn-secondary text-xs sm:text-sm py-1.5 px-3"
+                className="btn-secondary text-xs sm:text-sm py-1.5 px-3 flex items-center gap-1.5"
               >
                 <IconKey className="size-4" />
                 <span>{t('changePassword.title')}</span>
@@ -182,7 +199,7 @@ export function ProfilePage(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => void signOut()}
-                className="btn-danger text-xs sm:text-sm py-1.5 px-3"
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50/70 px-3 py-1.5 text-xs sm:text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 active:scale-95 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40"
               >
                 <IconLogout className="size-4" />
                 <span>{t('nav.signOut')}</span>
@@ -191,20 +208,20 @@ export function ProfilePage(): React.JSX.Element {
           </div>
 
           {/* Quick Info Badges */}
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-line/60">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-line/60">
             <span className="badge-brand inline-flex items-center gap-1.5 py-1 px-2.5 text-xs">
               <IconShield className="size-3.5" />
               <span>{t('profile.active')}</span>
             </span>
-            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs">
-              <IconBuilding className="size-3.5" />
-              <span>{t('profile.tenantCode')}: {effectiveTenant}</span>
+            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium">
+              <IconBuilding className="size-3.5 text-ink-muted" />
+              <span>{effectiveTenant}</span>
             </span>
-            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs">
-              <IconKey className="size-3.5" />
+            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium">
+              <IconKey className="size-3.5 text-ink-muted" />
               <span>{isSuperAdmin ? t('profile.allPermissions') : t('profile.permissionCount', { count: permissions.size })}</span>
             </span>
-            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs">
+            <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium">
               <span className="size-2 rounded-full bg-brand-500" />
               <span>Theme: {theme.toUpperCase()}</span>
             </span>
@@ -229,7 +246,7 @@ export function ProfilePage(): React.JSX.Element {
       )}
 
       {/* Tabs Navigation */}
-      <div className="flex overflow-x-auto border-b border-line gap-2 scrollbar-none">
+      <div className="flex overflow-x-auto border-b border-line gap-2 scrollbar-none pb-px">
         <TabButton
           active={activeTab === 'overview'}
           onClick={() => setActiveTab('overview')}
@@ -267,9 +284,14 @@ export function ProfilePage(): React.JSX.Element {
         <div className="grid gap-6 md:grid-cols-2 animate-fade-in">
           <div className="card p-5 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-line">
-              <h3 className="text-sm font-semibold text-ink">
-                Personal & Login Information
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-8 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                  <IconUser className="size-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-ink">
+                  Personal & Login Information
+                </h3>
+              </div>
               {!editingName && (
                 <button
                   type="button"
@@ -277,7 +299,7 @@ export function ProfilePage(): React.JSX.Element {
                     setNameInput(effectiveDisplayName);
                     setEditingName(true);
                   }}
-                  className="text-xs text-brand-600 hover:text-brand-700 font-semibold"
+                  className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-brand-600 hover:bg-surface-2 transition"
                 >
                   Edit Name
                 </button>
@@ -319,55 +341,69 @@ export function ProfilePage(): React.JSX.Element {
                 </div>
               </form>
             ) : (
-              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+              <dl className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 text-xs">
                 <div>
-                  <dt className="text-ink-muted">{t('profile.displayName')}</dt>
-                  <dd className="font-medium text-ink mt-0.5">{effectiveDisplayName}</dd>
+                  <dt className="text-ink-muted mb-1">{t('profile.displayName')}</dt>
+                  <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 font-medium text-ink">
+                    {effectiveDisplayName}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-ink-muted">{t('profile.userName')}</dt>
-                  <dd className="font-mono font-medium text-ink mt-0.5">{effectiveUserName}</dd>
+                  <dt className="text-ink-muted mb-1">{t('profile.userName')}</dt>
+                  <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 font-mono text-ink">
+                    @{effectiveUserName}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-ink-muted">{t('profile.email')}</dt>
-                  <dd className="font-medium text-ink mt-0.5">{effectiveEmail}</dd>
+                  <dt className="text-ink-muted mb-1">{t('profile.email')}</dt>
+                  <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 text-ink truncate">
+                    {effectiveEmail}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-ink-muted">Account Status</dt>
-                  <dd className="font-medium text-emerald-600 mt-0.5">Active & Verified</dd>
+                  <dt className="text-ink-muted mb-1">Account Status</dt>
+                  <dd className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 font-medium text-emerald-600 dark:text-emerald-400">
+                    Active & Verified
+                  </dd>
                 </div>
               </dl>
             )}
+
+            <div className="pt-2">
+              <span className="text-ink-muted mb-1 block text-xs">User ID</span>
+              <CopyableValue value={profile?.userId ?? 'local-system-admin'} mono />
+            </div>
           </div>
 
           <div className="card p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-ink pb-3 border-b border-line">
-              Tenancy & Organization Context
-            </h3>
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-xs">
+            <div className="flex items-center gap-2.5 pb-3 border-b border-line">
+              <div className="grid size-8 place-items-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <IconBuilding className="size-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-ink">
+                Tenancy & Organization Context
+              </h3>
+            </div>
+            <dl className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 text-xs">
               <div>
-                <dt className="text-ink-muted">{t('profile.tenantCode')}</dt>
-                <dd className="font-mono font-medium text-ink mt-0.5">
-                  {tenantCode ?? 'Inspire ERP Main'}
+                <dt className="text-ink-muted mb-1">{t('profile.tenantCode')}</dt>
+                <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 font-semibold text-ink">
+                  {effectiveTenant}
                 </dd>
               </div>
               <div>
-                <dt className="text-ink-muted">Tenant Identifier</dt>
-                <dd className="font-mono text-ink-muted truncate mt-0.5">
-                  {profile?.tenantId ?? 'default-tenant'}
+                <dt className="text-ink-muted mb-1">Active Branch</dt>
+                <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 font-medium text-ink">
+                  {profile?.branchId ? `Branch #${profile.branchId}` : 'All Branches (HQ)'}
                 </dd>
               </div>
-              <div>
-                <dt className="text-ink-muted">Firm ID</dt>
-                <dd className="font-mono text-ink-muted truncate mt-0.5">
-                  {profile?.firmId ?? 'Primary Firm'}
-                </dd>
+              <div className="sm:col-span-2">
+                <span className="text-ink-muted mb-1 block text-xs">Tenant Identifier</span>
+                <CopyableValue value={profile?.tenantId ?? 'default-tenant'} mono />
               </div>
-              <div>
-                <dt className="text-ink-muted">Active Branch</dt>
-                <dd className="font-mono text-ink-muted truncate mt-0.5">
-                  {profile?.branchId ?? 'Head Office'}
-                </dd>
+              <div className="sm:col-span-2">
+                <span className="text-ink-muted mb-1 block text-xs">Firm ID</span>
+                <CopyableValue value={profile?.firmId ?? 'Primary Operating Firm'} mono />
               </div>
             </dl>
           </div>
@@ -408,15 +444,25 @@ export function ProfilePage(): React.JSX.Element {
               <label htmlFor="currentPw" className="field-label">
                 {t('changePassword.current')}
               </label>
-              <input
-                id="currentPw"
-                type="password"
-                className="field-input text-base sm:text-sm"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <div className="relative">
+                <input
+                  id="currentPw"
+                  type={showCurrentPw ? 'text' : 'password'}
+                  className="field-input text-base sm:text-sm pe-10"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPw((v) => !v)}
+                  className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
+                  aria-label={showCurrentPw ? 'Hide password' : 'Show password'}
+                >
+                  {showCurrentPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -424,16 +470,26 @@ export function ProfilePage(): React.JSX.Element {
                 <label htmlFor="newPw" className="field-label">
                   {t('changePassword.new')}
                 </label>
-                <input
-                  id="newPw"
-                  type="password"
-                  className="field-input text-base sm:text-sm"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  autoComplete="new-password"
-                  minLength={12}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    id="newPw"
+                    type={showNewPw ? 'text' : 'password'}
+                    className="field-input text-base sm:text-sm pe-10"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw((v) => !v)}
+                    className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
+                    aria-label={showNewPw ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                  </button>
+                </div>
                 <p className="field-hint">{t('changePassword.policy')}</p>
               </div>
 
@@ -441,16 +497,26 @@ export function ProfilePage(): React.JSX.Element {
                 <label htmlFor="confirmPw" className="field-label">
                   {t('changePassword.confirm')}
                 </label>
-                <input
-                  id="confirmPw"
-                  type="password"
-                  className="field-input text-base sm:text-sm"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                  minLength={12}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    id="confirmPw"
+                    type={showConfirmPw ? 'text' : 'password'}
+                    className="field-input text-base sm:text-sm pe-10"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw((v) => !v)}
+                    className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
+                    aria-label={showConfirmPw ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -646,7 +712,7 @@ export function ProfilePage(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="btn-danger text-xs py-2 px-4"
+              className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50/70 px-4 py-2 text-xs font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 active:scale-95 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40"
             >
               <IconLogout className="size-4" />
               <span>{t('profile.signOutDevice')}</span>
@@ -664,25 +730,121 @@ function TabButton({
   icon,
   label,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly icon: React.ReactNode;
+  readonly label: string;
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
       className={clsx(
-        'flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-medium whitespace-nowrap transition',
+        'group flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs sm:text-sm font-medium whitespace-nowrap transition duration-150',
         active
-          ? 'border-brand-600 text-brand-600 dark:text-brand-400 font-semibold'
+          ? 'border-brand-600 text-brand-600 dark:border-brand-400 dark:text-brand-400 font-semibold'
           : 'border-transparent text-ink-muted hover:border-line-strong hover:text-ink',
       )}
     >
-      {icon}
+      <span className={clsx(active ? 'text-brand-600 dark:text-brand-400' : 'text-ink-subtle group-hover:text-ink')}>
+        {icon}
+      </span>
       <span>{label}</span>
     </button>
+  );
+}
+
+function CopyableValue({
+  value,
+  mono = false,
+}: {
+  readonly value: string;
+  readonly mono?: boolean;
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (): void => {
+    if (navigator?.clipboard?.writeText) {
+      void navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-line/60 bg-surface-2/60 px-3 py-1.5 transition hover:border-line-strong">
+      <span className={clsx('truncate text-xs text-ink select-all', mono && 'font-mono text-[11px]')}>
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        title="Copy"
+        aria-label="Copy"
+        className="btn-icon size-6 shrink-0 text-ink-subtle hover:text-brand-600 active:scale-95"
+      >
+        {copied ? (
+          <IconCheck className="size-3 text-emerald-600" />
+        ) : (
+          <IconCopy className="size-3" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function IconCopy(props: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={props.className ?? 'size-3.5'}
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function IconEye(props: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={props.className ?? 'size-4'}
+    >
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconEyeOff(props: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={props.className ?? 'size-4'}
+    >
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
   );
 }
 

@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
-import type { ApiError } from '@/lib/api';
+import { currentDisplayName, type ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { CommandPalette, opensPalette } from '@/components/CommandPalette';
@@ -291,14 +291,11 @@ export function AppShell(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-2 text-ink-muted transition duration-150 hover:bg-surface-3 hover:text-ink active:scale-95 sm:px-3"
+              className="btn-icon text-ink-muted hover:bg-surface-3 hover:text-red-600 dark:hover:text-red-400"
               aria-label={t('nav.signOut')}
               title={t('nav.signOut')}
             >
               <IconLogout />
-              <span className="hidden text-sm font-medium sm:inline">
-                {t('nav.signOut')}
-              </span>
             </button>
           </div>
         </header>
@@ -394,14 +391,16 @@ function UserProfileDropdown({
     };
   }, [open]);
 
-  const initials = displayName
-    ? displayName
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((p) => p[0]?.toUpperCase() ?? '')
-        .join('') || displayName.slice(0, 2).toUpperCase()
-    : 'U';
+  const effectiveName =
+    displayName || currentDisplayName() || 'System Administrator';
+
+  const initials =
+    effectiveName
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || effectiveName.slice(0, 2).toUpperCase() || 'SA';
 
   return (
     <div ref={containerRef} className="relative">
@@ -410,21 +409,19 @@ function UserProfileDropdown({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="true"
-        aria-label={t('profile.title')}
+        aria-label={`${effectiveName} - ${t('profile.title')}`}
         className={clsx(
-          'flex items-center gap-1.5 rounded-lg border border-line/70 bg-surface-2/80 px-2 py-1 text-xs transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 sm:gap-2',
-          open && 'border-brand-500 bg-surface-3 ring-2 ring-brand-500/20',
+          'flex items-center gap-2 rounded-lg border border-line/80 bg-surface-2/90 px-2 py-1 text-xs font-medium transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 sm:px-2.5 sm:py-1.5',
+          open && 'border-brand-500 bg-surface-3 ring-2 ring-brand-500/20 shadow-xs',
         )}
       >
-        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[10px] font-bold text-white shadow-xs">
+        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-[10px] font-bold text-white shadow-xs">
           {initials}
           <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
         </span>
-        {displayName && (
-          <span className="hidden max-w-28 truncate font-semibold text-ink sm:inline">
-            {displayName}
-          </span>
-        )}
+        <span className="max-w-28 truncate font-semibold text-ink sm:max-w-36 md:max-w-44">
+          {effectiveName}
+        </span>
         <IconChevron
           className={clsx(
             'size-3.5 text-ink-muted transition-transform duration-200',
@@ -445,10 +442,10 @@ function UserProfileDropdown({
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-ink">
-                {displayName ?? t('profile.anonymous')}
+                {effectiveName}
               </p>
               <p className="truncate text-[11px] text-ink-muted">
-                {tenantCode ? `${tenantCode}` : 'Inspire ERP'}
+                {tenantCode ? `${tenantCode}` : 'Inspire ERP Main'}
               </p>
               <span className="inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
                 {t('profile.active')}
@@ -543,6 +540,14 @@ function NavDrawer({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const displayName = useSession((s) => s.displayName);
+  const effectiveName = displayName || currentDisplayName() || 'System Administrator';
+  const drawerInitials =
+    effectiveName
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? '')
+      .join('') || 'SA';
 
   return (
     <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
@@ -571,12 +576,12 @@ function NavDrawer({
               className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-2.5 transition hover:bg-surface-3"
             >
               <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-xs">
-                {(displayName ?? 'U').charAt(0).toUpperCase()}
+                {drawerInitials}
                 <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-ink">
-                  {displayName ?? t('profile.anonymous')}
+                  {effectiveName}
                 </p>
                 <p className="truncate text-[11px] text-ink-muted">
                   {t('profile.myProfile')}

@@ -15,7 +15,7 @@
  */
 
 /** Reads one claim out of a JWT payload, or null if it is not there to read. */
-function claim(token: string | null, name: string): string | null {
+export function claim(token: string | null, name: string): string | null {
   if (!token) {
     return null;
   }
@@ -64,3 +64,15 @@ const BRANCH_CLAIM = 'branch_id';
 export function branchOf(token: string | null): string | null {
   return claim(token, BRANCH_CLAIM);
 }
+
+/**
+ * Reads the display name claim from the access token.
+ */
+export function displayNameOf(token: string | null): string | null {
+  return (
+    claim(token, 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name') ??
+    claim(token, 'name') ??
+    claim(token, 'unique_name')
+  );
+}
+

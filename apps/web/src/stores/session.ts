@@ -159,7 +159,7 @@ function withThemeTransition(apply: () => void): void {
 
 export const useSession = create<SessionState>((set, get) => ({
   status: 'unknown',
-  displayName: null,
+  displayName: api.getStoredDisplayName(),
   tenantCode: api.getStoredTenantCode(),
   mustChangePassword: false,
   permissions: new Set<string>(),
@@ -170,27 +170,45 @@ export const useSession = create<SessionState>((set, get) => ({
     const restored = await api.restoreSession();
 
     if (!restored) {
-      set({ status: 'signedOut' });
+      set({ status: 'signedOut', displayName: null });
       return;
     }
 
     const permissions = await api.fetchPermissions().catch(() => []);
     const tenantCode = api.getStoredTenantCode();
+    const displayName = api.currentDisplayName() || get().displayName;
 
     set({
       status: 'signedIn',
+      displayName,
       tenantCode,
       permissions: new Set(permissions),
     });
+
+    // In the background, fetch user profile to ensure display name is accurate and up to date
+    void api
+      .fetchCurrentUserProfile()
+      .then((profile) => {
+        if (profile?.displayName) {
+          set({ displayName: profile.displayName });
+          try {
+            localStorage.setItem('erp.displayName', profile.displayName);
+          } catch {
+            // Storage quota fallback.
+          }
+        }
+      })
+      .catch(() => undefined);
   },
 
   signIn: async (userName, password, tenantCode) => {
     const auth = await api.login(userName, password, tenantCode);
     const permissions = await api.fetchPermissions().catch(() => []);
+    const displayName = auth.displayName || api.currentDisplayName() || userName;
 
     set({
       status: 'signedIn',
-      displayName: auth.displayName,
+      displayName,
       tenantCode: tenantCode || api.getStoredTenantCode(),
       mustChangePassword: auth.mustChangePassword,
       permissions: new Set(permissions),
@@ -233,6 +251,11 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   setDisplayName: (displayName) => {
+    try {
+      localStorage.setItem('erp.displayName', displayName);
+    } catch {
+      // Storage quota fallback.
+    }
     set({ displayName });
   },
 

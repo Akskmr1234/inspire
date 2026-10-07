@@ -16,10 +16,16 @@
  *   because reuse cannot be distinguished from theft.
  */
 
-import { branchOf } from '@/lib/branch';
+import { branchOf, displayNameOf } from '@/lib/branch';
 
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
+const DISPLAY_NAME_KEY = 'erp.displayName';
+
+/** Reads the cached display name from previous sign-in. */
+export function getStoredDisplayName(): string | null {
+  return localStorage.getItem(DISPLAY_NAME_KEY);
+}
 
 /**
  * Where the API lives, baked in when the bundle is built.
@@ -82,6 +88,11 @@ export function setSession(auth: AuthenticationResponse, tenantCode?: string): v
   accessToken = auth.accessToken;
   localStorage.setItem(REFRESH_TOKEN_KEY, auth.refreshToken);
 
+  const name = auth.displayName || displayNameOf(auth.accessToken);
+  if (name) {
+    localStorage.setItem(DISPLAY_NAME_KEY, name);
+  }
+
   if (tenantCode) {
     localStorage.setItem(TENANT_CODE_KEY, tenantCode);
   }
@@ -98,10 +109,18 @@ export function currentBranchId(): string | null {
   return branchOf(accessToken);
 }
 
+/**
+ * Reads the current user's display name, either from the active token or from local storage.
+ */
+export function currentDisplayName(): string | null {
+  return displayNameOf(accessToken) ?? getStoredDisplayName();
+}
+
 /** Clears the session. The company code is kept: it is a convenience, not a secret. */
 export function clearSession(): void {
   accessToken = null;
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(DISPLAY_NAME_KEY);
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
