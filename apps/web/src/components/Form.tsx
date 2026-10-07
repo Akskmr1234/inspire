@@ -29,7 +29,7 @@ import clsx from 'clsx';
 export function Field({
   label,
   required = false,
-  hint,
+  hint: _hint,
   error,
   htmlFor,
   className,
@@ -63,9 +63,7 @@ export function Field({
           <span aria-hidden="true" className="grid size-3.5 place-items-center rounded-full bg-red-100 dark:bg-red-950 text-[10px] font-bold text-red-600">!</span>
           {error}
         </p>
-      ) : (
-        hint && <p className="field-hint">{hint}</p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -358,7 +356,7 @@ export function CheckField({
   checked,
   onChange,
   label,
-  hint,
+  hint: _hint,
   disabled = false,
   className,
 }: {
@@ -380,7 +378,6 @@ export function CheckField({
         />
         {label}
       </label>
-      {hint && <p className="field-hint">{hint}</p>}
     </div>
   );
 }

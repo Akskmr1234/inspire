@@ -283,13 +283,15 @@ function AddProduct({
     queryFn: () => listMaster<BrandSummary>('brands', false),
   });
 
+  const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } = useSettings();
+
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionArabic, setDescriptionArabic] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [stockUnitId, setStockUnitId] = useState('');
-  const [brandId, setBrandId] = useState('');
-  const [itemType, setItemType] = useState('1');
+  const [categoryId, setCategoryId] = useState(defaultCategoryId ?? '');
+  const [stockUnitId, setStockUnitId] = useState(defaultStockUnitId ?? '');
+  const [brandId, setBrandId] = useState(defaultBrandId ?? '');
+  const [itemType, setItemType] = useState(String(defaultItemType ?? 1));
 
   const categoryOptions = useMemo(
     () =>
@@ -310,15 +312,18 @@ function AddProduct({
     [units.data],
   );
 
-  /*
-    The firm's own answer where it has set one in Settings, and otherwise the only
-    one there is. A mandatory field holding the right answer already is one fewer
-    dropdown between somebody and the product they came to add.
-  */
-  const { defaultCategoryId, defaultStockUnitId } = useSettings();
+  const brandOptions = useMemo(
+    () =>
+      (brands.data ?? []).map((row) => ({
+        value: row.id,
+        label: `${row.code} — ${row.name}`,
+      })),
+    [brands.data],
+  );
 
   useDefaultChoice(categoryId, categoryOptions, setCategoryId, defaultCategoryId);
   useDefaultChoice(stockUnitId, unitOptions, setStockUnitId, defaultStockUnitId);
+  useDefaultChoice(brandId, brandOptions, setBrandId, defaultBrandId);
 
   const draft = { code, description, categoryId, stockUnitId };
 
@@ -426,10 +431,7 @@ function AddProduct({
             clearable
             label={t('products.brand')}
             placeholder={t('products.noBrand')}
-            options={(brands.data ?? []).map((row) => ({
-              value: row.id,
-              label: `${row.code} — ${row.name}`,
-            }))}
+            options={brandOptions}
           />
         </Field>
       </div>

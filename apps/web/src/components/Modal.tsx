@@ -48,35 +48,22 @@ export function Modal({
     */
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-950/50 backdrop-blur-[2px]">
-          {/*
-            The panel is inside the overlay so the two scroll as one: a document
-            taller than the window is scrolled by dragging anywhere over the dim,
-            not only over the card.
-          */}
-          <div className="flex min-h-full items-start justify-center sm:p-6">
+        <Dialog.Overlay className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-950/65 dark:bg-black/80 backdrop-blur-md p-2 sm:p-4 md:p-6 flex items-start sm:items-center justify-center">
+          <div className="flex min-h-full sm:min-h-0 w-full items-center justify-center">
             <Dialog.Content
               aria-describedby={undefined}
-              /*
-                Radix returns focus to the opener by itself, and would do it after
-                our own `onClose` has already re-rendered the list underneath. The
-                opener is still there — these dialogs are opened from a toolbar
-                button or a row that survives the close — so the default is right and
-                only needs to not fight the animation.
-              */
               className={clsx(
-                'animate-rise flex min-h-full w-full flex-col gap-4 border-line bg-surface p-4',
-                'shadow-float outline-none sm:min-h-0 sm:rounded-2xl sm:border sm:p-6 ring-1 ring-black/5 dark:ring-white/10',
+                'animate-rise flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-line/80 bg-surface shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10 outline-none',
                 size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
               )}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-line/60 pb-3">
-                <Dialog.Title className="truncate text-lg font-bold tracking-tight text-ink">
+              <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-line/60 bg-surface/90 px-5 py-4 backdrop-blur-md sm:px-6">
+                <Dialog.Title className="truncate text-base sm:text-lg font-bold tracking-tight text-ink">
                   {title}
                 </Dialog.Title>
 
                 <Dialog.Close
-                  className="btn-icon size-8 rounded-lg hover:bg-surface-3"
+                  className="btn-icon size-8 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
                   aria-label={t('common.close')}
                   title={t('common.close')}
                 >
@@ -84,7 +71,9 @@ export function Modal({
                 </Dialog.Close>
               </div>
 
-              {children}
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 min-h-0">
+                {children}
+              </div>
             </Dialog.Content>
           </div>
         </Dialog.Overlay>

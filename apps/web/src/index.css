@@ -698,12 +698,30 @@
     @apply min-h-8 rounded-md px-2.5 py-1;
   }
 
-  /* A select carries its own arrow and its own idea of the padding around the text;
-     without this the caret sits against the words on one side and a centimetre of
-     nothing on the other. */
+  /* Custom SVG dropdown chevron for select elements, styled identically to SearchSelect. */
   .field-input:is(select),
   .field-input-sm:is(select) {
-    @apply cursor-pointer pe-8;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+    padding-inline-end: 2.25rem;
+    cursor: pointer;
+  }
+
+  .dark .field-input:is(select),
+  .dark .field-input-sm:is(select) {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+  }
+
+  [dir="rtl"] .field-input:is(select),
+  [dir="rtl"] .field-input-sm:is(select),
+  :dir(rtl) .field-input:is(select),
+  :dir(rtl) .field-input-sm:is(select) {
+    background-position: left 0.75rem center;
   }
 
   .field-hint {

@@ -194,6 +194,14 @@ public static class MenuCatalogue
                     "/sales/invoices",
                     "sales:invoice:view"),
 
+                new(
+                    "transactions.sales-returns",
+                    "Sales returns",
+                    "مرتجعات المبيعات",
+                    "sales",
+                    "/sales/returns",
+                    "sales:invoice:view"),
+
                 // Before the purchases, for the reason the sales orders come before the
                 // sales invoices: an order is placed, then filled.
                 new(

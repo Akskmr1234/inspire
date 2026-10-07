@@ -989,12 +989,10 @@ function NumberField({
   label,
   value,
   onChange,
-  hint,
 }: {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
-  readonly hint?: string;
 }): React.JSX.Element {
   return (
     <label className="block">
@@ -1006,7 +1004,6 @@ function NumberField({
         onChange={(event) => onChange(event.target.value)}
         className="field-input text-end"
       />
-      {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
     </label>
   );
 }

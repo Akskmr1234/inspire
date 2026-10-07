@@ -89,18 +89,21 @@ const emptyLine: DraftLine = {
  * writes the books in one transaction, and what it produced is reported back rather than
  * left to be looked up.
  */
-export function SalesPage(): React.JSX.Element {
+export function SalesPage({
+  kind = SalesDocumentKind.invoice,
+}: {
+  readonly kind?: number;
+} = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
+  const isSalesReturn = isReturn(kind);
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 7)}-01`;
 
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(today);
-  const [activeTab, setActiveTab] = useState<'invoices' | 'returns'>('invoices');
-  const kindFilter =
-    activeTab === 'invoices' ? SalesDocumentKind.invoice : SalesDocumentKind.return;
+  const kindFilter = isSalesReturn ? SalesDocumentKind.return : SalesDocumentKind.invoice;
   const [statusFilter, setStatusFilter] = useState<number | ''>('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -119,7 +122,8 @@ export function SalesPage(): React.JSX.Element {
 
   const nextInvoiceNo = useMemo(() => {
     const items = query.data?.items ?? [];
-    if (items.length === 0) return 'INV-1001';
+    const prefix = isSalesReturn ? 'RET-' : 'INV-';
+    if (items.length === 0) return `${prefix}1001`;
     const nums = items
       .map((item) => {
         const match = item.number.match(/\d+/);
@@ -127,8 +131,8 @@ export function SalesPage(): React.JSX.Element {
       })
       .filter((n) => !isNaN(n));
     const maxNum = nums.length > 0 ? Math.max(...nums) : 1000;
-    return `INV-${String(maxNum + 1).padStart(4, '0')}`;
-  }, [query.data?.items]);
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+  }, [query.data?.items, isSalesReturn]);
 
   const mutation = useMutation<string | null, ApiError, () => Promise<string | null>>({
     mutationFn: (action) => action(),
@@ -246,58 +250,29 @@ export function SalesPage(): React.JSX.Element {
 
   return (
     <>
-      <ReportFrame title={t('nav.sales')} controls={controls} query={query}>
+      <ReportFrame
+        title={isSalesReturn ? (t('sales.salesReturns') || 'Sales Returns') : (t('sales.salesInvoices') || 'Sales Invoices')}
+        controls={controls}
+        query={query}
+      >
         {(result) => (
           <div className="space-y-3">
             {error && <p className="alert-error">{error}</p>}
 
             {notice && <p className="alert-success">{notice}</p>}
 
-            <nav className="flex items-center gap-1 border-b border-line mb-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('invoices');
-                  setPage(1);
-                }}
-                className={clsx(
-                  '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
-                  activeTab === 'invoices'
-                    ? 'border-brand-600 text-brand-700 dark:text-brand-100 font-semibold'
-                    : 'border-transparent text-ink-muted hover:text-ink',
-                )}
-              >
-                {t('sales.invoicesTab') || 'Sales Invoices'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('returns');
-                  setPage(1);
-                }}
-                className={clsx(
-                  '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition',
-                  activeTab === 'returns'
-                    ? 'border-brand-600 text-brand-700 dark:text-brand-100 font-semibold'
-                    : 'border-transparent text-ink-muted hover:text-ink',
-                )}
-              >
-                {t('sales.returnsTab') || 'Sales Returns'}
-              </button>
-            </nav>
-
             <DataGrid
-              gridKey={activeTab === 'invoices' ? 'sales-invoices' : 'sales-returns'}
+              gridKey={isSalesReturn ? 'sales-returns' : 'sales-invoices'}
               rows={result.items}
               columns={columns}
               rowKey={(row) => row.salesInvoiceId}
-              emptyMessage={t('sales.none')}
+              emptyMessage={isSalesReturn ? (t('sales.noReturns') || 'No sales returns in this range.') : t('sales.none')}
               actions={
                 <GridAction
                   label={
-                    activeTab === 'invoices'
-                      ? t('sales.newInvoice')
-                      : t('sales.newReturn')
+                    isSalesReturn
+                      ? (t('sales.newSalesReturn') || 'New return')
+                      : t('sales.newInvoice')
                   }
                   onClick={() => setEntering(true)}
                 />
@@ -319,11 +294,7 @@ export function SalesPage(): React.JSX.Element {
           invoice half entered should not go with them. */}
       {entering && (
         <EntryDialog
-          initialKind={
-            activeTab === 'invoices'
-              ? SalesDocumentKind.invoice
-              : SalesDocumentKind.return
-          }
+          initialKind={kindFilter}
           nextInvoiceNo={nextInvoiceNo}
           onClose={() => setEntering(false)}
           onSaved={(message) => {
@@ -904,15 +875,14 @@ function EntryDialog({
       onClose={onClose}
       size="full"
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-surface-2/40 p-3 rounded-xl border border-line">
-        {/* Column 1: Document Numbers */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
+        {/* Document Numbers */}
         <div className="space-y-2">
           <TextField
-            label={t('sales.invoiceNo')}
+            label={isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')}
             value={nextInvoiceNo}
             disabled
             onChange={() => {}}
-            hint="Auto-generated"
             className="bg-surface-3/50 font-mono font-semibold"
             size="sm"
           />
@@ -921,7 +891,6 @@ function EntryDialog({
             value={reference}
             onChange={setReference}
             placeholder={nextInvoiceNo}
-            hint="Defaults to Invoice No"
             size="sm"
           />
         </div>
@@ -1375,9 +1344,7 @@ function EntryDialog({
         </div>
       </div>
 
-      <p className="text-xs text-ink-muted">{t('sales.totalsHint')}</p>
-
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 pt-2 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
         <ModalButton primary disabled={busy} onClick={() => void save()}>
           {t('sales.saveDraft')}
@@ -1956,3 +1923,9 @@ function Select<TValue extends string | number>({
     />
   );
 }
+
+/** Sales returns screen rendering the returns list and entry. */
+export function SalesReturnsPage(): React.JSX.Element {
+  return <SalesPage kind={SalesDocumentKind.return} />;
+}
+

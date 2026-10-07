@@ -212,7 +212,8 @@ export function SearchSelect({
             onKeyDown={onKeyDown}
             className={clsx(
               size === 'sm' ? 'field-input-sm' : 'field-input',
-              'pe-7',
+              'pe-8 font-medium transition-all duration-150',
+              open && 'border-brand-500 ring-2 ring-brand-500/20',
               invalid && 'field-invalid',
             )}
           />
@@ -221,49 +222,30 @@ export function SearchSelect({
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth={1.8}
+            strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 end-2 my-auto size-4 text-ink-subtle"
+            className={clsx(
+              'pointer-events-none absolute inset-y-0 end-2.5 my-auto size-4 transition-transform duration-200',
+              open ? 'rotate-180 text-brand-600 dark:text-brand-400' : 'text-ink-subtle',
+            )}
           >
             <path d="m6 9 6 6 6-6" />
           </svg>
         </div>
       </Popover.Anchor>
 
-      {/*
-        Portalled, as the hand-rolled list was. Radix positions with Floating UI, so
-        it would land in the right place either way — but a list left inline is still
-        clipped by whatever `overflow` it sits inside, and the product picker lives
-        in a line-item table that scrolls sideways. Out at the body there is nothing
-        to clip it, and Radix keeps it inside the dialog's own layer, so a picker
-        opened from a form stays reachable while everything behind the form is inert.
-      */}
       <Popover.Portal>
         <Popover.Content
           id={listId}
           role="listbox"
           align="start"
-          sideOffset={4}
-          /*
-          Focus stays in the box. A popover takes focus by default, which for a list
-          hanging off a field somebody is typing into would move the caret out of it
-          on the first keystroke.
-        */
+          sideOffset={6}
           onOpenAutoFocus={(event) => event.preventDefault()}
-          /*
-          And the box keeps it when the list closes. Radix would otherwise return
-          focus to the anchor — which is this field's own wrapper, not the input —
-          and the caret would land nowhere.
-        */
           onCloseAutoFocus={(event) => event.preventDefault()}
-          /*
-          Typing is the point of this control, so the keys go to the input rather
-          than to the list: Radix's own typeahead would otherwise swallow them.
-        */
           onKeyDown={(event) => event.stopPropagation()}
-          className="animate-drop z-[70] max-h-64 w-[var(--radix-popover-trigger-width)] min-w-60 overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1 shadow-float ring-1 ring-black/5 dark:ring-white/10"
+          className="animate-drop z-[70] max-h-72 w-[var(--radix-popover-trigger-width)] min-w-64 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-surface/98 backdrop-blur-xl p-1.5 shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10"
         >
           {rows.length === 0 && (
             <p className="px-3 py-4 text-center text-xs text-ink-muted">{t('common.noMatches')}</p>
@@ -276,29 +258,44 @@ export function SearchSelect({
               role="option"
               aria-selected={option.value === value}
               disabled={option.disabled === true}
-              // Focus must not leave the input, or the box would empty itself
-              // mid-click and the choice would be made against a stale list.
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActive(index)}
               onClick={() => pick(option)}
               className={clsx(
-                'flex w-full items-start gap-3 rounded-lg px-3 py-2 text-start text-sm transition-colors',
+                'group flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-start text-xs sm:text-sm transition-all duration-150',
                 option.disabled === true && 'cursor-not-allowed opacity-50',
-                index === active ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200' : 'bg-transparent',
-                option.value === value ? 'font-semibold text-ink' : 'text-ink',
+                index === active
+                  ? 'bg-brand-500/10 text-brand-700 dark:bg-brand-500/20 dark:text-brand-200'
+                  : 'text-ink hover:bg-surface-3',
+                option.value === value && 'font-semibold text-brand-600 dark:text-brand-300',
               )}
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{option.label}</span>
-                {option.detail && (
-                  <span className="block truncate text-xs text-ink-muted">
-                    {option.detail}
-                  </span>
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                {option.value === value && (
+                  <svg
+                    className="size-4 shrink-0 text-brand-600 dark:text-brand-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 )}
-              </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate">{option.label}</span>
+                  {option.detail && (
+                    <span className="block truncate text-[11px] font-normal text-ink-muted">
+                      {option.detail}
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {option.meta && (
-                <span className="shrink-0 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-ink-muted">
+                <span className="shrink-0 rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-ink-muted">
                   {option.meta}
                 </span>
               )}
@@ -306,7 +303,7 @@ export function SearchSelect({
           ))}
 
           {total > shown.length && (
-            <p className="border-t border-line px-3 py-1.5 text-xs text-ink-subtle">
+            <p className="border-t border-line/60 px-3 py-1.5 text-xs text-ink-subtle">
               {t('common.moreMatches', { count: total - shown.length })}
             </p>
           )}

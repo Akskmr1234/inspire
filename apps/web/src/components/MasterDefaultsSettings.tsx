@@ -7,6 +7,7 @@ import { IconClose, IconPlus } from '@/components/icons';
 import { currentBranchId, type ApiError } from '@/lib/api';
 import {
   listMaster,
+  type BrandSummary,
   type CategorySummary,
   type UnitSummary,
   type WarehouseSummary,
@@ -94,6 +95,11 @@ export function MasterDefaultsSettings(): React.JSX.Element {
   const units = useQuery<readonly UnitSummary[], ApiError>({
     queryKey: ['units', false],
     queryFn: () => listMaster<UnitSummary>('units', false),
+  });
+
+  const brands = useQuery<readonly BrandSummary[], ApiError>({
+    queryKey: ['brands', false],
+    queryFn: () => listMaster<BrandSummary>('brands', false),
   });
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
@@ -250,6 +256,58 @@ export function MasterDefaultsSettings(): React.JSX.Element {
               }))}
             />
           </Field>
+          <Field label={t('settings.defaultBrand')}>
+            <SearchSelect
+              value={settings.defaultBrandId}
+              onChange={(id) => settings.update({ defaultBrandId: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('settings.defaultBrand')}
+              options={(brands.data ?? []).map((row) => ({
+                value: row.id,
+                label: `${row.code} — ${row.name}`,
+              }))}
+            />
+          </Field>
+
+          <SelectField
+            label={t('products.itemType')}
+            value={String(settings.defaultItemType ?? 1)}
+            onChange={(val) => settings.update({ defaultItemType: Number(val) })}
+            options={[
+              { value: '1', label: t('products.itemStock') },
+              { value: '2', label: t('products.itemService') },
+              { value: '3', label: t('products.itemNonStock') },
+            ]}
+          />
+
+          <Field label={t('vouchers.debitAccount')}>
+            <SearchSelect
+              value={settings.defaultDebitAccountId}
+              onChange={(id) => settings.update({ defaultDebitAccountId: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('vouchers.debitAccount')}
+              options={(ledgers.data ?? []).map((ledger) => ({
+                value: ledger.ledgerId,
+                label: `${ledger.code} — ${ledger.name}`,
+              }))}
+            />
+          </Field>
+
+          <Field label={t('vouchers.creditAccount')}>
+            <SearchSelect
+              value={settings.defaultCreditAccountId}
+              onChange={(id) => settings.update({ defaultCreditAccountId: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('vouchers.creditAccount')}
+              options={(ledgers.data ?? []).map((ledger) => ({
+                value: ledger.ledgerId,
+                label: `${ledger.code} — ${ledger.name}`,
+              }))}
+            />
+          </Field>
         </div>
       </div>
 
@@ -262,11 +320,6 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField
             label={t('settings.decimals')}
-            hint={
-              branchId === null
-                ? t('settings.decimalsHintFirm')
-                : t('settings.decimalsHintBranch')
-            }
             value={String(places)}
             onChange={(value) => {
               const chosen = Number(value);
@@ -296,7 +349,6 @@ export function MasterDefaultsSettings(): React.JSX.Element {
 
           <SelectField
             label={t('settings.quantityDecimals')}
-            hint={t('settings.quantityDecimalsHint')}
             value={String(settings.quantityDecimals ?? 2)}
             onChange={(value) =>
               settings.update({ quantityDecimals: Number(value) })
@@ -321,14 +373,12 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <CheckField
             label={t('settings.enableDeviceAttributes')}
-            hint={t('settings.enableDeviceAttributesHint')}
             checked={settings.enableDeviceAttributes}
             onChange={(checked) => settings.update({ enableDeviceAttributes: checked })}
           />
 
           <CheckField
             label={t('settings.enableReverseCalculation')}
-            hint={t('settings.enableReverseCalculationHint')}
             checked={settings.enableReverseCalculation}
             onChange={(checked) =>
               settings.update({ enableReverseCalculation: checked })
@@ -337,21 +387,18 @@ export function MasterDefaultsSettings(): React.JSX.Element {
 
           <CheckField
             label={t('settings.enableFreeQuantity')}
-            hint={t('settings.enableFreeQuantityHint')}
             checked={settings.enableFreeQuantity}
             onChange={(checked) => settings.update({ enableFreeQuantity: checked })}
           />
 
           <CheckField
             label={t('settings.enableItemDiscount')}
-            hint={t('settings.enableItemDiscountHint')}
             checked={settings.enableItemDiscount}
             onChange={(checked) => settings.update({ enableItemDiscount: checked })}
           />
 
           <CheckField
             label={t('settings.enableAutoBatch')}
-            hint={t('settings.enableAutoBatchHint')}
             checked={settings.enableAutoBatch}
             onChange={(checked) => settings.update({ enableAutoBatch: checked })}
           />

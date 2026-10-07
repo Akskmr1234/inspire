@@ -254,7 +254,7 @@ export function AppShell(): React.JSX.Element {
                   <circle cx="11" cy="11" r="7" />
                   <path d="m20 20-3.6-3.6" />
                 </svg>
-                <span className="hidden sm:inline text-xs text-ink-subtle">{t('grid.search')}…</span>
+                <span className="hidden sm:inline text-xs text-ink-subtle">{t('palette.searchModule')}</span>
               </span>
               <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-sans text-[0.65rem] font-semibold tracking-wide text-ink-muted lg:inline">
                 {t('palette.shortcut')}

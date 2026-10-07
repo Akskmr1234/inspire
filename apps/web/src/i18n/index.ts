@@ -77,6 +77,7 @@ const en = {
     title: 'Go to a screen',
     open: 'Search the menu',
     shortcut: 'Ctrl K',
+    searchModule: 'Search module…',
     placeholder: 'Type a screen name…',
     nothing: 'No screen matches that.',
     more: '{{count}} more — keep typing to narrow it',
@@ -705,6 +706,11 @@ const en = {
       'Naming the invoice lets the goods come back at the cost they left at, and the credit settle that sale’s bill. Without one they come back at the current average and the credit sits on the account.',
     totalsHint:
       'An estimate. The server rounds the total to the currency when it is saved.',
+    salesInvoices: 'Sales invoices',
+    salesReturns: 'Sales returns',
+    newSalesReturn: 'New return',
+    returnNo: 'Return No',
+    noReturns: 'No sales returns in this range.',
     invoicesTab: 'Sales Invoices',
     returnsTab: 'Sales Returns',
     invoiceNo: 'Invoice No',
@@ -1009,7 +1015,7 @@ const en = {
       'Some rows came from a journal rather than a purchase. They carry the tax but no taxable value, because a posting records the money and not the purchase it was charged on — and a figure derived from the rate would be a guess printed on a statutory return.',
   },
   grid: {
-    search: 'Search all columns…',
+    search: 'Search…',
     columns: 'Columns',
     freeze: 'Freeze first',
     unfreeze: 'Unfreeze',
@@ -1091,6 +1097,7 @@ const en = {
     defaultCategoryHint: 'Still mandatory — this only fills it in.',
     defaultStockUnit: 'Stock unit a new product starts at',
     defaultStockUnitHint: 'Still mandatory — this only fills it in.',
+    defaultBrand: 'Brand a new product starts at',
     chargesTitle: 'Charges a new document starts with',
     chargesHint:
       'Freight, packing, delivery, a standing discount — set once per kind of document and applied to every new one, so the row is not added by hand a hundred times a week.',
@@ -1259,6 +1266,7 @@ const ar = {
     title: 'الانتقال إلى شاشة',
     open: 'البحث في القائمة',
     shortcut: 'Ctrl K',
+    searchModule: 'البحث في النظام…',
     placeholder: 'اكتب اسم الشاشة…',
     nothing: 'لا توجد شاشة مطابقة.',
     more: '{{count}} نتيجة أخرى — تابع الكتابة لتضييق البحث',
@@ -1906,6 +1914,11 @@ const ar = {
     returnHint:
       'تحديد الفاتورة يعيد البضاعة بالتكلفة التي خرجت بها، ويسدد الرصيد مقابل تلك الفاتورة. وبدونها تعود بمتوسط التكلفة الحالي ويبقى الرصيد على حساب العميل.',
     totalsHint: 'تقدير مبدئي. يقوم الخادم بتقريب الإجمالي حسب العملة عند الحفظ.',
+    salesInvoices: 'فواتير المبيعات',
+    salesReturns: 'مرتجعات المبيعات',
+    newSalesReturn: 'سند إرجاع جديد',
+    returnNo: 'رقم المرتجع',
+    noReturns: 'لا توجد مرتجعات مبيعات في هذه الفترة.',
     invoicesTab: 'فواتير المبيعات',
     returnsTab: 'مردودات المبيعات',
     invoiceNo: 'رقم الفاتورة',
@@ -2208,7 +2221,7 @@ const ar = {
       'بعض السطور مصدرها قيد يدوي لا مستند شراء، فتحمل الضريبة دون قيمة خاضعة: القيد يسجّل المبلغ لا المشتريات التي احتُسب عليها، وأي قيمة تُشتق من النسبة تكون تخميناً يُطبع في إقرار رسمي.',
   },
   grid: {
-    search: 'ابحث في كل الأعمدة…',
+    search: 'بحث…',
     columns: 'الأعمدة',
     freeze: 'تثبيت الأول',
     unfreeze: 'إلغاء التثبيت',
@@ -2284,6 +2297,7 @@ const ar = {
     defaultCategoryHint: 'تبقى إلزامية — هذا يملؤها فقط.',
     defaultStockUnit: 'وحدة المخزون التي يبدأ بها المنتج الجديد',
     defaultStockUnitHint: 'تبقى إلزامية — هذا يملؤها فقط.',
+    defaultBrand: 'العلامة التجارية التي يبدأ بها المنتج الجديد',
     chargesTitle: 'الرسوم التي يبدأ بها المستند الجديد',
     chargesHint:
       'الشحن، التغليف، التوصيل، خصم ثابت — تُحدَّد مرة واحدة لكل نوع مستند وتُطبَّق على كل مستند جديد، فلا يُضاف السطر يدوياً في كل مرة.',

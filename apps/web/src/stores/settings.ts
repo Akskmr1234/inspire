@@ -118,6 +118,14 @@ export interface AppSettings {
   readonly enableItemDiscount: boolean;
   /** Whether automatic FIFO batch assignment is enabled. */
   readonly enableAutoBatch: boolean;
+  /** Default item type (1: Stocked, 2: Service, 3: Non-Stock). */
+  readonly defaultItemType: number;
+  /** Default brand identifier. */
+  readonly defaultBrandId: string;
+  /** Default debit account for payment vouchers. */
+  readonly defaultDebitAccountId: string;
+  /** Default credit account for receipt vouchers. */
+  readonly defaultCreditAccountId: string;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
 }
@@ -167,6 +175,10 @@ const DEFAULTS: AppSettings = {
   enableFreeQuantity: true,
   enableItemDiscount: true,
   enableAutoBatch: true,
+  defaultItemType: 1,
+  defaultBrandId: '',
+  defaultDebitAccountId: '',
+  defaultCreditAccountId: '',
   defaultAdditionalLedgers: [],
 };
 
