@@ -112,6 +112,7 @@ export function SalesPage({
   const [viewing, setViewing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const settings = useSettings();
 
   const filter = { from, to, kind: kindFilter, status: statusFilter, search };
 
@@ -122,8 +123,13 @@ export function SalesPage({
 
   const nextInvoiceNo = useMemo(() => {
     const items = query.data?.items ?? [];
-    const prefix = isSalesReturn ? 'RET-' : 'INV-';
-    if (items.length === 0) return `${prefix}1001`;
+    const prefix = isSalesReturn
+      ? (settings.salesReturnPrefix || 'RET-')
+      : (settings.invoicePrefix || 'INV-');
+    const suffix = isSalesReturn
+      ? (settings.salesReturnSuffix || '')
+      : (settings.invoiceSuffix || '');
+    if (items.length === 0) return `${prefix}1001${suffix}`;
     const nums = items
       .map((item) => {
         const match = item.number.match(/\d+/);
@@ -131,8 +137,15 @@ export function SalesPage({
       })
       .filter((n) => !isNaN(n));
     const maxNum = nums.length > 0 ? Math.max(...nums) : 1000;
-    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
-  }, [query.data?.items, isSalesReturn]);
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}${suffix}`;
+  }, [
+    query.data?.items,
+    isSalesReturn,
+    settings.invoicePrefix,
+    settings.invoiceSuffix,
+    settings.salesReturnPrefix,
+    settings.salesReturnSuffix,
+  ]);
 
   const mutation = useMutation<string | null, ApiError, () => Promise<string | null>>({
     mutationFn: (action) => action(),
@@ -1806,7 +1819,7 @@ function DocumentDialog({
         </>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
       </div>
     </Modal>

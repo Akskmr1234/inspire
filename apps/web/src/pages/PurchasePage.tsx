@@ -691,9 +691,10 @@ function EntryDialog({
   return (
     <Modal
       title={isReturn ? t('purchase.newReturn') : t('purchase.newInvoice')}
+      size="full"
       onClose={onClose}
     >
-      <div className="form-grid-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         {/*
           The document's own number is not asked for: it is issued by the branch's
           numbering series when the draft is saved, so the field says what will
@@ -904,11 +905,7 @@ function EntryDialog({
         />
       </div>
 
-      {/* What the screen adds up is what the lines come to; the server rounds the total
-          to the currency and may differ in the last place. */}
-      <p className="text-xs text-ink-muted">{t('purchase.totalsHint')}</p>
-
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton primary disabled={busy} onClick={() => void save()}>
           {busy ? t('common.saving') : t('purchase.saveDraft')}
@@ -1339,7 +1336,7 @@ function DocumentDialog({
         </>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('purchase.close')}</ModalButton>
       </div>
     </Modal>

@@ -48,35 +48,34 @@ export function Modal({
     */
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-950/65 dark:bg-black/80 backdrop-blur-md p-2 sm:p-4 md:p-6 flex items-start sm:items-center justify-center">
-          <div className="flex min-h-full sm:min-h-0 w-full items-center justify-center">
-            <Dialog.Content
-              aria-describedby={undefined}
-              className={clsx(
-                'animate-rise flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-line/80 bg-surface shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10 outline-none',
-                size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
-              )}
-            >
-              <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-line/60 bg-surface/90 px-5 py-4 backdrop-blur-md sm:px-6">
-                <Dialog.Title className="truncate text-base sm:text-lg font-bold tracking-tight text-ink">
-                  {title}
-                </Dialog.Title>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 dark:bg-black/80 backdrop-blur-md transition-opacity duration-200" />
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-2 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+          <Dialog.Content
+            aria-describedby={undefined}
+            className={clsx(
+              'animate-rise flex max-h-[92vh] sm:max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-line/80 bg-surface shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10 outline-none my-auto',
+              size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
+            )}
+          >
+            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-line/60 bg-surface/90 px-5 py-4 backdrop-blur-md sm:px-6">
+              <Dialog.Title className="truncate text-base sm:text-lg font-bold tracking-tight text-ink">
+                {title}
+              </Dialog.Title>
 
-                <Dialog.Close
-                  className="btn-icon size-8 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
-                  aria-label={t('common.close')}
-                  title={t('common.close')}
-                >
-                  <IconClose className="size-4" />
-                </Dialog.Close>
-              </div>
+              <Dialog.Close
+                className="btn-icon size-8 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+              >
+                <IconClose className="size-4" />
+              </Dialog.Close>
+            </div>
 
-              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 min-h-0">
-                {children}
-              </div>
-            </Dialog.Content>
-          </div>
-        </Dialog.Overlay>
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 min-h-0 flex flex-col gap-4">
+              {children}
+            </div>
+          </Dialog.Content>
+        </div>
       </Dialog.Portal>
     </Dialog.Root>
   );

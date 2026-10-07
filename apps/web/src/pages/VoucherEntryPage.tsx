@@ -571,6 +571,8 @@ function MoneyEntry({
 
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
   const defaultSalesman = useSettings((state) => state.defaultSalesman);
+  const paymentVoucherPrefix = useSettings((state) => state.paymentVoucherPrefix);
+  const receiptVoucherPrefix = useSettings((state) => state.receiptVoucherPrefix);
 
   const [through, setThrough] = useState<'cash' | 'bank'>('bank');
   const [salesman, setSalesman] = useState<string>(defaultSalesman || 'Primary');
@@ -594,8 +596,11 @@ function MoneyEntry({
   });
 
   const count = vouchersCount.data?.lines?.length ?? 0;
-  const prefix = direction === 'payment' ? 'PAY' : 'REC';
-  const transactionNo = `${prefix}-${String(1001 + count).padStart(4, '0')}`;
+  const rawPrefix = direction === 'payment'
+    ? (paymentVoucherPrefix || 'PAY-')
+    : (receiptVoucherPrefix || 'REC-');
+  const prefix = rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`;
+  const transactionNo = `${prefix}${String(1001 + count).padStart(4, '0')}`;
 
   const paymentModeOptions = useMemo((): readonly SelectOption[] => {
     const known = PAYMENT_MODES.map((mode) => ({

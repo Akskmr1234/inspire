@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -14,23 +14,47 @@ import {
   type MenuAdminEntry,
 } from '@/lib/menu';
 import type { ApiError } from '@/lib/api';
+import { IconChevron, IconSearch } from '@/components/icons';
+
+function IconGrip({ className }: { readonly className?: string }): React.JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="3" r="1.5" />
+      <circle cx="11" cy="3" r="1.5" />
+      <circle cx="5" cy="8" r="1.5" />
+      <circle cx="11" cy="8" r="1.5" />
+      <circle cx="5" cy="13" r="1.5" />
+      <circle cx="11" cy="13" r="1.5" />
+    </svg>
+  );
+}
+
+interface DragTargetInfo {
+  readonly id: string;
+  readonly position: 'before' | 'after' | 'inside';
+}
 
 /**
  * Editing the navigation menu.
  *
- * The specification's claim is that an administrator can show, hide, reorder, regroup,
- * and extend the menu with no source-code change. This is the screen where that
- * happens.
- *
- * Every edit invalidates the sidebar's own query as well as this one, so a change is
- * visible in the navigation immediately rather than after a reload. That is not
- * polish: an administrator hiding an entry needs to see it go, or they will hide it
- * twice and then wonder which of the two took effect.
+ * Allows administrators to show, hide, reorder (via intuitive drag-and-drop or arrows),
+ * regroup, and extend the navigation menu seamlessly.
  */
 export function MenuAdministrationPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  // Drag-and-drop state
+  const [draggedItem, setDraggedItem] = useState<{
+    id: string;
+    parentId: string | null;
+    sortOrder: number;
+    label: string;
+  } | null>(null);
+  const [dragTarget, setDragTarget] = useState<DragTargetInfo | null>(null);
 
   const query = useQuery<MenuAdmin, ApiError>({
     queryKey: ['admin-menu'],
@@ -43,20 +67,52 @@ export function MenuAdministrationPage(): React.JSX.Element {
     await queryClient.invalidateQueries({ queryKey: ['menu'] });
   };
 
-  // One mutation per action rather than one per row, so the list can be rebuilt
-  // without tearing down and recreating a mutation for every entry on every render.
   const mutation = useMutation<void, ApiError, () => Promise<void>>({
     mutationFn: (action) => action(),
     onSuccess: refresh,
-    // The server's rules are the real ones - a system entry refusing deletion, a
-    // heading that still holds screens - so its message is what gets shown rather
-    // than a guess made here.
     onError: (failure) => setError(failure.detail || failure.code),
   });
 
   const run = (action: () => Promise<void>): void => {
     setError(null);
     mutation.mutate(action);
+  };
+
+  const toggleCollapse = (id: string): void => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleDropOnItem = (targetEntry: MenuAdminEntry, targetParentId: string | null): void => {
+    if (!draggedItem || !dragTarget || draggedItem.id === targetEntry.id) {
+      setDraggedItem(null);
+      setDragTarget(null);
+      return;
+    }
+
+    const { position } = dragTarget;
+    const sourceId = draggedItem.id;
+
+    run(async () => {
+      if (position === 'inside') {
+        const newOrder = (targetEntry.children.length + 1) * 10;
+        await moveMenuItem(sourceId, targetEntry.id, newOrder);
+      } else if (position === 'before') {
+        await moveMenuItem(sourceId, targetParentId, Math.max(1, targetEntry.sortOrder - 1));
+      } else {
+        await moveMenuItem(sourceId, targetParentId, targetEntry.sortOrder + 1);
+      }
+    });
+
+    setDraggedItem(null);
+    setDragTarget(null);
   };
 
   const controls = (
@@ -85,20 +141,47 @@ export function MenuAdministrationPage(): React.JSX.Element {
             </div>
           )}
 
-          <div className="table-wrap">
+          {/* User Guide & Search Bar */}
+          <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs text-ink-muted">
+              <span className="flex size-6 items-center justify-center rounded-md bg-accent/15 text-accent font-bold">
+                ⠿
+              </span>
+              <span>
+                <strong>Drag & Drop to reorder:</strong> Grab any menu row using the{' '}
+                <strong className="text-ink">⠿ grip icon</strong> to move it up, down, or into a heading.
+              </span>
+            </div>
+
+            <div className="relative min-w-56">
+              <IconSearch className="pointer-events-none absolute start-2.5 top-2.5 size-3.5 text-ink-muted" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search menu items…"
+                className="field-input-sm ps-8 w-full"
+              />
+            </div>
+          </div>
+
+          <div className="table-wrap rounded-xl border border-line shadow-sm overflow-hidden">
             <table className="table">
               <thead className="bg-surface-3">
                 <tr>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="w-10 px-2 py-2.5 text-center font-semibold text-xs text-ink-muted">
+                    #
+                  </th>
+                  <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
                     {t('menuAdmin.entry')}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
                     {t('menuAdmin.route')}
                   </th>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
                     {t('menuAdmin.permission')}
                   </th>
-                  <th className="px-3 py-2 text-end font-semibold">
+                  <th className="px-3 py-2.5 text-end font-semibold text-xs text-ink">
                     {t('menuAdmin.actions')}
                   </th>
                 </tr>
@@ -114,6 +197,14 @@ export function MenuAdministrationPage(): React.JSX.Element {
                     parentId={null}
                     depth={0}
                     busy={mutation.isPending}
+                    search={search.trim().toLowerCase()}
+                    collapsedIds={collapsedIds}
+                    toggleCollapse={toggleCollapse}
+                    draggedItem={draggedItem}
+                    dragTarget={dragTarget}
+                    setDraggedItem={setDraggedItem}
+                    setDragTarget={setDragTarget}
+                    onDropOnItem={handleDropOnItem}
                     run={run}
                   />
                 ))}
@@ -127,11 +218,7 @@ export function MenuAdministrationPage(): React.JSX.Element {
 }
 
 /**
- * One entry's row, and the rows of everything beneath it.
- *
- * Rendered as sibling rows rather than a nested table so every entry lines up in the
- * same columns however deep it sits - a nested table would indent the columns too,
- * and the route of a third-level entry would no longer be under the route heading.
+ * One entry's row, and the rows of everything beneath it with drag-and-drop capabilities.
  */
 function EntryRows({
   entry,
@@ -140,6 +227,14 @@ function EntryRows({
   parentId,
   depth,
   busy,
+  search,
+  collapsedIds,
+  toggleCollapse,
+  draggedItem,
+  dragTarget,
+  setDraggedItem,
+  setDragTarget,
+  onDropOnItem,
   run,
 }: {
   readonly entry: MenuAdminEntry;
@@ -148,53 +243,197 @@ function EntryRows({
   readonly parentId: string | null;
   readonly depth: number;
   readonly busy: boolean;
+  readonly search: string;
+  readonly collapsedIds: ReadonlySet<string>;
+  readonly toggleCollapse: (id: string) => void;
+  readonly draggedItem: { id: string; parentId: string | null; sortOrder: number; label: string } | null;
+  readonly dragTarget: DragTargetInfo | null;
+  readonly setDraggedItem: (item: { id: string; parentId: string | null; sortOrder: number; label: string } | null) => void;
+  readonly setDragTarget: (target: DragTargetInfo | null) => void;
+  readonly onDropOnItem: (entry: MenuAdminEntry, parentId: string | null) => void;
   readonly run: (action: () => Promise<void>) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  // Reordering swaps sort orders with the neighbour rather than nudging one of them,
-  // which keeps the numbers stable however many times a level is rearranged.
+  const isHeading = entry.route === null;
+  const hasChildren = entry.children.length > 0;
+  const isCollapsed = collapsedIds.has(entry.id);
+  const isDraggingThis = draggedItem?.id === entry.id;
+  const isTargetOfDrop = dragTarget?.id === entry.id;
+
+  const matchesSearch = useMemo(() => {
+    if (!search) return true;
+    const matchSelf =
+      entry.label.toLowerCase().includes(search) ||
+      entry.code.toLowerCase().includes(search) ||
+      (entry.route && entry.route.toLowerCase().includes(search));
+    const matchChildren = entry.children.some(
+      (c) =>
+        c.label.toLowerCase().includes(search) ||
+        c.code.toLowerCase().includes(search) ||
+        (c.route && c.route.toLowerCase().includes(search)),
+    );
+    return matchSelf || matchChildren;
+  }, [entry, search]);
+
+  if (!matchesSearch) {
+    return <Fragment />;
+  }
+
   const swapWith = (other: MenuAdminEntry): void =>
     run(async () => {
       await moveMenuItem(entry.id, parentId, other.sortOrder);
       await moveMenuItem(other.id, parentId, entry.sortOrder);
     });
 
+  const handleDragStart = (e: React.DragEvent): void => {
+    e.dataTransfer.setData('text/plain', entry.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedItem({
+      id: entry.id,
+      parentId,
+      sortOrder: entry.sortOrder,
+      label: entry.label,
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    if (!draggedItem || draggedItem.id === entry.id) {
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = (e.clientY - rect.top) / rect.height;
+
+    let position: 'before' | 'after' | 'inside';
+    if (isHeading) {
+      if (relY < 0.25) position = 'before';
+      else if (relY > 0.75) position = 'after';
+      else position = 'inside';
+    } else {
+      position = relY < 0.5 ? 'before' : 'after';
+    }
+
+    if (!dragTarget || dragTarget.id !== entry.id || dragTarget.position !== position) {
+      setDragTarget({ id: entry.id, position });
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent): void => {
+    e.preventDefault();
+    if (dragTarget?.id === entry.id) {
+      setDragTarget(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDropOnItem(entry, parentId);
+  };
+
+  const dropClass = isTargetOfDrop
+    ? dragTarget?.position === 'before'
+      ? 'border-t-2 border-t-accent bg-accent/5'
+      : dragTarget?.position === 'after'
+        ? 'border-b-2 border-b-accent bg-accent/5'
+        : 'ring-2 ring-accent ring-inset bg-accent/10'
+    : '';
+
   return (
     <Fragment>
-      <tr className={clsx('border-t border-line', !entry.isEnabled && 'opacity-50')}>
-        <td
-          className="px-3 py-2"
-          style={{ paddingInlineStart: `${0.75 + depth * 1.25}rem` }}
-        >
-          {/* A row with a gap rather than margins on inline spans: see
-              `ProfitAndLossPage` — in Arabic the margin lands on the wrong side of
-              the neighbour and the two run together. */}
-          <span className="flex flex-wrap items-baseline gap-2">
-            <span className={clsx('font-medium', !entry.isEnabled && 'line-through')}>
-              {entry.label}
-            </span>
-            <span className="text-xs text-ink-subtle">{entry.code}</span>
-            {entry.isSystem && (
-              <span className="rounded bg-surface-3 px-1.5 py-0.5 text-xs text-ink-muted">
-                {t('menuAdmin.system')}
-              </span>
-            )}
-          </span>
+      <tr
+        draggable={!busy}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={clsx(
+          'border-t border-line transition-all duration-150',
+          !entry.isEnabled && 'opacity-50',
+          isDraggingThis && 'opacity-30 bg-surface-2 border-dashed border-accent',
+          dropClass,
+        )}
+      >
+        {/* Drag Handle */}
+        <td className="w-10 px-2 py-2 text-center">
+          <div
+            title="Drag to reorder"
+            className="flex items-center justify-center cursor-grab active:cursor-grabbing text-ink-muted hover:text-accent p-1 rounded transition"
+          >
+            <IconGrip className="size-4" />
+          </div>
         </td>
 
+        {/* Menu Label & Hierarchy */}
+        <td
+          className="px-3 py-2"
+          style={{ paddingInlineStart: `${0.75 + depth * 1.5}rem` }}
+        >
+          <div className="flex items-center gap-2">
+            {hasChildren && (
+              <button
+                type="button"
+                onClick={() => toggleCollapse(entry.id)}
+                className="p-0.5 text-ink-muted hover:text-ink transition"
+                title={isCollapsed ? 'Expand' : 'Collapse'}
+              >
+                <IconChevron
+                  className={clsx(
+                    'size-3.5 transition-transform duration-150',
+                    !isCollapsed && 'rotate-90',
+                  )}
+                />
+              </button>
+            )}
+
+            <span className="flex flex-wrap items-baseline gap-2">
+              <span
+                className={clsx(
+                  'font-medium',
+                  isHeading ? 'text-ink font-semibold' : 'text-ink',
+                  !entry.isEnabled && 'line-through text-ink-muted',
+                )}
+              >
+                {entry.label}
+              </span>
+              <span className="font-mono text-[11px] text-ink-subtle">{entry.code}</span>
+              {entry.isSystem && (
+                <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">
+                  {t('menuAdmin.system')}
+                </span>
+              )}
+            </span>
+          </div>
+        </td>
+
+        {/* Route / Heading Badge */}
         <td className="px-3 py-2 text-ink-muted">
-          {entry.route ?? (
-            <span className="text-ink-subtle italic">{t('menuAdmin.heading')}</span>
+          {entry.route ? (
+            <span className="font-mono text-xs rounded bg-surface-2 px-1.5 py-0.5 text-ink">
+              {entry.route}
+            </span>
+          ) : (
+            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+              {t('menuAdmin.heading')}
+            </span>
           )}
         </td>
 
+        {/* Required Permission */}
         <td className="px-3 py-2 text-xs text-ink-muted">
-          {entry.requiredPermission ?? (
+          {entry.requiredPermission ? (
+            <span className="font-mono text-[11px]">{entry.requiredPermission}</span>
+          ) : (
             <span className="text-ink-subtle italic">{t('menuAdmin.everyone')}</span>
           )}
         </td>
 
+        {/* Actions */}
         <td className="px-3 py-2 text-end">
           <div className="flex flex-wrap justify-end gap-1">
             <ActionButton
@@ -244,8 +483,6 @@ function EntryRows({
               title={
                 entry.isSystem ? t('menuAdmin.systemCannotDelete') : t('menuAdmin.delete')
               }
-              // Seeded entries are refused by the server too; disabling the control
-              // is the courtesy of not offering an action that will be refused.
               disabled={busy || entry.isSystem}
               danger
               onClick={() =>
@@ -258,18 +495,27 @@ function EntryRows({
         </td>
       </tr>
 
-      {entry.children.map((child, childIndex) => (
-        <EntryRows
-          key={child.id}
-          entry={child}
-          siblings={entry.children}
-          index={childIndex}
-          parentId={entry.id}
-          depth={depth + 1}
-          busy={busy}
-          run={run}
-        />
-      ))}
+      {!isCollapsed &&
+        entry.children.map((child, childIndex) => (
+          <EntryRows
+            key={child.id}
+            entry={child}
+            siblings={entry.children}
+            index={childIndex}
+            parentId={entry.id}
+            depth={depth + 1}
+            busy={busy}
+            search={search}
+            collapsedIds={collapsedIds}
+            toggleCollapse={toggleCollapse}
+            draggedItem={draggedItem}
+            dragTarget={dragTarget}
+            setDraggedItem={setDraggedItem}
+            setDragTarget={setDragTarget}
+            onDropOnItem={onDropOnItem}
+            run={run}
+          />
+        ))}
     </Fragment>
   );
 }
@@ -362,7 +608,6 @@ function AddEntryForm({
         />
       </label>
 
-      {/* Small, because the three fields beside it are. */}
       <button type="submit" disabled={busy} className="btn-primary btn-sm">
         {t('menuAdmin.add')}
       </button>

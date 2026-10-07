@@ -740,9 +740,10 @@ function OrderEntryDialog({
   return (
     <Modal
       title={kind === 'purchase' ? t('orders.newPurchase') : t('orders.newSales')}
+      size="full"
       onClose={onClose}
     >
-      <div className="form-grid-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         <Field label={t('orders.number')}>
           <input value={t('orders.numberOnSave')} disabled className="field-input" />
         </Field>
@@ -981,7 +982,7 @@ function OrderEntryDialog({
         />
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton primary disabled={busy} onClick={() => void save()}>
           {busy ? t('common.saving') : t('orders.saveDraft')}
@@ -1209,7 +1210,7 @@ function OrderDialog({
         </>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
       </div>
     </Modal>

@@ -375,10 +375,10 @@ public sealed class StockController : ApiControllerBase
     [RequiresPermission("inventory", "stock-adjustment", "view")]
     [ProducesResponseType(typeof(IReadOnlyList<SerialNumberView>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetProductSerialsAsync(
-        [FromQuery] Guid productId,
-        [FromQuery] Guid? warehouseId,
-        [FromQuery] bool includeGone,
-        CancellationToken cancellationToken)
+        [FromQuery] Guid? productId = null,
+        [FromQuery] Guid? warehouseId = null,
+        [FromQuery] bool includeGone = false,
+        CancellationToken cancellationToken = default)
     {
         Result<IReadOnlyList<SerialNumberView>> result = await _sender.Send(
             new ListProductSerialsQuery(productId, warehouseId, includeGone),

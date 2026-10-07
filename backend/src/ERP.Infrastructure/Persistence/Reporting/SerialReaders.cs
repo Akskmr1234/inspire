@@ -23,14 +23,19 @@ public sealed class SerialReader : ISerialReader
     /// <inheritdoc />
     public async Task<IReadOnlyList<SerialNumberView>> ForProductAsync(
         FirmId firmId,
-        ProductId productId,
+        ProductId? productId,
         WarehouseId? warehouseId,
         bool includeGone,
         DateOnly asOn,
         CancellationToken cancellationToken = default)
     {
         IQueryable<SerialNumber> units = _context.SerialNumbers
-            .Where(serial => serial.FirmId == firmId && serial.ProductId == productId);
+            .Where(serial => serial.FirmId == firmId);
+
+        if (productId is { } pid)
+        {
+            units = units.Where(serial => serial.ProductId == pid);
+        }
 
         if (warehouseId is { } warehouse)
         {

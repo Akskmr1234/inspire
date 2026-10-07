@@ -51,7 +51,7 @@ public sealed record SerialNumberView(
 /// offering one.
 /// </remarks>
 public sealed record ListProductSerialsQuery(
-    Guid ProductId,
+    Guid? ProductId = null,
     Guid? WarehouseId = null,
     bool IncludeGone = false) : IQuery<IReadOnlyList<SerialNumberView>>;
 
@@ -68,9 +68,9 @@ public sealed record FindSerialQuery(string Number) : IQuery<IReadOnlyList<Seria
 /// <summary>Reads serialised units.</summary>
 public interface ISerialReader
 {
-    /// <summary>Reads the units of one product.</summary>
+    /// <summary>Reads the units of one product, or all products if null.</summary>
     /// <param name="firmId">The firm.</param>
-    /// <param name="productId">The product.</param>
+    /// <param name="productId">The product, or null for all.</param>
     /// <param name="warehouseId">One warehouse, or null for all.</param>
     /// <param name="includeGone">Whether to include units that have left.</param>
     /// <param name="asOn">The date warranty cover is judged on.</param>
@@ -78,7 +78,7 @@ public interface ISerialReader
     /// <returns>The units, by number.</returns>
     Task<IReadOnlyList<SerialNumberView>> ForProductAsync(
         FirmId firmId,
-        ProductId productId,
+        ProductId? productId,
         WarehouseId? warehouseId,
         bool includeGone,
         DateOnly asOn,
@@ -131,8 +131,8 @@ public sealed class SerialQueryHandler
 
         return Result.Success(await _reader.ForProductAsync(
             firmId,
-            ProductId.From(request.ProductId),
-            request.WarehouseId is { } warehouse ? WarehouseId.From(warehouse) : null,
+            request.ProductId is { } pid && pid != Guid.Empty ? ProductId.From(pid) : null,
+            request.WarehouseId is { } warehouse && warehouse != Guid.Empty ? WarehouseId.From(warehouse) : null,
             request.IncludeGone,
             Today,
             cancellationToken));

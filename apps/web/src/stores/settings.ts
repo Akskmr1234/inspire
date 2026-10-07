@@ -128,6 +128,30 @@ export interface AppSettings {
   readonly defaultCreditAccountId: string;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
+  /** Prefix for sales invoice numbers (e.g. 'INV-'). */
+  readonly invoicePrefix: string;
+  /** Suffix for sales invoice numbers (e.g. '/2026'). */
+  readonly invoiceSuffix: string;
+  /** Prefix for sales returns (e.g. 'RET-'). */
+  readonly salesReturnPrefix: string;
+  /** Suffix for sales returns (e.g. '/2026'). */
+  readonly salesReturnSuffix: string;
+  /** Prefix for purchase invoices (e.g. 'PI-'). */
+  readonly purchaseInvoicePrefix: string;
+  /** Suffix for purchase invoices (e.g. '/2026'). */
+  readonly purchaseInvoiceSuffix: string;
+  /** Prefix for purchase orders (e.g. 'PO-'). */
+  readonly purchaseOrderPrefix: string;
+  /** Suffix for purchase orders. */
+  readonly purchaseOrderSuffix: string;
+  /** Prefix for sales orders (e.g. 'SO-'). */
+  readonly salesOrderPrefix: string;
+  /** Suffix for sales orders. */
+  readonly salesOrderSuffix: string;
+  /** Prefix for payment vouchers (e.g. 'PAY-'). */
+  readonly paymentVoucherPrefix: string;
+  /** Prefix for receipt vouchers (e.g. 'REC-'). */
+  readonly receiptVoucherPrefix: string;
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -180,6 +204,18 @@ const DEFAULTS: AppSettings = {
   defaultDebitAccountId: '',
   defaultCreditAccountId: '',
   defaultAdditionalLedgers: [],
+  invoicePrefix: 'INV-',
+  invoiceSuffix: '',
+  salesReturnPrefix: 'RET-',
+  salesReturnSuffix: '',
+  purchaseInvoicePrefix: 'PI-',
+  purchaseInvoiceSuffix: '',
+  purchaseOrderPrefix: 'PO-',
+  purchaseOrderSuffix: '',
+  salesOrderPrefix: 'SO-',
+  salesOrderSuffix: '',
+  paymentVoucherPrefix: 'PAY-',
+  receiptVoucherPrefix: 'REC-',
 };
 
 const STORAGE_KEY = 'erp.settings';

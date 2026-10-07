@@ -316,6 +316,7 @@ export function StockOperationsPage({
               ? t('stock.new')
               : t('stock.newOf', { type: t(typeKey(lockedType)).toLowerCase() })
           }
+          size="full"
           onClose={() => setEntering(false)}
         >
           {error && <Alert tone="error">{error}</Alert>}
@@ -698,7 +699,7 @@ function StockEntry({
         )}
       </div>
 
-      <div className="table-wrap max-h-[70vh] overflow-y-auto">
+      <div className="table-wrap overflow-x-auto max-h-[60vh] overflow-y-auto">
         <table className="table">
           <thead className="bg-surface-3">
             <tr>
@@ -835,7 +836,7 @@ function StockEntry({
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-line/60">
         <button
           type="button"
           onClick={() => setLines((current) => [...current, emptyLine()])}

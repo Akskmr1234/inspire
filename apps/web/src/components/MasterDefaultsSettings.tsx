@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
-import { IconClose, IconPlus } from '@/components/icons';
+import { IconCheck, IconClose, IconMoon, IconPlus, IconSparkles, IconSun } from '@/components/icons';
+import { useSession } from '@/stores/session';
+import { populateSampleTransactions } from '@/lib/sampleData';
 import { currentBranchId, type ApiError } from '@/lib/api';
 import {
   listMaster,
@@ -46,8 +49,28 @@ export function MasterDefaultsSettings(): React.JSX.Element {
   const settings = useSettings();
   const branchId = currentBranchId();
   const { places } = useMoney();
+  const { theme, setTheme } = useSession();
+  const queryClient = useQueryClient();
 
   const [selectedTxType, setSelectedTxType] = useState<string>('Sales');
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
+
+  const runSeeder = async (): Promise<void> => {
+    try {
+      setSeeding(true);
+      setSeedResult(null);
+      const res = await populateSampleTransactions();
+      await queryClient.invalidateQueries();
+      setSeedResult(
+        `Generated sample data: ${res.salesInvoicesCreated} Sales Invoices, ${res.purchaseInvoicesCreated} Purchase Invoices, ${res.ordersCreated} Orders, ${res.vouchersCreated} Vouchers.`,
+      );
+    } catch {
+      setSeedResult('Failed to populate some sample transactions.');
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const currentDefaults = (settings.defaultAdditionalLedgers ?? []).filter(
     (entry) => entry.transactionType === selectedTxType,
@@ -311,6 +334,260 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         </div>
       </div>
 
+      {/* Theme & Appearance */}
+      <div className="space-y-3 border-t border-line pt-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+            {t('common.theme')} & Appearance
+          </h4>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Choose light or dark interface theme across the application.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            className={clsx(
+              'flex items-center gap-2.5 rounded-lg border px-4 py-2 text-sm font-medium transition',
+              theme === 'light'
+                ? 'border-accent bg-accent/10 text-accent font-semibold ring-1 ring-accent'
+                : 'border-line bg-surface hover:bg-surface-2 text-ink',
+            )}
+          >
+            <IconSun className="size-4.5 text-amber-500" />
+            <span>Light Theme</span>
+            {theme === 'light' && (
+              <span className="ms-1 size-1.5 rounded-full bg-accent" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            className={clsx(
+              'flex items-center gap-2.5 rounded-lg border px-4 py-2 text-sm font-medium transition',
+              theme === 'dark'
+                ? 'border-accent bg-accent/10 text-accent font-semibold ring-1 ring-accent'
+                : 'border-line bg-surface hover:bg-surface-2 text-ink',
+            )}
+          >
+            <IconMoon className="size-4.5 text-indigo-400" />
+            <span>Dark Theme</span>
+            {theme === 'dark' && (
+              <span className="ms-1 size-1.5 rounded-full bg-accent" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Transaction Numbering & Series */}
+      <div className="space-y-4 border-t border-line pt-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+            Transaction Numbering & Series
+          </h4>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Customise prefix and suffix formats for invoices, returns, orders, and payment vouchers.
+          </p>
+        </div>
+
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Sales Invoice */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Sales Invoice</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.invoicePrefix || 'INV-'}1001${settings.invoiceSuffix || ''}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Prefix</label>
+                <input
+                  type="text"
+                  value={settings.invoicePrefix}
+                  onChange={(e) => settings.update({ invoicePrefix: e.target.value })}
+                  placeholder="INV-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Suffix</label>
+                <input
+                  type="text"
+                  value={settings.invoiceSuffix}
+                  onChange={(e) => settings.update({ invoiceSuffix: e.target.value })}
+                  placeholder="/2026"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Return */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Sales Return</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.salesReturnPrefix || 'RET-'}1001${settings.salesReturnSuffix || ''}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Prefix</label>
+                <input
+                  type="text"
+                  value={settings.salesReturnPrefix}
+                  onChange={(e) => settings.update({ salesReturnPrefix: e.target.value })}
+                  placeholder="RET-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Suffix</label>
+                <input
+                  type="text"
+                  value={settings.salesReturnSuffix}
+                  onChange={(e) => settings.update({ salesReturnSuffix: e.target.value })}
+                  placeholder="/2026"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Purchase Invoice */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Purchase Invoice</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.purchaseInvoicePrefix || 'PI-'}1001${settings.purchaseInvoiceSuffix || ''}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Prefix</label>
+                <input
+                  type="text"
+                  value={settings.purchaseInvoicePrefix}
+                  onChange={(e) => settings.update({ purchaseInvoicePrefix: e.target.value })}
+                  placeholder="PI-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Suffix</label>
+                <input
+                  type="text"
+                  value={settings.purchaseInvoiceSuffix}
+                  onChange={(e) => settings.update({ purchaseInvoiceSuffix: e.target.value })}
+                  placeholder="/2026"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Order */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Sales Order</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.salesOrderPrefix || 'SO-'}1001${settings.salesOrderSuffix || ''}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Prefix</label>
+                <input
+                  type="text"
+                  value={settings.salesOrderPrefix}
+                  onChange={(e) => settings.update({ salesOrderPrefix: e.target.value })}
+                  placeholder="SO-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Suffix</label>
+                <input
+                  type="text"
+                  value={settings.salesOrderSuffix}
+                  onChange={(e) => settings.update({ salesOrderSuffix: e.target.value })}
+                  placeholder=""
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Purchase Order */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Purchase Order</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.purchaseOrderPrefix || 'PO-'}1001${settings.purchaseOrderSuffix || ''}`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Prefix</label>
+                <input
+                  type="text"
+                  value={settings.purchaseOrderPrefix}
+                  onChange={(e) => settings.update({ purchaseOrderPrefix: e.target.value })}
+                  placeholder="PO-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Suffix</label>
+                <input
+                  type="text"
+                  value={settings.purchaseOrderSuffix}
+                  onChange={(e) => settings.update({ purchaseOrderSuffix: e.target.value })}
+                  placeholder=""
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Vouchers (Payment & Receipt) */}
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink">Payment & Receipt</span>
+              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                {`${settings.paymentVoucherPrefix || 'PAY-'}1001`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label text-[11px]">Pay Prefix</label>
+                <input
+                  type="text"
+                  value={settings.paymentVoucherPrefix}
+                  onChange={(e) => settings.update({ paymentVoucherPrefix: e.target.value })}
+                  placeholder="PAY-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="field-label text-[11px]">Rec Prefix</label>
+                <input
+                  type="text"
+                  value={settings.receiptVoucherPrefix}
+                  onChange={(e) => settings.update({ receiptVoucherPrefix: e.target.value })}
+                  placeholder="REC-"
+                  className="field-input-sm w-full font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Decimal Settings */}
       <div className="space-y-4 border-t border-line pt-4">
         <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
@@ -551,6 +828,38 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* Sample Demo Data & Transactions Generator */}
+      <div className="space-y-3 border-t border-line pt-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+              <IconSparkles className="size-4 text-accent" />
+              <span>Sample Demo Transactions & Masters</span>
+            </h4>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Populate realistic demo transactions (Sales Invoices, Returns, Purchases, Orders, and Vouchers) and demo master records.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={seeding}
+            onClick={runSeeder}
+            className="btn-primary btn-sm flex items-center gap-1.5 shrink-0"
+          >
+            <IconSparkles className={clsx('size-3.5', seeding && 'animate-spin')} />
+            <span>{seeding ? 'Generating Sample Data…' : 'Generate Sample Transactions'}</span>
+          </button>
+        </div>
+
+        {seedResult && (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+            <IconCheck className="size-4 shrink-0" />
+            <span>{seedResult}</span>
           </div>
         )}
       </div>

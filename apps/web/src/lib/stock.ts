@@ -454,17 +454,20 @@ export function fetchBatchStock(
  * how long it is covered for. A unit that has gone out is not offered again.
  */
 export function fetchProductSerials(
-  productId: string,
-  warehouseId: string,
+  productId?: string,
+  warehouseId?: string,
   includeGone = false,
 ): Promise<readonly SerialNumberView[]> {
   const query = new URLSearchParams({
-    productId,
     includeGone: String(includeGone),
   });
 
-  if (warehouseId) {
-    query.set('warehouseId', warehouseId);
+  if (productId && productId.trim()) {
+    query.set('productId', productId.trim());
+  }
+
+  if (warehouseId && warehouseId.trim()) {
+    query.set('warehouseId', warehouseId.trim());
   }
 
   return request<readonly SerialNumberView[]>(`${STOCK}/serials?${query.toString()}`);
