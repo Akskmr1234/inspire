@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { request, type ApiError } from '@/lib/api';
-import { BalanceBadge, DateRangeControls, ReportFrame } from '@/components/ReportFrame';
-import { money } from '@/lib/money';
+import { DateRangeControls, ReportFrame } from '@/components/ReportFrame';
+import {
+  HierarchicalAccountsTable,
+  type ReportColumn,
+} from '@/components/HierarchicalAccountsTable';
+import { buildTrialBalanceHierarchy } from '@/lib/hierarchicalReports';
+import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 
 interface TrialBalanceRow {
   readonly ledgerId: string;
@@ -11,6 +17,7 @@ interface TrialBalanceRow {
   readonly ledgerName: string;
   readonly groupCode: string;
   readonly groupName: string;
+  readonly nature?: number | undefined;
   readonly openingDebit: number;
   readonly openingCredit: number;
   readonly periodDebit: number;
@@ -33,8 +40,6 @@ interface TrialBalance {
   readonly isBalanced: boolean;
 }
 
-/** Formats a figure for a financial column, blanking zero so the eye follows the numbers. */
-
 function startOfYear(): string {
   return `${new Date().getFullYear()}-01-01`;
 }
@@ -43,9 +48,14 @@ function endOfYear(): string {
   return `${new Date().getFullYear()}-12-31`;
 }
 
-/** The trial balance screen. */
+/**
+ * The trial balance screen formatted as a unified hierarchical report:
+ * Account Head → Group → Ledger/Individual Account → Transactions/Details.
+ * Supports expand/collapse with subtotals at all levels and grand total.
+ */
 export function TrialBalancePage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(endOfYear());
   const [range, setRange] = useState({ from: startOfYear(), to: endOfYear() });
@@ -57,6 +67,33 @@ export function TrialBalancePage(): React.JSX.Element {
         `/accounting/reports/trial-balance?from=${range.from}&to=${range.to}`,
       ),
   });
+
+  const ledgersQuery = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(false),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgersMap = useMemo(() => {
+    const map = new Map<string, LedgerSummary>();
+    (ledgersQuery.data ?? []).forEach((l) => {
+      map.set(l.ledgerId, l);
+      map.set(l.code, l);
+    });
+    return map;
+  }, [ledgersQuery.data]);
+
+  const columns = useMemo<readonly ReportColumn[]>(
+    () => [
+      { key: 'openingDebit', header: t('reports.openingDebit'), align: 'end', blankZero: true },
+      { key: 'openingCredit', header: t('reports.openingCredit'), align: 'end', blankZero: true },
+      { key: 'periodDebit', header: t('reports.periodDebit'), align: 'end', blankZero: true },
+      { key: 'periodCredit', header: t('reports.periodCredit'), align: 'end', blankZero: true },
+      { key: 'closingDebit', header: t('reports.closingDebit'), align: 'end', blankZero: true },
+      { key: 'closingCredit', header: t('reports.closingCredit'), align: 'end', blankZero: true },
+    ],
+    [t],
+  );
 
   return (
     <ReportFrame
@@ -74,76 +111,32 @@ export function TrialBalancePage(): React.JSX.Element {
         />
       }
     >
-      {(data) => (
-        <div className="space-y-4">
-          {/*
-            The balance state is shown prominently and coloured, because a trial
-            balance that does not balance means the books are broken. Printing the
-            figures without saying so would leave a reader to compare two totals
-            and hope they notice.
-          */}
-          <BalanceBadge isBalanced={data.isBalanced} currency={data.currency} />
+      {(data) => {
+        const heads = buildTrialBalanceHierarchy(data.rows, ledgersMap);
+        const grandTotals = {
+          openingDebit: data.totalOpeningDebit,
+          openingCredit: data.totalOpeningCredit,
+          periodDebit: data.totalPeriodDebit,
+          periodCredit: data.totalPeriodCredit,
+          closingDebit: data.totalClosingDebit,
+          closingCredit: data.totalClosingCredit,
+        };
 
-          <div className="table-wrap table-wrap-tall">
-            {/*
-              A floor width, so the eight money columns keep their figures on one
-              line and the table scrolls inside its own container rather than
-              crushing every column to three characters on a narrow screen.
-            */}
-            <table className="table min-w-[64rem]">
-              <thead>
-                <tr>
-                  <th className="text-start">{t('reports.ledger')}</th>
-                  <th className="text-start">{t('reports.group')}</th>
-                  <th className="text-end">{t('reports.openingDebit')}</th>
-                  <th className="text-end">{t('reports.openingCredit')}</th>
-                  <th className="text-end">{t('reports.periodDebit')}</th>
-                  <th className="text-end">{t('reports.periodCredit')}</th>
-                  <th className="text-end">{t('reports.closingDebit')}</th>
-                  <th className="text-end">{t('reports.closingCredit')}</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {data.rows.map((row) => (
-                  <tr key={row.ledgerId}>
-                    <td>
-                      {/* A row with a gap rather than a margin on an inline span: see
-                          `ProfitAndLossPage` — in Arabic the margin lands on the wrong
-                          side of the name and the code runs into it. */}
-                      <span className="flex flex-wrap items-baseline gap-2">
-                        <span className="font-medium">{row.ledgerCode}</span>
-                        <span className="text-ink-muted">{row.ledgerName}</span>
-                      </span>
-                    </td>
-                    <td className="text-ink-muted">
-                      {row.groupCode} {row.groupName}
-                    </td>
-                    <td className="cell-numeric">{money(row.openingDebit)}</td>
-                    <td className="cell-numeric">{money(row.openingCredit)}</td>
-                    <td className="cell-numeric">{money(row.periodDebit)}</td>
-                    <td className="cell-numeric">{money(row.periodCredit)}</td>
-                    <td className="cell-numeric">{money(row.closingDebit)}</td>
-                    <td className="cell-numeric">{money(row.closingCredit)}</td>
-                  </tr>
-                ))}
-              </tbody>
-
-              <tfoot>
-                <tr>
-                  <td colSpan={2}>{t('reports.totals')}</td>
-                  <td className="cell-numeric">{money(data.totalOpeningDebit)}</td>
-                  <td className="cell-numeric">{money(data.totalOpeningCredit)}</td>
-                  <td className="cell-numeric">{money(data.totalPeriodDebit)}</td>
-                  <td className="cell-numeric">{money(data.totalPeriodCredit)}</td>
-                  <td className="cell-numeric">{money(data.totalClosingDebit)}</td>
-                  <td className="cell-numeric">{money(data.totalClosingCredit)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
+        return (
+          <HierarchicalAccountsTable
+            heads={heads}
+            columns={columns}
+            currency={data.currency}
+            fromDate={range.from}
+            toDate={range.to}
+            isBalanced={data.isBalanced}
+            grandTotals={grandTotals}
+            onVoucherClick={(vNum) => {
+              navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+            }}
+          />
+        );
+      }}
     </ReportFrame>
   );
 }

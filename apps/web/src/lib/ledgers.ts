@@ -104,3 +104,70 @@ export function chargeLedgers(
 export function chargeAdds(ledger: LedgerSummary): boolean {
   return !ledger.code.toUpperCase().startsWith('DISC');
 }
+
+/** Standard 5 Primary Account Natures / Heads. */
+export const AccountNature = {
+  asset: 1,
+  liability: 2,
+  equity: 3,
+  income: 4,
+  expense: 5,
+} as const;
+
+export type AccountNatureValue = (typeof AccountNature)[keyof typeof AccountNature];
+
+export interface AccountHeadMeta {
+  readonly key: string;
+  readonly name: string;
+  readonly nameArabic: string;
+  readonly order: number;
+  readonly tone: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+}
+
+export const ACCOUNT_HEAD_META: Record<number, AccountHeadMeta> = {
+  1: { key: 'Asset', name: 'Assets', nameArabic: 'الأصول', order: 1, tone: 'asset' },
+  2: { key: 'Liability', name: 'Liabilities', nameArabic: 'الالتزامات', order: 2, tone: 'liability' },
+  3: { key: 'Equity', name: 'Equity', nameArabic: 'حقوق الملكية', order: 3, tone: 'equity' },
+  4: { key: 'Income', name: 'Income / Revenue', nameArabic: 'الإيرادات', order: 4, tone: 'income' },
+  5: { key: 'Expense', name: 'Expenses', nameArabic: 'المصروفات', order: 5, tone: 'expense' },
+};
+
+export interface LedgerStatementLine {
+  readonly date: string;
+  readonly voucherId: string;
+  readonly voucherNumber: string;
+  readonly voucherType: number | string;
+  readonly referenceNumber: string | null;
+  readonly narration: string | null;
+  readonly contraLedgerNames: readonly string[];
+  readonly debit: number;
+  readonly credit: number;
+  readonly runningBalance: number;
+}
+
+export interface LedgerStatementResponse {
+  readonly ledgerId: string;
+  readonly ledgerCode: string;
+  readonly ledgerName: string;
+  readonly groupName: string;
+  readonly currency: string;
+  readonly from: string;
+  readonly to: string;
+  readonly openingBalance: number;
+  readonly closingBalance: number;
+  readonly totalDebit: number;
+  readonly totalCredit: number;
+  readonly lines: readonly LedgerStatementLine[];
+}
+
+export function fetchLedgerStatement(
+  ledgerId: string,
+  from: string,
+  to: string,
+): Promise<LedgerStatementResponse> {
+  const params = new URLSearchParams({ from, to });
+  return request<LedgerStatementResponse>(
+    `/accounting/reports/ledger-statement/${ledgerId}?${params.toString()}`,
+  );
+}
+

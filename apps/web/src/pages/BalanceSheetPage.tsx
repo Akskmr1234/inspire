@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import clsx from 'clsx';
 import { request, type ApiError } from '@/lib/api';
 import {
   AsAtControls,
-  BalanceBadge,
   ReportFrame,
   moneyAlways,
 } from '@/components/ReportFrame';
+import {
+  HierarchicalAccountsTable,
+  type ReportColumn,
+} from '@/components/HierarchicalAccountsTable';
+import { buildBalanceSheetHierarchy } from '@/lib/hierarchicalReports';
+import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 
 interface StatementLine {
   readonly groupCode: string;
@@ -34,17 +41,45 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** The balance sheet, presented as two facing columns. */
+/**
+ * The balance sheet formatted as a unified hierarchical report:
+ * Account Head (Assets, Liabilities, Equity) → Group → Ledger/Individual Account → Transactions/Details.
+ * Supports expand/collapse with subtotals at all levels and grand total.
+ */
 export function BalanceSheetPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [asAt, setAsAt] = useState(today());
   const [applied, setApplied] = useState(today());
+  const [viewMode, setViewMode] = useState<'tree' | 'facing'>('tree');
 
   const query = useQuery<BalanceSheet, ApiError>({
     queryKey: ['balance-sheet', applied],
     queryFn: () =>
       request<BalanceSheet>(`/accounting/reports/balance-sheet?asAt=${applied}`),
   });
+
+  const ledgersQuery = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(false),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgersMap = useMemo(() => {
+    const map = new Map<string, LedgerSummary>();
+    (ledgersQuery.data ?? []).forEach((l) => {
+      map.set(l.code, l);
+      map.set(l.ledgerId, l);
+    });
+    return map;
+  }, [ledgersQuery.data]);
+
+  const columns = useMemo<readonly ReportColumn[]>(
+    () => [
+      { key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' },
+    ],
+    [t],
+  );
 
   return (
     <ReportFrame
@@ -56,146 +91,132 @@ export function BalanceSheetPage(): React.JSX.Element {
         data.equity.length === 0
       }
       controls={
-        <AsAtControls
-          asAt={asAt}
-          onChange={setAsAt}
-          onApply={() => setApplied(asAt)}
-          busy={query.isFetching}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <AsAtControls
+            asAt={asAt}
+            onChange={setAsAt}
+            onApply={() => setApplied(asAt)}
+            busy={query.isFetching}
+          />
+
+          <div className="inline-flex rounded-lg bg-surface-2 p-1 border border-line ms-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('tree')}
+              className={clsx(
+                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                viewMode === 'tree'
+                  ? 'bg-surface text-ink shadow-2xs'
+                  : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('reports.hierarchicalView') || 'Hierarchical Tree'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('facing')}
+              className={clsx(
+                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                viewMode === 'facing'
+                  ? 'bg-surface text-ink shadow-2xs'
+                  : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('reports.facingColumns') || 'Facing Columns'}
+            </button>
+          </div>
+        </div>
       }
     >
-      {(data) => (
-        <div className="space-y-4">
-          <BalanceBadge isBalanced={data.isBalanced} currency={data.currency} />
+      {(data) => {
+        const heads = buildBalanceSheetHierarchy(
+          data.assets,
+          data.liabilities,
+          data.equity,
+          data.retainedEarnings,
+          ledgersMap,
+        );
 
-          {/*
-            Two facing columns, the traditional presentation: assets on one side,
-            what funds them on the other. Stacking them would obscure the single
-            fact the statement exists to show, which is that the two sides agree.
-          */}
-          {/*
-            `items-start` so the shorter side keeps its own height. Stretched to
-            match the taller column, a statement with three asset accounts and
-            twelve liabilities drew a card of empty white the depth of the page,
-            which reads as content that failed to load rather than as a side that
-            is simply shorter.
-          */}
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            <Panel
-              heading={t('reports.assets')}
-              lines={data.assets}
-              total={data.totalAssets}
-              totalLabel={t('reports.totalAssets')}
-              currency={data.currency}
-            />
+        const summaryCard = (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5">
+              <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
+                {t('reports.totalAssets')}
+              </span>
+              <div className="font-mono text-xl font-black text-emerald-900 dark:text-emerald-100 mt-1">
+                {moneyAlways(data.totalAssets)} {data.currency}
+              </div>
+            </div>
 
-            <div className="space-y-4">
-              <Panel
-                heading={t('reports.liabilities')}
-                lines={data.liabilities}
-                total={data.totalLiabilities}
-                totalLabel={t('reports.totalLiabilities')}
-                currency={data.currency}
-              />
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-3.5">
+              <span className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
+                {t('reports.totalLiabilities')}
+              </span>
+              <div className="font-mono text-xl font-black text-amber-900 dark:text-amber-100 mt-1">
+                {moneyAlways(data.totalLiabilities)} {data.currency}
+              </div>
+            </div>
 
-              <Panel
-                heading={t('reports.equity')}
-                lines={data.equity}
-                total={data.totalEquity}
-                totalLabel={t('reports.totalEquity')}
-                currency={data.currency}
-                extraRow={{
-                  // Called out on its own line rather than folded into equity,
-                  // because it is the figure that makes the statement balance and
-                  // the one a reader most often wants to reconcile against the
-                  // profit and loss.
-                  label: t('reports.retainedEarnings'),
-                  amount: data.retainedEarnings,
-                }}
-              />
-
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface-3 px-4 py-3.5 text-base font-semibold text-ink">
-                <span>{t('reports.totalLiabilitiesAndEquity')}</span>
-                <span className="font-mono tabular-nums">
-                  {moneyAlways(data.totalLiabilitiesAndEquity)} {data.currency}
-                </span>
+            <div className="rounded-xl border border-purple-200 dark:border-purple-800/40 bg-purple-50/50 dark:bg-purple-950/20 p-3.5 sm:col-span-2 lg:col-span-1">
+              <span className="text-xs font-semibold text-purple-800 dark:text-purple-300 uppercase tracking-wider block">
+                {t('reports.totalLiabilitiesAndEquity')}
+              </span>
+              <div className="font-mono text-xl font-black text-purple-900 dark:text-purple-100 mt-1">
+                {moneyAlways(data.totalLiabilitiesAndEquity)} {data.currency}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+
+        if (viewMode === 'facing') {
+          return (
+            <div className="space-y-4">
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <HierarchicalAccountsTable
+                  heads={heads.filter((h) => h.headId === 1)}
+                  columns={columns}
+                  currency={data.currency}
+                  emptyMessage={t('reports.noAssets') || 'No assets recorded'}
+                  grandTotals={{ amount: data.totalAssets }}
+                  onVoucherClick={(vNum) => {
+                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                  }}
+                />
+
+                <div className="space-y-4">
+                  <HierarchicalAccountsTable
+                    heads={heads.filter((h) => h.headId === 2 || h.headId === 3)}
+                    columns={columns}
+                    currency={data.currency}
+                    emptyMessage={t('reports.noLiabilities') || 'No liabilities or equity recorded'}
+                    grandTotals={{ amount: data.totalLiabilitiesAndEquity }}
+                    isBalanced={data.isBalanced}
+                    onVoucherClick={(vNum) => {
+                      navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {summaryCard}
+            </div>
+          );
+        }
+
+        return (
+          <HierarchicalAccountsTable
+            heads={heads}
+            columns={columns}
+            currency={data.currency}
+            isBalanced={data.isBalanced}
+            grandTotals={{ amount: data.totalAssets }}
+            bottomNote={summaryCard}
+            onVoucherClick={(vNum) => {
+              navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+            }}
+          />
+        );
+      }}
     </ReportFrame>
-  );
-}
-
-function Panel({
-  heading,
-  lines,
-  total,
-  totalLabel,
-  currency,
-  extraRow,
-}: {
-  readonly heading: string;
-  readonly lines: readonly StatementLine[];
-  readonly total: number;
-  readonly totalLabel: string;
-  readonly currency: string;
-  readonly extraRow?: { readonly label: string; readonly amount: number };
-}): React.JSX.Element {
-  return (
-    <div className="card overflow-hidden">
-      <h2 className="border-b border-line bg-surface-3 px-4 py-2.5 text-xs font-semibold tracking-wide text-ink-muted uppercase">
-        {heading}
-      </h2>
-
-      <div className="overflow-x-auto">
-        <table className="table">
-          <tbody>
-            {lines.length === 0 && extraRow === undefined ? (
-              <tr>
-                <td className="px-4 py-3 text-ink-subtle" colSpan={2}>
-                  —
-                </td>
-              </tr>
-            ) : (
-              lines.map((line) => (
-                <tr
-                  key={line.ledgerCode}
-                  className="border-t border-line transition-colors hover:bg-surface-2"
-                >
-                  <td className="px-4 py-2 text-ink">
-                    {/* A row with a gap rather than a margin on an inline span: see
-                        `ProfitAndLossPage` — in Arabic the margin lands on the wrong
-                        side of the name and the code runs into it. */}
-                    <span className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium">{line.ledgerCode}</span>
-                      <span className="text-ink-muted">{line.ledgerName}</span>
-                    </span>
-                  </td>
-                  <td className="cell-numeric">{moneyAlways(line.amount)}</td>
-                </tr>
-              ))
-            )}
-
-            {extraRow && (
-              <tr className="border-t border-line transition-colors hover:bg-surface-2">
-                <td className="px-4 py-2 text-ink-muted italic">{extraRow.label}</td>
-                <td className="cell-numeric">{moneyAlways(extraRow.amount)}</td>
-              </tr>
-            )}
-          </tbody>
-
-          <tfoot className="border-t-2 border-line-strong bg-surface-2 font-semibold">
-            <tr>
-              <td className="px-4 py-2.5 text-ink">{totalLabel}</td>
-              <td className="cell-numeric">
-                {moneyAlways(extraRow ? total + extraRow.amount : total)} {currency}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
   );
 }

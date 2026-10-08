@@ -8,7 +8,8 @@ import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
-import { IconBarcode, IconClose, IconPlus } from '@/components/icons';
+import { IconBarcode, IconClose, IconPrinter } from '@/components/icons';
+import { InvoicePrintView } from '@/components/InvoicePrintView';
 import {
   DocumentTotals,
   productOption,
@@ -61,6 +62,8 @@ interface DraftLine {
   expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
+  /** Whether the line requires serial/IMEI tracking (defaults from product master or toggled). */
+  requiresSerial?: boolean;
 }
 
 const emptyLine: DraftLine = {
@@ -109,7 +112,7 @@ export function SalesPage({
   const [page, setPage] = useState(1);
 
   const [entering, setEntering] = useState(false);
-  const [viewing, setViewing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const settings = useSettings();
@@ -213,13 +216,24 @@ export function SalesPage({
       header: '',
       value: () => '',
       render: (row) => (
-        <button
-          type="button"
-          onClick={() => setViewing(row.salesInvoiceId)}
-          className="row-action row-action-neutral"
-        >
-          {t('sales.open')}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setViewing({ id: row.salesInvoiceId, print: false })}
+            className="row-action row-action-neutral"
+          >
+            {t('sales.open')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewing({ id: row.salesInvoiceId, print: true })}
+            className="row-action row-action-neutral flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:text-primary-700 font-medium"
+            title={t('sales.print') || 'Print Invoice'}
+          >
+            <IconPrinter className="size-3.5" />
+            <span>{t('sales.print') || 'Print'}</span>
+          </button>
+        </div>
       ),
     },
   ];
@@ -321,7 +335,8 @@ export function SalesPage({
 
       {viewing && (
         <DocumentDialog
-          id={viewing}
+          id={viewing.id}
+          initialPrint={viewing.print ?? false}
           busy={mutation.isPending}
           onClose={() => setViewing(null)}
           onPost={(id) =>
@@ -367,18 +382,6 @@ function AdditionalLedgersSection({
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  const addRow = (): void => {
-    onChange([
-      ...rows,
-      {
-        id: Math.random().toString(36).slice(2, 9),
-        ledgerId: '',
-        isAddition: true,
-        amount: '0.00',
-      },
-    ]);
-  };
-
   const removeRow = (id: string): void => {
     onChange(rows.filter((r) => r.id !== id));
   };
@@ -396,14 +399,6 @@ function AdditionalLedgersSection({
         <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
           {t('sales.additionalLedgers')}
         </span>
-        <button
-          type="button"
-          onClick={addRow}
-          className="btn-secondary btn-xs flex items-center gap-1 text-xs"
-        >
-          <IconPlus className="size-3" />
-          {t('sales.addLedger')}
-        </button>
       </div>
 
       {rows.length === 0 ? (
@@ -513,10 +508,10 @@ function EntryDialog({
   const [rateType, setRateType] = useState<'retail' | 'wholesale' | 'mrp'>(
     settings.defaultSalesRateType || 'retail',
   );
-  const [reverseCalc, setReverseCalc] = useState<boolean>(settings.enableReverseCalculation ?? false);
-  const [autoBatch, setAutoBatch] = useState<boolean>(settings.enableAutoBatch ?? true);
-  const [enableFreeQty, setEnableFreeQty] = useState<boolean>(settings.enableFreeQuantity ?? true);
-  const [enableDiscount, setEnableDiscount] = useState<boolean>(settings.enableItemDiscount ?? true);
+  const reverseCalc = settings.enableReverseCalculation ?? false;
+  const autoBatch = settings.enableAutoBatch ?? true;
+  const enableFreeQty = settings.enableFreeQuantity ?? true;
+  const enableDiscount = settings.enableItemDiscount ?? true;
 
   const [barcodeInput, setBarcodeInput] = useState('');
   const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
@@ -886,7 +881,7 @@ function EntryDialog({
     <Modal
       title={isReturn(kind) ? t('sales.newReturn') : t('sales.newInvoice')}
       onClose={onClose}
-      size="full"
+      size="fullscreen"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         {/* Document Numbers */}
@@ -1049,70 +1044,34 @@ function EntryDialog({
         </div>
       </div>
 
-      {/* Feature Quick Toggles Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-0.5 text-xs text-ink-muted">
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
-            <input
-              type="checkbox"
-              checked={reverseCalc}
-              onChange={(e) => setReverseCalc(e.target.checked)}
-              className="rounded border-line text-brand-600 focus:ring-brand-500"
-            />
-            {t('sales.reverseCalculation')}
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
-            <input
-              type="checkbox"
-              checked={autoBatch}
-              onChange={(e) => setAutoBatch(e.target.checked)}
-              className="rounded border-line text-brand-600 focus:ring-brand-500"
-            />
-            {t('sales.autoBatch')}
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
-            <input
-              type="checkbox"
-              checked={enableFreeQty}
-              onChange={(e) => setEnableFreeQty(e.target.checked)}
-              className="rounded border-line text-brand-600 focus:ring-brand-500"
-            />
-            {t('sales.freeQuantity')}
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer font-medium select-none hover:text-ink">
-            <input
-              type="checkbox"
-              checked={enableDiscount}
-              onChange={(e) => setEnableDiscount(e.target.checked)}
-              className="rounded border-line text-brand-600 focus:ring-brand-500"
-            />
-            {t('sales.itemDiscount')}
-          </label>
-        </div>
-
-        {isReturn(kind) && (
-          <div className="w-72">
-            <SearchSelect
-              value={returnsInvoiceId}
-              onChange={setReturnsInvoiceId}
-              clearable
-              size="sm"
-              label={t('sales.againstInvoice')}
-              placeholder={t('sales.noInvoice')}
-              options={(returnable.data?.items ?? []).map((inv) => ({
-                value: inv.salesInvoiceId,
-                label: inv.number,
-                detail: inv.date,
-                meta: moneyAlways(inv.total),
-              }))}
-            />
-          </div>
-        )}
-      </div>
-
+      {/* Sales Return against invoice selector */}
       {isReturn(kind) && (
-        <p className="alert-warn text-xs">{t('sales.returnHint')}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-surface-2/60 p-2.5 rounded-xl border border-line">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-ink-muted">{t('sales.againstInvoice')}:</span>
+            <div className="w-80">
+              <SearchSelect
+                value={returnsInvoiceId}
+                onChange={setReturnsInvoiceId}
+                clearable
+                size="sm"
+                label={t('sales.againstInvoice')}
+                placeholder={t('sales.noInvoice')}
+                options={(returnable.data?.items ?? []).map((inv) => ({
+                  value: inv.salesInvoiceId,
+                  label: inv.number,
+                  detail: inv.date,
+                  meta: moneyAlways(inv.total),
+                }))}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+            {t('sales.returnHint')}
+          </p>
+        </div>
       )}
+
 
       {/* Line Items Table */}
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -1176,7 +1135,12 @@ function EntryDialog({
       {/* Bottom Master Section: Customer Details + Additional Ledgers + Partial Payment & Totals */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
         {/* Panel 1: Customer Details & Narration */}
-        <div className="lg:col-span-4 flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+        <div
+          className={clsx(
+            'flex flex-col gap-2 rounded-xl border border-line bg-surface p-3',
+            additionalLedgers.length > 0 ? 'lg:col-span-4' : 'lg:col-span-7',
+          )}
+        >
           <div className="flex items-center gap-2 border-b border-line pb-1.5">
             <button
               type="button"
@@ -1262,17 +1226,24 @@ function EntryDialog({
           )}
         </div>
 
-        {/* Panel 2: Additional Ledgers */}
-        <div className="lg:col-span-4">
-          <AdditionalLedgersSection
-            rows={additionalLedgers}
-            ledgers={ledgers.data ?? []}
-            onChange={setAdditionalLedgers}
-          />
-        </div>
+        {/* Panel 2: Additional Ledgers (Only displayed when standing default ledgers exist) */}
+        {additionalLedgers.length > 0 && (
+          <div className="lg:col-span-4">
+            <AdditionalLedgersSection
+              rows={additionalLedgers}
+              ledgers={ledgers.data ?? []}
+              onChange={setAdditionalLedgers}
+            />
+          </div>
+        )}
 
         {/* Panel 3: Partial Payment & Grand Totals */}
-        <div className="lg:col-span-4 rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3">
+        <div
+          className={clsx(
+            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3',
+            additionalLedgers.length > 0 ? 'lg:col-span-4' : 'lg:col-span-5',
+          )}
+        >
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between text-ink-muted">
               <span>{t('sales.prevBalance')}</span>
@@ -1406,9 +1377,10 @@ function LineRow({
   const product = products.find((candidate) => candidate.id === line.productId);
   const net = Number(line.quantity) * Number(line.rate) - (enableDiscount ? Number(line.discount || 0) : 0);
 
+  const [customSerialInput, setCustomSerialInput] = useState('');
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
-  const needsSerials = product?.tracksSerialNumbers === true;
+  const needsSerials = line.requiresSerial ?? (product?.tracksSerialNumbers === true);
 
   const batches = useQuery<readonly BatchStockRow[], ApiError>({
     queryKey: ['sales-line-batches', line.productId, warehouseId],
@@ -1473,6 +1445,7 @@ function LineRow({
         batchNumber: '',
         expiresOn: '',
         serialNumbers: [],
+        requiresSerial: chosen.tracksSerialNumbers,
       });
     } else {
       onChange({
@@ -1480,6 +1453,7 @@ function LineRow({
         batchNumber: '',
         expiresOn: '',
         serialNumbers: [],
+        requiresSerial: false,
       });
     }
   };
@@ -1502,6 +1476,21 @@ function LineRow({
             label={t('sales.product')}
             placeholder={t('sales.chooseProduct')}
           />
+          {line.productId !== '' && (
+            <div className="mt-1 flex items-center gap-1.5">
+              <label className="flex items-center gap-1 text-[11px] font-medium text-ink-muted hover:text-ink cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={needsSerials}
+                  onChange={(e) => onChange({ requiresSerial: e.target.checked })}
+                  className="rounded border-line text-purple-600 focus:ring-purple-500 size-3"
+                />
+                <span className={clsx(needsSerials && 'font-semibold text-purple-700 dark:text-purple-300')}>
+                  {t('products.requiresSerialImei')}
+                </span>
+              </label>
+            </div>
+          )}
         </td>
         <NumberCell
           label={t('sales.quantity')}
@@ -1636,32 +1625,91 @@ function LineRow({
               )}
 
               {needsSerials && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-ink-muted">
-                    {t('sales.serialsChosen', {
-                      chosen: line.serialNumbers.length,
-                      wanted: Number.isFinite(wanted) ? wanted : 0,
-                    })}
-                  </span>
+                <div className="flex flex-col gap-2 w-full">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">
+                      {t('sales.serialsChosen', {
+                        chosen: line.serialNumbers.length,
+                        wanted: Number.isFinite(wanted) ? wanted : 0,
+                      })}
+                    </span>
+                    <span className="text-[10px] text-ink-muted">
+                      Select warehouse units or scan/type IMEI below
+                    </span>
+                  </div>
 
-                  <div className="flex max-h-24 flex-wrap gap-2 overflow-auto">
-                    {(serials.data ?? []).map((unit) => (
-                      <label
-                        key={unit.serialNumberId}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-0.5 text-xs transition hover:border-line-strong hover:bg-surface-3"
+                  {/* Custom Serial/IMEI input */}
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Type/Scan Serial or IMEI & press Enter"
+                      value={customSerialInput}
+                      onChange={(e) => setCustomSerialInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = customSerialInput.trim();
+                          if (val && !line.serialNumbers.includes(val)) {
+                            onChange({ serialNumbers: [...line.serialNumbers, val] });
+                            setCustomSerialInput('');
+                          }
+                        }
+                      }}
+                      className="field-input-sm w-64 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = customSerialInput.trim();
+                        if (val && !line.serialNumbers.includes(val)) {
+                          onChange({ serialNumbers: [...line.serialNumbers, val] });
+                          setCustomSerialInput('');
+                        }
+                      }}
+                      className="btn-secondary btn-xs text-xs"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Selected & Warehouse units list */}
+                  <div className="flex max-h-24 flex-wrap gap-1.5 overflow-auto pt-1">
+                    {/* Chosen serials rendered as tags */}
+                    {line.serialNumbers.map((num) => (
+                      <span
+                        key={num}
+                        className="inline-flex items-center gap-1 rounded bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 text-xs font-mono font-medium text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-500/30"
                       >
-                        <input
-                          type="checkbox"
-                          checked={line.serialNumbers.includes(unit.number)}
-                          onChange={() => toggleSerial(unit.number)}
-                        />
-                        {unit.number}
-                      </label>
+                        <span>{num}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSerial(num)}
+                          className="hover:text-red-500 font-bold ml-0.5"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </span>
                     ))}
 
-                    {(serials.data ?? []).length === 0 && (
-                      <span className="text-xs text-ink-muted">
-                        {t('sales.noSerials')}
+                    {/* Warehouse available serials */}
+                    {(serials.data ?? [])
+                      .filter((unit) => !line.serialNumbers.includes(unit.number))
+                      .map((unit) => (
+                        <button
+                          key={unit.serialNumberId}
+                          type="button"
+                          onClick={() => toggleSerial(unit.number)}
+                          className="rounded-md border border-dashed border-line bg-surface px-2 py-0.5 text-xs font-mono transition hover:border-purple-500 hover:bg-purple-50/50 dark:hover:bg-purple-500/10 text-ink-muted"
+                          title="Click to select this serial number"
+                        >
+                          + {unit.number}
+                        </button>
+                      ))}
+
+                    {line.serialNumbers.length === 0 && (serials.data ?? []).length === 0 && (
+                      <span className="text-xs text-ink-muted italic">
+                        {t('sales.noSerials')} — scan or type IMEI above
                       </span>
                     )}
                   </div>
@@ -1675,32 +1723,80 @@ function LineRow({
   );
 }
 
-/** Reads a document back, and offers what may still be done to it. */
+/** Reads a document back, and offers what may still be done to it or printed. */
 function DocumentDialog({
   id,
   busy,
   onClose,
   onPost,
   onCancel,
+  initialPrint = false,
 }: {
   readonly id: string;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
   readonly onCancel: (id: string, reason: string) => void;
+  readonly initialPrint?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'print'>(
+    initialPrint ? 'print' : 'details',
+  );
 
   const query = useQuery<SalesInvoiceDetail, ApiError>({
     queryKey: ['sales-invoice', id],
     queryFn: () => getSalesInvoice(id),
   });
 
+  const customers = useQuery<readonly CustomerSummary[], ApiError>({
+    queryKey: ['customers', 'picker'],
+    queryFn: () => listCustomers('', true),
+  });
+
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+  });
+
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+  });
+
   const document = query.data;
 
+  const matchedCustomer = useMemo(
+    () =>
+      customers.data?.find(
+        (c) =>
+          c.customerId === document?.customerLedgerId ||
+          c.code === document?.customerLedgerId,
+      ),
+    [customers.data, document?.customerLedgerId],
+  );
+
+  const matchedWarehouse = useMemo(
+    () =>
+      warehouses.data?.find(
+        (w) =>
+          w.id === document?.warehouseId ||
+          w.code === document?.warehouseId,
+      ),
+    [warehouses.data, document?.warehouseId],
+  );
+
   return (
-    <Modal title={document?.header.number ?? t('sales.document')} onClose={onClose}>
+    <Modal
+      title={
+        document?.header.number
+          ? `${document.header.number} — ${activeTab === 'print' ? (t('sales.print') || 'Print Preview') : (t('sales.document') || 'Document Details')}`
+          : (t('sales.document') || 'Document Details')
+      }
+      onClose={onClose}
+      size="fullscreen"
+    >
       {query.isLoading && (
         <div className="space-y-3" aria-busy="true">
           <div className="grid gap-2 sm:grid-cols-3">
@@ -1716,112 +1812,184 @@ function DocumentDialog({
       )}
 
       {document && (
-        <>
-          <div className="grid gap-2 text-sm sm:grid-cols-3">
-            <Detail label={t('sales.date')} value={document.date} />
-            <div>
-              <span className="text-xs text-ink-muted">{t('sales.status')}</span>
-              <div className="mt-0.5">
-                <StatusBadge
-                  tone={statusTone(document.header.status)}
-                  label={statusLabel(document.header.status, t)}
-                  struck={document.header.status === SalesInvoiceStatus.cancelled}
+        <div className="space-y-4">
+          {/* View Tab Switcher & Status */}
+          <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+            <div className="inline-flex rounded-xl bg-surface-2 p-1 border border-line">
+              <button
+                type="button"
+                onClick={() => setActiveTab('details')}
+                className={clsx(
+                  'rounded-lg px-3.5 py-1.5 text-xs font-semibold transition',
+                  activeTab === 'details'
+                    ? 'bg-surface text-ink shadow-sm'
+                    : 'text-ink-muted hover:text-ink',
+                )}
+              >
+                {t('sales.documentDetails') || 'Document Details'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('print')}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition',
+                  activeTab === 'print'
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink',
+                )}
+              >
+                <IconPrinter className="size-3.5" />
+                <span>{t('sales.printInvoice') || 'Print / Formats (A4 / A5 / POS)'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <StatusBadge
+                tone={statusTone(document.header.status)}
+                label={statusLabel(document.header.status, t)}
+                struck={document.header.status === SalesInvoiceStatus.cancelled}
+              />
+            </div>
+          </div>
+
+          {activeTab === 'print' ? (
+            <InvoicePrintView
+              invoice={document}
+              customer={matchedCustomer}
+              warehouse={matchedWarehouse}
+              products={products.data ?? []}
+              onClose={onClose}
+            />
+          ) : (
+            <>
+              <div className="grid gap-2 text-sm sm:grid-cols-3 bg-surface-2/30 p-3 rounded-xl border border-line">
+                <Detail label={t('sales.date')} value={document.date} />
+                <div>
+                  <span className="text-xs text-ink-muted">{t('sales.customer')}</span>
+                  <div className="mt-0.5 font-medium text-ink">
+                    {matchedCustomer?.name || document.customerLedgerId || '—'}
+                  </div>
+                </div>
+                <Detail label={t('sales.currency')} value={document.currency} />
+              </div>
+
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <table className="w-full min-w-[32rem] text-sm">
+                  <thead className="text-xs text-ink-muted">
+                    <tr>
+                      <th className="px-2 py-1 text-start">#</th>
+                      <th className="px-2 py-1 text-start">{t('sales.product')} & Serial / IMEI</th>
+                      <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
+                      <th className="px-2 py-1 text-end">{t('sales.rate')}</th>
+                      <th className="px-2 py-1 text-end">{t('sales.taxable')}</th>
+                      <th className="px-2 py-1 text-end">{t('sales.tax')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {document.lines.map((line) => {
+                      const prod = products.data?.find((p) => p.id === line.productId);
+                      return (
+                        <tr key={line.lineNumber} className="border-t border-line">
+                          <td className="px-2 py-1">{line.lineNumber}</td>
+                          <td className="px-2 py-1">
+                            <span className="font-medium text-ink">
+                              {prod?.description || prod?.code || line.productId}
+                            </span>
+                            {line.serialNumberIds && line.serialNumberIds.length > 0 && (
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                <span className="text-[10px] text-purple-700 bg-purple-50 dark:bg-purple-950/40 dark:text-purple-300 px-1 rounded font-mono">
+                                  IMEI/Serial: {line.serialNumberIds.join(', ')}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
+                          <td className="px-2 py-1 text-end font-mono">
+                            {moneyAlways(line.rate)}
+                          </td>
+                          <td className="px-2 py-1 text-end font-mono">
+                            {moneyAlways(line.taxable)}
+                          </td>
+                          <td className="px-2 py-1 text-end font-mono">
+                            {moneyAlways(line.tax)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/*
+                The same ladder the draft was entered against. Gross and discount are
+                added up from the lines because the header carries neither — it keeps the
+                taxable value, which is what is left after the discount.
+              */}
+              <div className="line-totals flex flex-wrap items-end justify-end gap-6 pt-2">
+                <DocumentTotals
+                  gross={document.lines.reduce(
+                    (running, line) => running + line.quantity * line.rate,
+                    0,
+                  )}
+                  discount={document.lines.reduce(
+                    (running, line) => running + line.discount,
+                    0,
+                  )}
+                  tax={document.header.tax}
+                  charges={document.header.chargeTotal}
+                  rounding={document.header.roundingDifference}
+                  currency={document.currency}
                 />
               </div>
-            </div>
-            <Detail label={t('sales.currency')} value={document.currency} />
-          </div>
 
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[32rem] text-sm">
-              <thead className="text-xs text-ink-muted">
-                <tr>
-                  <th className="px-2 py-1 text-start">#</th>
-                  <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
-                  <th className="px-2 py-1 text-end">{t('sales.rate')}</th>
-                  <th className="px-2 py-1 text-end">{t('sales.taxable')}</th>
-                  <th className="px-2 py-1 text-end">{t('sales.tax')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {document.lines.map((line) => (
-                  <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-1">{line.lineNumber}</td>
-                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                    <td className="px-2 py-1 text-end font-mono">
-                      {moneyAlways(line.rate)}
-                    </td>
-                    <td className="px-2 py-1 text-end font-mono">
-                      {moneyAlways(line.taxable)}
-                    </td>
-                    <td className="px-2 py-1 text-end font-mono">
-                      {moneyAlways(line.tax)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/*
-            The same ladder the draft was entered against. Gross and discount are
-            added up from the lines because the header carries neither — it keeps the
-            taxable value, which is what is left after the discount.
-          */}
-          <div className="line-totals flex flex-wrap items-end justify-end gap-6">
-            <DocumentTotals
-              gross={document.lines.reduce(
-                (running, line) => running + line.quantity * line.rate,
-                0,
+              {/* What posting produced. A sale leaves two documents on purpose, so the issue
+                  is named rather than left for somebody to find in the stock ledger. */}
+              {document.stockDocumentId && (
+                <p className="text-xs text-ink-muted">{t('sales.postedProduced')}</p>
               )}
-              discount={document.lines.reduce(
-                (running, line) => running + line.discount,
-                0,
-              )}
-              tax={document.header.tax}
-              charges={document.header.chargeTotal}
-              rounding={document.header.roundingDifference}
-              currency={document.currency}
-            />
-          </div>
 
-          {/* What posting produced. A sale leaves two documents on purpose, so the issue
-              is named rather than left for somebody to find in the stock ledger. */}
-          {document.stockDocumentId && (
-            <p className="text-xs text-ink-muted">{t('sales.postedProduced')}</p>
-          )}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-line">
+                <div className="flex items-center gap-2">
+                  <ModalButton onClick={() => setActiveTab('print')}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <IconPrinter className="size-4" />
+                      {t('sales.print') || 'Print Invoice'}
+                    </span>
+                  </ModalButton>
+                </div>
 
-          {document.header.status === SalesInvoiceStatus.draft && (
-            <div className="flex justify-end">
-              <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
-                {t('sales.post')}
-              </ModalButton>
-            </div>
-          )}
+                <div className="flex items-center gap-2">
+                  {document.header.status === SalesInvoiceStatus.draft && (
+                    <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
+                      {t('sales.post')}
+                    </ModalButton>
+                  )}
 
-          {document.header.status === SalesInvoiceStatus.posted && (
-            <div className="flex flex-wrap items-end justify-end gap-2">
-              <Field label={t('sales.cancelReason')}>
-                <input
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  className="field-input-sm"
-                />
-              </Field>
-              <ModalButton
-                disabled={busy || reason.trim() === ''}
-                onClick={() => onCancel(id, reason.trim())}
-              >
-                {t('sales.cancel')}
-              </ModalButton>
-            </div>
+                  {document.header.status === SalesInvoiceStatus.posted && (
+                    <div className="flex flex-wrap items-end justify-end gap-2">
+                      <Field label={t('sales.cancelReason')}>
+                        <input
+                          value={reason}
+                          onChange={(event) => setReason(event.target.value)}
+                          className="field-input-sm"
+                        />
+                      </Field>
+                      <ModalButton
+                        disabled={busy || reason.trim() === ''}
+                        onClick={() => onCancel(id, reason.trim())}
+                      >
+                        {t('sales.cancel')}
+                      </ModalButton>
+                    </div>
+                  )}
+
+                  <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
+                </div>
+              </div>
+            </>
           )}
-        </>
+        </div>
       )}
-
-      <div className="flex justify-end pt-3 border-t border-line/60">
-        <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
-      </div>
     </Modal>
   );
 }

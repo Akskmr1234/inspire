@@ -154,7 +154,15 @@ export interface AppSettings {
   readonly receiptVoucherPrefix: string;
   /** Application-wide default theme ('light' or 'dark') applied for all users. */
   readonly defaultTheme: 'light' | 'dark';
+  /** Default invoice print format across the system ('A4', 'A5', or 'thermal'). */
+  readonly defaultInvoicePrintFormat: InvoicePrintFormat;
+  /** Branch-wise configured invoice print format overrides (branchId -> format). */
+  readonly branchInvoicePrintFormats: Readonly<Record<string, InvoicePrintFormat>>;
+  /** Customer-assigned invoice print format / template overrides (customerId -> format). */
+  readonly customerInvoicePrintFormats: Readonly<Record<string, InvoicePrintFormat>>;
 }
+
+export type InvoicePrintFormat = 'A4' | 'A5' | 'thermal';
 
 export interface DefaultAdditionalLedgerConfig {
   readonly id: string;
@@ -219,7 +227,30 @@ const DEFAULTS: AppSettings = {
   paymentVoucherPrefix: 'PAY-',
   receiptVoucherPrefix: 'REC-',
   defaultTheme: 'light',
+  defaultInvoicePrintFormat: 'A4',
+  branchInvoicePrintFormats: {},
+  customerInvoicePrintFormats: {},
 };
+
+/**
+ * Resolves the effective invoice print format following precedence:
+ * 1. Specific template assigned to the customer
+ * 2. Specific format configured for the active branch
+ * 3. System default invoice print format (defaults to 'A4')
+ */
+export function getEffectiveInvoicePrintFormat(
+  settings: AppSettings,
+  customerId?: string | null,
+  branchId?: string | null,
+): InvoicePrintFormat {
+  if (customerId && settings.customerInvoicePrintFormats[customerId]) {
+    return settings.customerInvoicePrintFormats[customerId]!;
+  }
+  if (branchId && settings.branchInvoicePrintFormats[branchId]) {
+    return settings.branchInvoicePrintFormats[branchId]!;
+  }
+  return settings.defaultInvoicePrintFormat || 'A4';
+}
 
 const STORAGE_KEY = 'erp.settings';
 

@@ -1,6 +1,7 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   BalanceBadge,
@@ -10,6 +11,11 @@ import {
   money,
 } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
+import {
+  HierarchicalAccountsTable,
+  type ReportColumn,
+} from '@/components/HierarchicalAccountsTable';
+import { buildAccountGroupSummaryHierarchy } from '@/lib/hierarchicalReports';
 
 interface AccountGroupSummaryLedger {
   readonly ledgerId: string;
@@ -51,15 +57,11 @@ interface AccountGroupSummary {
   readonly isBalanced: boolean;
 }
 
-/** A group's code, name and ledger count, drawn the same whether it expands or not. */
 function GroupLabel({
   group,
 }: {
   readonly group: AccountGroupSummaryRow;
 }): React.JSX.Element {
-  // A row with a gap rather than margins on inline spans: see `ProfitAndLossPage` —
-  // in Arabic the margin lands on the wrong side of the name and the code runs into
-  // it.
   return (
     <span className="inline-flex items-baseline gap-2 whitespace-nowrap">
       <span>{group.groupCode}</span>
@@ -78,16 +80,15 @@ function endOfYear(): string {
 }
 
 /**
- * The account group report: the trial balance rolled up to the group each ledger
- * reports under, and reconciling with it to the penny.
+ * The account group summary report.
  *
- * Groups are collapsed to their subtotal by default - the summary a reader opens it
- * for - and expand to the ledgers behind them for drill-down. The same opening,
- * period, and closing columns as the trial balance, and the same balance check, which
- * carries the same weight: if it is false the books are broken.
+ * Formatted as a unified hierarchical report:
+ * Account Head (Asset, Liability, Equity, Income, Expense) → Group → Ledger/Individual Account → Transactions/Details.
+ * Supports expand/collapse with subtotals at all levels and grand total, plus transaction drill-down.
  */
 export function AccountGroupSummaryPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(endOfYear());
   const [includeZeroBalances, setIncludeZeroBalances] = useState(false);
@@ -99,6 +100,7 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
     includeLedgers: true,
   });
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'hierarchy' | 'classic'>('hierarchy');
 
   const query = useQuery<AccountGroupSummary, ApiError>({
     queryKey: [
@@ -123,6 +125,18 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
     },
   });
 
+  const columns = useMemo<readonly ReportColumn[]>(
+    () => [
+      { key: 'openingDebit', header: t('reports.openingDebit'), align: 'end', blankZero: true },
+      { key: 'openingCredit', header: t('reports.openingCredit'), align: 'end', blankZero: true },
+      { key: 'periodDebit', header: t('reports.periodDebit'), align: 'end', blankZero: true },
+      { key: 'periodCredit', header: t('reports.periodCredit'), align: 'end', blankZero: true },
+      { key: 'closingDebit', header: t('reports.closingDebit'), align: 'end', blankZero: true },
+      { key: 'closingCredit', header: t('reports.closingCredit'), align: 'end', blankZero: true },
+    ],
+    [t],
+  );
+
   const toggle = (code: string): void =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -136,59 +150,90 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
 
   const controls = (
     <form
-      className="toolbar"
+      className="toolbar flex flex-wrap items-end justify-between gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, includeZeroBalances, includeLedgers });
       }}
     >
-      <div className="field">
-        <label htmlFor="from" className="field-label">
-          {t('reports.from')}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="field">
+          <label htmlFor="from" className="field-label">
+            {t('reports.from')}
+          </label>
+          <input
+            id="from"
+            type="date"
+            className="field-input-sm"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="to" className="field-label">
+            {t('reports.to')}
+          </label>
+          <input
+            id="to"
+            type="date"
+            className="field-input-sm"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+
+        <label className="field-check pb-1">
+          <input
+            type="checkbox"
+            checked={includeLedgers}
+            onChange={(e) => setIncludeLedgers(e.target.checked)}
+          />
+          {t('reports.includeLedgers')}
         </label>
-        <input
-          id="from"
-          type="date"
-          className="field-input-sm"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="to" className="field-label">
-          {t('reports.to')}
+
+        <label className="field-check pb-1">
+          <input
+            type="checkbox"
+            checked={includeZeroBalances}
+            onChange={(e) => setIncludeZeroBalances(e.target.checked)}
+          />
+          {t('reports.includeZeroBalances')}
         </label>
-        <input
-          id="to"
-          type="date"
-          className="field-input-sm"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
+
+        <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">
+          {query.isFetching && <Spinner />}
+          {query.isFetching ? t('reports.running') : t('reports.run')}
+        </button>
       </div>
 
-      <label className="field-check">
-        <input
-          type="checkbox"
-          checked={includeLedgers}
-          onChange={(e) => setIncludeLedgers(e.target.checked)}
-        />
-        {t('reports.includeLedgers')}
-      </label>
-
-      <label className="field-check">
-        <input
-          type="checkbox"
-          checked={includeZeroBalances}
-          onChange={(e) => setIncludeZeroBalances(e.target.checked)}
-        />
-        {t('reports.includeZeroBalances')}
-      </label>
-
-      <button type="submit" disabled={query.isFetching} className="btn-primary btn-sm">
-        {query.isFetching && <Spinner />}
-        {query.isFetching ? t('reports.running') : t('reports.run')}
-      </button>
+      <div className="flex items-center rounded-lg border border-line bg-surface-2 p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setViewMode('hierarchy')}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition',
+            viewMode === 'hierarchy'
+              ? 'bg-surface text-ink shadow-2xs font-semibold'
+              : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          <span>🌳</span>
+          <span>{t('reports.hierarchicalTree') || 'Hierarchical Tree'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('classic')}
+          className={clsx(
+            'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition',
+            viewMode === 'classic'
+              ? 'bg-surface text-ink shadow-2xs font-semibold'
+              : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          <span>📋</span>
+          <span>{t('reports.classicView') || 'Classic Groups'}</span>
+        </button>
+      </div>
     </form>
   );
 
@@ -197,6 +242,34 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
       {(data) =>
         data.groups.length === 0 ? (
           <EmptyState message={t('reports.noData')} />
+        ) : viewMode === 'hierarchy' ? (
+          (() => {
+            const heads = buildAccountGroupSummaryHierarchy(data.groups);
+            const grandTotals = {
+              openingDebit: data.totalOpeningDebit,
+              openingCredit: data.totalOpeningCredit,
+              periodDebit: data.totalPeriodDebit,
+              periodCredit: data.totalPeriodCredit,
+              closingDebit: data.totalClosingDebit,
+              closingCredit: data.totalClosingCredit,
+            };
+
+            return (
+              <HierarchicalAccountsTable
+                heads={heads}
+                columns={columns}
+                currency={data.currency}
+                fromDate={criteria.from}
+                toDate={criteria.to}
+                isBalanced={data.isBalanced}
+                grandTotals={grandTotals}
+                initialExpandLevel={2}
+                onVoucherClick={(vNum) => {
+                  navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                }}
+              />
+            );
+          })()
         ) : (
           <div className="space-y-4">
             <BalanceBadge isBalanced={data.isBalanced} currency={data.currency} />
@@ -224,12 +297,6 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
                       <Fragment key={group.groupCode}>
                         <tr className="bg-surface-2 font-semibold">
                           <td className="py-1.5">
-                            {/*
-                              A real button rather than a click handler on the row.
-                              The row carries the group's figures, and a keyboard
-                              user needs something focusable to press — a `<tr>`
-                              with an onClick is reachable by mouse only.
-                            */}
                             {canExpand ? (
                               <button
                                 type="button"

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
 import { ArabicNameField } from '@/components/ArabicNameField';
-import { Field, NumberField, TextField } from '@/components/Form';
+import { Field, NumberField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import type { GridColumn } from '@/components/DataGrid';
 import {
@@ -22,7 +23,7 @@ import {
   required,
   useValidation,
 } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, type InvoicePrintFormat } from '@/stores/settings';
 
 /**
  * The customer master of section 12.1.
@@ -36,7 +37,8 @@ import { useSettings } from '@/stores/settings';
  */
 export function CustomersPage(): React.JSX.Element {
   const { t } = useTranslation();
-  const regime = useSettings((state) => state.taxRegime);
+  const settings = useSettings();
+  const regime = settings.taxRegime;
 
   const columns = (
     run: (action: () => Promise<void>) => void,
@@ -93,6 +95,32 @@ export function CustomersPage(): React.JSX.Element {
       header: t('customers.registrationNumber'),
       value: (row) => row.taxDetails.registrationNumber ?? '',
       hiddenByDefault: true,
+    },
+    {
+      key: 'invoiceTemplate',
+      header: t('settings.customerInvoiceTemplate'),
+      value: (row) => settings.customerInvoicePrintFormats[row.customerId] || 'Default (Branch)',
+      render: (row) => {
+        const assigned = settings.customerInvoicePrintFormats[row.customerId];
+        return (
+          <span
+            className={clsx(
+              'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium',
+              assigned
+                ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30'
+                : 'text-ink-muted',
+            )}
+          >
+            {assigned === 'A4'
+              ? 'A4 Format'
+              : assigned === 'A5'
+              ? 'A5 Compact'
+              : assigned === 'thermal'
+              ? 'Thermal (80mm)'
+              : 'Default (Branch)'}
+          </span>
+        );
+      },
     },
     {
       key: 'status',
@@ -199,7 +227,11 @@ function CustomerForm({
   readonly existing?: CustomerSummary;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const regime = useSettings((state) => state.taxRegime);
+  const settings = useSettings();
+  const regime = settings.taxRegime;
+  const [assignedTemplate, setAssignedTemplate] = useState<string>(() =>
+    existing ? (settings.customerInvoicePrintFormats[existing.customerId] ?? '') : '',
+  );
 
   /*
     The next code in the firm's own sequence, offered rather than demanded.
@@ -298,10 +330,18 @@ function CustomerForm({
           taxDetails,
         });
 
+        const nextCustomerFormats = { ...settings.customerInvoicePrintFormats };
+        if (assignedTemplate) {
+          nextCustomerFormats[existing.customerId] = assignedTemplate as InvoicePrintFormat;
+        } else {
+          delete nextCustomerFormats[existing.customerId];
+        }
+        settings.update({ customerInvoicePrintFormats: nextCustomerFormats });
+
         return;
       }
 
-      await createCustomer({
+      const created = await createCustomer({
         // Blank means "issue the next one", which is what the suggestion above
         // already is. Recomputed here rather than trusted from state so a cleared
         // box still produces a code.
@@ -314,6 +354,15 @@ function CustomerForm({
         openingBalance:
           draft.openingBalance.trim() === '' ? 0 : Number(draft.openingBalance),
       });
+
+      if (assignedTemplate && created?.customerId) {
+        settings.update({
+          customerInvoicePrintFormats: {
+            ...settings.customerInvoicePrintFormats,
+            [created.customerId]: assignedTemplate as InvoicePrintFormat,
+          },
+        });
+      }
     });
   };
 
@@ -438,6 +487,18 @@ function CustomerForm({
           onChange={(value) => set('creditLimit', value)}
           error={errors['creditLimit']}
           placeholder={t('customers.noLimit')}
+        />
+
+        <SelectField
+          label={t('settings.customerInvoiceTemplate')}
+          value={assignedTemplate}
+          onChange={setAssignedTemplate}
+          options={[
+            { value: '', label: 'Default (Branch / System)' },
+            { value: 'A4', label: 'A4 Format (Standard Tax Invoice)' },
+            { value: 'A5', label: 'A5 Format (Compact Half-Page)' },
+            { value: 'thermal', label: 'Thermal Printer (80mm POS Roll)' },
+          ]}
         />
 
         {!existing && (

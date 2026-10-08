@@ -22,6 +22,7 @@ import {
   DECIMAL_CHOICES,
   useSettings,
   type DefaultAdditionalLedgerConfig,
+  type InvoicePrintFormat,
 } from '@/stores/settings';
 import { useMoney } from '@/lib/money';
 
@@ -839,6 +840,89 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* Invoice Print & Template Formats */}
+      <div className="space-y-4 border-t border-line pt-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+            {t('settings.invoicePrintFormatsTitle')}
+          </h4>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            {t('settings.invoicePrintFormatsHint')}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <SelectField
+            label={t('settings.defaultInvoicePrintFormat')}
+            value={settings.defaultInvoicePrintFormat}
+            onChange={(val) =>
+              settings.update({ defaultInvoicePrintFormat: val as InvoicePrintFormat })
+            }
+            options={[
+              { value: 'A4', label: 'A4 Format (Standard Tax Invoice)' },
+              { value: 'A5', label: 'A5 Format (Compact Half-Page)' },
+              { value: 'thermal', label: 'Thermal Printer (80mm POS Roll)' },
+            ]}
+          />
+        </div>
+
+        {/* Branch-wise configuration table */}
+        {(warehouses.data ?? []).length > 0 && (
+          <div className="space-y-2 pt-2">
+            <h5 className="text-xs font-semibold text-ink">
+              {t('settings.branchInvoicePrintFormats')}
+            </h5>
+            <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-line bg-surface-2/60 text-ink-muted text-start">
+                    <th className="px-3 py-2 font-medium">Branch / Warehouse</th>
+                    <th className="px-3 py-2 font-medium">Code</th>
+                    <th className="px-3 py-2 font-medium">Assigned Invoice Print Format</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {(warehouses.data ?? []).map((wh) => {
+                    const currentBranchFmt = settings.branchInvoicePrintFormats[wh.id] || '';
+                    return (
+                      <tr key={wh.id} className="hover:bg-surface-2/30">
+                        <td className="px-3 py-2 font-medium text-ink">
+                          {wh.name} {wh.isDefault && <span className="text-[10px] text-accent font-normal">(Default)</span>}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-muted">{wh.code}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={currentBranchFmt}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const next = { ...settings.branchInvoicePrintFormats };
+                              if (val) {
+                                next[wh.id] = val as InvoicePrintFormat;
+                              } else {
+                                delete next[wh.id];
+                              }
+                              settings.update({ branchInvoicePrintFormats: next });
+                            }}
+                            className="field-input-sm w-full max-w-xs text-xs"
+                          >
+                            <option value="">
+                              Follow System Default ({settings.defaultInvoicePrintFormat})
+                            </option>
+                            <option value="A4">A4 Format (Standard Tax Invoice)</option>
+                            <option value="A5">A5 Format (Compact Half-Page)</option>
+                            <option value="thermal">Thermal Printer (80mm POS Roll)</option>
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

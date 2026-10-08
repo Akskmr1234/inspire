@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import clsx from 'clsx';
 import { BalanceBadge, ReportFrame, Spinner } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
 import { money } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
+import {
+  HierarchicalAccountsTable,
+  type ReportColumn,
+} from '@/components/HierarchicalAccountsTable';
+import { buildDayBookHierarchy } from '@/lib/hierarchicalReports';
+import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 
 interface DayBookLine {
   readonly ledgerId: string;
@@ -36,13 +44,6 @@ interface DayBook {
   readonly entries: readonly DayBookEntry[];
 }
 
-/**
- * The voucher types the filter offers.
- *
- * Values must match the server enum names exactly - the API binds the query
- * string straight onto `VoucherType`, and a mismatch fails validation rather
- * than silently returning everything.
- */
 const VOUCHER_TYPES = [
   'CashReceipt',
   'BankReceipt',
@@ -51,8 +52,6 @@ const VOUCHER_TYPES = [
   'Journal',
   'Contra',
 ] as const;
-
-/** Formats a figure for a financial column, blanking zero so the eye follows the numbers. */
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -64,15 +63,13 @@ function startOfMonth(): string {
 }
 
 /**
- * The day book: every voucher posted in a period, in order.
- *
- * Defaults to the current month rather than the year the other reports use. The
- * day book is a register read a day or a week at a time, and it returns every
- * line of every voucher - a year of it is neither useful on screen nor kind to
- * the server.
+ * The day book: every voucher posted in a period, formatted as a unified hierarchical report:
+ * Account Head → Group → Ledger/Individual Account → Transactions/Details.
+ * Supports expand/collapse with subtotals at all levels and grand total.
  */
 export function DayBookPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [from, setFrom] = useState(startOfMonth());
   const [to, setTo] = useState(today());
   const [voucherType, setVoucherType] = useState('');
@@ -81,6 +78,7 @@ export function DayBookPage(): React.JSX.Element {
     to: today(),
     voucherType: '',
   });
+  const [viewMode, setViewMode] = useState<'hierarchy' | 'chronological'>('hierarchy');
 
   const query = useQuery<DayBook, ApiError>({
     queryKey: ['day-book', criteria.from, criteria.to, criteria.voucherType],
@@ -95,9 +93,32 @@ export function DayBookPage(): React.JSX.Element {
     },
   });
 
+  const ledgersQuery = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(false),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgersMap = useMemo(() => {
+    const map = new Map<string, LedgerSummary>();
+    (ledgersQuery.data ?? []).forEach((l) => {
+      map.set(l.ledgerId, l);
+      map.set(l.code, l);
+    });
+    return map;
+  }, [ledgersQuery.data]);
+
+  const columns = useMemo<readonly ReportColumn[]>(
+    () => [
+      { key: 'debit', header: t('reports.debit') || 'Debit', align: 'end', blankZero: true },
+      { key: 'credit', header: t('reports.credit') || 'Credit', align: 'end', blankZero: true },
+    ],
+    [t],
+  );
+
   const controls = (
     <form
-      className="toolbar"
+      className="toolbar flex flex-wrap items-end gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         setCriteria({ from, to, voucherType });
@@ -123,7 +144,7 @@ export function DayBookPage(): React.JSX.Element {
         />
       </label>
 
-      <label className="field">
+      <label className="field min-w-44">
         <span className="field-label">{t('reports.voucherType')}</span>
         <SearchSelect
           value={voucherType}
@@ -143,6 +164,33 @@ export function DayBookPage(): React.JSX.Element {
         {query.isFetching && <Spinner />}
         {query.isFetching ? t('reports.running') : t('reports.run')}
       </button>
+
+      <div className="inline-flex rounded-lg bg-surface-2 p-1 border border-line ms-auto">
+        <button
+          type="button"
+          onClick={() => setViewMode('hierarchy')}
+          className={clsx(
+            'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+            viewMode === 'hierarchy'
+              ? 'bg-surface text-ink shadow-2xs'
+              : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          {t('reports.hierarchicalView') || 'Hierarchical (Head → Group → Ledger)'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode('chronological')}
+          className={clsx(
+            'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+            viewMode === 'chronological'
+              ? 'bg-surface text-ink shadow-2xs'
+              : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          {t('reports.chronologicalView') || 'Chronological Register'}
+        </button>
+      </div>
     </form>
   );
 
@@ -153,89 +201,108 @@ export function DayBookPage(): React.JSX.Element {
       query={query}
       isEmpty={(data) => data.entries.length === 0}
     >
-      {(data) => (
-        <div className="space-y-4">
-          <p className="text-sm text-ink-muted">
-            {t('reports.voucherCount', { count: data.voucherCount })} · {data.currency}
-          </p>
+      {(data) => {
+        const heads = buildDayBookHierarchy(data.entries, ledgersMap);
+        const grandTotals = {
+          debit: data.totalDebit,
+          credit: data.totalCredit,
+        };
 
-          <div className="table-wrap table-wrap-tall">
-            <table className="table min-w-[56rem]">
-              <thead>
-                <tr>
-                  <th className="text-start">{t('reports.date')}</th>
-                  <th className="text-start">{t('reports.voucherNo')}</th>
-                  <th className="text-start">{t('reports.ledger')}</th>
-                  <th className="text-start">{t('reports.particulars')}</th>
-                  <th className="text-end">{t('reports.debit')}</th>
-                  <th className="text-end">{t('reports.credit')}</th>
-                </tr>
-              </thead>
+        if (viewMode === 'chronological') {
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-ink-muted">
+                {t('reports.voucherCount', { count: data.voucherCount })} · {data.currency}
+              </p>
 
-              {data.entries.map((entry) => (
-                // One tbody per voucher, so the browser keeps a voucher's lines
-                // together and the group can be styled as the single document it
-                // actually is. The border goes on the group rather than each row,
-                // which is what makes a five-line voucher read as one block.
-                <tbody
-                  key={entry.voucherId}
-                  className="border-t border-line align-top transition-colors hover:bg-surface-2"
-                >
-                  {entry.lines.map((line, index) => (
-                    <tr
-                      key={`${entry.voucherId}-${line.ledgerId}-${index}`}
-                      className="border-t-0"
-                    >
-                      <td className="py-1 text-ink-muted whitespace-nowrap">
-                        {index === 0 ? entry.date : ''}
-                      </td>
-                      <td className="py-1">
-                        {index === 0 ? (
-                          <span className="font-medium whitespace-nowrap">
-                            {entry.voucherNumber}
-                          </span>
-                        ) : (
-                          ''
-                        )}
-                      </td>
-                      <td className="py-1">
-                        <span className="text-ink-subtle">{line.ledgerCode}</span>{' '}
-                        {line.ledgerName}
-                      </td>
-                      <td className="py-1 text-ink-muted">
-                        {index === 0
-                          ? (line.narration ?? entry.narration ?? '')
-                          : (line.narration ?? '')}
-                      </td>
-                      <td className="cell-numeric py-1">{money(line.debit)}</td>
-                      <td className="cell-numeric py-1">{money(line.credit)}</td>
+              <div className="table-wrap table-wrap-tall card overflow-hidden border border-line">
+                <table className="table min-w-[56rem] text-xs">
+                  <thead>
+                    <tr className="bg-surface-3 text-ink-muted font-bold uppercase text-[11px] border-b border-line">
+                      <th className="py-2.5 px-3 text-start">{t('reports.date')}</th>
+                      <th className="py-2.5 px-3 text-start">{t('reports.voucherNo')}</th>
+                      <th className="py-2.5 px-3 text-start">{t('reports.ledger')}</th>
+                      <th className="py-2.5 px-3 text-start">{t('reports.particulars')}</th>
+                      <th className="py-2.5 px-3 text-end">{t('reports.debit')}</th>
+                      <th className="py-2.5 px-3 text-end">{t('reports.credit')}</th>
                     </tr>
+                  </thead>
+
+                  {data.entries.map((entry) => (
+                    <tbody
+                      key={entry.voucherId}
+                      className="border-t border-line align-top transition-colors hover:bg-surface-2/60"
+                    >
+                      {entry.lines.map((line, index) => (
+                        <tr
+                          key={`${entry.voucherId}-${line.ledgerId}-${index}`}
+                          className="border-t-0"
+                        >
+                          <td className="py-1 px-3 text-ink-muted whitespace-nowrap font-mono">
+                            {index === 0 ? entry.date : ''}
+                          </td>
+                          <td className="py-1 px-3">
+                            {index === 0 ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate(`/accounting/voucher-report?posted=${encodeURIComponent(entry.voucherNumber)}`)
+                                }
+                                className="font-semibold text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap font-mono"
+                              >
+                                {entry.voucherNumber}
+                              </button>
+                            ) : (
+                              ''
+                            )}
+                          </td>
+                          <td className="py-1 px-3">
+                            <span className="text-primary-700 dark:text-primary-400 font-mono font-medium">{line.ledgerCode}</span>{' '}
+                            <span className="text-ink">{line.ledgerName}</span>
+                          </td>
+                          <td className="py-1 px-3 text-ink-muted">
+                            {index === 0
+                              ? (line.narration ?? entry.narration ?? '—')
+                              : (line.narration ?? '—')}
+                          </td>
+                          <td className="cell-numeric py-1 px-3 font-mono">{money(line.debit)}</td>
+                          <td className="cell-numeric py-1 px-3 font-mono">{money(line.credit)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
                   ))}
-                </tbody>
-              ))}
 
-              <tfoot>
-                <tr>
-                  <td colSpan={4}>{t('reports.totals')}</td>
-                  <td className="cell-numeric">{money(data.totalDebit)}</td>
-                  <td className="cell-numeric">{money(data.totalCredit)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                  <tfoot className="border-t-2 border-line-strong bg-surface-3 font-bold">
+                    <tr>
+                      <td colSpan={4} className="py-2.5 px-3 uppercase tracking-wider">{t('reports.totals')}</td>
+                      <td className="cell-numeric py-2.5 px-3 font-mono">{money(data.totalDebit)}</td>
+                      <td className="cell-numeric py-2.5 px-3 font-mono">{money(data.totalCredit)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
 
-          {/*
-            Both totals are shown and explicitly compared. Debits equal credits by
-            the voucher aggregate's own invariant, so a mismatch here means
-            something has posted incorrectly - and saying so plainly is far better
-            than presenting figures that quietly do not add up.
-          */}
-          <BalanceBadge
-            isBalanced={data.totalDebit === data.totalCredit}
+              <BalanceBadge
+                isBalanced={data.totalDebit === data.totalCredit}
+                currency={data.currency}
+              />
+            </div>
+          );
+        }
+
+        return (
+          <HierarchicalAccountsTable
+            heads={heads}
+            columns={columns}
             currency={data.currency}
+            isBalanced={data.totalDebit === data.totalCredit}
+            grandTotals={grandTotals}
+            onVoucherClick={(vNum) => {
+              navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+            }}
           />
-        </div>
-      )}
+        );
+      }}
     </ReportFrame>
   );
 }

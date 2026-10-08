@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { request, type ApiError } from '@/lib/api';
 import { DateRangeControls, ReportFrame, moneyAlways } from '@/components/ReportFrame';
+import {
+  HierarchicalAccountsTable,
+  type ReportColumn,
+} from '@/components/HierarchicalAccountsTable';
+import { buildProfitAndLossHierarchy } from '@/lib/hierarchicalReports';
+import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 
 interface StatementLine {
   readonly groupCode: string;
@@ -30,12 +37,18 @@ function endOfYear(): string {
   return `${new Date().getFullYear()}-12-31`;
 }
 
-/** The profit and loss statement. */
+/**
+ * The profit and loss statement formatted as a unified hierarchical report:
+ * Account Head (Income & Expense) → Group → Ledger/Individual Account → Transactions/Details.
+ * Supports expand/collapse with subtotals at all levels and grand total.
+ */
 export function ProfitAndLossPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(endOfYear());
   const [range, setRange] = useState({ from: startOfYear(), to: endOfYear() });
+  const [viewMode, setViewMode] = useState<'tree' | 'facing'>('tree');
 
   const query = useQuery<ProfitAndLoss, ApiError>({
     queryKey: ['profit-and-loss', range.from, range.to],
@@ -45,143 +58,154 @@ export function ProfitAndLossPage(): React.JSX.Element {
       ),
   });
 
+  const ledgersQuery = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers'],
+    queryFn: () => listLedgers(false),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgersMap = useMemo(() => {
+    const map = new Map<string, LedgerSummary>();
+    (ledgersQuery.data ?? []).forEach((l) => {
+      map.set(l.code, l);
+      map.set(l.ledgerId, l);
+    });
+    return map;
+  }, [ledgersQuery.data]);
+
+  const columns = useMemo<readonly ReportColumn[]>(
+    () => [
+      { key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' },
+    ],
+    [t],
+  );
+
   return (
     <ReportFrame
       title={t('nav.profitAndLoss')}
       query={query}
       isEmpty={(data) => data.income.length === 0 && data.expenses.length === 0}
       controls={
-        <DateRangeControls
-          from={from}
-          to={to}
-          onFromChange={setFrom}
-          onToChange={setTo}
-          onApply={() => setRange({ from, to })}
-          busy={query.isFetching}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <DateRangeControls
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            onApply={() => setRange({ from, to })}
+            busy={query.isFetching}
+          />
+
+          <div className="inline-flex rounded-lg bg-surface-2 p-1 border border-line ms-auto">
+            <button
+              type="button"
+              onClick={() => setViewMode('tree')}
+              className={clsx(
+                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                viewMode === 'tree'
+                  ? 'bg-surface text-ink shadow-2xs'
+                  : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('reports.hierarchicalView') || 'Hierarchical Tree'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('facing')}
+              className={clsx(
+                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                viewMode === 'facing'
+                  ? 'bg-surface text-ink shadow-2xs'
+                  : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              {t('reports.facingColumns') || 'Facing Columns'}
+            </button>
+          </div>
+        </div>
       }
     >
-      {(data) => (
-        <div className="space-y-4">
-          {/*
-            Facing columns, as the balance sheet has. The statement used to be held
-            at `max-w-2xl` under a filter strip that spanned the screen, so the two
-            disagreed about where the page ended by most of half a metre — and the
-            reader's eye, running down a column of figures, fell off it. Side by
-            side the two halves fit the same width the filters do, and what the
-            period earned sits beside what it spent.
+      {(data) => {
+        const heads = buildProfitAndLossHierarchy(data.income, data.expenses, ledgersMap);
 
-            `items-start`, because income and expenses rarely run to the same
-            number of accounts and the shorter one should stop where it stops.
-          */}
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            <Section
-              heading={t('reports.income')}
-              lines={data.income}
-              total={data.totalIncome}
-              totalLabel={t('reports.totalIncome')}
-              currency={data.currency}
-            />
-
-            <Section
-              heading={t('reports.expenses')}
-              lines={data.expenses}
-              total={data.totalExpenses}
-              totalLabel={t('reports.totalExpenses')}
-              currency={data.currency}
-            />
-          </div>
-
-          {/*
-            A loss is stated as a loss, in red, not as a negative profit. An
-            accountant reading "-1,733.33" beside the word "profit" has to do a
-            double-take; naming it removes the ambiguity.
-          */}
+        const netProfitBanner = (
           <div
             className={clsx(
-              'flex animate-rise-sm flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-base font-semibold',
+              'flex animate-rise-sm flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-base font-semibold shadow-2xs',
               data.netProfit >= 0
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100'
                 : 'border-red-200 bg-red-50 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100',
             )}
           >
-            <span>
-              {data.netProfit >= 0 ? t('reports.netProfit') : t('reports.netLoss')}
-            </span>
-            <span className="font-mono tabular-nums">
+            <div className="flex items-center gap-2">
+              <span
+                className={clsx(
+                  'size-2.5 rounded-full',
+                  data.netProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500',
+                )}
+              />
+              <span>
+                {data.netProfit >= 0 ? t('reports.netProfit') : t('reports.netLoss')}
+              </span>
+            </div>
+
+            <span className="font-mono tabular-nums text-lg font-black">
               {moneyAlways(Math.abs(data.netProfit))} {data.currency}
             </span>
           </div>
-        </div>
-      )}
+        );
+
+        if (viewMode === 'facing') {
+          return (
+            <div className="space-y-4">
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <HierarchicalAccountsTable
+                  heads={heads.filter((h) => h.headId === 4)}
+                  columns={columns}
+                  currency={data.currency}
+                  fromDate={range.from}
+                  toDate={range.to}
+                  emptyMessage={t('reports.noIncome') || 'No income records'}
+                  grandTotals={{ amount: data.totalIncome }}
+                  onVoucherClick={(vNum) => {
+                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                  }}
+                />
+
+                <HierarchicalAccountsTable
+                  heads={heads.filter((h) => h.headId === 5)}
+                  columns={columns}
+                  currency={data.currency}
+                  fromDate={range.from}
+                  toDate={range.to}
+                  emptyMessage={t('reports.noExpenses') || 'No expense records'}
+                  grandTotals={{ amount: data.totalExpenses }}
+                  onVoucherClick={(vNum) => {
+                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                  }}
+                />
+              </div>
+
+              {netProfitBanner}
+            </div>
+          );
+        }
+
+        return (
+          <HierarchicalAccountsTable
+            heads={heads}
+            columns={columns}
+            currency={data.currency}
+            fromDate={range.from}
+            toDate={range.to}
+            grandTotals={{ amount: data.totalIncome - data.totalExpenses }}
+            bottomNote={netProfitBanner}
+            onVoucherClick={(vNum) => {
+              navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+            }}
+          />
+        );
+      }}
     </ReportFrame>
-  );
-}
-
-function Section({
-  heading,
-  lines,
-  total,
-  totalLabel,
-  currency,
-}: {
-  readonly heading: string;
-  readonly lines: readonly StatementLine[];
-  readonly total: number;
-  readonly totalLabel: string;
-  readonly currency: string;
-}): React.JSX.Element {
-  return (
-    <div className="card overflow-hidden">
-      <h2 className="border-b border-line bg-surface-3 px-4 py-2.5 text-xs font-semibold tracking-wide text-ink-muted uppercase">
-        {heading}
-      </h2>
-
-      <div className="overflow-x-auto">
-        <table className="table">
-          <tbody>
-            {lines.length === 0 ? (
-              <tr>
-                <td className="px-4 py-3 text-ink-subtle" colSpan={2}>
-                  —
-                </td>
-              </tr>
-            ) : (
-              lines.map((line) => (
-                <tr
-                  key={line.ledgerCode}
-                  className="border-t border-line transition-colors hover:bg-surface-2"
-                >
-                  <td className="px-4 py-2 text-ink">
-                    {/* Laid out as a row with a gap, not inline spans with a logical
-                        margin. A margin on an inline box is placed at the start of its
-                        own fragment, and the bidirectional algorithm reorders fragments
-                        of Latin text inside an Arabic line — so in Arabic the gap landed
-                        on the far side of the name and the account code ran straight
-                        into it. Flex items are laid out in the container's direction and
-                        are not reordered, so the gap holds both ways. */}
-                    <span className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium">{line.ledgerCode}</span>
-                      <span className="text-ink-muted">{line.ledgerName}</span>
-                      <span className="text-xs text-ink-subtle">{line.groupName}</span>
-                    </span>
-                  </td>
-                  <td className="cell-numeric">{moneyAlways(line.amount)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-
-          <tfoot className="border-t-2 border-line-strong bg-surface-2 font-semibold">
-            <tr>
-              <td className="px-4 py-2.5 text-ink">{totalLabel}</td>
-              <td className="cell-numeric">
-                {moneyAlways(total)} {currency}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
   );
 }

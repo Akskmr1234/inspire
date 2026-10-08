@@ -714,7 +714,40 @@ export const fixtures: Readonly<Record<string, unknown>> = {
   },
 };
 
+const ledgerStatementLine = {
+  date: '2026-08-03',
+  voucherId: 'v1',
+  voucherNumber: 'JV-000241',
+  voucherType: 'Journal',
+  referenceNumber: null,
+  narration: 'Retainer receipt',
+  contraLedgerNames: ['Sales revenue'],
+  debit: 31500,
+  credit: 0,
+  runningBalance: 156500,
+};
+
+const ledgerStatementFixture = {
+  ledgerId: 'l1',
+  ledgerCode: '1000',
+  ledgerName: 'Cash in hand',
+  groupName: 'Current assets',
+  currency: 'AED',
+  from: '2026-01-01',
+  to: '2026-12-31',
+  openingBalance: 125000,
+  closingBalance: 213150.25,
+  totalDebit: 480250.75,
+  totalCredit: 392100.5,
+  lines: [ledgerStatementLine],
+};
+
 /** The response for a path, or undefined when nothing is registered for it. */
 export function fixtureFor(path: string): unknown {
-  return fixtures[path.split('?')[0] ?? path];
+  const clean = path.split('?')[0] ?? path;
+  if (clean.startsWith('/accounting/reports/ledger-statement')) {
+    return ledgerStatementFixture;
+  }
+  return fixtures[clean];
 }
+

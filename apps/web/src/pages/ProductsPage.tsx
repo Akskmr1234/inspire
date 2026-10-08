@@ -16,7 +16,7 @@ import {
   type CategorySummary,
   type UnitSummary,
 } from '@/lib/inventory';
-import { createProduct, listProducts, type ProductSummary } from '@/lib/products';
+import { createProduct, listProducts, saveProductTab, type ProductSummary } from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
@@ -158,6 +158,23 @@ export function ProductsPage(): React.JSX.Element {
         ]
           .filter(Boolean)
           .join(' · '),
+      render: (row) => (
+        <div className="flex flex-wrap items-center gap-1">
+          {row.tracksSerialNumbers && (
+            <span className="inline-flex items-center rounded bg-purple-50 dark:bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/20">
+              Serial / IMEI
+            </span>
+          )}
+          {row.tracksBatches && (
+            <span className="inline-flex items-center rounded bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20">
+              {t('products.batchShort')}
+            </span>
+          )}
+          {!row.tracksSerialNumbers && !row.tracksBatches && (
+            <span className="text-ink-muted text-xs">—</span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'status',
@@ -241,9 +258,34 @@ export function ProductsPage(): React.JSX.Element {
             categories={categories.data ?? []}
             busy={mutation.isPending}
             onCancel={() => setAdding(false)}
-            onSubmit={(body, mode) => {
+            onSubmit={(body, mode, tracksSerialNumbers) => {
               setError(null);
-              mutation.mutate({ action: () => createProduct(body), mode });
+              mutation.mutate({
+                action: async () => {
+                  const id = await createProduct(body);
+                  if (tracksSerialNumbers && id) {
+                    try {
+                      const cast = body as { stockUnitId: string };
+                      await saveProductTab(id, 'stocking', {
+                        purchaseUnitId: cast.stockUnitId,
+                        salesUnitId: cast.stockUnitId,
+                        minimumLevel: 0,
+                        reorderLevel: 0,
+                        maximumLevel: 0,
+                        movement: 0,
+                        tracksBatches: false,
+                        tracksSerialNumbers: true,
+                        shelfLifeDays: null,
+                        isPacking: false,
+                      });
+                    } catch {
+                      // Non-fatal
+                    }
+                  }
+                  return id;
+                },
+                mode,
+              });
             }}
           />
         </Modal>
@@ -269,7 +311,7 @@ function AddProduct({
   readonly categories: readonly CategorySummary[];
   readonly busy: boolean;
   readonly onCancel: () => void;
-  readonly onSubmit: (body: object, mode: 'save' | 'detail') => void;
+  readonly onSubmit: (body: object, mode: 'save' | 'detail', tracksSerialNumbers: boolean) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -292,6 +334,7 @@ function AddProduct({
   const [stockUnitId, setStockUnitId] = useState(defaultStockUnitId ?? '');
   const [brandId, setBrandId] = useState(defaultBrandId ?? '');
   const [itemType, setItemType] = useState(String(defaultItemType ?? 1));
+  const [tracksSerialNumbers, setTracksSerialNumbers] = useState(false);
 
   const categoryOptions = useMemo(
     () =>
@@ -354,6 +397,7 @@ function AddProduct({
         itemType: Number(itemType),
       },
       mode,
+      tracksSerialNumbers,
     );
   };
 
@@ -434,6 +478,18 @@ function AddProduct({
             options={brandOptions}
           />
         </Field>
+
+        <div className="sm:col-span-2 pt-1">
+          <label className="flex items-center gap-2 cursor-pointer font-medium text-xs text-ink hover:text-ink-strong select-none">
+            <input
+              type="checkbox"
+              checked={tracksSerialNumbers}
+              onChange={(e) => setTracksSerialNumbers(e.target.checked)}
+              className="rounded border-line text-brand-600 focus:ring-brand-500"
+            />
+            <span>{t('products.tracksSerialNumbers')}</span>
+          </label>
+        </div>
       </div>
 
       <div className="form-actions flex items-center justify-end gap-2">
