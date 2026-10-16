@@ -37,6 +37,7 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
+import { DocumentType, useNextNumber } from '@/lib/numbering';
 import {
   cancelPurchaseInvoice,
   createPurchaseInvoice,
@@ -436,6 +437,12 @@ function EntryDialog({
     returnsInvoiceId: '',
     narration: '',
   });
+  // The number the series will issue this document, read without reserving it. The
+  // field said "issued when the draft is saved" and nothing more; now it says which.
+  const { next: nextNumber } = useNextNumber(
+    isReturn ? DocumentType.purchaseReturn : DocumentType.purchaseInvoice,
+    draft.date,
+  );
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
   const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
   const [busy, setBusy] = useState(false);
@@ -703,7 +710,11 @@ function EntryDialog({
           field further down and mandatory on a tax invoice.
         */}
         <Field label={t('purchase.documentNumber')}>
-          <input value={t('purchase.numberOnSave')} disabled className="field-input" />
+          <input
+            value={nextNumber ?? t('purchase.numberOnSave')}
+            disabled
+            className="field-input font-mono"
+          />
         </Field>
 
         <DateField

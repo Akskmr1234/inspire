@@ -425,27 +425,11 @@ public sealed class CreateVoucherCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: DefaultPrefix(type),
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }
 
         return series.Reserve();
     }
-
-    private static string DefaultPrefix(VoucherType type) => type switch
-    {
-        VoucherType.CashReceipt => "CR",
-        VoucherType.BankReceipt => "BR",
-        VoucherType.CashPayment => "CP",
-        VoucherType.BankPayment => "BP",
-        VoucherType.Journal => "JV",
-        VoucherType.Contra => "CN",
-        VoucherType.OpeningBalance => "OB",
-        _ => "VC",
-    };
 }

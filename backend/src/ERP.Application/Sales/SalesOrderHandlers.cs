@@ -300,7 +300,7 @@ public sealed class CreateSalesOrderCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat("SO", null, "/", year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

@@ -146,7 +146,9 @@ public sealed class PurchaseEndpointTests
             (await posted.Content.ReadFromJsonAsync<PostPurchaseInvoiceResponse>())!;
 
         result.Total.ShouldBe(105m);
-        result.StockDocumentNumber.ShouldStartWith("PR");
+        // A goods received note, and not "PR": that is a purchase return's prefix, and
+        // the two used to share it, so one number could name two different documents.
+        result.StockDocumentNumber.ShouldStartWith("GRN/");
         result.BillId.ShouldNotBeNull();
 
         // The goods are on the shelf at what they cost, and the tax is reclaimable.

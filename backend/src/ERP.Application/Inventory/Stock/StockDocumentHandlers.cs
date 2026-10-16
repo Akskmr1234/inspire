@@ -240,39 +240,13 @@ public sealed class CreateStockDocumentCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: DefaultPrefix(type),
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }
 
         return series.Reserve();
     }
-
-    /// <summary>The prefix a firm's documents start out carrying.</summary>
-    /// <remarks>
-    /// Short and conventional, and only a default: the numbering series is a master an
-    /// administrator can reshape, so a firm with its own convention changes it once
-    /// rather than living with this.
-    /// </remarks>
-    private static string DefaultPrefix(StockDocumentType type) => type switch
-    {
-        StockDocumentType.OpeningStock => "OS",
-        StockDocumentType.MaterialReceipt => "MR",
-        StockDocumentType.MaterialIssue => "MI",
-        StockDocumentType.StockTransfer => "ST",
-        StockDocumentType.StockAdjustment => "ADJ",
-        StockDocumentType.DamagedStock => "DMG",
-        StockDocumentType.PhysicalVerification => "PV",
-        StockDocumentType.SalesIssue => "SI",
-        StockDocumentType.SalesReturn => "SR",
-        StockDocumentType.PurchaseReceipt => "PR",
-        StockDocumentType.PurchaseReturn => "PRN",
-        _ => "SD",
-    };
 }
 
 /// <summary>Handles <see cref="PostStockDocumentCommand"/>.</summary>

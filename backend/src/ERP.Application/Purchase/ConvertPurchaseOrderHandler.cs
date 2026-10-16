@@ -496,7 +496,7 @@ public sealed class ConvertPurchaseOrderCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat("PU", null, "/", year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

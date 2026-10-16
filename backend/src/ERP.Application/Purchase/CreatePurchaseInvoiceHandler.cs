@@ -425,11 +425,7 @@ public sealed class CreatePurchaseInvoiceCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: isReturn ? "PR" : "PU",
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

@@ -268,7 +268,11 @@ public sealed class SalesEndpointTests
 
         // A return raises no bill of its own; it settles the one the sale raised.
         result.BillId.ShouldBeNull();
-        result.StockDocumentNumber.ShouldStartWith("SR");
+
+        // The goods coming back carry a number of their own, not the return's prefix:
+        // "SR" on both made two documents answer to one number.
+        result.StockDocumentNumber.ShouldStartWith("SRN/");
+        result.StockDocumentNumber.ShouldNotBe(credit.Number);
 
         (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(0m);
 

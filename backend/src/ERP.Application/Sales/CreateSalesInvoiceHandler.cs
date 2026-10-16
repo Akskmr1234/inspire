@@ -573,11 +573,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: isReturn ? "SR" : "SL",
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

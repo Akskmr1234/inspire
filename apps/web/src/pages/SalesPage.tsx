@@ -19,6 +19,7 @@ import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
+import { DocumentType, useNextNumber } from '@/lib/numbering';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -126,7 +127,6 @@ export function SalesPage({
   const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const settings = useSettings();
 
   const filter = { from, to, kind: kindFilter, status: statusFilter, search };
 
@@ -134,32 +134,6 @@ export function SalesPage({
     queryKey: ['sales-invoices', from, to, kindFilter, statusFilter, search, page],
     queryFn: () => listSalesInvoices(filter, page, PAGE_SIZE),
   });
-
-  const nextInvoiceNo = useMemo(() => {
-    const items = query.data?.items ?? [];
-    const prefix = isSalesReturn
-      ? settings.salesReturnPrefix || 'RET-'
-      : settings.invoicePrefix || 'INV-';
-    const suffix = isSalesReturn
-      ? settings.salesReturnSuffix || ''
-      : settings.invoiceSuffix || '';
-    if (items.length === 0) return `${prefix}1001${suffix}`;
-    const nums = items
-      .map((item) => {
-        const match = item.number.match(/\d+/);
-        return match ? parseInt(match[0], 10) : 0;
-      })
-      .filter((n) => !isNaN(n));
-    const maxNum = nums.length > 0 ? Math.max(...nums) : 1000;
-    return `${prefix}${String(maxNum + 1).padStart(4, '0')}${suffix}`;
-  }, [
-    query.data?.items,
-    isSalesReturn,
-    settings.invoicePrefix,
-    settings.invoiceSuffix,
-    settings.salesReturnPrefix,
-    settings.salesReturnSuffix,
-  ]);
 
   const mutation = useMutation<string | null, ApiError, () => Promise<string | null>>({
     mutationFn: (action) => action(),
@@ -341,7 +315,6 @@ export function SalesPage({
       {entering && (
         <EntryDialog
           initialKind={kindFilter}
-          nextInvoiceNo={nextInvoiceNo}
           onClose={() => setEntering(false)}
           onSaved={(message) => {
             setEntering(false);
@@ -490,13 +463,11 @@ function AdditionalLedgersSection({
 /** Enters a draft: the header, then the lines. */
 function EntryDialog({
   initialKind = SalesDocumentKind.invoice,
-  nextInvoiceNo,
   onClose,
   onSaved,
   onError,
 }: {
   readonly initialKind?: number;
-  readonly nextInvoiceNo: string;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
@@ -509,6 +480,13 @@ function EntryDialog({
 
   const [kind] = useState<number>(initialKind);
   const [date, setDate] = useState(today);
+
+  // The number the server will give this document, read from its own series.
+  const { next: nextNumber } = useNextNumber(
+    isReturn(kind) ? DocumentType.salesReturn : DocumentType.salesInvoice,
+    date,
+  );
+  const nextInvoiceNo = nextNumber ?? t('numbering.issuedOnSave');
   const [customerId, setCustomerId] = useState(settings.defaultCustomerId || '');
   const [warehouseId, setWarehouseId] = useState('');
   const [reference, setReference] = useState('');
@@ -878,8 +856,9 @@ function EntryDialog({
           serialNumbers: line.serialNumbers,
         }));
 
-      // Requirement 3: if referenceNo is blank then update with Invoice No
-      const finalReference = reference.trim() || nextInvoiceNo;
+      // A blank reference takes the invoice's own number, as the firm asked: the
+      // number the server's series will issue, never one made up on this screen.
+      const finalReference = reference.trim() || nextNumber || '';
 
       // Requirement 7: addition ledgers mapped into charges
       const chargesPayload: readonly SalesChargeInput[] = additionalLedgers
@@ -933,7 +912,7 @@ function EntryDialog({
             label={t('sales.referenceNo')}
             value={reference}
             onChange={setReference}
-            placeholder={nextInvoiceNo}
+            placeholder={nextNumber ?? ''}
             size="sm"
           />
         </div>
