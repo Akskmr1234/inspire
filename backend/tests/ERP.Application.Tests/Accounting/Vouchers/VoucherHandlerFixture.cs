@@ -9,6 +9,7 @@ using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
+using MediatR;
 
 namespace ERP.Application.Tests.Accounting.Vouchers;
 
@@ -136,7 +137,7 @@ internal sealed class Fixture
 
         _handler = new CreateVoucherCommandHandler(
             Vouchers, Ledgers, Bills, Cheques, FinancialYears, Numbering, Firms,
-            tenant, user, clock, UnitOfWork);
+            tenant, user, clock, UnitOfWork, Substitute.For<ISender>());
     }
 
     /// <summary>Gets the firm every posting lands in.</summary>

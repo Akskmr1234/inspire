@@ -346,6 +346,22 @@ public sealed class User : AggregateRoot<UserId>, ITenantScoped, IAuditable, ISo
         TotpSecret = null;
     }
 
+    /// <summary>Changes the email address the user is reached at.</summary>
+    /// <param name="email">The new address.</param>
+    /// <returns>Success, or a validation failure.</returns>
+    public Result ChangeEmail(string email)
+    {
+        if (!LooksLikeEmail(email))
+        {
+            return Result.Failure(Error.Validation(
+                "User.EmailInvalid", $"'{email}' is not a valid email address."));
+        }
+
+        Email = email.Trim().ToLowerInvariant();
+
+        return Result.Success();
+    }
+
     /// <summary>Sets the contact details.</summary>
     /// <param name="displayName">The display name.</param>
     /// <param name="mobileNumber">The mobile number.</param>

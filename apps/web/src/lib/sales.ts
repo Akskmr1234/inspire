@@ -64,6 +64,8 @@ export interface SalesInvoiceLineDetail {
   readonly tax: number;
   readonly components: readonly SalesInvoiceLineTax[];
   readonly serialNumberIds: readonly string[];
+  /** The same units by number, which is what a correction sends back. */
+  readonly serialNumbers: readonly string[];
 }
 
 /** One charge on a document being entered. */
@@ -107,6 +109,8 @@ export interface SalesInvoiceDetail {
   readonly stockDocumentId: string | null;
   readonly billId: string | null;
   readonly journalVoucherId: string | null;
+  readonly kind: number;
+  readonly returnsInvoiceId: string | null;
 }
 
 /** What posting produced. */
@@ -183,7 +187,8 @@ export async function getSalesInvoice(id: string): Promise<SalesInvoiceDetail> {
 }
 
 /** Enters a document as a draft. Nothing moves until it is posted. */
-export async function createSalesInvoice(input: {
+/** What the entry screen sends, for a new document or a correction. */
+export interface SalesInvoiceInput {
   readonly date: string;
   readonly customerLedgerId: string;
   readonly warehouseId: string;
@@ -194,9 +199,32 @@ export async function createSalesInvoice(input: {
   readonly narration?: string | null;
   /** Freight, delivery, a discount off the whole document. */
   readonly charges?: readonly SalesChargeInput[];
-}): Promise<SalesInvoiceHeader> {
+  /** The tax mode. Omitted, the server takes it from the firm's regime. */
+  readonly mode?: number | null;
+}
+
+export async function createSalesInvoice(
+  input: SalesInvoiceInput,
+): Promise<SalesInvoiceHeader> {
   return request<SalesInvoiceHeader>('/sales/invoices', {
     method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Corrects an invoice, keeping its number.
+ *
+ * A draft is rewritten (and posted if asked). A posted one has its issue, bill and journal
+ * cancelled and is posted again as corrected, in one step on the server, so the books are
+ * never left with the sale half-undone. Refused once the customer has paid against it.
+ */
+export async function updateSalesInvoice(
+  id: string,
+  input: SalesInvoiceInput & { readonly post?: boolean; readonly reason?: string | null },
+): Promise<SalesInvoiceHeader> {
+  return request<SalesInvoiceHeader>(`/sales/invoices/${id}`, {
+    method: 'PUT',
     body: input,
   });
 }

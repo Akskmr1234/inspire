@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
 import { ArabicNameField } from '@/components/ArabicNameField';
@@ -23,7 +24,8 @@ import {
   required,
   useValidation,
 } from '@/lib/validation';
-import { useSettings, type InvoicePrintFormat } from '@/stores/settings';
+import { useSettings } from '@/stores/settings';
+import { savePrintSetup, usePrintSetup } from '@/lib/printing';
 
 /**
  * The customer master of section 12.1.
@@ -39,6 +41,14 @@ export function CustomersPage(): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
   const regime = settings.taxRegime;
+  const { setup: printSetup } = usePrintSetup();
+
+  const templateName = (customerId: string): string | null => {
+    const id = printSetup.customerTemplates[customerId];
+    return id
+      ? (printSetup.templates.find((template) => template.id === id)?.name ?? null)
+      : null;
+  };
 
   const columns = (
     run: (action: () => Promise<void>) => void,
@@ -99,9 +109,9 @@ export function CustomersPage(): React.JSX.Element {
     {
       key: 'invoiceTemplate',
       header: t('settings.customerInvoiceTemplate'),
-      value: (row) => settings.customerInvoicePrintFormats[row.customerId] || 'Default (Branch)',
+      value: (row) => templateName(row.customerId) ?? t('printing.followSettings'),
       render: (row) => {
-        const assigned = settings.customerInvoicePrintFormats[row.customerId];
+        const assigned = templateName(row.customerId);
         return (
           <span
             className={clsx(
@@ -111,13 +121,7 @@ export function CustomersPage(): React.JSX.Element {
                 : 'text-ink-muted',
             )}
           >
-            {assigned === 'A4'
-              ? 'A4 Format'
-              : assigned === 'A5'
-              ? 'A5 Compact'
-              : assigned === 'thermal'
-              ? 'Thermal (80mm)'
-              : 'Default (Branch)'}
+            {assigned ?? t('printing.followSettings')}
           </span>
         );
       },
@@ -229,9 +233,26 @@ function CustomerForm({
   const { t } = useTranslation();
   const settings = useSettings();
   const regime = settings.taxRegime;
+  const queryClient = useQueryClient();
+  const { setup: printSetup } = usePrintSetup();
   const [assignedTemplate, setAssignedTemplate] = useState<string>(() =>
-    existing ? (settings.customerInvoicePrintFormats[existing.customerId] ?? '') : '',
+    existing ? (printSetup.customerTemplates[existing.customerId] ?? '') : '',
   );
+
+  // The customer's own layout lives with the firm's print setup, so every counter
+  // prints their documents the same way.
+  const assignTemplate = async (customerId: string): Promise<void> => {
+    const current = printSetup.customerTemplates[customerId] ?? '';
+
+    if (current === assignedTemplate) return;
+
+    const customerTemplates = { ...printSetup.customerTemplates };
+    if (assignedTemplate) customerTemplates[customerId] = assignedTemplate;
+    else delete customerTemplates[customerId];
+
+    await savePrintSetup({ ...printSetup, customerTemplates });
+    void queryClient.invalidateQueries({ queryKey: ['print-setup'] });
+  };
 
   /*
     The next code in the firm's own sequence, offered rather than demanded.
@@ -330,13 +351,7 @@ function CustomerForm({
           taxDetails,
         });
 
-        const nextCustomerFormats = { ...settings.customerInvoicePrintFormats };
-        if (assignedTemplate) {
-          nextCustomerFormats[existing.customerId] = assignedTemplate as InvoicePrintFormat;
-        } else {
-          delete nextCustomerFormats[existing.customerId];
-        }
-        settings.update({ customerInvoicePrintFormats: nextCustomerFormats });
+        await assignTemplate(existing.customerId);
 
         return;
       }
@@ -355,13 +370,8 @@ function CustomerForm({
           draft.openingBalance.trim() === '' ? 0 : Number(draft.openingBalance),
       });
 
-      if (assignedTemplate && created?.customerId) {
-        settings.update({
-          customerInvoicePrintFormats: {
-            ...settings.customerInvoicePrintFormats,
-            [created.customerId]: assignedTemplate as InvoicePrintFormat,
-          },
-        });
+      if (created?.customerId) {
+        await assignTemplate(created.customerId);
       }
     });
   };
@@ -494,10 +504,11 @@ function CustomerForm({
           value={assignedTemplate}
           onChange={setAssignedTemplate}
           options={[
-            { value: '', label: 'Default (Branch / System)' },
-            { value: 'A4', label: 'A4 Format (Standard Tax Invoice)' },
-            { value: 'A5', label: 'A5 Format (Compact Half-Page)' },
-            { value: 'thermal', label: 'Thermal Printer (80mm POS Roll)' },
+            { value: '', label: t('printing.followSettings') },
+            ...printSetup.templates.map((template) => ({
+              value: template.id,
+              label: `${template.name} (${template.paper})`,
+            })),
           ]}
         />
 

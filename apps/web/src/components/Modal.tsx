@@ -65,7 +65,11 @@ export function Modal({
                 ? 'fixed inset-0 h-screen max-h-screen w-screen max-w-none rounded-none border-0 ring-0 m-0 z-50'
                 : clsx(
                     'max-h-[92vh] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl my-auto',
-                    size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
+                    size === 'full'
+                      ? 'max-w-7xl'
+                      : size === 'wide'
+                        ? 'max-w-5xl'
+                        : 'max-w-2xl',
                   ),
             )}
           >
@@ -117,7 +121,16 @@ export function Modal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 min-h-0 flex flex-col gap-4">
+            {/*
+              `[&>*]:shrink-0`: the body is a column that scrolls, so nothing in it may
+              shrink to fit. A flex item with `overflow` set has no automatic minimum
+              height, and the line tables sit in an `overflow-x-auto` wrapper so they can
+              scroll sideways — so the moment a document was taller than the dialog, the
+              flexbox took the missing height out of that wrapper and squeezed it to
+              zero. The product row was still there, under the Add line button, which
+              is why a purchase could not be given an item.
+            */}
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 [&>*]:shrink-0">
               {children}
             </div>
           </Dialog.Content>
@@ -144,12 +157,7 @@ export function ModalButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={clsx(
-        'btn px-4 py-2 text-sm',
-        primary
-          ? 'btn-primary'
-          : 'btn-secondary',
-      )}
+      className={clsx('btn px-4 py-2 text-sm', primary ? 'btn-primary' : 'btn-secondary')}
     >
       {children}
     </button>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as api from '@/lib/api';
+import { useSettings } from '@/stores/settings';
 
 export type Theme = 'light' | 'dark';
 export type Language = 'en' | 'ar';
@@ -80,13 +81,13 @@ export function setDefaultAppTheme(theme: Theme): void {
   try {
     localStorage.setItem(DEFAULT_THEME_KEY, theme);
     localStorage.setItem(THEME_KEY, theme);
-
-    const s = JSON.parse(localStorage.getItem('erp.settings') || '{}') as Record<string, unknown>;
-    s['defaultTheme'] = theme;
-    localStorage.setItem('erp.settings', JSON.stringify(s));
   } catch {
     // Storage quota or restriction fallback.
   }
+
+  // Through the settings store rather than written into its storage by hand, so the
+  // default reaches the firm's shared copy and every other workstation with it.
+  useSettings.getState().update({ defaultTheme: theme });
 
   withThemeTransition(() => applyPresentation(theme, useSession.getState().language));
   useSession.setState({ theme });
@@ -293,4 +294,3 @@ if (typeof window !== 'undefined') {
     // Unsupported fallback.
   }
 }
-

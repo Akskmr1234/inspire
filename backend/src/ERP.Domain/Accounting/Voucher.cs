@@ -472,7 +472,91 @@ public sealed class Voucher : AggregateRoot<VoucherId>, IBranchScoped, IAuditabl
         return Result.Success();
     }
 
-    /// <summary>Cancels a posted voucher, reversing its effect on the ledgers.</summary>
+    /// <summary>Replaces what a draft says, keeping its number.</summary>
+    /// <param name="financialYear">The year the new date falls in.</param>
+    /// <param name="date">The document date.</param>
+    /// <param name="currency">The entry currency.</param>
+    /// <param name="exchangeRate">The rate to the base currency.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// The lines are cleared, to be entered again by the caller: a correction is the whole
+    /// voucher as it should have been. The number and the year whose series issued it stay.
+    /// </remarks>
+    public Result Revise(
+        FinancialYear financialYear,
+        DateOnly date,
+        CurrencyCode currency,
+        decimal exchangeRate)
+    {
+        ArgumentNullException.ThrowIfNull(financialYear);
+
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Voucher.NotEditable",
+                $"Voucher '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (financialYear.Id != FinancialYearId)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Voucher.YearChanged",
+                $"'{Number}' was numbered in another financial year. Cancel it and enter "
+                + "the voucher again on the new date."));
+        }
+
+        if (!currency.IsSpecified)
+        {
+            return Result.Failure(Error.Validation(
+                "Voucher.CurrencyRequired", "An entry currency is required."));
+        }
+
+        if (exchangeRate <= 0m || (currency == BaseCurrency && exchangeRate != 1m))
+        {
+            return Result.Failure(Error.Validation(
+                "Voucher.ExchangeRateInvalid",
+                $"{exchangeRate} is not a usable rate from {currency} to {BaseCurrency}."));
+        }
+
+        Result canPost = financialYear.CanPostOn(date);
+
+        if (canPost.IsFailure)
+        {
+            return canPost;
+        }
+
+        Date = date;
+        Currency = currency;
+        ExchangeRate = exchangeRate;
+        _lines.Clear();
+
+        return Result.Success();
+    }
+
+    /// <summary>Takes a posted voucher back to a draft so it can be corrected.</summary>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Only the voucher's own state; the handler first gives back what it settled and
+    /// withdraws the bills and cheques it recorded. Posting the corrected draft records
+    /// them again.
+    /// </remarks>
+    public Result Reopen()
+    {
+        if (Status != VoucherStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Voucher.NotPosted",
+                $"Only a posted voucher can be reopened, and '{Number}' is {Status}."));
+        }
+
+        Status = VoucherStatus.Draft;
+        PostedAtUtc = null;
+        PostedBy = null;
+
+        return Result.Success();
+    }
+
+    /// <summary>Cancels a voucher, posted or still a draft, taking it out of the ledgers.</summary>
     /// <param name="reason">Why it is being cancelled. Required.</param>
     /// <returns>Success, or a failure.</returns>
     /// <remarks>
@@ -482,11 +566,10 @@ public sealed class Voucher : AggregateRoot<VoucherId>, IBranchScoped, IAuditabl
     /// </remarks>
     public Result Cancel(string reason)
     {
-        if (Status != VoucherStatus.Posted)
+        if (Status == VoucherStatus.Cancelled)
         {
             return Result.Failure(Error.BusinessRule(
-                "Voucher.NotPosted",
-                $"Only a posted voucher can be cancelled, and '{Number}' is {Status}."));
+                "Voucher.AlreadyCancelled", $"Voucher '{Number}' is already cancelled."));
         }
 
         if (string.IsNullOrWhiteSpace(reason))

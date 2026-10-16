@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Sales;
+using ERP.Domain.Accounting;
 using ERP.Domain.Sales;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -130,6 +131,53 @@ public sealed class SalesController : ApiControllerBase
             : Problem(result.Error);
     }
 
+    /// <summary>Corrects an invoice, keeping its number.</summary>
+    /// <param name="id">The invoice.</param>
+    /// <param name="request">The invoice as it should be, in full.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The invoice as it now stands.</returns>
+    /// <response code="200">The corrected invoice.</response>
+    /// <response code="400">The correction was refused, and the reason says why.</response>
+    /// <response code="404">No such invoice in the selected firm.</response>
+    /// <response code="422">
+    /// The invoice is cancelled, has been paid against, or could not be posted again.
+    /// </response>
+    /// <remarks>
+    /// A draft is rewritten. A posted invoice has its issue, bill and journal cancelled -
+    /// kept, as the record that it was posted once - and is rewritten and posted again in
+    /// the same transaction, so nothing is half-undone if the new version is refused.
+    /// </remarks>
+    [HttpPut("{id:guid}")]
+    [RequiresPermission("sales", "invoice", "edit")]
+    [ProducesResponseType(typeof(SalesInvoiceResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] UpdateSalesInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateSalesInvoiceCommand changes = new(
+            request.Date,
+            request.CustomerLedgerId,
+            request.WarehouseId,
+            request.Lines,
+            request.Charges,
+            request.Mode,
+            request.ReferenceNumber,
+            request.Narration,
+            ReturnsInvoiceId: request.ReturnsInvoiceId);
+
+        Result<SalesInvoiceResponse> result = await _sender.Send(
+            new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Posts a draft: the goods leave, the debt is raised, the books move.</summary>
     /// <param name="id">The draft to post.</param>
     /// <param name="request">The terms, if they differ from the customer's own.</param>
@@ -191,6 +239,31 @@ public sealed class SalesController : ApiControllerBase
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 }
+
+/// <summary>An invoice as it should be, sent to correct one.</summary>
+/// <param name="Date">The invoice date.</param>
+/// <param name="CustomerLedgerId">The customer billed.</param>
+/// <param name="WarehouseId">The warehouse the goods leave.</param>
+/// <param name="Lines">Every line, as it should be.</param>
+/// <param name="Charges">Every charge, as it should be.</param>
+/// <param name="Mode">The tax mode. Unchanged when omitted.</param>
+/// <param name="ReferenceNumber">The customer's own reference.</param>
+/// <param name="Narration">What is printed on the invoice.</param>
+/// <param name="ReturnsInvoiceId">For a return, the invoice it is against.</param>
+/// <param name="Post">Post a draft once it is corrected. A posted invoice is always posted again.</param>
+/// <param name="Reason">Why a posted invoice was changed.</param>
+public sealed record UpdateSalesInvoiceRequest(
+    DateOnly Date,
+    Guid CustomerLedgerId,
+    Guid WarehouseId,
+    IReadOnlyList<SalesInvoiceLineInput> Lines,
+    IReadOnlyList<SalesInvoiceChargeInput>? Charges = null,
+    TaxMode? Mode = null,
+    string? ReferenceNumber = null,
+    string? Narration = null,
+    Guid? ReturnsInvoiceId = null,
+    bool Post = false,
+    string? Reason = null);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

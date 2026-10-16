@@ -75,4 +75,3 @@ export function displayNameOf(token: string | null): string | null {
     claim(token, 'unique_name')
   );
 }
-

@@ -60,7 +60,12 @@ export function Field({
 
       {error ? (
         <p className="field-message-error flex items-center gap-1">
-          <span aria-hidden="true" className="grid size-3.5 place-items-center rounded-full bg-red-100 dark:bg-red-950 text-[10px] font-bold text-red-600">!</span>
+          <span
+            aria-hidden="true"
+            className="grid size-3.5 place-items-center rounded-full bg-red-100 dark:bg-red-950 text-[10px] font-bold text-red-600"
+          >
+            !
+          </span>
           {error}
         </p>
       ) : null}

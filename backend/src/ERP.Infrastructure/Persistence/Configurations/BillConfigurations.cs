@@ -62,10 +62,14 @@ public sealed class BillConfiguration : IEntityTypeConfiguration<Bill>
             .HasDatabaseName("ix_bills_open_by_due_date");
 
         // A party cannot have the same bill reference twice: it is how the two
-        // sides of the relationship identify the document to each other.
+        // sides of the relationship identify the document to each other. A cancelled
+        // bill no longer identifies anything, so it gives its reference up - which is
+        // what lets an edited invoice be posted again under its own number, and a
+        // supplier's invoice entered wrongly and cancelled be entered again.
         builder
             .HasIndex(b => new { b.FirmId, b.LedgerId, b.BillNumber })
             .IsUnique()
+            .HasFilter("status <> 4")
             .HasDatabaseName("ix_bills_party_reference");
 
         builder.HasIndex(b => b.TenantId).HasDatabaseName("ix_bills_tenant");

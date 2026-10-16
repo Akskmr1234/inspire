@@ -4,11 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { request, type ApiError } from '@/lib/api';
-import {
-  AsAtControls,
-  ReportFrame,
-  moneyAlways,
-} from '@/components/ReportFrame';
+import { AsAtControls, ReportFrame, moneyAlways } from '@/components/ReportFrame';
 import {
   HierarchicalAccountsTable,
   type ReportColumn,
@@ -75,9 +71,7 @@ export function BalanceSheetPage(): React.JSX.Element {
   }, [ledgersQuery.data]);
 
   const columns = useMemo<readonly ReportColumn[]>(
-    () => [
-      { key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' },
-    ],
+    () => [{ key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' }],
     [t],
   );
 
@@ -179,7 +173,9 @@ export function BalanceSheetPage(): React.JSX.Element {
                   emptyMessage={t('reports.noAssets') || 'No assets recorded'}
                   grandTotals={{ amount: data.totalAssets }}
                   onVoucherClick={(vNum) => {
-                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                    navigate(
+                      `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                    );
                   }}
                 />
 
@@ -188,11 +184,15 @@ export function BalanceSheetPage(): React.JSX.Element {
                     heads={heads.filter((h) => h.headId === 2 || h.headId === 3)}
                     columns={columns}
                     currency={data.currency}
-                    emptyMessage={t('reports.noLiabilities') || 'No liabilities or equity recorded'}
+                    emptyMessage={
+                      t('reports.noLiabilities') || 'No liabilities or equity recorded'
+                    }
                     grandTotals={{ amount: data.totalLiabilitiesAndEquity }}
                     isBalanced={data.isBalanced}
                     onVoucherClick={(vNum) => {
-                      navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                      navigate(
+                        `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                      );
                     }}
                   />
                 </div>

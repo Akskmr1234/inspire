@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Purchase;
+using ERP.Domain.Accounting;
 using ERP.Domain.Purchase;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -123,6 +124,50 @@ public sealed class PurchaseController : ApiControllerBase
             : Problem(result.Error);
     }
 
+    /// <summary>Corrects a purchase, keeping its number.</summary>
+    /// <param name="id">The purchase.</param>
+    /// <param name="request">The purchase as it should be, in full.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The purchase as it now stands.</returns>
+    /// <response code="200">The corrected purchase.</response>
+    /// <response code="400">The correction was refused, and the reason says why.</response>
+    /// <response code="404">No such purchase in the selected firm.</response>
+    /// <response code="422">
+    /// The purchase is cancelled, has been paid against, its goods have since gone out, or
+    /// it could not be posted again.
+    /// </response>
+    [HttpPut("{id:guid}")]
+    [RequiresPermission("purchase", "invoice", "edit")]
+    [ProducesResponseType(typeof(PurchaseInvoiceResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] UpdatePurchaseInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreatePurchaseInvoiceCommand changes = new(
+            request.Date,
+            request.SupplierLedgerId,
+            request.WarehouseId,
+            request.Lines,
+            request.Charges,
+            request.Mode,
+            request.SupplierInvoiceNumber,
+            request.SupplierInvoiceDate,
+            request.Narration,
+            ReturnsInvoiceId: request.ReturnsInvoiceId);
+
+        Result<PurchaseInvoiceResponse> result = await _sender.Send(
+            new UpdatePurchaseInvoiceCommand(id, changes, request.Post, request.Reason),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Posts a draft: the goods arrive, the debt is raised, the books move.</summary>
     /// <param name="id">The draft to post.</param>
     /// <param name="request">The terms, if they differ from the supplier's own.</param>
@@ -184,6 +229,33 @@ public sealed class PurchaseController : ApiControllerBase
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 }
+
+/// <summary>A purchase as it should be, sent to correct one.</summary>
+/// <param name="Date">The document date.</param>
+/// <param name="SupplierLedgerId">The supplier.</param>
+/// <param name="WarehouseId">The warehouse.</param>
+/// <param name="Lines">Every line, as it should be.</param>
+/// <param name="Charges">Every charge, as it should be.</param>
+/// <param name="Mode">The tax mode. Unchanged when omitted.</param>
+/// <param name="SupplierInvoiceNumber">The supplier's own invoice number.</param>
+/// <param name="SupplierInvoiceDate">The date on the supplier's invoice.</param>
+/// <param name="Narration">What is recorded against the entry.</param>
+/// <param name="ReturnsInvoiceId">For a return, the purchase it is against.</param>
+/// <param name="Post">Post a draft once it is corrected. A posted purchase is always posted again.</param>
+/// <param name="Reason">Why a posted purchase was changed.</param>
+public sealed record UpdatePurchaseInvoiceRequest(
+    DateOnly Date,
+    Guid SupplierLedgerId,
+    Guid WarehouseId,
+    IReadOnlyList<PurchaseInvoiceLineInput> Lines,
+    IReadOnlyList<PurchaseInvoiceChargeInput>? Charges = null,
+    TaxMode? Mode = null,
+    string? SupplierInvoiceNumber = null,
+    DateOnly? SupplierInvoiceDate = null,
+    string? Narration = null,
+    Guid? ReturnsInvoiceId = null,
+    bool Post = false,
+    string? Reason = null);
 
 /// <summary>Why a purchase is being cancelled.</summary>
 /// <param name="Reason">

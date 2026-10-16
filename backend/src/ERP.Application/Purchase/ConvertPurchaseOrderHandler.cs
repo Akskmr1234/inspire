@@ -153,7 +153,7 @@ public sealed class ConvertPurchaseOrderCommandHandler
         if (request.SupplierInvoiceNumber is { Length: > 0 } supplierNumber)
         {
             bool alreadyEntered = await _invoices.IsSupplierInvoiceNumberInUseAsync(
-                firmId, order.SupplierLedgerId, supplierNumber.Trim(), cancellationToken);
+                firmId, order.SupplierLedgerId, supplierNumber.Trim(), cancellationToken: cancellationToken);
 
             if (alreadyEntered)
             {
@@ -496,7 +496,7 @@ public sealed class ConvertPurchaseOrderCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat("PU", null, "/", year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

@@ -302,4 +302,3 @@ export interface UserProfile {
 export function fetchCurrentUserProfile(): Promise<UserProfile> {
   return request<UserProfile>('/auth/me');
 }
-

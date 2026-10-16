@@ -153,3 +153,39 @@ public sealed class CreateSalesInvoiceCommandValidator
         });
     }
 }
+
+/// <summary>Corrects an invoice, keeping its number.</summary>
+/// <param name="SalesInvoiceId">The invoice.</param>
+/// <param name="Changes">The invoice as it should be: header, lines and charges, in full.</param>
+/// <param name="Post">
+/// Whether to post it once corrected. An invoice that was posted is always posted again -
+/// an edit does not quietly take a sale out of the books - so this matters only for a draft.
+/// </param>
+/// <param name="Reason">
+/// Why a posted invoice was changed, written onto the issue and journal it replaces.
+/// </param>
+/// <remarks>
+/// A draft is simply rewritten. A posted invoice is reopened first - its issue, bill and
+/// journal cancelled and kept as the record that it was posted once - then rewritten and
+/// posted again, all in one transaction: the customer's copy keeps its number, and the
+/// books never see a moment with the sale half-undone. Refused, as cancelling is, once the
+/// customer has paid against it.
+/// </remarks>
+public sealed record UpdateSalesInvoiceCommand(
+    Guid SalesInvoiceId,
+    CreateSalesInvoiceCommand Changes,
+    bool Post = false,
+    string? Reason = null) : ICommand<SalesInvoiceResponse>, ITransactional;
+
+/// <summary>Validates <see cref="UpdateSalesInvoiceCommand"/>.</summary>
+public sealed class UpdateSalesInvoiceCommandValidator
+    : AbstractValidator<UpdateSalesInvoiceCommand>
+{
+    /// <summary>Initialises a new instance of the <see cref="UpdateSalesInvoiceCommandValidator"/> class.</summary>
+    public UpdateSalesInvoiceCommandValidator()
+    {
+        RuleFor(c => c.SalesInvoiceId).NotEqual(Guid.Empty);
+        RuleFor(c => c.Changes).NotNull().SetValidator(new CreateSalesInvoiceCommandValidator());
+        RuleFor(c => c.Reason).MaximumLength(400);
+    }
+}

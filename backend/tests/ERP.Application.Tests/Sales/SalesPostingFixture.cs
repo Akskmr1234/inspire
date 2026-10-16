@@ -11,6 +11,7 @@ using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
+using MediatR;
 
 namespace ERP.Application.Tests.Sales;
 
@@ -289,7 +290,7 @@ internal sealed class SalesPostingFixture
 
         _creator = new CreateSalesInvoiceCommandHandler(
             Invoices, Masters, Products, Batches, Serials, Charges, Ledgers, Numbering,
-            FinancialYears, Firms, tenant, UnitOfWork);
+            FinancialYears, Firms, Orders, tenant, UnitOfWork, Substitute.For<ISender>());
 
         _canceller = new CancelSalesInvoiceCommandHandler(
             Invoices, Orders, Documents, StockLedger, Products, Batches, Serials, Balances,

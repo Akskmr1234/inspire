@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Accounting.Vouchers;
+using ERP.Domain.Accounting;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -86,4 +88,96 @@ public sealed class VouchersController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Corrects a voucher, keeping its number.</summary>
+    /// <param name="id">The voucher.</param>
+    /// <param name="request">The voucher as it should be, in full.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The voucher as it now stands.</returns>
+    /// <response code="200">The corrected voucher.</response>
+    /// <response code="400">The correction was refused, and the reason says why.</response>
+    /// <response code="404">No such voucher in the selected firm.</response>
+    /// <response code="422">
+    /// The voucher is cancelled, was written by an invoice, or what it settled has moved on.
+    /// </response>
+    [HttpPut("{id:guid}")]
+    [RequiresPermission("accounting", "voucher", "edit")]
+    [ProducesResponseType(typeof(CreateVoucherResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] UpdateVoucherRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateVoucherCommand changes = new(
+            VoucherType.Journal,
+            request.Date,
+            request.Lines,
+            request.CurrencyCode,
+            request.ExchangeRate,
+            request.ReferenceNumber,
+            request.Narration,
+            request.PaymentMode,
+            request.PostImmediately);
+
+        Result<CreateVoucherResponse> result = await _sender.Send(
+            new UpdateVoucherCommand(id, changes, request.Reason), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Cancels a voucher, undoing what it settled and recorded.</summary>
+    /// <param name="id">The voucher.</param>
+    /// <param name="request">Why it is being cancelled.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">The voucher was cancelled.</response>
+    /// <response code="404">No such voucher in the selected firm.</response>
+    /// <response code="422">The cancellation was refused, and the reason says why.</response>
+    [HttpPost("{id:guid}/cancel")]
+    [RequiresPermission("accounting", "voucher", "delete")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> CancelAsync(
+        Guid id,
+        [FromBody] CancelVoucherRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new CancelVoucherCommand(id, request.Reason), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }
+
+/// <summary>A voucher as it should be, sent to correct one.</summary>
+/// <param name="Date">The document date.</param>
+/// <param name="Lines">Every line, as it should be.</param>
+/// <param name="CurrencyCode">The entry currency. The firm's own when omitted.</param>
+/// <param name="ExchangeRate">The rate to the base currency.</param>
+/// <param name="ReferenceNumber">A related reference.</param>
+/// <param name="Narration">The narration.</param>
+/// <param name="PaymentMode">The payment mode, for a receipt or payment.</param>
+/// <param name="PostImmediately">Post a draft once corrected. A posted voucher is always posted again.</param>
+/// <param name="Reason">Why a posted voucher was changed.</param>
+public sealed record UpdateVoucherRequest(
+    DateOnly Date,
+    IReadOnlyList<CreateVoucherLine> Lines,
+    string? CurrencyCode = null,
+    decimal ExchangeRate = 1m,
+    string? ReferenceNumber = null,
+    string? Narration = null,
+    string? PaymentMode = null,
+    bool PostImmediately = true,
+    string? Reason = null);
+
+/// <summary>Why a voucher is being cancelled.</summary>
+/// <param name="Reason">Required, and kept on the voucher.</param>
+public sealed record CancelVoucherRequest([property: JsonRequired] string Reason);

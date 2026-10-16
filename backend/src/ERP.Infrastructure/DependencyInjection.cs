@@ -8,6 +8,9 @@ using ERP.Application.Inventory.Stock;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Menus;
+using ERP.Application.Platform.Settings;
+using ERP.Application.Platform.Data;
+using ERP.Application.Platform.Users;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
 using ERP.Infrastructure.Persistence.Reporting;
@@ -61,6 +64,8 @@ public static class DependencyInjection
         services.AddMemoryCache(options => options.SizeLimit = 50_000);
         services.AddScoped<IPermissionChecker, CachedPermissionChecker>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<IUserAdministration, UserAdministration>();
+        services.AddScoped<IDataReset, DataReset>();
 
         services.AddOptions<SeedOptions>()
             .Bind(configuration.GetSection(SeedOptions.SectionName))
@@ -87,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IMenuAdministrationReader, MenuAdministrationReader>();
         services.AddScoped<IMenuItemRepository, MenuItemRepository>();
         services.AddScoped<IGridLayoutRepository, GridLayoutRepository>();
+        services.AddScoped<IFirmSettingRepository, FirmSettingRepository>();
         services.AddScoped<IDashboardReader, DashboardReader>();
         services.AddScoped<IDashboardMetricReader, DashboardMetricReader>();
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();

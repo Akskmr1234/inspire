@@ -1,12 +1,21 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
-import { IconCheck, IconClose, IconMoon, IconPlus, IconSparkles, IconSun } from '@/components/icons';
+import {
+  IconCheck,
+  IconClose,
+  IconMoon,
+  IconPlus,
+  IconSparkles,
+  IconSun,
+} from '@/components/icons';
 import { useSession, setDefaultAppTheme } from '@/stores/session';
 import { populateSampleTransactions } from '@/lib/sampleData';
+import { NumberingSettings } from '@/components/NumberingSettings';
 import { currentBranchId, type ApiError } from '@/lib/api';
 import {
   listMaster,
@@ -22,7 +31,6 @@ import {
   DECIMAL_CHOICES,
   useSettings,
   type DefaultAdditionalLedgerConfig,
-  type InvoicePrintFormat,
 } from '@/stores/settings';
 import { useMoney } from '@/lib/money';
 
@@ -56,16 +64,19 @@ export function MasterDefaultsSettings(): React.JSX.Element {
   const [selectedTxType, setSelectedTxType] = useState<string>('Sales');
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
+  const [seedProblems, setSeedProblems] = useState<readonly string[]>([]);
 
   const runSeeder = async (): Promise<void> => {
     try {
       setSeeding(true);
       setSeedResult(null);
+      setSeedProblems([]);
       const res = await populateSampleTransactions();
       await queryClient.invalidateQueries();
       setSeedResult(
         `Generated sample data: ${res.salesInvoicesCreated} Sales Invoices, ${res.purchaseInvoicesCreated} Purchase Invoices, ${res.ordersCreated} Orders, ${res.vouchersCreated} Vouchers.`,
       );
+      setSeedProblems(res.problems);
     } catch {
       setSeedResult('Failed to populate some sample transactions.');
     } finally {
@@ -142,9 +153,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         <h3 className="text-base font-semibold text-ink">
           {t('settings.masterDefaultsTitle')}
         </h3>
-        <p className="mt-1 text-sm text-ink-muted">
-          {t('settings.masterDefaultsHint')}
-        </p>
+        <p className="mt-1 text-sm text-ink-muted">{t('settings.masterDefaultsHint')}</p>
       </div>
 
       {/* Main Dropdown Defaults */}
@@ -347,7 +356,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             </span>
           </div>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Configure the default interface appearance. The selected theme applies as the default for all users and workstations across the application.
+            Configure the default interface appearance. The selected theme applies as the
+            default for all users and workstations across the application.
           </p>
         </div>
 
@@ -394,211 +404,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Transaction Numbering & Series */}
-      <div className="space-y-4 border-t border-line pt-4">
-        <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
-            Transaction Numbering & Series
-          </h4>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Customise prefix and suffix formats for invoices, returns, orders, and payment vouchers.
-          </p>
-        </div>
-
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Sales Invoice */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Sales Invoice</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.invoicePrefix || 'INV-'}1001${settings.invoiceSuffix || ''}`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Prefix</label>
-                <input
-                  type="text"
-                  value={settings.invoicePrefix}
-                  onChange={(e) => settings.update({ invoicePrefix: e.target.value })}
-                  placeholder="INV-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Suffix</label>
-                <input
-                  type="text"
-                  value={settings.invoiceSuffix}
-                  onChange={(e) => settings.update({ invoiceSuffix: e.target.value })}
-                  placeholder="/2026"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Sales Return */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Sales Return</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.salesReturnPrefix || 'RET-'}1001${settings.salesReturnSuffix || ''}`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Prefix</label>
-                <input
-                  type="text"
-                  value={settings.salesReturnPrefix}
-                  onChange={(e) => settings.update({ salesReturnPrefix: e.target.value })}
-                  placeholder="RET-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Suffix</label>
-                <input
-                  type="text"
-                  value={settings.salesReturnSuffix}
-                  onChange={(e) => settings.update({ salesReturnSuffix: e.target.value })}
-                  placeholder="/2026"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Purchase Invoice */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Purchase Invoice</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.purchaseInvoicePrefix || 'PI-'}1001${settings.purchaseInvoiceSuffix || ''}`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Prefix</label>
-                <input
-                  type="text"
-                  value={settings.purchaseInvoicePrefix}
-                  onChange={(e) => settings.update({ purchaseInvoicePrefix: e.target.value })}
-                  placeholder="PI-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Suffix</label>
-                <input
-                  type="text"
-                  value={settings.purchaseInvoiceSuffix}
-                  onChange={(e) => settings.update({ purchaseInvoiceSuffix: e.target.value })}
-                  placeholder="/2026"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Sales Order */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Sales Order</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.salesOrderPrefix || 'SO-'}1001${settings.salesOrderSuffix || ''}`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Prefix</label>
-                <input
-                  type="text"
-                  value={settings.salesOrderPrefix}
-                  onChange={(e) => settings.update({ salesOrderPrefix: e.target.value })}
-                  placeholder="SO-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Suffix</label>
-                <input
-                  type="text"
-                  value={settings.salesOrderSuffix}
-                  onChange={(e) => settings.update({ salesOrderSuffix: e.target.value })}
-                  placeholder=""
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Purchase Order */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Purchase Order</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.purchaseOrderPrefix || 'PO-'}1001${settings.purchaseOrderSuffix || ''}`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Prefix</label>
-                <input
-                  type="text"
-                  value={settings.purchaseOrderPrefix}
-                  onChange={(e) => settings.update({ purchaseOrderPrefix: e.target.value })}
-                  placeholder="PO-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Suffix</label>
-                <input
-                  type="text"
-                  value={settings.purchaseOrderSuffix}
-                  onChange={(e) => settings.update({ purchaseOrderSuffix: e.target.value })}
-                  placeholder=""
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Vouchers (Payment & Receipt) */}
-          <div className="rounded-lg border border-line bg-surface-2/40 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink">Payment & Receipt</span>
-              <span className="font-mono text-[11px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                {`${settings.paymentVoucherPrefix || 'PAY-'}1001`}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="field-label text-[11px]">Pay Prefix</label>
-                <input
-                  type="text"
-                  value={settings.paymentVoucherPrefix}
-                  onChange={(e) => settings.update({ paymentVoucherPrefix: e.target.value })}
-                  placeholder="PAY-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="field-label text-[11px]">Rec Prefix</label>
-                <input
-                  type="text"
-                  value={settings.receiptVoucherPrefix}
-                  onChange={(e) => settings.update({ receiptVoucherPrefix: e.target.value })}
-                  placeholder="REC-"
-                  className="field-input-sm w-full font-mono text-xs"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Numbering: the server's own series, not prefixes kept in the browser. */}
+      <NumberingSettings />
 
       {/* Decimal Settings */}
       <div className="space-y-4 border-t border-line pt-4">
@@ -639,9 +446,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           <SelectField
             label={t('settings.quantityDecimals')}
             value={String(settings.quantityDecimals ?? 2)}
-            onChange={(value) =>
-              settings.update({ quantityDecimals: Number(value) })
-            }
+            onChange={(value) => settings.update({ quantityDecimals: Number(value) })}
             options={[
               { value: '0', label: '0 decimals (1)' },
               { value: '1', label: '1 decimal (1.0)' },
@@ -669,9 +474,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           <CheckField
             label={t('settings.enableReverseCalculation')}
             checked={settings.enableReverseCalculation}
-            onChange={(checked) =>
-              settings.update({ enableReverseCalculation: checked })
-            }
+            onChange={(checked) => settings.update({ enableReverseCalculation: checked })}
           />
 
           <CheckField
@@ -690,6 +493,13 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             label={t('settings.enableAutoBatch')}
             checked={settings.enableAutoBatch}
             onChange={(checked) => settings.update({ enableAutoBatch: checked })}
+          />
+
+          <CheckField
+            label={t('settings.enableSerialNumbers')}
+            hint={t('settings.enableSerialNumbersHint')}
+            checked={settings.enableSerialNumbers}
+            onChange={(checked) => settings.update({ enableSerialNumbers: checked })}
           />
         </div>
       </div>
@@ -762,7 +572,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <tr className="text-ink-muted">
                   <th className="px-3 py-2 text-start font-semibold">Ledger</th>
                   <th className="w-32 px-3 py-2 text-center font-semibold">Effect</th>
-                  <th className="w-28 px-3 py-2 text-end font-semibold">Default Amount</th>
+                  <th className="w-28 px-3 py-2 text-end font-semibold">
+                    Default Amount
+                  </th>
                   <th className="w-24 px-3 py-2 text-center font-semibold">Active</th>
                   <th className="w-10 px-2 py-2" />
                 </tr>
@@ -773,9 +585,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                     <td className="px-3 py-1.5">
                       <SearchSelect
                         value={row.ledgerId}
-                        onChange={(ledgerId) =>
-                          updateDefaultLedger(row.id, { ledgerId })
-                        }
+                        onChange={(ledgerId) => updateDefaultLedger(row.id, { ledgerId })}
                         options={(ledgers.data ?? []).map((l) => ({
                           value: l.ledgerId,
                           label: `${l.code} — ${l.name}`,
@@ -844,87 +654,22 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         )}
       </div>
 
-      {/* Invoice Print & Template Formats */}
-      <div className="space-y-4 border-t border-line pt-4">
-        <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
-            {t('settings.invoicePrintFormatsTitle')}
-          </h4>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            {t('settings.invoicePrintFormatsHint')}
-          </p>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <SelectField
-            label={t('settings.defaultInvoicePrintFormat')}
-            value={settings.defaultInvoicePrintFormat}
-            onChange={(val) =>
-              settings.update({ defaultInvoicePrintFormat: val as InvoicePrintFormat })
-            }
-            options={[
-              { value: 'A4', label: 'A4 Format (Standard Tax Invoice)' },
-              { value: 'A5', label: 'A5 Format (Compact Half-Page)' },
-              { value: 'thermal', label: 'Thermal Printer (80mm POS Roll)' },
-            ]}
-          />
-        </div>
-
-        {/* Branch-wise configuration table */}
-        {(warehouses.data ?? []).length > 0 && (
-          <div className="space-y-2 pt-2">
-            <h5 className="text-xs font-semibold text-ink">
-              {t('settings.branchInvoicePrintFormats')}
-            </h5>
-            <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-line bg-surface-2/60 text-ink-muted text-start">
-                    <th className="px-3 py-2 font-medium">Branch / Warehouse</th>
-                    <th className="px-3 py-2 font-medium">Code</th>
-                    <th className="px-3 py-2 font-medium">Assigned Invoice Print Format</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {(warehouses.data ?? []).map((wh) => {
-                    const currentBranchFmt = settings.branchInvoicePrintFormats[wh.id] || '';
-                    return (
-                      <tr key={wh.id} className="hover:bg-surface-2/30">
-                        <td className="px-3 py-2 font-medium text-ink">
-                          {wh.name} {wh.isDefault && <span className="text-[10px] text-accent font-normal">(Default)</span>}
-                        </td>
-                        <td className="px-3 py-2 font-mono text-ink-muted">{wh.code}</td>
-                        <td className="px-3 py-2">
-                          <select
-                            value={currentBranchFmt}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const next = { ...settings.branchInvoicePrintFormats };
-                              if (val) {
-                                next[wh.id] = val as InvoicePrintFormat;
-                              } else {
-                                delete next[wh.id];
-                              }
-                              settings.update({ branchInvoicePrintFormats: next });
-                            }}
-                            className="field-input-sm w-full max-w-xs text-xs"
-                          >
-                            <option value="">
-                              Follow System Default ({settings.defaultInvoicePrintFormat})
-                            </option>
-                            <option value="A4">A4 Format (Standard Tax Invoice)</option>
-                            <option value="A5">A5 Format (Compact Half-Page)</option>
-                            <option value="thermal">Thermal Printer (80mm POS Roll)</option>
-                          </select>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+      {/* Printing moved to screens of its own, where every document and both tax modes
+          have their settings, and layouts are designed rather than picked from three. */}
+      <div className="space-y-1 border-t border-line pt-4">
+        <h4 className="text-xs font-bold tracking-wider text-ink-muted uppercase">
+          {t('printing.settingsTitle')}
+        </h4>
+        <p className="text-xs text-ink-muted">
+          {t('printing.movedHint')}{' '}
+          <Link to="/settings/printing" className="font-medium underline">
+            {t('printing.settingsTitle')}
+          </Link>
+          {' · '}
+          <Link to="/settings/print-templates" className="font-medium underline">
+            {t('printing.templatesTitle')}
+          </Link>
+        </p>
       </div>
 
       {/* Sample Demo Data & Transactions Generator */}
@@ -936,7 +681,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
               <span>Sample Demo Transactions & Masters</span>
             </h4>
             <p className="mt-0.5 text-xs text-ink-muted">
-              Populate realistic demo transactions (Sales Invoices, Returns, Purchases, Orders, and Vouchers) and demo master records.
+              Populate realistic demo transactions (Sales Invoices, Returns, Purchases,
+              Orders, and Vouchers) and demo master records.
             </p>
           </div>
 
@@ -947,7 +693,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             className="btn-primary btn-sm flex items-center gap-1.5 shrink-0"
           >
             <IconSparkles className={clsx('size-3.5', seeding && 'animate-spin')} />
-            <span>{seeding ? 'Generating Sample Data…' : 'Generate Sample Transactions'}</span>
+            <span>
+              {seeding ? 'Generating Sample Data…' : 'Generate Sample Transactions'}
+            </span>
           </button>
         </div>
 
@@ -957,8 +705,15 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             <span>{seedResult}</span>
           </div>
         )}
+
+        {seedProblems.length > 0 && (
+          <ul className="alert-warn list-disc space-y-0.5 ps-6 text-xs">
+            {seedProblems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
 }
-

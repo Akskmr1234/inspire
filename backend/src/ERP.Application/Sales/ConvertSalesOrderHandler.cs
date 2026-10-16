@@ -573,7 +573,7 @@ public sealed class ConvertSalesOrderCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat("SL", null, "/", year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

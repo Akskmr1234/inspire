@@ -48,8 +48,7 @@ internal static class JournalNumbering
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: "JV", suffix: null, separator: "/", financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             numbering.Add(series);
         }

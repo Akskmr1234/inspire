@@ -5,13 +5,7 @@ import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
-import {
-  DateField,
-  Field,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from '@/components/Form';
+import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
@@ -37,6 +31,15 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
+import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { useChargeSetup } from '@/lib/charges';
+import { PrintCenter } from '@/components/print/PrintCenter';
+import { printablePurchase } from '@/lib/printing';
+import {
+  SerialLineSummary,
+  SerialPickerDialog,
+  useSerialNumbersEnabled,
+} from '@/components/SerialNumbers';
 import {
   cancelPurchaseInvoice,
   createPurchaseInvoice,
@@ -47,6 +50,7 @@ import {
   PurchaseDocumentKind,
   PurchaseInvoiceStatus,
   PurchaseTaxMode,
+  updatePurchaseInvoice,
   type PurchaseInvoiceDetail,
   type PurchaseInvoiceSummary,
   type PurchaseLineInput,
@@ -85,6 +89,29 @@ function emptyLine(taxRate: number): DraftLine {
     batchNumber: '',
     expiresOn: '',
     serialNumbers: '',
+  };
+}
+
+/** A saved line as the entry screen holds it, for a correction to start from. */
+function lineFrom(line: PurchaseInvoiceDetail['lines'][number]): DraftLine {
+  const headRate = line.components.reduce((sum, head) => sum + head.percentage, 0);
+  const taxRate =
+    headRate > 0
+      ? headRate
+      : line.taxable > 0
+        ? Math.round((line.tax / line.taxable) * 10000) / 100
+        : 0;
+
+  return {
+    key: crypto.randomUUID(),
+    productId: line.productId,
+    quantity: String(line.quantity),
+    rate: String(line.rate),
+    taxPercentage: String(taxRate),
+    discount: String(line.discount),
+    batchNumber: line.batchNumber ?? '',
+    expiresOn: line.expiresOn ?? '',
+    serialNumbers: line.serialNumbers.join('\n'),
   };
 }
 
@@ -145,6 +172,8 @@ export function PurchasePage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  // The document being corrected, read back in full so the entry screen starts from it.
+  const [editing, setEditing] = useState<PurchaseInvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -349,14 +378,20 @@ export function PurchasePage({
       {/* Outside the frame on purpose: it replaces its children with a skeleton
           whenever the list goes back to pending — a page change or a filter — and an
           invoice half entered should not go with them. */}
-      {entering && (
+      {(entering || editing) && (
         <EntryDialog
-          kind={kind}
-          onClose={() => setEntering(false)}
+          kind={editing?.kind ?? kind}
+          {...(editing ? { editing } : {})}
+          onClose={() => {
+            setEntering(false);
+            setEditing(null);
+          }}
           onSaved={(message) => {
             setEntering(false);
+            setEditing(null);
             setNotice(message);
             void queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+            void queryClient.invalidateQueries({ queryKey: ['purchase-invoice'] });
           }}
           onError={setError}
         />
@@ -386,6 +421,10 @@ export function PurchasePage({
               return t('purchase.cancelledNotice');
             })
           }
+          onEdit={(document) => {
+            setViewing(null);
+            setEditing(document);
+          }}
         />
       )}
     </>
@@ -411,11 +450,14 @@ interface HeaderDraft {
 /** Enters a draft: the header, the lines, then whatever is charged beside them. */
 function EntryDialog({
   kind,
+  editing,
   onClose,
   onSaved,
   onError,
 }: {
   readonly kind: number;
+  /** A saved document being corrected. Absent, a new one is being entered. */
+  readonly editing?: PurchaseInvoiceDetail;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
@@ -426,18 +468,37 @@ function EntryDialog({
   const isReturn = isPurchaseReturn(kind);
   const today = new Date().toISOString().slice(0, 10);
 
-  const [mode, setMode] = useState<number>(PurchaseTaxMode.tax);
+  const [mode, setMode] = useState<number>(editing?.mode ?? PurchaseTaxMode.tax);
   const [draft, setDraft] = useState<HeaderDraft>({
-    date: today,
-    supplierId: '',
-    warehouseId: '',
-    supplierInvoiceNumber: '',
-    supplierInvoiceDate: '',
-    returnsInvoiceId: '',
-    narration: '',
+    date: editing?.date ?? today,
+    supplierId: editing?.supplierLedgerId ?? '',
+    warehouseId: editing?.warehouseId ?? '',
+    supplierInvoiceNumber: editing?.supplierInvoiceNumber ?? '',
+    supplierInvoiceDate: editing?.supplierInvoiceDate ?? '',
+    returnsInvoiceId: editing?.returnsInvoiceId ?? '',
+    narration: editing?.narration ?? '',
   });
-  const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
-  const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
+  const [editReason, setEditReason] = useState('');
+  // The number the series will issue this document, read without reserving it. The
+  // field said "issued when the draft is saved" and nothing more; now it says which.
+  const { next: nextNumber } = useNextNumber(
+    editing
+      ? null
+      : isReturn
+        ? DocumentType.purchaseReturn
+        : DocumentType.purchaseInvoice,
+    draft.date,
+  );
+  const [lines, setLines] = useState<readonly DraftLine[]>(() =>
+    editing ? editing.lines.map(lineFrom) : [emptyLine(defaultTaxRate)],
+  );
+  const [charges, setCharges] = useState<readonly DraftCharge[]>(() =>
+    (editing?.charges ?? []).map((charge) => ({
+      key: crypto.randomUUID(),
+      ledgerId: charge.ledgerId,
+      amount: String(charge.amount),
+    })),
+  );
   const [busy, setBusy] = useState(false);
 
   const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
@@ -466,6 +527,7 @@ function EntryDialog({
     ledgers.data ?? [],
     setCharges,
   );
+  const chargeSetup = useChargeSetup(isReturn ? 'purchaseReturn' : 'purchase');
 
   // What is on the shelf, for the product picker. One call for the whole master
   // rather than one per line, and stale for a minute: a purchase being keyed in is
@@ -575,7 +637,7 @@ function EntryDialog({
     };
   }, [lines]);
 
-  const chargesTotal = chargeTotal(charges, ledgers.data ?? []);
+  const chargesTotal = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -647,7 +709,7 @@ function EntryDialog({
           serialNumbers: splitSerials(line.serialNumbers),
         }));
 
-      const header = await createPurchaseInvoice({
+      const input = {
         date: draft.date,
         supplierLedgerId: draft.supplierId,
         warehouseId: draft.warehouseId,
@@ -672,7 +734,19 @@ function EntryDialog({
           ? draft.supplierInvoiceDate || null
           : null,
         narration: draft.narration.trim() || null,
-      });
+      };
+
+      if (editing) {
+        const header = await updatePurchaseInvoice(editing.header.purchaseInvoiceId, {
+          ...input,
+          reason: editReason.trim() || null,
+        });
+
+        onSaved(t('purchase.updatedNotice', { number: header.number }));
+        return;
+      }
+
+      const header = await createPurchaseInvoice(input);
 
       onSaved(t('purchase.savedNotice', { number: header.number }));
     } catch (failure) {
@@ -690,10 +764,30 @@ function EntryDialog({
 
   return (
     <Modal
-      title={isReturn ? t('purchase.newReturn') : t('purchase.newInvoice')}
+      title={
+        editing
+          ? t('purchase.editDocument', { number: editing.header.number })
+          : isReturn
+            ? t('purchase.newReturn')
+            : t('purchase.newInvoice')
+      }
       size="full"
       onClose={onClose}
     >
+      {editing && editing.header.status === PurchaseInvoiceStatus.posted && (
+        <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
+          <p className="min-w-0 flex-1">{t('purchase.editPostedHint')}</p>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('purchase.editReason')}</span>
+            <input
+              value={editReason}
+              onChange={(event) => setEditReason(event.target.value)}
+              className="field-input-sm w-64"
+              maxLength={400}
+            />
+          </label>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         {/*
           The document's own number is not asked for: it is issued by the branch's
@@ -703,7 +797,11 @@ function EntryDialog({
           field further down and mandatory on a tax invoice.
         */}
         <Field label={t('purchase.documentNumber')}>
-          <input value={t('purchase.numberOnSave')} disabled className="field-input" />
+          <input
+            value={editing?.header.number ?? nextNumber ?? t('purchase.numberOnSave')}
+            disabled
+            className="field-input font-mono"
+          />
         </Field>
 
         <DateField
@@ -866,6 +964,7 @@ function EntryDialog({
                 key={line.key}
                 line={line}
                 isReturn={isReturn}
+                warehouseId={draft.warehouseId}
                 products={products.data ?? []}
                 productOptions={productOptions}
                 taxRates={taxRates}
@@ -894,6 +993,8 @@ function EntryDialog({
         charges={charges}
         ledgers={ledgers.data ?? []}
         onChange={setCharges}
+        setup={chargeSetup}
+        nonTax={mode === PurchaseTaxMode.nonTax}
       />
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
@@ -926,6 +1027,7 @@ function EntryDialog({
 function LineRow({
   line,
   isReturn,
+  warehouseId,
   products,
   productOptions,
   taxRates,
@@ -937,6 +1039,8 @@ function LineRow({
 }: {
   readonly line: DraftLine;
   readonly isReturn: boolean;
+  /** Where the goods go to or come from, for the units a return can send back. */
+  readonly warehouseId: string;
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly taxRates: readonly number[];
@@ -954,8 +1058,11 @@ function LineRow({
 
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
-  const needsSerials = product?.tracksSerialNumbers === true;
-  const named = splitSerials(line.serialNumbers).length;
+  // Offered only where the firm has switched serial numbers on, and always optional:
+  // a purchase of five may name five, four, two or none of them.
+  const serialsOn = useSerialNumbersEnabled();
+  const needsSerials = serialsOn && product?.tracksSerialNumbers === true;
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   /*
     How far the batch and serial sub-row reaches: product, quantity, rate, net and
@@ -1137,23 +1244,35 @@ function LineRow({
               )}
 
               {needsSerials && (
-                <TextAreaField
-                  label={t('purchase.serialsNamed', {
-                    named,
-                    wanted: Number.isFinite(wanted) ? wanted : 0,
-                  })}
-                  size="sm"
-                  mono
-                  rows={2}
-                  value={line.serialNumbers}
-                  onChange={(value) => onChange({ serialNumbers: value })}
-                  placeholder={t('purchase.serialsHint')}
-                  className="w-full sm:w-72"
-                />
+                <div className="self-end">
+                  <SerialLineSummary
+                    chosen={splitSerials(line.serialNumbers)}
+                    quantity={wanted}
+                    onOpen={() => setPickerOpen(true)}
+                  />
+                </div>
               )}
             </div>
           </td>
         </tr>
+      )}
+
+      {pickerOpen && product && (
+        <SerialPickerDialog
+          productId={product.id}
+          productLabel={`${product.code} — ${product.description}`}
+          warehouseId={warehouseId}
+          // A purchase brings new numbers in; a return to the supplier sends back
+          // units that are on the shelf.
+          direction={isReturn ? 'out' : 'in'}
+          chosen={splitSerials(line.serialNumbers)}
+          quantity={wanted}
+          onClose={() => setPickerOpen(false)}
+          onDone={(serials, quantity) => {
+            onChange({ serialNumbers: serials.join('\n'), quantity: String(quantity) });
+            setPickerOpen(false);
+          }}
+        />
       )}
     </>
   );
@@ -1166,15 +1285,18 @@ function DocumentDialog({
   onClose,
   onPost,
   onCancel,
+  onEdit,
 }: {
   readonly id: string;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
   readonly onCancel: (id: string, reason: string) => void;
+  readonly onEdit: (document: PurchaseInvoiceDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
+  const [printing, setPrinting] = useState(false);
 
   const query = useQuery<PurchaseInvoiceDetail, ApiError>({
     queryKey: ['purchase-invoice', id],
@@ -1182,6 +1304,18 @@ function DocumentDialog({
   });
 
   const document = query.data;
+
+  if (printing && document) {
+    return (
+      <Modal
+        title={document.header.number}
+        size="fullscreen"
+        onClose={() => setPrinting(false)}
+      >
+        <PurchasePrint document={document} onDone={() => setPrinting(false)} />
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={document?.header.number ?? t('purchase.document')} onClose={onClose}>
@@ -1317,7 +1451,18 @@ function DocumentDialog({
             </>
           )}
 
-          {document.header.status === PurchaseInvoiceStatus.posted && (
+          <div className="flex justify-end gap-2">
+            <ModalButton onClick={() => setPrinting(true)}>
+              {t('printing.print')}
+            </ModalButton>
+            {document.header.status !== PurchaseInvoiceStatus.cancelled && (
+              <ModalButton disabled={busy} onClick={() => onEdit(document)}>
+                {t('purchase.edit')}
+              </ModalButton>
+            )}
+          </div>
+
+          {document.header.status !== PurchaseInvoiceStatus.cancelled && (
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('purchase.cancelReason')}
@@ -1405,5 +1550,53 @@ function NumberCell({
         )}
       />
     </td>
+  );
+}
+
+/** A purchase on paper, with what it names looked up. */
+function PurchasePrint({
+  document,
+  onDone,
+}: {
+  readonly document: PurchaseInvoiceDetail;
+  readonly onDone: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
+    queryKey: ['suppliers', 'picker'],
+    queryFn: () => listSuppliers('', true),
+  });
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+  });
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+  });
+
+  if (suppliers.isPending || warehouses.isPending || products.isPending) {
+    return <p className="text-sm text-ink-muted">{t('common.loading')}</p>;
+  }
+
+  return (
+    <PrintCenter
+      document={printablePurchase(
+        document,
+        {
+          suppliers: suppliers.data ?? [],
+          products: products.data ?? [],
+          warehouses: warehouses.data ?? [],
+        },
+        {
+          taxable: t('printing.taxable'),
+          tax: t('printing.taxTotal'),
+          charges: t('printing.charges'),
+          roundOff: t('printing.roundOff'),
+        },
+      )}
+      onDone={onDone}
+    />
   );
 }

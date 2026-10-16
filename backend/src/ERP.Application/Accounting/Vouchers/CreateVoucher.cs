@@ -9,6 +9,7 @@ using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
 using FluentValidation;
+using MediatR;
 
 namespace ERP.Application.Accounting.Vouchers;
 
@@ -163,9 +164,39 @@ public sealed class CreateVoucherCommandValidator : AbstractValidator<CreateVouc
     }
 }
 
+/// <summary>Corrects a voucher, keeping its number.</summary>
+/// <param name="VoucherId">The voucher.</param>
+/// <param name="Changes">
+/// The voucher as it should be, in full. Its type is the voucher's own and is not changed.
+/// </param>
+/// <param name="Reason">Why a posted voucher was changed.</param>
+/// <remarks>
+/// A draft is rewritten, and posted if <see cref="CreateVoucherCommand.PostImmediately"/>
+/// says so. A posted voucher has what it settled given back and what it recorded withdrawn,
+/// is rewritten, and is posted again - all in one transaction, so the books never show it
+/// half-undone. A journal an invoice wrote is refused: it is that invoice's to correct.
+/// </remarks>
+public sealed record UpdateVoucherCommand(
+    Guid VoucherId,
+    CreateVoucherCommand Changes,
+    string? Reason = null) : ICommand<CreateVoucherResponse>, ITransactional;
+
+/// <summary>Validates <see cref="UpdateVoucherCommand"/>.</summary>
+public sealed class UpdateVoucherCommandValidator : AbstractValidator<UpdateVoucherCommand>
+{
+    /// <summary>Initialises a new instance of the <see cref="UpdateVoucherCommandValidator"/> class.</summary>
+    public UpdateVoucherCommandValidator()
+    {
+        RuleFor(c => c.VoucherId).NotEqual(Guid.Empty);
+        RuleFor(c => c.Changes).NotNull().SetValidator(new CreateVoucherCommandValidator());
+        RuleFor(c => c.Reason).MaximumLength(400);
+    }
+}
+
 /// <summary>Handles <see cref="CreateVoucherCommand"/>.</summary>
 public sealed class CreateVoucherCommandHandler
-    : ICommandHandler<CreateVoucherCommand, CreateVoucherResponse>
+    : ICommandHandler<CreateVoucherCommand, CreateVoucherResponse>,
+        ICommandHandler<UpdateVoucherCommand, CreateVoucherResponse>
 {
     private readonly IVoucherRepository _vouchers;
     private readonly ILedgerRepository _ledgers;
@@ -178,6 +209,7 @@ public sealed class CreateVoucherCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly VoucherBillReferencePoster _billReferences;
     private readonly VoucherChequeRecorder _chequeRecorder;
+    private readonly ISender _sender;
 
     /// <summary>Initialises a new instance of the <see cref="CreateVoucherCommandHandler"/> class.</summary>
     /// <param name="vouchers">The voucher repository.</param>
@@ -191,6 +223,7 @@ public sealed class CreateVoucherCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="sender">Sends the reopening an edit of a posted voucher starts with.</param>
     public CreateVoucherCommandHandler(
         IVoucherRepository vouchers,
         ILedgerRepository ledgers,
@@ -202,7 +235,8 @@ public sealed class CreateVoucherCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISender sender)
     {
         _vouchers = vouchers;
         _ledgers = ledgers;
@@ -215,6 +249,7 @@ public sealed class CreateVoucherCommandHandler
         _unitOfWork = unitOfWork;
         _billReferences = new VoucherBillReferencePoster(bills);
         _chequeRecorder = new VoucherChequeRecorder(cheques);
+        _sender = sender;
     }
 
     /// <inheritdoc />
@@ -352,6 +387,170 @@ public sealed class CreateVoucherCommandHandler
             voucher.TotalDebit.Amount));
     }
 
+    /// <inheritdoc />
+    public async Task<Result<CreateVoucherResponse>> Handle(
+        UpdateVoucherCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<CreateVoucherResponse>(Error.Forbidden(
+                "Voucher.NoFirmSelected", "A firm must be selected before correcting a voucher."));
+        }
+
+        Voucher? voucher = await _vouchers.FindAsync(
+            VoucherId.From(request.VoucherId), cancellationToken);
+
+        if (voucher is null || voucher.FirmId != firmId)
+        {
+            return Result.Failure<CreateVoucherResponse>(Error.NotFound(
+                "Voucher.NotFound", "That voucher does not exist in the selected firm."));
+        }
+
+        if (voucher.Status == VoucherStatus.Cancelled)
+        {
+            return Result.Failure<CreateVoucherResponse>(Error.BusinessRule(
+                "Voucher.Cancelled",
+                $"'{voucher.Number}' has been cancelled and cannot be edited. Enter it again "
+                + "as a new voucher."));
+        }
+
+        Result manual = await CancelVoucherCommandHandler.EnsureEnteredByHandAsync(
+            _vouchers, voucher, cancellationToken);
+
+        if (manual.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(manual.Error);
+        }
+
+        bool wasPosted = voucher.Status == VoucherStatus.Posted;
+
+        if (wasPosted)
+        {
+            string reason = string.IsNullOrWhiteSpace(request.Reason)
+                ? "corrected"
+                : request.Reason.Trim();
+
+            Result reopened = await SendAsync(
+                new ReopenVoucherCommand(request.VoucherId, reason), cancellationToken);
+
+            if (reopened.IsFailure)
+            {
+                return Result.Failure<CreateVoucherResponse>(reopened.Error);
+            }
+        }
+
+        CreateVoucherCommand changes = request.Changes with { Type = voucher.Type };
+
+        Firm? firm = await _firms.FindAsync(firmId, cancellationToken);
+        FinancialYear? year = await _financialYears.FindContainingAsync(
+            firmId, changes.Date, cancellationToken);
+
+        if (firm is null || year is null)
+        {
+            return Result.Failure<CreateVoucherResponse>(Error.BusinessRule(
+                "FinancialYear.NotFoundForDate",
+                $"No financial year covers {changes.Date:yyyy-MM-dd}."));
+        }
+
+        Result<CurrencyCode> currency = changes.CurrencyCode is null
+            ? Result.Success(firm.BaseCurrency)
+            : CurrencyCode.Create(changes.CurrencyCode);
+
+        if (currency.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(currency.Error);
+        }
+
+        Result<IReadOnlyDictionary<LedgerId, Ledger>> ledgers =
+            await LoadAndValidateLedgersAsync(changes, firmId, cancellationToken);
+
+        if (ledgers.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(ledgers.Error);
+        }
+
+        Result revised = voucher.Revise(year, changes.Date, currency.Value, changes.ExchangeRate);
+
+        if (revised.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(revised.Error);
+        }
+
+        foreach (CreateVoucherLine line in changes.Lines)
+        {
+            Result<VoucherLine> added = voucher.AddLine(
+                LedgerId.From(line.LedgerId), line.Side, line.Amount, line.Narration);
+
+            if (added.IsFailure)
+            {
+                return Result.Failure<CreateVoucherResponse>(added.Error);
+            }
+        }
+
+        Result details = voucher.SetDetails(
+            changes.ReferenceNumber, changes.Narration, changes.PaymentMode);
+
+        if (details.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(details.Error);
+        }
+
+        if (wasPosted || changes.PostImmediately)
+        {
+            Result posted = voucher.Post(_currentUser.UserId, _clock.UtcNow);
+
+            if (posted.IsFailure)
+            {
+                return Result.Failure<CreateVoucherResponse>(posted.Error);
+            }
+        }
+
+        Result settled = await _billReferences.ApplyAsync(
+            voucher, changes.Lines, ledgers.Value, cancellationToken);
+
+        if (settled.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(settled.Error);
+        }
+
+        Result recorded = await _chequeRecorder.RecordAsync(
+            voucher, changes.Lines, ledgers.Value, cancellationToken);
+
+        if (recorded.IsFailure)
+        {
+            return Result.Failure<CreateVoucherResponse>(recorded.Error);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(new CreateVoucherResponse(
+            voucher.Id.Value,
+            voucher.Number,
+            voucher.Status,
+            voucher.TotalDebit.Amount));
+    }
+
+    /// <summary>Sends a command that joins this transaction, and hands back its failure.</summary>
+    private async Task<Result> SendAsync<TCommand>(
+        TCommand command,
+        CancellationToken cancellationToken)
+        where TCommand : notnull
+    {
+        try
+        {
+            object? response = await _sender.Send((object)command, cancellationToken);
+
+            return response as Result ?? Result.Success();
+        }
+        catch (TransactionRollbackException rollback) when (rollback.Response is Result failed)
+        {
+            return failed;
+        }
+    }
+
     private async Task<Result<IReadOnlyDictionary<LedgerId, Ledger>>> LoadAndValidateLedgersAsync(
         CreateVoucherCommand request,
         FirmId firmId,
@@ -425,27 +624,11 @@ public sealed class CreateVoucherCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: DefaultPrefix(type),
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }
 
         return series.Reserve();
     }
-
-    private static string DefaultPrefix(VoucherType type) => type switch
-    {
-        VoucherType.CashReceipt => "CR",
-        VoucherType.BankReceipt => "BR",
-        VoucherType.CashPayment => "CP",
-        VoucherType.BankPayment => "BP",
-        VoucherType.Journal => "JV",
-        VoucherType.Contra => "CN",
-        VoucherType.OpeningBalance => "OB",
-        _ => "VC",
-    };
 }

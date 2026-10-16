@@ -28,15 +28,30 @@
      --------------------------------------------------------------------- */
   --color-brand-50: oklch(0.975 0.018 262);
   --color-brand-100: oklch(0.942 0.038 262);
-  --color-brand-200: oklch(0.895 0.070 262);
+  --color-brand-200: oklch(0.895 0.07 262);
   --color-brand-300: oklch(0.825 0.115 262);
   --color-brand-400: oklch(0.725 0.165 262);
-  --color-brand-500: oklch(0.635 0.200 262);
-  --color-brand-600: oklch(0.550 0.205 262);
-  --color-brand-700: oklch(0.470 0.180 262);
+  --color-brand-500: oklch(0.635 0.2 262);
+  --color-brand-600: oklch(0.55 0.205 262);
+  --color-brand-700: oklch(0.47 0.18 262);
   --color-brand-800: oklch(0.395 0.145 262);
-  --color-brand-900: oklch(0.325 0.110 262);
-  --color-brand-950: oklch(0.220 0.080 262);
+  --color-brand-900: oklch(0.325 0.11 262);
+  --color-brand-950: oklch(0.22 0.08 262);
+
+  /* "primary" is what several screens were written against, and it was never defined:
+     their highlights rendered as nothing, and a selected tab as white text on no
+     background. It is the brand colour under another name. */
+  --color-primary-50: var(--color-brand-50);
+  --color-primary-100: var(--color-brand-100);
+  --color-primary-200: var(--color-brand-200);
+  --color-primary-300: var(--color-brand-300);
+  --color-primary-400: var(--color-brand-400);
+  --color-primary-500: var(--color-brand-500);
+  --color-primary-600: var(--color-brand-600);
+  --color-primary-700: var(--color-brand-700);
+  --color-primary-800: var(--color-brand-800);
+  --color-primary-900: var(--color-brand-900);
+  --color-primary-950: var(--color-brand-950);
 
   /* ---------------------------------------------------------------------
      Semantic surface tokens.
@@ -70,7 +85,7 @@
      card that looks blurred. */
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.05), 0 1px 2px -1px rgb(15 23 42 / 0.08);
   --shadow-raised:
-    0 4px 6px -1px rgb(15 23 42 / 0.07), 0 10px 18px -4px rgb(15 23 42 / 0.10);
+    0 4px 6px -1px rgb(15 23 42 / 0.07), 0 10px 18px -4px rgb(15 23 42 / 0.1);
   --shadow-float:
     0 12px 28px -6px rgb(15 23 42 / 0.15), 0 4px 10px -2px rgb(15 23 42 / 0.06);
 
@@ -235,7 +250,7 @@
     --app-surface-3: oklch(0.952 0.008 260);
     --app-line: oklch(0.915 0.007 260);
     --app-line-strong: oklch(0.845 0.012 260);
-    --app-ink: oklch(0.20 0.024 260);
+    --app-ink: oklch(0.2 0.024 260);
     --app-ink-muted: oklch(0.48 0.022 260);
     --app-ink-subtle: oklch(0.62 0.018 260);
 
@@ -251,15 +266,15 @@
   :root.dark {
     color-scheme: dark;
 
-    --app-canvas: oklch(0.145 0.020 264);
+    --app-canvas: oklch(0.145 0.02 264);
     --app-surface: oklch(0.195 0.022 264);
     --app-surface-2: oklch(0.228 0.024 264);
     --app-surface-3: oklch(0.265 0.026 264);
     --app-line: oklch(0.285 0.024 264);
     --app-line-strong: oklch(0.355 0.027 264);
-    --app-ink: oklch(0.970 0.005 264);
-    --app-ink-muted: oklch(0.750 0.018 264);
-    --app-ink-subtle: oklch(0.620 0.020 264);
+    --app-ink: oklch(0.97 0.005 264);
+    --app-ink-muted: oklch(0.75 0.018 264);
+    --app-ink-subtle: oklch(0.62 0.02 264);
 
     --app-glass: oklch(0.195 0.022 264 / 0.85);
 
@@ -734,8 +749,8 @@
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
   }
 
-  [dir="rtl"] .field-input:is(select),
-  [dir="rtl"] .field-input-sm:is(select),
+  [dir='rtl'] .field-input:is(select),
+  [dir='rtl'] .field-input-sm:is(select),
   :dir(rtl) .field-input:is(select),
   :dir(rtl) .field-input-sm:is(select) {
     background-position: left 0.75rem center;
@@ -836,6 +851,16 @@
   /* The small size, on the floor `.field-input-sm` uses, for the same reason. */
   .btn-sm {
     @apply min-h-8 gap-1.5 rounded-md px-2.5 py-1 text-xs;
+  }
+
+  /*
+    Smaller still, for a control that sits inside a line of a document - "choose
+    serials" under a product - where a full-height button would make every serialised
+    line taller than the rest. It was used before it existed, and drew as a full-size
+    button.
+  */
+  .btn-xs {
+    @apply min-h-6 gap-1 rounded px-2 py-0.5 text-[11px];
   }
 
   /*
@@ -1191,7 +1216,29 @@
    Everything below is deliberately outside `@layer`, so it wins against the utility
    classes it has to override without an arms race of specificity.
    ======================================================================== */
+/* A document being printed is rendered into its own container at the end of the body,
+   so the screen behind the dialog that asked for it never reaches the printer. */
+.print-root {
+  display: none;
+}
+
 @media print {
+  body:has(> .print-root) > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block !important;
+  }
+
+  .print-root .printed-document {
+    break-after: page;
+  }
+
+  .print-root .printed-document:last-child {
+    break-after: auto;
+  }
+
   /* Ink is white and text is black whatever the reader had on screen. Overriding
      the tokens rather than each rule means every card, table and badge follows,
      including ones written after this. */

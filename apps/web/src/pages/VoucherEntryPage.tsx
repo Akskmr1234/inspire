@@ -20,6 +20,7 @@ import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { moneyAlways as money } from '@/lib/money';
 import { isKnownPaymentMode, PAYMENT_MODES } from '@/lib/paymentModes';
 import { useSettings } from '@/stores/settings';
+import { DocumentType, useNextNumber } from '@/lib/numbering';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -571,8 +572,6 @@ function MoneyEntry({
 
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
   const defaultSalesman = useSettings((state) => state.defaultSalesman);
-  const paymentVoucherPrefix = useSettings((state) => state.paymentVoucherPrefix);
-  const receiptVoucherPrefix = useSettings((state) => state.receiptVoucherPrefix);
 
   const [through, setThrough] = useState<'cash' | 'bank'>('bank');
   const [salesman, setSalesman] = useState<string>(defaultSalesman || 'Primary');
@@ -588,19 +587,20 @@ function MoneyEntry({
     narration: '',
   }));
 
-  const vouchersCount = useQuery<{ readonly lines?: readonly unknown[] }, ApiError>({
-    queryKey: ['voucher-report', 'count', direction],
-    queryFn: () =>
-      request<{ readonly lines?: readonly unknown[] }>('/accounting/voucher-report'),
-    staleTime: 60000,
-  });
-
-  const count = vouchersCount.data?.lines?.length ?? 0;
-  const rawPrefix = direction === 'payment'
-    ? (paymentVoucherPrefix || 'PAY-')
-    : (receiptVoucherPrefix || 'REC-');
-  const prefix = rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`;
-  const transactionNo = `${prefix}${String(1001 + count).padStart(4, '0')}`;
+  // The number this voucher will be given, from the server's own series for the
+  // type it is about to become. It used to be made up from a count of a report that
+  // does not exist at that address, so every receipt read "REC-1001".
+  const { next: nextNumber } = useNextNumber(
+    direction === 'payment'
+      ? through === 'cash'
+        ? DocumentType.cashPayment
+        : DocumentType.bankPayment
+      : through === 'cash'
+        ? DocumentType.cashReceipt
+        : DocumentType.bankReceipt,
+    draft.date,
+  );
+  const transactionNo = nextNumber ?? t('numbering.issuedOnSave');
 
   const paymentModeOptions = useMemo((): readonly SelectOption[] => {
     const known = PAYMENT_MODES.map((mode) => ({
@@ -653,7 +653,11 @@ function MoneyEntry({
   ]);
 
   useEffect(() => {
-    if (paymentEntries.length === 1 && !paymentEntries[0]?.accountId && accounts.length > 0) {
+    if (
+      paymentEntries.length === 1 &&
+      !paymentEntries[0]?.accountId &&
+      accounts.length > 0
+    ) {
       const defaultAcc = accounts[0]?.ledgerId ?? '';
       setPaymentEntries([{ ...paymentEntries[0]!, accountId: defaultAcc }]);
       setDraft((curr) => ({ ...curr, accountId: defaultAcc }));
@@ -681,10 +685,7 @@ function MoneyEntry({
     ]);
   };
 
-  const updatePaymentEntry = (
-    id: string,
-    patch: Partial<PaymentEntryLine>,
-  ): void => {
+  const updatePaymentEntry = (id: string, patch: Partial<PaymentEntryLine>): void => {
     setPaymentEntries((current) => {
       const next = current.map((item) => (item.id === id ? { ...item, ...patch } : item));
       const nextTotal = next.reduce((sum, item) => {
@@ -746,7 +747,7 @@ function MoneyEntry({
 
   const post = useMutation<CreateVoucherResponse, ApiError, MoneyDraft>({
     mutationFn: (values) => {
-      const finalReference = values.reference.trim() || transactionNo;
+      const finalReference = values.reference.trim() || nextNumber || '';
       const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
       const partySide = direction === 'receipt' ? CREDIT : DEBIT;
 
@@ -882,7 +883,7 @@ function MoneyEntry({
             label={t('vouchers.referenceNo')}
             value={draft.reference}
             onChange={(value) => set('reference', value)}
-            placeholder={transactionNo}
+            placeholder={nextNumber ?? ''}
             hint={t('vouchers.referenceNoHint')}
             size="sm"
           />
@@ -1107,9 +1108,7 @@ function MoneyEntry({
 
         <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
           {t(
-            direction === 'receipt'
-              ? 'vouchers.receiptEffect'
-              : 'vouchers.paymentEffect',
+            direction === 'receipt' ? 'vouchers.receiptEffect' : 'vouchers.paymentEffect',
           )}
         </p>
 

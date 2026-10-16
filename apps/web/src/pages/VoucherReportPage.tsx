@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { request, type ApiError } from '@/lib/api';
 import { SearchSelect } from '@/components/SearchSelect';
+import {
+  VoucherCancelDialog,
+  VoucherEditDialog,
+  VoucherPrintDialog,
+} from '@/components/VoucherEditDialog';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
 const STATUS_NAME: Record<number, string> = { 1: 'Draft', 2: 'Posted', 3: 'Cancelled' };
+const CANCELLED = 3;
 
 /** The voucher types, keyed by the wire value, for the `voucherTypes.<name>` lookup. */
 const TYPE_NAME: Record<number, string> = {
@@ -121,6 +127,22 @@ export function VoucherReportPage(): React.JSX.Element {
   const [params, setParams] = useSearchParams();
   const arrivedFrom = params.get('type') ?? '';
   const justPosted = params.get('posted');
+  const queryClient = useQueryClient();
+
+  // A voucher being corrected or cancelled from the list, and what came of it.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<VoucherReportLine | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const finished = (message: string): void => {
+    setEditingId(null);
+    setCancelling(null);
+    setNotice(message);
+    void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+    void queryClient.invalidateQueries({ queryKey: ['voucher'] });
+    void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
+  };
 
   const [from, setFrom] = useState(startOfMonth());
   const [to, setTo] = useState(today());
@@ -226,115 +248,179 @@ export function VoucherReportPage(): React.JSX.Element {
   );
 
   return (
-    <ReportFrame
-      title={t('nav.voucherReport')}
-      controls={controls}
-      query={query}
-      banner={
-        justPosted === null ? undefined : (
-          <p className="alert-success flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{t('vouchers.postedAndListed', { number: justPosted })}</span>
+    <>
+      <ReportFrame
+        title={t('nav.voucherReport')}
+        controls={controls}
+        query={query}
+        banner={
+          notice !== null ? (
+            <p className="alert-success flex items-center gap-3">
+              <span>{notice}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                className="ms-auto text-xs font-medium underline underline-offset-2"
+              >
+                {t('common.dismiss')}
+              </button>
+            </p>
+          ) : justPosted === null ? undefined : (
+            <p className="alert-success flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>{t('vouchers.postedAndListed', { number: justPosted })}</span>
 
-            <Link
-              to={ENTRY_PATH[Number(arrivedFrom)] ?? '/accounting/vouchers/new'}
-              className="font-semibold underline underline-offset-2"
-            >
-              {t('vouchers.enterAnother')}
-            </Link>
+              <Link
+                to={ENTRY_PATH[Number(arrivedFrom)] ?? '/accounting/vouchers/new'}
+                className="font-semibold underline underline-offset-2"
+              >
+                {t('vouchers.enterAnother')}
+              </Link>
 
-            <button
-              type="button"
-              onClick={() => {
-                const next = new URLSearchParams(params);
-                next.delete('posted');
-                setParams(next, { replace: true });
-              }}
-              className="ms-auto text-xs font-medium underline underline-offset-2"
-            >
-              {t('common.dismiss')}
-            </button>
-          </p>
-        )
-      }
-    >
-      {(data) =>
-        data.vouchers.length === 0 ? (
-          <EmptyState message={t('reports.noData')} />
-        ) : (
-          <div className="space-y-4">
-            {data.currencies.length > 1 && (
-              <p className="alert-warn">{t('cheques.multiCurrency')}</p>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete('posted');
+                  setParams(next, { replace: true });
+                }}
+                className="ms-auto text-xs font-medium underline underline-offset-2"
+              >
+                {t('common.dismiss')}
+              </button>
+            </p>
+          )
+        }
+      >
+        {(data) =>
+          data.vouchers.length === 0 ? (
+            <EmptyState message={t('reports.noData')} />
+          ) : (
+            <div className="space-y-4">
+              {data.currencies.length > 1 && (
+                <p className="alert-warn">{t('cheques.multiCurrency')}</p>
+              )}
 
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-ink-muted">
-                {t('reports.voucherCount', { count: data.voucherCount })}:
-              </span>
-              {Object.keys(STATUS_NAME)
-                .map(Number)
-                .filter((value) => countFor(data.countByStatus, value) > 0)
-                .map((value) => (
-                  <span key={value} className="flex items-center gap-1">
-                    <VoucherStatus status={value} />
-                    <span className="tabular-nums">
-                      {countFor(data.countByStatus, value)}
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-ink-muted">
+                  {t('reports.voucherCount', { count: data.voucherCount })}:
+                </span>
+                {Object.keys(STATUS_NAME)
+                  .map(Number)
+                  .filter((value) => countFor(data.countByStatus, value) > 0)
+                  .map((value) => (
+                    <span key={value} className="flex items-center gap-1">
+                      <VoucherStatus status={value} />
+                      <span className="tabular-nums">
+                        {countFor(data.countByStatus, value)}
+                      </span>
                     </span>
-                  </span>
-                ))}
-            </div>
-
-            <div className="table-wrap table-wrap-tall">
-              <table className="table min-w-[60rem]">
-                <thead>
-                  <tr>
-                    <th className="text-start">{t('reports.date')}</th>
-                    <th className="text-start">{t('reports.voucherNo')}</th>
-                    <th className="text-start">{t('reports.voucherType')}</th>
-                    <th className="text-start">{t('reports.status')}</th>
-                    <th className="text-start">{t('reports.reference')}</th>
-                    <th className="text-start">{t('reports.particulars')}</th>
-                    <th className="text-end">{t('reports.amount')}</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {data.vouchers.map((voucher) => (
-                    <tr key={voucher.voucherId}>
-                      <td className="py-1.5 text-ink-muted whitespace-nowrap">
-                        {voucher.date}
-                      </td>
-                      <td className="py-1.5 font-medium whitespace-nowrap">
-                        {voucher.voucherNumber}
-                      </td>
-                      <td className="py-1.5 whitespace-nowrap">
-                        {t(`voucherTypes.${TYPE_NAME[voucher.type]}`)}
-                      </td>
-                      <td className="py-1.5">
-                        <VoucherStatus status={voucher.status} />
-                      </td>
-                      <td className="py-1.5 text-ink-muted">
-                        {voucher.referenceNumber ?? ''}
-                      </td>
-                      <td className="py-1.5 text-ink-muted">{voucher.narration ?? ''}</td>
-                      <td className="cell-numeric py-1.5">
-                        {moneyAlways(voucher.documentAmount)}{' '}
-                        <span className="text-ink-subtle">{voucher.currency}</span>
-                      </td>
-                    </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </div>
 
-            <dl className="panel grid max-w-sm grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              <dt className="text-ink-muted">{t('reports.totals')}</dt>
-              <dd className="text-end font-mono font-semibold tabular-nums">
-                {moneyAlways(data.totalBaseAmount)} {data.currency}
-              </dd>
-            </dl>
-          </div>
-        )
-      }
-    </ReportFrame>
+              <div className="table-wrap table-wrap-tall">
+                <table className="table min-w-[60rem]">
+                  <thead>
+                    <tr>
+                      <th className="text-start">{t('reports.date')}</th>
+                      <th className="text-start">{t('reports.voucherNo')}</th>
+                      <th className="text-start">{t('reports.voucherType')}</th>
+                      <th className="text-start">{t('reports.status')}</th>
+                      <th className="text-start">{t('reports.reference')}</th>
+                      <th className="text-start">{t('reports.particulars')}</th>
+                      <th className="text-end">{t('reports.amount')}</th>
+                      <th className="text-end">{t('vouchers.actions')}</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {data.vouchers.map((voucher) => (
+                      <tr key={voucher.voucherId}>
+                        <td className="py-1.5 text-ink-muted whitespace-nowrap">
+                          {voucher.date}
+                        </td>
+                        <td className="py-1.5 font-medium whitespace-nowrap">
+                          {voucher.voucherNumber}
+                        </td>
+                        <td className="py-1.5 whitespace-nowrap">
+                          {t(`voucherTypes.${TYPE_NAME[voucher.type]}`)}
+                        </td>
+                        <td className="py-1.5">
+                          <VoucherStatus status={voucher.status} />
+                        </td>
+                        <td className="py-1.5 text-ink-muted">
+                          {voucher.referenceNumber ?? ''}
+                        </td>
+                        <td className="py-1.5 text-ink-muted">
+                          {voucher.narration ?? ''}
+                        </td>
+                        <td className="cell-numeric py-1.5">
+                          {moneyAlways(voucher.documentAmount)}{' '}
+                          <span className="text-ink-subtle">{voucher.currency}</span>
+                        </td>
+                        <td className="py-1.5 text-end whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setPrintingId(voucher.voucherId)}
+                            className="row-action row-action-neutral me-1"
+                          >
+                            {t('printing.print')}
+                          </button>
+                          {voucher.status !== CANCELLED && (
+                            <span className="inline-flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(voucher.voucherId)}
+                                className="row-action row-action-neutral"
+                              >
+                                {t('vouchers.edit')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCancelling(voucher)}
+                                className="row-action row-action-danger"
+                              >
+                                {t('vouchers.cancelVoucher')}
+                              </button>
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <dl className="panel grid max-w-sm grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                <dt className="text-ink-muted">{t('reports.totals')}</dt>
+                <dd className="text-end font-mono font-semibold tabular-nums">
+                  {moneyAlways(data.totalBaseAmount)} {data.currency}
+                </dd>
+              </dl>
+            </div>
+          )
+        }
+      </ReportFrame>
+
+      {editingId && (
+        <VoucherEditDialog
+          voucherId={editingId}
+          onClose={() => setEditingId(null)}
+          onSaved={finished}
+        />
+      )}
+
+      {printingId && (
+        <VoucherPrintDialog voucherId={printingId} onClose={() => setPrintingId(null)} />
+      )}
+
+      {cancelling && (
+        <VoucherCancelDialog
+          voucherId={cancelling.voucherId}
+          number={cancelling.voucherNumber}
+          onClose={() => setCancelling(null)}
+          onCancelled={finished}
+        />
+      )}
+    </>
   );
 }

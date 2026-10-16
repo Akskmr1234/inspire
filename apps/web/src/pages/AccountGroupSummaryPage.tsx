@@ -127,12 +127,42 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
 
   const columns = useMemo<readonly ReportColumn[]>(
     () => [
-      { key: 'openingDebit', header: t('reports.openingDebit'), align: 'end', blankZero: true },
-      { key: 'openingCredit', header: t('reports.openingCredit'), align: 'end', blankZero: true },
-      { key: 'periodDebit', header: t('reports.periodDebit'), align: 'end', blankZero: true },
-      { key: 'periodCredit', header: t('reports.periodCredit'), align: 'end', blankZero: true },
-      { key: 'closingDebit', header: t('reports.closingDebit'), align: 'end', blankZero: true },
-      { key: 'closingCredit', header: t('reports.closingCredit'), align: 'end', blankZero: true },
+      {
+        key: 'openingDebit',
+        header: t('reports.openingDebit'),
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'openingCredit',
+        header: t('reports.openingCredit'),
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'periodDebit',
+        header: t('reports.periodDebit'),
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'periodCredit',
+        header: t('reports.periodCredit'),
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'closingDebit',
+        header: t('reports.closingDebit'),
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'closingCredit',
+        header: t('reports.closingCredit'),
+        align: 'end',
+        blankZero: true,
+      },
     ],
     [t],
   );
@@ -265,7 +295,9 @@ export function AccountGroupSummaryPage(): React.JSX.Element {
                 grandTotals={grandTotals}
                 initialExpandLevel={2}
                 onVoucherClick={(vNum) => {
-                  navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                  navigate(
+                    `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                  );
                 }}
               />
             );

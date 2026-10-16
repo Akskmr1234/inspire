@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -6,6 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
+import { prefetchScreens } from '@/lib/screens';
+import { useSettings } from '@/stores/settings';
+import { ReportSkeleton } from '@/components/ReportFrame';
 import { currentDisplayName, type ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
@@ -41,6 +44,16 @@ const DESKTOP = '(min-width: 1024px)';
 export function AppShell(): React.JSX.Element {
   const { t } = useTranslation();
   const location = useLocation();
+
+  // Once signed in, fetch the rest of the screens behind the one on show. See
+  // `prefetchScreens`.
+  useEffect(() => prefetchScreens(), []);
+
+  // And read the firm's settings over this browser's copy, so every counter works to
+  // the same setup. See `useSettings.hydrate`.
+  useEffect(() => {
+    void useSettings.getState().hydrate();
+  }, []);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -255,7 +268,9 @@ export function AppShell(): React.JSX.Element {
                   <circle cx="11" cy="11" r="7" />
                   <path d="m20 20-3.6-3.6" />
                 </svg>
-                <span className="hidden sm:inline text-xs text-ink-subtle">{t('palette.searchModule')}</span>
+                <span className="hidden sm:inline text-xs text-ink-subtle">
+                  {t('palette.searchModule')}
+                </span>
               </span>
               <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-sans text-[0.65rem] font-semibold tracking-wide text-ink-muted lg:inline">
                 {t('palette.shortcut')}
@@ -335,7 +350,22 @@ export function AppShell(): React.JSX.Element {
                 than leaving the bar naming a page that is no longer there.
               */}
               <HeadingSlotProvider value={slot}>
-                <Outlet />
+                {/*
+                  Its own boundary, inside the shell. The one in `App` sits outside
+                  the shell, so a screen whose code was still downloading took the
+                  menu and the header down with it and put a blank skeleton where
+                  the whole application had been — the delay after a click was the
+                  menu vanishing. Here only the content area waits.
+                */}
+                <Suspense
+                  fallback={
+                    <div className="page">
+                      <ReportSkeleton rows={5} />
+                    </div>
+                  }
+                >
+                  <Outlet />
+                </Suspense>
               </HeadingSlotProvider>
             </ErrorBoundary>
           </div>
@@ -373,10 +403,7 @@ function UserProfileDropdown({
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (event: MouseEvent): void => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
@@ -391,8 +418,7 @@ function UserProfileDropdown({
     };
   }, [open]);
 
-  const effectiveName =
-    displayName || currentDisplayName() || 'System Administrator';
+  const effectiveName = displayName || currentDisplayName() || 'System Administrator';
 
   const initials =
     effectiveName
@@ -400,7 +426,9 @@ function UserProfileDropdown({
       .split(/\s+/)
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase() ?? '')
-      .join('') || effectiveName.slice(0, 2).toUpperCase() || 'SA';
+      .join('') ||
+    effectiveName.slice(0, 2).toUpperCase() ||
+    'SA';
 
   return (
     <div ref={containerRef} className="relative">
@@ -441,9 +469,7 @@ function UserProfileDropdown({
               {initials}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-ink">
-                {effectiveName}
-              </p>
+              <p className="truncate text-xs font-bold text-ink">{effectiveName}</p>
               <p className="truncate text-[11px] text-ink-muted">
                 {tenantCode ? `${tenantCode}` : 'Inspire ERP Main'}
               </p>
@@ -463,7 +489,13 @@ function UserProfileDropdown({
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                className="size-4 text-ink-muted"
+              >
                 <circle cx="12" cy="8" r="5" />
                 <path d="M20 21a8 8 0 0 0-16 0" />
               </svg>
@@ -478,7 +510,13 @@ function UserProfileDropdown({
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                className="size-4 text-ink-muted"
+              >
                 <rect x="5" y="11" width="14" height="10" rx="2" />
                 <path d="M8 11V7a4 4 0 0 1 8 0v4" />
               </svg>
@@ -493,7 +531,13 @@ function UserProfileDropdown({
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="size-4 text-ink-muted">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                className="size-4 text-ink-muted"
+              >
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
@@ -580,9 +624,7 @@ function NavDrawer({
                 <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-ink">
-                  {effectiveName}
-                </p>
+                <p className="truncate text-xs font-semibold text-ink">{effectiveName}</p>
                 <p className="truncate text-[11px] text-ink-muted">
                   {t('profile.myProfile')}
                 </p>

@@ -110,8 +110,18 @@ export function DayBookPage(): React.JSX.Element {
 
   const columns = useMemo<readonly ReportColumn[]>(
     () => [
-      { key: 'debit', header: t('reports.debit') || 'Debit', align: 'end', blankZero: true },
-      { key: 'credit', header: t('reports.credit') || 'Credit', align: 'end', blankZero: true },
+      {
+        key: 'debit',
+        header: t('reports.debit') || 'Debit',
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'credit',
+        header: t('reports.credit') || 'Credit',
+        align: 'end',
+        blankZero: true,
+      },
     ],
     [t],
   );
@@ -212,7 +222,8 @@ export function DayBookPage(): React.JSX.Element {
           return (
             <div className="space-y-4">
               <p className="text-sm text-ink-muted">
-                {t('reports.voucherCount', { count: data.voucherCount })} · {data.currency}
+                {t('reports.voucherCount', { count: data.voucherCount })} ·{' '}
+                {data.currency}
               </p>
 
               <div className="table-wrap table-wrap-tall card overflow-hidden border border-line">
@@ -222,7 +233,9 @@ export function DayBookPage(): React.JSX.Element {
                       <th className="py-2.5 px-3 text-start">{t('reports.date')}</th>
                       <th className="py-2.5 px-3 text-start">{t('reports.voucherNo')}</th>
                       <th className="py-2.5 px-3 text-start">{t('reports.ledger')}</th>
-                      <th className="py-2.5 px-3 text-start">{t('reports.particulars')}</th>
+                      <th className="py-2.5 px-3 text-start">
+                        {t('reports.particulars')}
+                      </th>
                       <th className="py-2.5 px-3 text-end">{t('reports.debit')}</th>
                       <th className="py-2.5 px-3 text-end">{t('reports.credit')}</th>
                     </tr>
@@ -246,7 +259,9 @@ export function DayBookPage(): React.JSX.Element {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  navigate(`/accounting/voucher-report?posted=${encodeURIComponent(entry.voucherNumber)}`)
+                                  navigate(
+                                    `/accounting/voucher-report?posted=${encodeURIComponent(entry.voucherNumber)}`,
+                                  )
                                 }
                                 className="font-semibold text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap font-mono"
                               >
@@ -257,7 +272,9 @@ export function DayBookPage(): React.JSX.Element {
                             )}
                           </td>
                           <td className="py-1 px-3">
-                            <span className="text-primary-700 dark:text-primary-400 font-mono font-medium">{line.ledgerCode}</span>{' '}
+                            <span className="text-primary-700 dark:text-primary-400 font-mono font-medium">
+                              {line.ledgerCode}
+                            </span>{' '}
                             <span className="text-ink">{line.ledgerName}</span>
                           </td>
                           <td className="py-1 px-3 text-ink-muted">
@@ -265,8 +282,12 @@ export function DayBookPage(): React.JSX.Element {
                               ? (line.narration ?? entry.narration ?? '—')
                               : (line.narration ?? '—')}
                           </td>
-                          <td className="cell-numeric py-1 px-3 font-mono">{money(line.debit)}</td>
-                          <td className="cell-numeric py-1 px-3 font-mono">{money(line.credit)}</td>
+                          <td className="cell-numeric py-1 px-3 font-mono">
+                            {money(line.debit)}
+                          </td>
+                          <td className="cell-numeric py-1 px-3 font-mono">
+                            {money(line.credit)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -274,9 +295,15 @@ export function DayBookPage(): React.JSX.Element {
 
                   <tfoot className="border-t-2 border-line-strong bg-surface-3 font-bold">
                     <tr>
-                      <td colSpan={4} className="py-2.5 px-3 uppercase tracking-wider">{t('reports.totals')}</td>
-                      <td className="cell-numeric py-2.5 px-3 font-mono">{money(data.totalDebit)}</td>
-                      <td className="cell-numeric py-2.5 px-3 font-mono">{money(data.totalCredit)}</td>
+                      <td colSpan={4} className="py-2.5 px-3 uppercase tracking-wider">
+                        {t('reports.totals')}
+                      </td>
+                      <td className="cell-numeric py-2.5 px-3 font-mono">
+                        {money(data.totalDebit)}
+                      </td>
+                      <td className="cell-numeric py-2.5 px-3 font-mono">
+                        {money(data.totalCredit)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>

@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
 using ERP.Domain.Sales;
 using ERP.Domain.Taxation;
 using ERP.SharedKernel.Results;
@@ -35,6 +36,7 @@ public sealed record SalesInvoiceLineTaxDetail(
 /// <param name="Tax">The tax on it.</param>
 /// <param name="Components">That tax, head by head, as the engine assessed it.</param>
 /// <param name="SerialNumberIds">The units sold, where the product is serialised.</param>
+/// <param name="SerialNumbers">The same units by their numbers, as a correction sends them back.</param>
 public sealed record SalesInvoiceLineDetail(
     int LineNumber,
     Guid ProductId,
@@ -47,7 +49,8 @@ public sealed record SalesInvoiceLineDetail(
     decimal Taxable,
     decimal Tax,
     IReadOnlyList<SalesInvoiceLineTaxDetail> Components,
-    IReadOnlyList<Guid> SerialNumberIds);
+    IReadOnlyList<Guid> SerialNumberIds,
+    IReadOnlyList<string> SerialNumbers);
 
 /// <summary>One charge carried beside the goods.</summary>
 /// <param name="LedgerId">The account it posts to.</param>
@@ -69,6 +72,8 @@ public sealed record SalesInvoiceChargeDetail(Guid LedgerId, decimal Amount, boo
 /// <param name="StockDocumentId">The issue that took the goods off the shelf, once posted.</param>
 /// <param name="BillId">The bill the customer owes, once posted.</param>
 /// <param name="JournalVoucherId">The journal in the nominal ledger, once posted.</param>
+/// <param name="Kind">Whether it is a sale or a return.</param>
+/// <param name="ReturnsInvoiceId">For a return, the invoice it is against.</param>
 public sealed record SalesInvoiceDetail(
     SalesInvoiceResponse Header,
     DateOnly Date,
@@ -82,7 +87,9 @@ public sealed record SalesInvoiceDetail(
     IReadOnlyList<SalesInvoiceChargeDetail> Charges,
     Guid? StockDocumentId,
     Guid? BillId,
-    Guid? JournalVoucherId);
+    Guid? JournalVoucherId,
+    SalesDocumentKind Kind,
+    Guid? ReturnsInvoiceId);
 
 /// <summary>Handles <see cref="GetSalesInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -94,16 +101,20 @@ public sealed class GetSalesInvoiceQueryHandler
     : IQueryHandler<GetSalesInvoiceQuery, SalesInvoiceDetail>
 {
     private readonly ISalesInvoiceRepository _invoices;
+    private readonly ISerialNumberRepository _serials;
     private readonly ITenantContext _tenantContext;
 
     /// <summary>Initialises a new instance of the <see cref="GetSalesInvoiceQueryHandler"/> class.</summary>
     /// <param name="invoices">The sales invoice repository.</param>
+    /// <param name="serials">The serial-number repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     public GetSalesInvoiceQueryHandler(
         ISalesInvoiceRepository invoices,
+        ISerialNumberRepository serials,
         ITenantContext tenantContext)
     {
         _invoices = invoices;
+        _serials = serials;
         _tenantContext = tenantContext;
     }
 
@@ -129,6 +140,13 @@ public sealed class GetSalesInvoiceQueryHandler
             return Result.Failure<SalesInvoiceDetail>(Error.NotFound(
                 "SalesInvoice.NotFound", "That invoice does not exist in the selected firm."));
         }
+
+        List<SerialNumberId> unitIds =
+            [.. invoice.Lines.SelectMany(line => line.Serials.Select(serial => serial.SerialNumberId))];
+
+        IReadOnlyDictionary<SerialNumberId, SerialNumber> units = unitIds.Count == 0
+            ? new Dictionary<SerialNumberId, SerialNumber>()
+            : await _serials.GetManyAsync(unitIds, cancellationToken);
 
         return Result.Success(new SalesInvoiceDetail(
             CreateSalesInvoiceCommandHandler.Describe(invoice),
@@ -157,7 +175,12 @@ public sealed class GetSalesInvoiceQueryHandler
                                 new SalesInvoiceLineTaxDetail(
                                     component.Type, component.Percentage, component.Amount)),
                         ],
-                        [.. line.Serials.Select(serial => serial.SerialNumberId.Value)])),
+                        [.. line.Serials.Select(serial => serial.SerialNumberId.Value)],
+                        [
+                            .. line.Serials
+                                .Select(serial => units.GetValueOrDefault(serial.SerialNumberId)?.Number)
+                                .OfType<string>(),
+                        ])),
             ],
             [
                 .. invoice.Charges.Select(charge =>
@@ -166,6 +189,8 @@ public sealed class GetSalesInvoiceQueryHandler
             ],
             invoice.StockDocumentId?.Value,
             invoice.BillId?.Value,
-            invoice.JournalVoucherId?.Value));
+            invoice.JournalVoucherId?.Value,
+            invoice.Kind,
+            invoice.ReturnsInvoiceId?.Value));
     }
 }

@@ -48,7 +48,8 @@ export interface ReportHead {
   readonly headId: number | string;
   readonly name: string;
   readonly nameArabic?: string | undefined;
-  readonly badgeTone?: 'asset' | 'liability' | 'equity' | 'income' | 'expense' | 'neutral' | undefined;
+  readonly badgeTone?:
+    'asset' | 'liability' | 'equity' | 'income' | 'expense' | 'neutral' | undefined;
   readonly groups: readonly ReportGroup[];
   /** Subtotals keyed by column key. Recomputed if omitted. */
   readonly subtotals?: Record<string, number | undefined> | undefined;
@@ -91,34 +92,40 @@ export interface HierarchicalAccountsTableProps {
 }
 
 const DEFAULT_TONE = {
-  badge: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700',
+  badge:
+    'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700',
   border: 'border-line',
   bg: 'bg-surface-2/40',
 };
 
 const TONE_CLASSES: Record<string, { badge: string; border: string; bg: string }> = {
   asset: {
-    badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
+    badge:
+      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700',
     border: 'border-emerald-200 dark:border-emerald-800/40',
     bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
   },
   liability: {
-    badge: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700',
+    badge:
+      'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700',
     border: 'border-amber-200 dark:border-amber-800/40',
     bg: 'bg-amber-50/50 dark:bg-amber-950/20',
   },
   equity: {
-    badge: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700',
+    badge:
+      'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-700',
     border: 'border-purple-200 dark:border-purple-800/40',
     bg: 'bg-purple-50/50 dark:bg-purple-950/20',
   },
   income: {
-    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700',
+    badge:
+      'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-700',
     border: 'border-blue-200 dark:border-blue-800/40',
     bg: 'bg-blue-50/50 dark:bg-blue-950/20',
   },
   expense: {
-    badge: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-700',
+    badge:
+      'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-700',
     border: 'border-rose-200 dark:border-rose-800/40',
     bg: 'bg-rose-50/50 dark:bg-rose-950/20',
   },
@@ -164,7 +171,9 @@ export function HierarchicalAccountsTable({
 
   const [expandedLedgers, setExpandedLedgers] = useState<Set<string>>(() => {
     if (initialExpandLevel >= 3) {
-      return new Set(heads.flatMap((h) => h.groups.flatMap((g) => g.ledgers.map((l) => l.id))));
+      return new Set(
+        heads.flatMap((h) => h.groups.flatMap((g) => g.ledgers.map((l) => l.id))),
+      );
     }
     return new Set();
   });
@@ -189,7 +198,9 @@ export function HierarchicalAccountsTable({
       setExpandedHeads(new Set(heads.map((h) => h.id)));
       setExpandedGroups(new Set(heads.flatMap((h) => h.groups.map((g) => g.id))));
       setExpandedLedgers(
-        new Set(heads.flatMap((h) => h.groups.flatMap((g) => g.ledgers.map((l) => l.id)))),
+        new Set(
+          heads.flatMap((h) => h.groups.flatMap((g) => g.ledgers.map((l) => l.id))),
+        ),
       );
     } else if (level === 4) {
       // Expand all + expand ledgers
@@ -246,7 +257,13 @@ export function HierarchicalAccountsTable({
       return next;
     });
 
-    if (isExpanding && !ledger.transactions && !dynamicTransactions[ledger.id] && fromDate && toDate) {
+    if (
+      isExpanding &&
+      !ledger.transactions &&
+      !dynamicTransactions[ledger.id] &&
+      fromDate &&
+      toDate
+    ) {
       void loadLedgerTransactions(ledger.id);
     }
   };
@@ -258,21 +275,23 @@ export function HierarchicalAccountsTable({
 
     try {
       const res = await fetchLedgerStatement(ledgerId, fromDate, toDate);
-      const mappedLines: readonly ReportTransaction[] = (res.lines ?? []).map((line, idx) => ({
-        id: line.voucherId || `line-${idx}`,
-        date: line.date,
-        voucherNumber: line.voucherNumber,
-        voucherType: line.voucherType,
-        referenceNumber: line.referenceNumber,
-        particulars:
-          line.contraLedgerNames && line.contraLedgerNames.length > 0
-            ? line.contraLedgerNames
-            : line.narration || undefined,
-        narration: line.narration,
-        debit: line.debit,
-        credit: line.credit,
-        balance: line.runningBalance,
-      }));
+      const mappedLines: readonly ReportTransaction[] = (res.lines ?? []).map(
+        (line, idx) => ({
+          id: line.voucherId || `line-${idx}`,
+          date: line.date,
+          voucherNumber: line.voucherNumber,
+          voucherType: line.voucherType,
+          referenceNumber: line.referenceNumber,
+          particulars:
+            line.contraLedgerNames && line.contraLedgerNames.length > 0
+              ? line.contraLedgerNames
+              : line.narration || undefined,
+          narration: line.narration,
+          debit: line.debit,
+          credit: line.credit,
+          balance: line.runningBalance,
+        }),
+      );
 
       setDynamicTransactions((prev) => ({ ...prev, [ledgerId]: mappedLines }));
     } catch {
@@ -347,7 +366,10 @@ export function HierarchicalAccountsTable({
 
         const totals: Record<string, number> = {};
         columns.forEach((col) => {
-          totals[col.key] = g.ledgers.reduce((sum, l) => sum + (l.figures[col.key] ?? 0), 0);
+          totals[col.key] = g.ledgers.reduce(
+            (sum, l) => sum + (l.figures[col.key] ?? 0),
+            0,
+          );
         });
         map.set(g.id, totals);
       });
@@ -395,7 +417,10 @@ export function HierarchicalAccountsTable({
 
   // Total counts for stats
   const totalLedgerCount = useMemo(() => {
-    return heads.reduce((acc, h) => acc + h.groups.reduce((gAcc, g) => gAcc + g.ledgers.length, 0), 0);
+    return heads.reduce(
+      (acc, h) => acc + h.groups.reduce((gAcc, g) => gAcc + g.ledgers.length, 0),
+      0,
+    );
   }, [heads]);
 
   const totalGroupCount = useMemo(() => {
@@ -421,7 +446,12 @@ export function HierarchicalAccountsTable({
     }
 
     return (
-      <span className={clsx('font-mono tabular-nums', val < 0 && 'text-red-600 dark:text-red-400')}>
+      <span
+        className={clsx(
+          'font-mono tabular-nums',
+          val < 0 && 'text-red-600 dark:text-red-400',
+        )}
+      >
         {col.blankZero ? money(val) : moneyAlways(val)}
       </span>
     );
@@ -432,7 +462,9 @@ export function HierarchicalAccountsTable({
   if (isEmpty) {
     return (
       <div className="card p-8 text-center text-ink-muted">
-        <p className="text-sm font-medium">{emptyMessage ?? t('reports.none') ?? 'No account records found in this range.'}</p>
+        <p className="text-sm font-medium">
+          {emptyMessage ?? t('reports.none') ?? 'No account records found in this range.'}
+        </p>
       </div>
     );
   }
@@ -522,7 +554,9 @@ export function HierarchicalAccountsTable({
           </div>
 
           <span className="hidden md:inline-block text-xs font-medium text-ink-subtle">
-            {heads.length} {t('reports.heads') || 'Heads'} · {totalGroupCount} {t('reports.groups') || 'Groups'} · {totalLedgerCount} {t('reports.accounts') || 'Accounts'}
+            {heads.length} {t('reports.heads') || 'Heads'} · {totalGroupCount}{' '}
+            {t('reports.groups') || 'Groups'} · {totalLedgerCount}{' '}
+            {t('reports.accounts') || 'Accounts'}
           </span>
         </div>
       </div>
@@ -534,7 +568,10 @@ export function HierarchicalAccountsTable({
             <thead>
               <tr className="border-b-2 border-line bg-surface-3 text-ink-muted font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4 text-start min-w-[20rem]">
-                  <span>{t('reports.accountHierarchy') || 'Account Head → Group → Ledger → Details'}</span>
+                  <span>
+                    {t('reports.accountHierarchy') ||
+                      'Account Head → Group → Ledger → Details'}
+                  </span>
                 </th>
                 {columns.map((col) => (
                   <th
@@ -557,9 +594,14 @@ export function HierarchicalAccountsTable({
               {filteredHeads.map((head) => {
                 const isHeadExpanded = expandedHeads.has(head.id);
                 const hTotals = headSubtotals.get(head.id) ?? {};
-                const tone = (head.badgeTone ? TONE_CLASSES[head.badgeTone] : undefined) ?? DEFAULT_TONE;
+                const tone =
+                  (head.badgeTone ? TONE_CLASSES[head.badgeTone] : undefined) ??
+                  DEFAULT_TONE;
 
-                const headLedgersCount = head.groups.reduce((s, g) => s + g.ledgers.length, 0);
+                const headLedgersCount = head.groups.reduce(
+                  (s, g) => s + g.ledgers.length,
+                  0,
+                );
 
                 return (
                   <Fragment key={head.id}>
@@ -591,11 +633,13 @@ export function HierarchicalAccountsTable({
                               tone.badge,
                             )}
                           >
-                            {head.headId}. {isArabic && head.nameArabic ? head.nameArabic : head.name}
+                            {head.headId}.{' '}
+                            {isArabic && head.nameArabic ? head.nameArabic : head.name}
                           </span>
 
                           <span className="text-[11px] font-medium text-ink-subtle">
-                            ({head.groups.length} {t('reports.groups') || 'groups'} · {headLedgersCount} {t('reports.accounts') || 'accounts'})
+                            ({head.groups.length} {t('reports.groups') || 'groups'} ·{' '}
+                            {headLedgersCount} {t('reports.accounts') || 'accounts'})
                           </span>
                         </div>
                       </td>
@@ -650,7 +694,8 @@ export function HierarchicalAccountsTable({
                                   </span>
 
                                   <span className="text-[10px] text-ink-subtle font-normal">
-                                    ({group.ledgers.length} {t('reports.accounts') || 'ledgers'})
+                                    ({group.ledgers.length}{' '}
+                                    {t('reports.accounts') || 'ledgers'})
                                   </span>
                                 </div>
                               </td>
@@ -675,7 +720,10 @@ export function HierarchicalAccountsTable({
                               group.ledgers.map((ledger) => {
                                 const isLedgerExpanded = expandedLedgers.has(ledger.id);
                                 const isLedgerLoading = loadingLedgers.has(ledger.id);
-                                const txList = ledger.transactions ?? dynamicTransactions[ledger.id] ?? [];
+                                const txList =
+                                  ledger.transactions ??
+                                  dynamicTransactions[ledger.id] ??
+                                  [];
 
                                 return (
                                   <Fragment key={ledger.id}>
@@ -723,10 +771,16 @@ export function HierarchicalAccountsTable({
                                             'py-1.5 px-3 whitespace-nowrap',
                                             col.align === 'start' && 'text-start',
                                             col.align === 'center' && 'text-center',
-                                            (!col.align || col.align === 'end') && 'text-end',
+                                            (!col.align || col.align === 'end') &&
+                                              'text-end',
                                           )}
                                         >
-                                          {formatVal(ledger.figures[col.key], col, ledger, 'ledger')}
+                                          {formatVal(
+                                            ledger.figures[col.key],
+                                            col,
+                                            ledger,
+                                            'ledger',
+                                          )}
                                         </td>
                                       ))}
                                     </tr>
@@ -736,18 +790,27 @@ export function HierarchicalAccountsTable({
                                     {/* ============================================== */}
                                     {isLedgerExpanded && (
                                       <tr className="bg-surface-2/30 border-y border-line">
-                                        <td colSpan={columns.length + 1} className="p-3 ps-16 pe-6">
+                                        <td
+                                          colSpan={columns.length + 1}
+                                          className="p-3 ps-16 pe-6"
+                                        >
                                           <div className="rounded-xl border border-line bg-surface p-3 shadow-inner">
                                             <div className="flex items-center justify-between border-b border-line pb-2 mb-2">
                                               <span className="text-[11px] font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
-                                                <span>📋 {t('reports.transactionDetails') || 'Transactions / Postings'}:</span>
+                                                <span>
+                                                  📋{' '}
+                                                  {t('reports.transactionDetails') ||
+                                                    'Transactions / Postings'}
+                                                  :
+                                                </span>
                                                 <span className="text-primary-600 dark:text-primary-400 font-mono">
                                                   {ledger.code} — {ledger.name}
                                                 </span>
                                               </span>
 
                                               <span className="text-[10px] text-ink-muted">
-                                                {txList.length} {t('reports.entries') || 'entries'}
+                                                {txList.length}{' '}
+                                                {t('reports.entries') || 'entries'}
                                               </span>
                                             </div>
 
@@ -758,20 +821,38 @@ export function HierarchicalAccountsTable({
                                               </div>
                                             ) : txList.length === 0 ? (
                                               <p className="py-3 text-center text-xs text-ink-subtle italic">
-                                                {t('reports.noTransactionsPeriod') || 'No transaction postings for this account in the selected date range.'}
+                                                {t('reports.noTransactionsPeriod') ||
+                                                  'No transaction postings for this account in the selected date range.'}
                                               </p>
                                             ) : (
                                               <div className="overflow-x-auto">
                                                 <table className="w-full text-xs border-collapse">
                                                   <thead>
                                                     <tr className="border-b border-line text-[10px] font-bold text-ink-muted uppercase">
-                                                      <th className="py-1 px-2 text-start w-24">{t('reports.date') || 'Date'}</th>
-                                                      <th className="py-1 px-2 text-start w-28">{t('reports.voucherNo') || 'Voucher #'}</th>
-                                                      <th className="py-1 px-2 text-start w-24">{t('reports.type') || 'Type'}</th>
-                                                      <th className="py-1 px-3 text-start">{t('reports.particulars') || 'Particulars / Narration'}</th>
-                                                      <th className="py-1 px-2 text-end w-28">{t('reports.debit') || 'Debit'}</th>
-                                                      <th className="py-1 px-2 text-end w-28">{t('reports.credit') || 'Credit'}</th>
-                                                      <th className="py-1 px-2 text-end w-28">{t('reports.balance') || 'Balance'}</th>
+                                                      <th className="py-1 px-2 text-start w-24">
+                                                        {t('reports.date') || 'Date'}
+                                                      </th>
+                                                      <th className="py-1 px-2 text-start w-28">
+                                                        {t('reports.voucherNo') ||
+                                                          'Voucher #'}
+                                                      </th>
+                                                      <th className="py-1 px-2 text-start w-24">
+                                                        {t('reports.type') || 'Type'}
+                                                      </th>
+                                                      <th className="py-1 px-3 text-start">
+                                                        {t('reports.particulars') ||
+                                                          'Particulars / Narration'}
+                                                      </th>
+                                                      <th className="py-1 px-2 text-end w-28">
+                                                        {t('reports.debit') || 'Debit'}
+                                                      </th>
+                                                      <th className="py-1 px-2 text-end w-28">
+                                                        {t('reports.credit') || 'Credit'}
+                                                      </th>
+                                                      <th className="py-1 px-2 text-end w-28">
+                                                        {t('reports.balance') ||
+                                                          'Balance'}
+                                                      </th>
                                                     </tr>
                                                   </thead>
                                                   <tbody className="divide-y divide-line/40">
@@ -787,7 +868,12 @@ export function HierarchicalAccountsTable({
                                                           {onVoucherClick ? (
                                                             <button
                                                               type="button"
-                                                              onClick={() => onVoucherClick(tx.voucherNumber, tx.id)}
+                                                              onClick={() =>
+                                                                onVoucherClick(
+                                                                  tx.voucherNumber,
+                                                                  tx.id,
+                                                                )
+                                                              }
                                                               className="hover:underline font-semibold"
                                                             >
                                                               {tx.voucherNumber}
@@ -797,28 +883,43 @@ export function HierarchicalAccountsTable({
                                                           )}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-ink-muted whitespace-nowrap">
-                                                          {tx.voucherType ? String(tx.voucherType) : '—'}
+                                                          {tx.voucherType
+                                                            ? String(tx.voucherType)
+                                                            : '—'}
                                                         </td>
                                                         <td className="py-1.5 px-3 text-ink">
                                                           <div>
                                                             {Array.isArray(tx.particulars)
                                                               ? tx.particulars.join(', ')
-                                                              : tx.particulars || tx.narration || '—'}
+                                                              : tx.particulars ||
+                                                                tx.narration ||
+                                                                '—'}
                                                           </div>
-                                                          {tx.narration && tx.particulars && tx.particulars !== tx.narration && (
-                                                            <span className="text-[10px] text-ink-subtle italic block">
-                                                              {tx.narration}
-                                                            </span>
-                                                          )}
+                                                          {tx.narration &&
+                                                            tx.particulars &&
+                                                            tx.particulars !==
+                                                              tx.narration && (
+                                                              <span className="text-[10px] text-ink-subtle italic block">
+                                                                {tx.narration}
+                                                              </span>
+                                                            )}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-end font-mono tabular-nums">
-                                                          {tx.debit !== undefined && tx.debit > 0 ? money(tx.debit) : '—'}
+                                                          {tx.debit !== undefined &&
+                                                          tx.debit > 0
+                                                            ? money(tx.debit)
+                                                            : '—'}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-end font-mono tabular-nums">
-                                                          {tx.credit !== undefined && tx.credit > 0 ? money(tx.credit) : '—'}
+                                                          {tx.credit !== undefined &&
+                                                          tx.credit > 0
+                                                            ? money(tx.credit)
+                                                            : '—'}
                                                         </td>
                                                         <td className="py-1.5 px-2 text-end font-mono tabular-nums font-semibold text-ink">
-                                                          {tx.balance !== undefined ? moneyAlways(tx.balance) : '—'}
+                                                          {tx.balance !== undefined
+                                                            ? moneyAlways(tx.balance)
+                                                            : '—'}
                                                         </td>
                                                       </tr>
                                                     ))}
@@ -899,7 +1000,12 @@ export function HierarchicalAccountsTable({
                       (!col.align || col.align === 'end') && 'text-end',
                     )}
                   >
-                    {formatVal(computedGrandTotals[col.key], col, computedGrandTotals, 'total')}
+                    {formatVal(
+                      computedGrandTotals[col.key],
+                      col,
+                      computedGrandTotals,
+                      'total',
+                    )}
                   </td>
                 ))}
               </tr>
@@ -928,13 +1034,12 @@ export function HierarchicalAccountsTable({
             <span>
               {isBalanced
                 ? t('reports.balancedBooks') || 'Books are balanced.'
-                : t('reports.unbalancedBooks') || 'Warning: Trial Balance / Balance Sheet is not balanced.'}
+                : t('reports.unbalancedBooks') ||
+                  'Warning: Trial Balance / Balance Sheet is not balanced.'}
             </span>
           </div>
 
-          <span className="text-xs font-mono font-medium">
-            {currency}
-          </span>
+          <span className="text-xs font-mono font-medium">{currency}</span>
         </div>
       )}
 

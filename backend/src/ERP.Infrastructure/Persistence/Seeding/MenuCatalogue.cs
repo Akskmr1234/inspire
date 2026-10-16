@@ -463,6 +463,54 @@ public static class MenuCatalogue
                     "/settings/menu",
                     "platform:menu:view"),
 
+                // Who may sign in, and what each role does and sees. Behind the
+                // permissions that guard the screens' own endpoints, so the entry is
+                // never offered to somebody the screen would refuse.
+                new(
+                    "settings.users",
+                    "Users",
+                    "المستخدمون",
+                    "platform",
+                    "/settings/users",
+                    "platform:user:view"),
+
+                new(
+                    "settings.roles",
+                    "Roles and menus",
+                    "الأدوار والقوائم",
+                    "platform",
+                    "/settings/roles",
+                    "platform:role:view"),
+
+                // How each document prints - preview, layout, printer, copies, and a
+                // second run - and the layouts themselves. Readable by anybody who may
+                // read settings; the designer behind the print-template permission.
+                new(
+                    "settings.printing",
+                    "Print settings",
+                    "إعدادات الطباعة",
+                    "platform",
+                    "/settings/printing",
+                    "platform:setting:view"),
+
+                new(
+                    "settings.print-templates",
+                    "Print templates",
+                    "قوالب الطباعة",
+                    "printing",
+                    "/settings/print-templates",
+                    "printing:template:view"),
+
+                // Clearing a firm's data to hand it over or to test from nothing. Behind
+                // the permission to delete the firm, the nearest grant to what it does.
+                new(
+                    "settings.data",
+                    "Clear data",
+                    "مسح البيانات",
+                    "platform",
+                    "/settings/data",
+                    "platform:firm:delete"),
+
                 // No permission: everything behind it is a preference about how this
                 // browser behaves - the tax rates a picker offers, whether Arabic
                 // names are translated, how many rows a page holds - and none of it

@@ -2,6 +2,7 @@ using ERP.Application;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
@@ -96,6 +97,32 @@ public sealed class VoucherRepository : IVoucherRepository
 
     /// <inheritdoc />
     public void Add(Voucher voucher) => _context.Vouchers.Add(voucher);
+
+    /// <inheritdoc />
+    public async Task<string?> FindRaisingDocumentAsync(
+        VoucherId id,
+        CancellationToken cancellationToken = default)
+    {
+        VoucherId? journal = id;
+
+        return await _context.SalesInvoices
+                .Where(invoice => invoice.JournalVoucherId == journal)
+                .Select(invoice => invoice.Number)
+                .FirstOrDefaultAsync(cancellationToken)
+            ?? await _context.PurchaseInvoices
+                .Where(invoice => invoice.JournalVoucherId == journal)
+                .Select(invoice => invoice.Number)
+                .FirstOrDefaultAsync(cancellationToken)
+            ?? await _context.StockDocuments
+                .Where(document => document.JournalVoucherId == journal)
+                .Select(document => document.Number)
+                .FirstOrDefaultAsync(cancellationToken)
+            ?? await _context.Cheques
+                .Where(cheque => cheque.ClearingVoucherId == journal
+                    || cheque.ReversalVoucherId == journal)
+                .Select(cheque => "cheque " + cheque.ChequeNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+    }
 }
 
 /// <summary>The EF Core ledger repository.</summary>
@@ -309,12 +336,15 @@ public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
         FirmId firmId,
         LedgerId supplierLedgerId,
         string supplierInvoiceNumber,
+        PurchaseInvoiceId? except = null,
         CancellationToken cancellationToken = default) =>
         _context.PurchaseInvoices.AnyAsync(
             invoice =>
                 invoice.FirmId == firmId
                 && invoice.SupplierLedgerId == supplierLedgerId
-                && invoice.SupplierInvoiceNumber == supplierInvoiceNumber,
+                && invoice.SupplierInvoiceNumber == supplierInvoiceNumber
+                && invoice.Status != PurchaseInvoiceStatus.Cancelled
+                && (except == null || invoice.Id != except),
             cancellationToken);
 }
 
@@ -381,12 +411,22 @@ public sealed class BillRepository : IBillRepository
             .Where(b =>
                 b.FirmId == firmId
                 && b.LedgerId == ledgerId
+                && b.Status != BillStatus.Cancelled
                 && requested.Contains(b.BillNumber))
             .Select(b => b.BillNumber)
             .ToListAsync(cancellationToken);
 
         return existing.ToHashSet(StringComparer.Ordinal);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Bill>> FindRaisedByAsync(
+        VoucherId voucherId,
+        CancellationToken cancellationToken = default) =>
+        await _context.Bills
+            .Include(b => b.Allocations)
+            .Where(b => b.OriginVoucherId == voucherId)
+            .ToListAsync(cancellationToken);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Bill>> FindAllocatedByAsync(
@@ -458,6 +498,14 @@ public sealed class ChequeRepository : IChequeRepository
 
     /// <inheritdoc />
     public void Add(Cheque cheque) => _context.Cheques.Add(cheque);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Cheque>> FindRecordedByAsync(
+        VoucherId voucherId,
+        CancellationToken cancellationToken = default) =>
+        await _context.Cheques
+            .Where(c => c.OriginVoucherId == voucherId)
+            .ToListAsync(cancellationToken);
 }
 
 /// <summary>The EF Core firm repository.</summary>
@@ -619,6 +667,28 @@ public sealed class GridLayoutRepository : IGridLayoutRepository
 
     /// <inheritdoc />
     public void Remove(GridLayout layout) => _context.GridLayouts.Remove(layout);
+}
+
+/// <summary>EF Core implementation of <see cref="IFirmSettingRepository"/>.</summary>
+public sealed class FirmSettingRepository : IFirmSettingRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="FirmSettingRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public FirmSettingRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<FirmSetting?> FindAsync(
+        FirmId firmId,
+        string key,
+        CancellationToken cancellationToken = default) =>
+        _context.FirmSettings.FirstOrDefaultAsync(
+            setting => setting.FirmId == firmId && setting.Key == key,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(FirmSetting setting) => _context.FirmSettings.Add(setting);
 }
 
 /// <summary>Reads and writes dashboards.</summary>

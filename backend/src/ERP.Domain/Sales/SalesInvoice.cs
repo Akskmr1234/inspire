@@ -324,57 +324,11 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 "SalesInvoice.NumberRequired", "An invoice number is required."));
         }
 
-        if (!Enum.IsDefined(mode))
-        {
-            return Result.Failure<SalesInvoice>(Error.Validation(
-                "SalesInvoice.UnknownMode", $"'{mode}' is not a recognised tax mode."));
-        }
+        Result header = CheckHeader(firmId, customer, warehouse, mode, kind, returnsInvoiceId);
 
-        if (!Enum.IsDefined(kind))
+        if (header.IsFailure)
         {
-            return Result.Failure<SalesInvoice>(Error.Validation(
-                "SalesInvoice.UnknownKind", $"'{kind}' is not a kind of sales document."));
-        }
-
-        // An invoice that says which invoice it returns is a document confused about
-        // what it is, and the confusion would reach the accounts: the posting reads the
-        // kind to decide which way the goods and the money move.
-        if (kind == SalesDocumentKind.Invoice && returnsInvoiceId is not null)
-        {
-            return Result.Failure<SalesInvoice>(Error.Validation(
-                "SalesInvoice.NotAReturn",
-                "Only a return may name the invoice it is against."));
-        }
-
-        // Billed to somebody who is not a customer. A sale to a bank account or an
-        // expense head is a mistake that would sit in the debtors report for ever, and
-        // the party is the one thing on an invoice nobody re-reads before posting.
-        if (customer.Kind != LedgerKind.Customer)
-        {
-            return Result.Failure<SalesInvoice>(Error.BusinessRule(
-                "SalesInvoice.NotACustomer",
-                $"'{customer.Name}' is not a customer account."));
-        }
-
-        if (customer.FirmId != firmId || warehouse.FirmId != firmId)
-        {
-            return Result.Failure<SalesInvoice>(Error.Validation(
-                "SalesInvoice.NotInFirm",
-                "The customer and the warehouse must both belong to the selected firm."));
-        }
-
-        if (!customer.IsActive)
-        {
-            return Result.Failure<SalesInvoice>(Error.BusinessRule(
-                "SalesInvoice.CustomerWithdrawn",
-                $"'{customer.Name}' has been withdrawn from use."));
-        }
-
-        if (!warehouse.IsActive)
-        {
-            return Result.Failure<SalesInvoice>(Error.BusinessRule(
-                "SalesInvoice.WarehouseWithdrawn",
-                $"Warehouse '{warehouse.Name}' has been withdrawn from use."));
+            return Result.Failure<SalesInvoice>(header.Error);
         }
 
         Result canPost = financialYear.CanPostOn(date);
@@ -396,6 +350,106 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 currency,
                 returnsInvoiceId,
                 salesOrderId));
+    }
+
+    /// <summary>Replaces what a draft says, keeping its number.</summary>
+    /// <param name="financialYear">The year the new date falls in.</param>
+    /// <param name="date">The invoice date.</param>
+    /// <param name="customer">The customer billed.</param>
+    /// <param name="warehouse">The warehouse the goods leave.</param>
+    /// <param name="mode">The tax mode.</param>
+    /// <param name="returnsInvoiceId">The invoice a return is against, where it names one.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// The lines and charges are cleared, to be entered again by the caller: an edit is
+    /// the whole document as it should have been, not a list of differences, so the screen
+    /// that corrects it sends what it shows. The number stays - it is the one printed on
+    /// whatever copy already left the building - and so does the financial year, whose
+    /// series issued it: a date moved into another year is a different document.
+    /// </remarks>
+    public Result Revise(
+        FinancialYear financialYear,
+        DateOnly date,
+        Ledger customer,
+        Warehouse warehouse,
+        TaxMode mode,
+        SalesInvoiceId? returnsInvoiceId)
+    {
+        ArgumentNullException.ThrowIfNull(financialYear);
+        ArgumentNullException.ThrowIfNull(customer);
+        ArgumentNullException.ThrowIfNull(warehouse);
+
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (financialYear.Id != FinancialYearId)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.YearChanged",
+                $"'{Number}' was numbered in another financial year. Cancel it and enter "
+                + "the invoice again on the new date."));
+        }
+
+        if (returnsInvoiceId == Id)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.ReturnsItself", "A return cannot be against itself."));
+        }
+
+        Result header = CheckHeader(FirmId, customer, warehouse, mode, Kind, returnsInvoiceId);
+
+        if (header.IsFailure)
+        {
+            return header;
+        }
+
+        Result canPost = financialYear.CanPostOn(date);
+
+        if (canPost.IsFailure)
+        {
+            return canPost;
+        }
+
+        Date = date;
+        CustomerLedgerId = customer.Id;
+        WarehouseId = warehouse.Id;
+        Mode = mode;
+        ReturnsInvoiceId = returnsInvoiceId;
+        _lines.Clear();
+        _charges.Clear();
+
+        return Result.Success();
+    }
+
+    /// <summary>Takes a posted invoice back to a draft so it can be corrected.</summary>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Only the invoice's own state. Its issue, its bill and its journal are cancelled by
+    /// the handler first - they stay in the books as cancelled documents, which is the
+    /// record that the invoice was posted once and then corrected - and posting the
+    /// corrected draft raises new ones.
+    /// </remarks>
+    public Result Reopen()
+    {
+        if (Status != SalesInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotPosted",
+                $"Only a posted invoice can be reopened, and '{Number}' is {Status}."));
+        }
+
+        Status = SalesInvoiceStatus.Draft;
+        PostedAtUtc = null;
+        PostedBy = null;
+        StockDocumentId = null;
+        BillId = null;
+        JournalVoucherId = null;
+
+        return Result.Success();
     }
 
     /// <summary>Adds a line to a draft invoice.</summary>
@@ -484,8 +538,12 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         // amount can tell the difference. A mismatch means the rate or the discount
         // changed after the tax was computed, which is a printed invoice whose figures
         // do not add up.
-        if (decimal.Round(assessment.TaxableAmount.Amount, 4)
-            != decimal.Round(gross - discount, 4))
+        //
+        // Compared with the line rounded to the currency, because that is what the engine
+        // taxes: 3 at 33.335 is a taxable value of 100.01, not 100.005. Compared unrounded,
+        // every line with more decimals than the currency - a weighed quantity, a price to
+        // three places - was refused as an assessment for some other line.
+        if (assessment.TaxableAmount.Amount != Money.Of(gross - discount, Currency).Amount)
         {
             return Result.Failure<SalesInvoiceLine>(Error.Validation(
                 "SalesInvoice.TaxNotForThisLine",
@@ -701,7 +759,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         return Result.Success();
     }
 
-    /// <summary>Cancels a posted invoice.</summary>
+    /// <summary>Cancels an invoice, posted or still a draft.</summary>
     /// <param name="reason">Why. Required.</param>
     /// <returns>Success, or the reason it was refused.</returns>
     /// <remarks>
@@ -712,11 +770,10 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// </remarks>
     public Result Cancel(string reason)
     {
-        if (Status != SalesInvoiceStatus.Posted)
+        if (Status == SalesInvoiceStatus.Cancelled)
         {
             return Result.Failure(Error.BusinessRule(
-                "SalesInvoice.NotPosted",
-                $"Only a posted invoice can be cancelled, and '{Number}' is {Status}."));
+                "SalesInvoice.AlreadyCancelled", $"Invoice '{Number}' is already cancelled."));
         }
 
         if (string.IsNullOrWhiteSpace(reason))
@@ -728,6 +785,71 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
         Status = SalesInvoiceStatus.Cancelled;
         CancellationReason = reason.Trim();
+
+        return Result.Success();
+    }
+
+    /// <summary>The checks a draft's header has to pass, on entry and on every revision.</summary>
+    private static Result CheckHeader(
+        FirmId firmId,
+        Ledger customer,
+        Warehouse warehouse,
+        TaxMode mode,
+        SalesDocumentKind kind,
+        SalesInvoiceId? returnsInvoiceId)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.UnknownMode", $"'{mode}' is not a recognised tax mode."));
+        }
+
+        if (!Enum.IsDefined(kind))
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.UnknownKind", $"'{kind}' is not a kind of sales document."));
+        }
+
+        // An invoice that says which invoice it returns is a document confused about
+        // what it is, and the confusion would reach the accounts: the posting reads the
+        // kind to decide which way the goods and the money move.
+        if (kind == SalesDocumentKind.Invoice && returnsInvoiceId is not null)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.NotAReturn",
+                "Only a return may name the invoice it is against."));
+        }
+
+        // Billed to somebody who is not a customer. A sale to a bank account or an
+        // expense head is a mistake that would sit in the debtors report for ever, and
+        // the party is the one thing on an invoice nobody re-reads before posting.
+        if (customer.Kind != LedgerKind.Customer)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotACustomer",
+                $"'{customer.Name}' is not a customer account."));
+        }
+
+        if (customer.FirmId != firmId || warehouse.FirmId != firmId)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.NotInFirm",
+                "The customer and the warehouse must both belong to the selected firm."));
+        }
+
+        if (!customer.IsActive)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.CustomerWithdrawn",
+                $"'{customer.Name}' has been withdrawn from use."));
+        }
+
+        if (!warehouse.IsActive)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.WarehouseWithdrawn",
+                $"Warehouse '{warehouse.Name}' has been withdrawn from use."));
+        }
 
         return Result.Success();
     }
@@ -790,13 +912,29 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 : Result.Success();
         }
 
-        // One number per unit sold, whole units only - the same rule the stock document
-        // enforces, because it is the same fact about the goods.
-        return stockQuantity != decimal.Truncate(stockQuantity) || offered != stockQuantity
+        // At most one number per unit sold, and whole units wherever any are named - the
+        // same rule the stock document enforces, because it is the same fact about the
+        // goods. Not one for every unit: a firm records the numbers it has, and a counter
+        // selling a phone whose box it cannot find should not be stopped at the till by a
+        // rule about the box. The units it does name are the ones that leave stock.
+        if (offered == 0)
+        {
+            return Result.Success();
+        }
+
+        if (stockQuantity != decimal.Truncate(stockQuantity))
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.SerialQuantityFractional",
+                $"'{product.Code}' is identified unit by unit, so {stockQuantity:0.######} of "
+                + "it cannot carry serial numbers."));
+        }
+
+        return offered > stockQuantity
             ? Result.Failure(Error.Validation(
                 "SalesInvoice.SerialCountMismatch",
-                $"'{product.Code}' sells {stockQuantity} units on this line, so that many "
-                + $"serial numbers are needed and {offered} were given."))
+                $"'{product.Code}' sells {stockQuantity:0.######} units on this line, so at most "
+                + $"that many serial numbers can be named and {offered} were given."))
             : Result.Success();
     }
 

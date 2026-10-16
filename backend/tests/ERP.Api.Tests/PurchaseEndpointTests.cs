@@ -146,7 +146,9 @@ public sealed class PurchaseEndpointTests
             (await posted.Content.ReadFromJsonAsync<PostPurchaseInvoiceResponse>())!;
 
         result.Total.ShouldBe(105m);
-        result.StockDocumentNumber.ShouldStartWith("PR");
+        // A goods received note, and not "PR": that is a purchase return's prefix, and
+        // the two used to share it, so one number could name two different documents.
+        result.StockDocumentNumber.ShouldStartWith("GRN/");
         result.BillId.ShouldNotBeNull();
 
         // The goods are on the shelf at what they cost, and the tax is reclaimable.
@@ -367,21 +369,25 @@ public sealed class PurchaseEndpointTests
     }
 
     [Fact]
-    public async Task A_draft_cannot_be_cancelled_and_a_reason_is_required()
+    public async Task A_draft_can_be_cancelled_once_and_a_reason_is_required()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
         PurchaseFixtures fixtures = await ArrangeAsync(client);
 
         Guid purchaseId = await EnterAsync(client, fixtures, 1m, 10m);
 
-        // A draft has moved nothing, so there is nothing to put back.
-        (await client.PostAsJsonAsync(
-            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Changed my mind" }))
-            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
-
         // A cancellation nobody explained is one somebody has to reconstruct later.
         (await client.PostAsJsonAsync($"{Purchases}/{purchaseId}/cancel", new { Reason = " " }))
             .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        // A draft has moved nothing, so cancelling it only withdraws the document.
+        (await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Changed my mind" }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await client.PostAsJsonAsync(
+            $"{Purchases}/{purchaseId}/cancel", new { Reason = "Again" }))
+            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]

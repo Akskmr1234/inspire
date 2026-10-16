@@ -1,593 +1,434 @@
-import { request } from '@/lib/api';
+import { request, type ApiError } from '@/lib/api';
 import { listCustomers, createCustomer } from '@/lib/customers';
 import { listSuppliers, createSupplier } from '@/lib/suppliers';
 import {
   listMaster,
   createMaster,
+  setDefaultWarehouse,
   type WarehouseSummary,
   type CategorySummary,
   type UnitSummary,
   type BrandSummary,
 } from '@/lib/inventory';
-import { listProducts, createProduct } from '@/lib/products';
-import { createSalesInvoice, postSalesInvoice, type SalesLineInput } from '@/lib/sales';
-import { createPurchaseInvoice, postPurchaseInvoice, type PurchaseLineInput } from '@/lib/purchase';
+import { listProducts, createProduct, saveProductTab } from '@/lib/products';
+import { createSalesInvoice, postSalesInvoice } from '@/lib/sales';
+import { createPurchaseInvoice, postPurchaseInvoice } from '@/lib/purchase';
 import { createSalesOrder, createPurchaseOrder } from '@/lib/orders';
-import { listLedgers } from '@/lib/ledgers';
+import { isMoneyAccount, listLedgers } from '@/lib/ledgers';
 
 export interface SampleDataSummary {
   readonly salesInvoicesCreated: number;
   readonly purchaseInvoicesCreated: number;
   readonly ordersCreated: number;
   readonly vouchersCreated: number;
+  /**
+   * What the server refused, step by step.
+   *
+   * The generator used to swallow every failure and report "0 Sales Invoices" with
+   * nothing to say why — it had been written against request shapes the API does not
+   * accept, so every call failed and the screen called that success. A demo that
+   * cannot be built should say which step stopped it.
+   */
+  readonly problems: readonly string[];
 }
 
+/** Debit and credit, as the voucher API numbers them. */
+const DEBIT = 1;
+const CREDIT = 2;
+
+const CATALOGUE = [
+  {
+    code: 'DEMO-LAPTOP',
+    description: 'Business laptop 15.6"',
+    cost: 2800,
+    retail: 3450,
+    mrp: 3800,
+  },
+  { code: 'DEMO-MOUSE', description: 'Wireless mouse', cost: 42, retail: 65, mrp: 75 },
+  {
+    code: 'DEMO-MONITOR',
+    description: '27" 4K monitor',
+    cost: 1100,
+    retail: 1420,
+    mrp: 1550,
+  },
+  {
+    code: 'DEMO-HUB',
+    description: 'USB-C multiport hub',
+    cost: 120,
+    retail: 185,
+    mrp: 210,
+  },
+  {
+    code: 'DEMO-PAPER',
+    description: 'A4 copier paper (box of 5 reams)',
+    cost: 70,
+    retail: 95,
+    mrp: 110,
+  },
+] as const;
+
 /**
- * Populates realistic sample data across all transactions:
- * Sales Invoices, Sales Returns, Purchase Invoices, Purchase Returns,
- * Sales Orders, Purchase Orders, and Payment/Receipt Vouchers.
+ * Populates demo masters and transactions, through the same API the screens use.
+ *
+ * In the order the books need them: stock is bought and posted before anything is
+ * sold, so the sales post rather than failing on an empty shelf. Every record is
+ * named `DEMO-` or `Demo` so it can be told apart from real data afterwards, and an
+ * existing record with the same code is reused rather than duplicated.
  */
 export async function populateSampleTransactions(): Promise<SampleDataSummary> {
   const today = new Date().toISOString().slice(0, 10);
+  const problems: string[] = [];
 
-  // 1. Ensure Warehouses
-  let warehouses = await listMaster<WarehouseSummary>('warehouses', false);
-  if (warehouses.length === 0) {
+  // Runs one step, recording what the server said if it refused. Never throws:
+  // one failed step should not stop the ones that do not depend on it.
+  const attempt = async <T>(step: string, run: () => Promise<T>): Promise<T | null> => {
     try {
-      await createMaster('warehouses', {
-        code: 'WH-MAIN',
-        name: 'Main Central Warehouse',
-        isDefault: true,
-      });
-      await createMaster('warehouses', {
-        code: 'WH-RETAIL',
-        name: 'Retail Showroom Store',
-        isDefault: false,
-      });
-      warehouses = await listMaster<WarehouseSummary>('warehouses', false);
-    } catch {
-      // Ignore if exists
+      return await run();
+    } catch (failure) {
+      const api = failure as Partial<ApiError>;
+      problems.push(`${step}: ${api.detail || api.code || String(failure)}`);
+      return null;
     }
-  }
-  const defaultWarehouseId = warehouses[0]?.id || '';
+  };
 
-  // 2. Ensure Categories
-  let categories = await listMaster<CategorySummary>('categories', false);
-  if (categories.length === 0) {
-    try {
-      await createMaster('categories', { code: 'CAT-ELEC', name: 'Electronics & IT Hardware' });
-      await createMaster('categories', { code: 'CAT-OFF', name: 'Office Equipment & Supplies' });
-      categories = await listMaster<CategorySummary>('categories', false);
-    } catch {
-      // Ignore
-    }
-  }
-  const defaultCategoryId = categories[0]?.id || '';
+  // 1. Masters the transactions need.
+  const ensure = async <TRow extends { readonly code: string }>(
+    kind: string,
+    rows: readonly { readonly code: string; readonly name: string }[],
+  ): Promise<readonly TRow[]> => {
+    const have = await listMaster<TRow>(kind, true);
 
-  // 3. Ensure Units
-  let units = await listMaster<UnitSummary>('units', false);
-  if (units.length === 0) {
-    try {
-      await createMaster('units', { code: 'PCS', name: 'Pieces' });
-      await createMaster('units', { code: 'BOX', name: 'Box (Pack)' });
-      units = await listMaster<UnitSummary>('units', false);
-    } catch {
-      // Ignore
-    }
-  }
-  const defaultUnitId = units[0]?.id || '';
-
-  // 4. Ensure Brands
-  let brands = await listMaster<BrandSummary>('brands', false);
-  if (brands.length === 0) {
-    try {
-      await createMaster('brands', { code: 'DELL', name: 'Dell Technologies' });
-      await createMaster('brands', { code: 'LOGI', name: 'Logitech' });
-      await createMaster('brands', { code: 'HP', name: 'HP Enterprise' });
-      brands = await listMaster<BrandSummary>('brands', false);
-    } catch {
-      // Ignore
-    }
-  }
-  const defaultBrandId = brands[0]?.id || null;
-
-  // 5. Ensure Products
-  let products = await listProducts('', '', false);
-  if (products.length < 3 && defaultCategoryId && defaultUnitId) {
-    const demoCatalog = [
-      {
-        code: 'PROD-LAPTOP-15',
-        description: 'Dell Latitude 15.6" Business Laptop',
-        categoryId: defaultCategoryId,
-        unitId: defaultUnitId,
-        brandId: defaultBrandId,
-        itemType: 1,
-        tracksSerialNumbers: true,
-        tracksBatches: false,
-        standardRate: 3450.0,
-        mrp: 3800.0,
-      },
-      {
-        code: 'PROD-MOUSE-W1',
-        description: 'Logitech M185 Wireless Ergonomic Mouse',
-        categoryId: defaultCategoryId,
-        unitId: defaultUnitId,
-        brandId: brands[1]?.id || defaultBrandId,
-        itemType: 1,
-        tracksSerialNumbers: false,
-        tracksBatches: true,
-        standardRate: 65.0,
-        mrp: 75.0,
-      },
-      {
-        code: 'PROD-MON-27',
-        description: 'Dell 27" 4K UHD USB-C Hub Monitor',
-        categoryId: defaultCategoryId,
-        unitId: defaultUnitId,
-        brandId: defaultBrandId,
-        itemType: 1,
-        tracksSerialNumbers: true,
-        tracksBatches: false,
-        standardRate: 1420.0,
-        mrp: 1550.0,
-      },
-      {
-        code: 'PROD-ADAPT-C',
-        description: 'HP 7-in-1 Multiport USB-C Hub Adapter',
-        categoryId: defaultCategoryId,
-        unitId: defaultUnitId,
-        brandId: brands[2]?.id || defaultBrandId,
-        itemType: 1,
-        tracksSerialNumbers: false,
-        tracksBatches: false,
-        standardRate: 185.0,
-        mrp: 210.0,
-      },
-      {
-        code: 'PROD-PAPER-A4',
-        description: 'Premium A4 Multipurpose Copy Paper (Box 5 Reams)',
-        categoryId: categories[1]?.id || defaultCategoryId,
-        unitId: units[1]?.id || defaultUnitId,
-        brandId: null,
-        itemType: 1,
-        tracksSerialNumbers: false,
-        tracksBatches: false,
-        standardRate: 95.0,
-        mrp: 110.0,
-      },
-    ];
-
-    for (const p of demoCatalog) {
-      try {
-        await createProduct(p);
-      } catch {
-        // Continue if already exists
+    for (const row of rows) {
+      if (!have.some((existing) => existing.code === row.code)) {
+        await attempt(`Create ${kind} ${row.code}`, () => createMaster(kind, row));
       }
     }
+
+    return listMaster<TRow>(kind, false);
+  };
+
+  const warehouses = await ensure<WarehouseSummary>('warehouses', [
+    { code: 'DEMO-WH', name: 'Demo main warehouse' },
+  ]);
+
+  if (!warehouses.some((warehouse) => warehouse.isDefault) && warehouses[0]) {
+    const first = warehouses[0];
+    await attempt('Set the default warehouse', () => setDefaultWarehouse(first.id));
+  }
+
+  const warehouseId =
+    (warehouses.find((warehouse) => warehouse.isDefault) ?? warehouses[0])?.id ?? '';
+
+  const categories = await ensure<CategorySummary>('categories', [
+    { code: 'DEMO-IT', name: 'Demo IT hardware' },
+  ]);
+  const units = await ensure<UnitSummary>('units', [{ code: 'PCS', name: 'Pieces' }]);
+  const brands = await ensure<BrandSummary>('brands', [
+    { code: 'DEMO', name: 'Demo brand' },
+  ]);
+
+  const categoryId =
+    categories.find((row) => row.code === 'DEMO-IT')?.id ?? categories[0]?.id;
+  const unitId = units.find((row) => row.code === 'PCS')?.id ?? units[0]?.id;
+  const brandId = brands.find((row) => row.code === 'DEMO')?.id ?? null;
+
+  // 2. Products, with their rates. Not tracked by serial number or batch, so the demo
+  // documents need nothing but a product and a quantity.
+  let products = await listProducts('', '', true);
+
+  if (categoryId && unitId) {
+    for (const item of CATALOGUE) {
+      if (products.some((product) => product.code === item.code)) {
+        continue;
+      }
+
+      const id = await attempt(`Create product ${item.code}`, () =>
+        createProduct({
+          code: item.code,
+          description: item.description,
+          categoryId,
+          stockUnitId: unitId,
+          brandId,
+        }),
+      );
+
+      if (id) {
+        await attempt(`Price product ${item.code}`, () =>
+          saveProductTab(id, 'rates', {
+            costingMethod: 1,
+            cost: item.cost,
+            retailRate: item.retail,
+            wholesaleRate: item.retail * 0.95,
+            maximumRetailPrice: item.mrp,
+          }),
+        );
+      }
+    }
+
     products = await listProducts('', '', false);
+  } else {
+    problems.push('No category or unit to put the demo products under.');
   }
 
-  // 6. Ensure Customers
-  let customers = await listCustomers('', false);
-  if (customers.length < 2) {
-    const demoCustomers = [
-      {
-        code: 'CUST-001',
-        name: 'Al-Noor Trading LLC',
-        contact: {
-          phone: '+974 4411 2233',
-          email: 'accounts@alnoortrading.qa',
-          addressLine1: 'Building 44, Grand Hamad St, Doha',
-        },
-        terms: { creditDays: 30, creditLimit: 50000, isBillWise: true },
-      },
-      {
-        code: 'CUST-002',
-        name: 'Gulf Tech Solutions WLL',
-        contact: {
-          phone: '+974 4488 9900',
-          email: 'finance@gulftech.qa',
-          addressLine1: 'West Bay Commercial Tower 12, Doha',
-        },
-        terms: { creditDays: 45, creditLimit: 75000, isBillWise: true },
-      },
-      {
-        code: 'CUST-003',
-        name: 'Doha Horizon Superstores',
-        contact: {
-          phone: '+974 4455 6677',
-          email: 'procurement@dohahorizon.qa',
-          addressLine1: 'Salwa Road Industrial Zone, Doha',
-        },
-        terms: { creditDays: 15, creditLimit: 25000, isBillWise: true },
-      },
-    ];
+  const demo = (code: string): string =>
+    products.find((product) => product.code === code)?.id ?? '';
+  const laptop = demo('DEMO-LAPTOP');
+  const mouse = demo('DEMO-MOUSE');
+  const monitor = demo('DEMO-MONITOR');
 
-    for (const c of demoCustomers) {
-      try {
-        await createCustomer(c);
-      } catch {
-        // Continue
-      }
+  // 3. Parties.
+  const customers = await listCustomers('', true);
+
+  for (const [code, name] of [
+    ['DEMO-C1', 'Demo customer: Al-Noor Trading'],
+    ['DEMO-C2', 'Demo customer: Gulf Tech Solutions'],
+  ] as const) {
+    if (!customers.some((customer) => customer.code === code)) {
+      await attempt(`Create customer ${code}`, () =>
+        createCustomer({
+          code,
+          name,
+          terms: { creditDays: 30, creditLimit: null, isBillWise: true },
+        }),
+      );
     }
-    customers = await listCustomers('', false);
   }
 
-  // 7. Ensure Suppliers
-  let suppliers = await listSuppliers('', false);
-  if (suppliers.length < 2) {
-    const demoSuppliers = [
-      {
-        code: 'SUPP-001',
-        name: 'Apex Hardware Supplies Ltd',
-        contact: {
-          phone: '+974 4422 1100',
-          email: 'sales@apexsupplies.qa',
-          addressLine1: 'Logistics Park South, Al Wakrah',
-        },
-        terms: { creditDays: 30, creditLimit: 100000, isBillWise: true },
-      },
-      {
-        code: 'SUPP-002',
-        name: 'Global IT Distribution Network',
-        contact: {
-          phone: '+974 4433 7788',
-          email: 'orders@globalitdist.qa',
-          addressLine1: 'Free Zone Area, Airport Road',
-        },
-        terms: { creditDays: 60, creditLimit: 150000, isBillWise: true },
-      },
-    ];
+  const suppliers = await listSuppliers('', true);
 
-    for (const s of demoSuppliers) {
-      try {
-        await createSupplier(s);
-      } catch {
-        // Continue
-      }
+  for (const [code, name] of [
+    ['DEMO-S1', 'Demo supplier: Apex Hardware'],
+    ['DEMO-S2', 'Demo supplier: Global IT Distribution'],
+  ] as const) {
+    if (!suppliers.some((supplier) => supplier.code === code)) {
+      await attempt(`Create supplier ${code}`, () =>
+        createSupplier({
+          code,
+          name,
+          terms: { creditDays: 30, creditLimit: null, isBillWise: true },
+        }),
+      );
     }
-    suppliers = await listSuppliers('', false);
   }
 
-  // Pick ledgers for transactions
-  const ledgers = await listLedgers(false);
-  const customerLedger1 =
-    customers[0]?.customerId ||
-    ledgers.find((l) => l.name.toLowerCase().includes('customer') || l.groupName.toLowerCase().includes('debtor'))?.ledgerId ||
-    '';
-  const customerLedger2 =
-    customers[1]?.customerId ||
-    customerLedger1;
-  const supplierLedger1 =
-    suppliers[0]?.supplierId ||
-    ledgers.find((l) => l.name.toLowerCase().includes('supplier') || l.groupName.toLowerCase().includes('creditor'))?.ledgerId ||
-    '';
-  const supplierLedger2 =
-    suppliers[1]?.supplierId ||
-    supplierLedger1;
-
-  const prod1 = products[0]?.id || '';
-  const prod2 = products[1]?.id || prod1;
-  const prod3 = products[2]?.id || prod1;
+  const customer = (await listCustomers('', false)).find((row) => row.code === 'DEMO-C1');
+  const customer2 = (await listCustomers('', false)).find(
+    (row) => row.code === 'DEMO-C2',
+  );
+  const supplier = (await listSuppliers('', false)).find((row) => row.code === 'DEMO-S1');
 
   let salesInvoicesCreated = 0;
   let purchaseInvoicesCreated = 0;
   let ordersCreated = 0;
   let vouchersCreated = 0;
 
-  // 8. Create Sample Sales Invoices
-  if (customerLedger1 && defaultWarehouseId && prod1) {
-    try {
-      const lines1: SalesLineInput[] = [
-        {
-          productId: prod1,
-          quantity: 2,
-          rate: 3450.0,
-          discount: 100.0,
-          taxPercentage: 5,
-        },
-      ];
-      if (prod2) {
-        lines1.push({
-          productId: prod2,
-          quantity: 5,
-          rate: 65.0,
-          discount: 0,
-          taxPercentage: 5,
-        });
-      }
-
-      const inv1 = await createSalesInvoice({
-        date: today,
-        customerLedgerId: customerLedger1,
-        warehouseId: defaultWarehouseId,
-        lines: lines1,
-        kind: 1, // Invoice
-        referenceNumber: 'PO-ALNOOR-991',
-        narration: 'Supply of office laptops and accessories as per agreed tender quote.',
-      });
-      salesInvoicesCreated++;
-
-      // Post the first invoice to make it real
-      if (inv1?.salesInvoiceId) {
-        try {
-          await postSalesInvoice(inv1.salesInvoiceId, 30);
-        } catch {
-          // If post has strict constraints (e.g. stock reservation), it remains draft
-        }
-      }
-    } catch {
-      // Continue
-    }
-
-    // Invoice 2
-    try {
-      const lines2: SalesLineInput[] = [
-        {
-          productId: prod3 || prod1,
-          quantity: 3,
-          rate: 1420.0,
-          discount: 50.0,
-          taxPercentage: 5,
-        },
-      ];
-      await createSalesInvoice({
-        date: today,
-        customerLedgerId: customerLedger2,
-        warehouseId: defaultWarehouseId,
-        lines: lines2,
-        kind: 1, // Invoice
-        referenceNumber: 'GULFTECH-REQ-104',
-        narration: 'Workstation 4K monitors deployment for engineering floor.',
-      });
-      salesInvoicesCreated++;
-    } catch {
-      // Continue
-    }
-
-    // Sales Return (Kind 2)
-    try {
-      const returnLines: SalesLineInput[] = [
-        {
-          productId: prod2 || prod1,
-          quantity: 1,
-          rate: 65.0,
-          discount: 0,
-          taxPercentage: 5,
-        },
-      ];
-      await createSalesInvoice({
-        date: today,
-        customerLedgerId: customerLedger1,
-        warehouseId: defaultWarehouseId,
-        lines: returnLines,
-        kind: 2, // Return
-        referenceNumber: 'RET-BOX-DAMAGE',
-        narration: 'Customer return: 1 unit unopened with damaged outer packaging.',
-      });
-      salesInvoicesCreated++;
-    } catch {
-      // Continue
-    }
+  if (!warehouseId || !laptop || !mouse || !monitor) {
+    problems.push(
+      'The demo warehouse or products are missing, so no documents were made.',
+    );
+    return {
+      salesInvoicesCreated,
+      purchaseInvoicesCreated,
+      ordersCreated,
+      vouchersCreated,
+      problems,
+    };
   }
 
-  // 9. Create Sample Purchase Invoices
-  if (supplierLedger1 && defaultWarehouseId && prod1) {
-    try {
-      const pLines1: PurchaseLineInput[] = [
-        {
-          productId: prod1,
-          quantity: 10,
-          rate: 2800.0,
-          discount: 200.0,
-          taxPercentage: 5,
-        },
-      ];
-      if (prod3) {
-        pLines1.push({
-          productId: prod3,
-          quantity: 15,
-          rate: 1100.0,
-          discount: 0,
-          taxPercentage: 5,
-        });
-      }
-
-      const pInv1 = await createPurchaseInvoice({
+  // 4. Buy the stock first, and post it, so there is something to sell.
+  if (supplier) {
+    const purchase = await attempt('Create a demo purchase', () =>
+      createPurchaseInvoice({
         date: today,
-        supplierLedgerId: supplierLedger1,
-        warehouseId: defaultWarehouseId,
-        lines: pLines1,
-        kind: 1, // Purchase Invoice
-        supplierInvoiceNumber: 'APEX-INV-2026-908',
-        narration: 'Stock replenishment order from Apex Hardware Supplies.',
-      });
-      purchaseInvoicesCreated++;
-
-      if (pInv1?.purchaseInvoiceId) {
-        try {
-          await postPurchaseInvoice(pInv1.purchaseInvoiceId, 45);
-        } catch {
-          // Continue
-        }
-      }
-    } catch {
-      // Continue
-    }
-
-    // Purchase Invoice 2
-    try {
-      const pLines2: PurchaseLineInput[] = [
-        {
-          productId: prod2 || prod1,
-          quantity: 50,
-          rate: 42.0,
-          discount: 0,
-          taxPercentage: 5,
-        },
-      ];
-      await createPurchaseInvoice({
-        date: today,
-        supplierLedgerId: supplierLedger2,
-        warehouseId: defaultWarehouseId,
-        lines: pLines2,
+        supplierLedgerId: supplier.supplierId,
+        warehouseId,
         kind: 1,
-        supplierInvoiceNumber: 'GLOBAL-DO-5521',
-        narration: 'Accessories batch consignment from Global IT Distribution.',
-      });
+        supplierInvoiceNumber: 'DEMO-APEX-908',
+        narration: 'Demo: stock replenishment.',
+        lines: [
+          {
+            productId: laptop,
+            quantity: 10,
+            rate: 2800,
+            discount: 200,
+            taxPercentage: 5,
+          },
+          { productId: monitor, quantity: 15, rate: 1100, discount: 0, taxPercentage: 5 },
+          { productId: mouse, quantity: 50, rate: 42, discount: 0, taxPercentage: 5 },
+        ],
+      }),
+    );
+
+    if (purchase) {
       purchaseInvoicesCreated++;
-    } catch {
-      // Continue
+      await attempt(`Post ${purchase.number}`, () =>
+        postPurchaseInvoice(purchase.purchaseInvoiceId, 45),
+      );
     }
 
-    // Purchase Return (Kind 2)
-    try {
-      const pRetLines: PurchaseLineInput[] = [
-        {
-          productId: prod2 || prod1,
-          quantity: 2,
-          rate: 42.0,
-          discount: 0,
-          taxPercentage: 5,
-        },
-      ];
-      await createPurchaseInvoice({
+    const purchaseReturn = await attempt('Create a demo purchase return', () =>
+      createPurchaseInvoice({
         date: today,
-        supplierLedgerId: supplierLedger2,
-        warehouseId: defaultWarehouseId,
-        lines: pRetLines,
+        supplierLedgerId: supplier.supplierId,
+        warehouseId,
         kind: 2,
-        supplierInvoiceNumber: 'RMA-RETURN-042',
-        narration: 'Defective batch items returned to supplier under warranty replacement.',
-      });
+        supplierInvoiceNumber: 'DEMO-RMA-042',
+        narration: 'Demo: two faulty mice sent back.',
+        lines: [
+          { productId: mouse, quantity: 2, rate: 42, discount: 0, taxPercentage: 5 },
+        ],
+      }),
+    );
+
+    if (purchaseReturn) {
       purchaseInvoicesCreated++;
-    } catch {
-      // Continue
     }
-  }
 
-  // 10. Create Sample Orders
-  if (customerLedger1 && defaultWarehouseId && prod1) {
-    try {
-      await createSalesOrder({
-        date: today,
-        customerLedgerId: customerLedger1,
-        warehouseId: defaultWarehouseId,
-        lines: [
-          {
-            productId: prod1,
-            quantity: 5,
-            rate: 3450.0,
-            discount: 250.0,
-            taxPercentage: 5,
-          },
-        ],
-        narration: 'Annual IT hardware upgrade order for Q4 delivery.',
-      });
-      ordersCreated++;
-    } catch {
-      // Continue
-    }
-  }
-
-  if (supplierLedger1 && defaultWarehouseId && prod1) {
-    try {
-      await createPurchaseOrder({
-        date: today,
-        supplierLedgerId: supplierLedger1,
-        warehouseId: defaultWarehouseId,
-        lines: [
-          {
-            productId: prod1,
-            quantity: 20,
-            rate: 2800.0,
-            discount: 500.0,
-            taxPercentage: 5,
-          },
-        ],
-        narration: 'Restock Purchase Order awaiting dispatch confirmation.',
-      });
-      ordersCreated++;
-    } catch {
-      // Continue
-    }
-  }
-
-  // 11. Create Sample Vouchers (Payment & Receipt)
-  const bankOrCashLedger =
-    ledgers.find(
-      (l) =>
-        l.name.toLowerCase().includes('bank') ||
-        l.name.toLowerCase().includes('cash') ||
-        l.code.startsWith('10'),
-    )?.ledgerId || ledgers[0]?.ledgerId || '';
-
-  if (customerLedger1 && bankOrCashLedger) {
-    try {
-      // Receipt Voucher
-      await request('/accounting/vouchers', {
-        method: 'POST',
-        body: {
-          type: 1, // Receipt
+    if (
+      await attempt('Create a demo purchase order', () =>
+        createPurchaseOrder({
           date: today,
-          referenceNumber: 'REC-BANK-8821',
-          narration: 'Bank transfer receipt against invoice INV-1001',
-          paymentMode: 'Bank Transfer',
-          postImmediately: true,
+          supplierLedgerId: supplier.supplierId,
+          warehouseId,
+          narration: 'Demo: restock awaiting confirmation.',
           lines: [
             {
-              ledgerId: bankOrCashLedger,
-              amount: 5000.0,
-              isDebit: true,
-              narration: 'Commercial Bank of Qatar deposit',
-            },
-            {
-              ledgerId: customerLedger1,
-              amount: 5000.0,
-              isDebit: false,
-              narration: 'Receipt from Al-Noor Trading LLC',
+              productId: laptop,
+              quantity: 20,
+              rate: 2800,
+              discount: 500,
+              taxPercentage: 5,
             },
           ],
-        },
-      });
-      vouchersCreated++;
-    } catch {
-      // Continue
+        }),
+      )
+    ) {
+      ordersCreated++;
     }
   }
 
-  if (supplierLedger1 && bankOrCashLedger) {
-    try {
-      // Payment Voucher
-      await request('/accounting/vouchers', {
-        method: 'POST',
-        body: {
-          type: 2, // Payment
+  // 5. Then sell some of it.
+  if (customer) {
+    const sale = await attempt('Create a demo sales invoice', () =>
+      createSalesInvoice({
+        date: today,
+        customerLedgerId: customer.customerId,
+        warehouseId,
+        kind: 1,
+        referenceNumber: 'DEMO-PO-991',
+        narration: 'Demo: laptops and accessories.',
+        lines: [
+          { productId: laptop, quantity: 2, rate: 3450, discount: 100, taxPercentage: 5 },
+          { productId: mouse, quantity: 5, rate: 65, discount: 0, taxPercentage: 5 },
+        ],
+      }),
+    );
+
+    if (sale) {
+      salesInvoicesCreated++;
+      await attempt(`Post ${sale.number}`, () =>
+        postSalesInvoice(sale.salesInvoiceId, 30),
+      );
+    }
+
+    const salesReturn = await attempt('Create a demo sales return', () =>
+      createSalesInvoice({
+        date: today,
+        customerLedgerId: customer.customerId,
+        warehouseId,
+        kind: 2,
+        narration: 'Demo: one mouse returned unopened.',
+        lines: [
+          { productId: mouse, quantity: 1, rate: 65, discount: 0, taxPercentage: 5 },
+        ],
+      }),
+    );
+
+    if (salesReturn) {
+      salesInvoicesCreated++;
+    }
+
+    if (
+      await attempt('Create a demo sales order', () =>
+        createSalesOrder({
           date: today,
-          referenceNumber: 'PAY-CHQ-1009',
-          narration: 'Payment to Apex Hardware Supplies for stock shipment',
-          paymentMode: 'Cheque',
-          postImmediately: true,
+          customerLedgerId: (customer2 ?? customer).customerId,
+          warehouseId,
+          narration: 'Demo: monitors for Q4 delivery.',
           lines: [
             {
-              ledgerId: supplierLedger1,
-              amount: 8500.0,
-              isDebit: true,
-              narration: 'Payment against purchase bill PI-1001',
-            },
-            {
-              ledgerId: bankOrCashLedger,
-              amount: 8500.0,
-              isDebit: false,
-              narration: 'Direct settlement from Bank Current Account',
+              productId: monitor,
+              quantity: 5,
+              rate: 1420,
+              discount: 250,
+              taxPercentage: 5,
             },
           ],
-        },
-      });
-      vouchersCreated++;
-    } catch {
-      // Continue
+        }),
+      )
+    ) {
+      ordersCreated++;
     }
+  }
+
+  // 6. Money in and out through a bank account.
+  const ledgers = await listLedgers(true);
+  const bank = ledgers.find((ledger) => isMoneyAccount(ledger) && ledger.kind === 3);
+  const voucherType = (receipt: boolean): number =>
+    // Bank receipt and bank payment, as the API numbers voucher types.
+    receipt ? 2 : 4;
+
+  if (bank && customer) {
+    if (
+      await attempt('Post a demo receipt', () =>
+        request('/accounting/vouchers', {
+          method: 'POST',
+          body: {
+            type: voucherType(true),
+            date: today,
+            referenceNumber: 'DEMO-TT-8821',
+            narration: 'Demo: bank transfer from Al-Noor Trading.',
+            paymentMode: 'Bank transfer',
+            postImmediately: true,
+            lines: [
+              { ledgerId: bank.ledgerId, side: DEBIT, amount: 5000 },
+              { ledgerId: customer.customerId, side: CREDIT, amount: 5000 },
+            ],
+          },
+        }),
+      )
+    ) {
+      vouchersCreated++;
+    }
+  }
+
+  if (bank && supplier) {
+    if (
+      await attempt('Post a demo payment', () =>
+        request('/accounting/vouchers', {
+          method: 'POST',
+          body: {
+            type: voucherType(false),
+            date: today,
+            referenceNumber: 'DEMO-CHQ-1009',
+            narration: 'Demo: part payment to Apex Hardware.',
+            paymentMode: 'Cheque',
+            postImmediately: true,
+            lines: [
+              { ledgerId: supplier.supplierId, side: DEBIT, amount: 8500 },
+              { ledgerId: bank.ledgerId, side: CREDIT, amount: 8500 },
+            ],
+          },
+        }),
+      )
+    ) {
+      vouchersCreated++;
+    }
+  } else if (!bank) {
+    problems.push(
+      'No bank ledger in the chart of accounts, so no demo receipt or payment.',
+    );
   }
 
   return {
@@ -595,5 +436,6 @@ export async function populateSampleTransactions(): Promise<SampleDataSummary> {
     purchaseInvoicesCreated,
     ordersCreated,
     vouchersCreated,
+    problems,
   };
 }

@@ -85,4 +85,19 @@ describe('a dialog', () => {
       expect(dialog.contains(document.activeElement)).toBe(true);
     }
   });
+
+  /*
+    jsdom lays nothing out, so this pins the rule rather than the pixels. The body is
+    a column that scrolls; a child with \`overflow\` set has no automatic minimum
+    height, so without this the line table's sideways scroller was squeezed to zero
+    the moment a purchase was taller than the dialog, and its product row hid under
+    the Add line button.
+  */
+  it('never lets its content shrink to fit, so a tall document scrolls instead', () => {
+    open();
+
+    const body = screen.getByRole('dialog').querySelector('.overflow-y-auto');
+
+    expect(body?.className).toContain('[&>*]:shrink-0');
+  });
 });

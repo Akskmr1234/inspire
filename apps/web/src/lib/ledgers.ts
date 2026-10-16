@@ -126,10 +126,34 @@ export interface AccountHeadMeta {
 
 export const ACCOUNT_HEAD_META: Record<number, AccountHeadMeta> = {
   1: { key: 'Asset', name: 'Assets', nameArabic: 'الأصول', order: 1, tone: 'asset' },
-  2: { key: 'Liability', name: 'Liabilities', nameArabic: 'الالتزامات', order: 2, tone: 'liability' },
-  3: { key: 'Equity', name: 'Equity', nameArabic: 'حقوق الملكية', order: 3, tone: 'equity' },
-  4: { key: 'Income', name: 'Income / Revenue', nameArabic: 'الإيرادات', order: 4, tone: 'income' },
-  5: { key: 'Expense', name: 'Expenses', nameArabic: 'المصروفات', order: 5, tone: 'expense' },
+  2: {
+    key: 'Liability',
+    name: 'Liabilities',
+    nameArabic: 'الالتزامات',
+    order: 2,
+    tone: 'liability',
+  },
+  3: {
+    key: 'Equity',
+    name: 'Equity',
+    nameArabic: 'حقوق الملكية',
+    order: 3,
+    tone: 'equity',
+  },
+  4: {
+    key: 'Income',
+    name: 'Income / Revenue',
+    nameArabic: 'الإيرادات',
+    order: 4,
+    tone: 'income',
+  },
+  5: {
+    key: 'Expense',
+    name: 'Expenses',
+    nameArabic: 'المصروفات',
+    order: 5,
+    tone: 'expense',
+  },
 };
 
 export interface LedgerStatementLine {
@@ -170,4 +194,3 @@ export function fetchLedgerStatement(
     `/accounting/reports/ledger-statement/${ledgerId}?${params.toString()}`,
   );
 }
-

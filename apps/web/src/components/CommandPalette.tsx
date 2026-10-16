@@ -275,7 +275,9 @@ export function CommandPalette({
 
             <div className="flex items-center justify-between border-t border-line bg-surface-2/60 px-4 py-2 text-xs text-ink-subtle">
               <span>{t('palette.hint')}</span>
-              <span className="hidden sm:inline text-[11px] font-medium text-ink-subtle">Spotlight</span>
+              <span className="hidden sm:inline text-[11px] font-medium text-ink-subtle">
+                Spotlight
+              </span>
             </div>
           </Dialog.Content>
         </Dialog.Overlay>

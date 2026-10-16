@@ -300,7 +300,7 @@ public sealed class CreatePurchaseOrderCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat("PO", null, "/", year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

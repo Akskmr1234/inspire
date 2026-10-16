@@ -302,68 +302,12 @@ public sealed class PurchaseInvoice
                 "PurchaseInvoice.NumberRequired", "A document number is required."));
         }
 
-        if (!Enum.IsDefined(mode))
-        {
-            return Result.Failure<PurchaseInvoice>(Error.Validation(
-                "PurchaseInvoice.UnknownMode", $"'{mode}' is not a recognised tax mode."));
-        }
+        Result header = CheckHeader(
+            firmId, supplier, warehouse, mode, kind, returnsInvoiceId, purchaseOrderId);
 
-        if (!Enum.IsDefined(kind))
+        if (header.IsFailure)
         {
-            return Result.Failure<PurchaseInvoice>(Error.Validation(
-                "PurchaseInvoice.UnknownKind",
-                $"'{kind}' is not a kind of purchase document."));
-        }
-
-        // A purchase that says which purchase it returns is a document confused about what
-        // it is, and the confusion reaches the accounts: the posting reads the kind to
-        // decide which way the goods and the money move.
-        if (kind == PurchaseDocumentKind.Invoice && returnsInvoiceId is not null)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.Validation(
-                "PurchaseInvoice.NotAReturn",
-                "Only a return may name the purchase it is against."));
-        }
-
-        // An order is a promise to buy, so goods going back cannot be raised from one. A
-        // return that filled an order would take the order's outstanding quantity down as
-        // though the supplier had delivered, which is the opposite of what happened.
-        if (kind == PurchaseDocumentKind.Return && purchaseOrderId is not null)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.Validation(
-                "PurchaseInvoice.ReturnFromOrder",
-                "A return cannot be raised from a purchase order."));
-        }
-
-        // Bought from somebody who is not a supplier. A purchase booked against a bank
-        // account or an expense head would sit in the creditors report for ever, and the
-        // party is the one thing on a purchase nobody re-reads before posting.
-        if (supplier.Kind != LedgerKind.Supplier)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.BusinessRule(
-                "PurchaseInvoice.NotASupplier",
-                $"'{supplier.Name}' is not a supplier account."));
-        }
-
-        if (supplier.FirmId != firmId || warehouse.FirmId != firmId)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.Validation(
-                "PurchaseInvoice.NotInFirm",
-                "The supplier and the warehouse must both belong to the selected firm."));
-        }
-
-        if (!supplier.IsActive)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.BusinessRule(
-                "PurchaseInvoice.SupplierWithdrawn",
-                $"'{supplier.Name}' has been withdrawn from use."));
-        }
-
-        if (!warehouse.IsActive)
-        {
-            return Result.Failure<PurchaseInvoice>(Error.BusinessRule(
-                "PurchaseInvoice.WarehouseWithdrawn",
-                $"Warehouse '{warehouse.Name}' has been withdrawn from use."));
+            return Result.Failure<PurchaseInvoice>(header.Error);
         }
 
         Result canPost = financialYear.CanPostOn(date);
@@ -385,6 +329,104 @@ public sealed class PurchaseInvoice
                 currency,
                 returnsInvoiceId,
                 purchaseOrderId));
+    }
+
+    /// <summary>Replaces what a draft says, keeping its number.</summary>
+    /// <param name="financialYear">The year the new date falls in.</param>
+    /// <param name="date">The document date.</param>
+    /// <param name="supplier">The supplier.</param>
+    /// <param name="warehouse">The warehouse the goods arrive at or leave.</param>
+    /// <param name="mode">The tax mode.</param>
+    /// <param name="returnsInvoiceId">The purchase a return is against, where it names one.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// The lines and charges are cleared, to be entered again by the caller: an edit is the
+    /// whole document as it should have been. The number stays, and so does the financial
+    /// year whose series issued it.
+    /// </remarks>
+    public Result Revise(
+        FinancialYear financialYear,
+        DateOnly date,
+        Ledger supplier,
+        Warehouse warehouse,
+        TaxMode mode,
+        PurchaseInvoiceId? returnsInvoiceId)
+    {
+        ArgumentNullException.ThrowIfNull(financialYear);
+        ArgumentNullException.ThrowIfNull(supplier);
+        ArgumentNullException.ThrowIfNull(warehouse);
+
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotEditable",
+                $"Purchase '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (financialYear.Id != FinancialYearId)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.YearChanged",
+                $"'{Number}' was numbered in another financial year. Cancel it and enter "
+                + "the purchase again on the new date."));
+        }
+
+        if (returnsInvoiceId == Id)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.ReturnsItself", "A return cannot be against itself."));
+        }
+
+        Result header = CheckHeader(
+            FirmId, supplier, warehouse, mode, Kind, returnsInvoiceId, PurchaseOrderId);
+
+        if (header.IsFailure)
+        {
+            return header;
+        }
+
+        Result canPost = financialYear.CanPostOn(date);
+
+        if (canPost.IsFailure)
+        {
+            return canPost;
+        }
+
+        Date = date;
+        SupplierLedgerId = supplier.Id;
+        WarehouseId = warehouse.Id;
+        Mode = mode;
+        ReturnsInvoiceId = returnsInvoiceId;
+        _lines.Clear();
+        _charges.Clear();
+
+        return Result.Success();
+    }
+
+    /// <summary>Takes a posted purchase back to a draft so it can be corrected.</summary>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Only the purchase's own state. Its receipt, its bill and its journal are cancelled by
+    /// the handler first and stay in the books as the record that it was posted once;
+    /// posting the corrected draft raises new ones.
+    /// </remarks>
+    public Result Reopen()
+    {
+        if (Status != PurchaseInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotPosted",
+                $"Only a posted purchase can be reopened, and '{Number}' is {Status}."));
+        }
+
+        Status = PurchaseInvoiceStatus.Draft;
+        PostedAtUtc = null;
+        PostedBy = null;
+        StockDocumentId = null;
+        BillId = null;
+        JournalVoucherId = null;
+
+        return Result.Success();
     }
 
     /// <summary>Adds a line to a draft purchase.</summary>
@@ -476,8 +518,12 @@ public sealed class PurchaseInvoice
         // amount can tell the difference. A mismatch means the rate or the discount
         // changed after the tax was computed, which is input tax reclaimed against a
         // figure the document itself contradicts.
-        if (decimal.Round(assessment.TaxableAmount.Amount, 4)
-            != decimal.Round(gross - discount, 4))
+        //
+        // Compared with the line rounded to the currency, because that is what the engine
+        // taxes: 3 at 33.335 is a taxable value of 100.01, not 100.005. Compared unrounded,
+        // every line with more decimals than the currency - a weighed quantity, a price to
+        // three places - was refused as an assessment for some other line.
+        if (assessment.TaxableAmount.Amount != Money.Of(gross - discount, Currency).Amount)
         {
             return Result.Failure<PurchaseInvoiceLine>(Error.Validation(
                 "PurchaseInvoice.TaxNotForThisLine",
@@ -708,7 +754,7 @@ public sealed class PurchaseInvoice
         return Result.Success();
     }
 
-    /// <summary>Cancels a posted purchase.</summary>
+    /// <summary>Cancels a purchase, posted or still a draft.</summary>
     /// <param name="reason">Why. Required.</param>
     /// <returns>Success, or the reason it was refused.</returns>
     /// <remarks>
@@ -719,11 +765,10 @@ public sealed class PurchaseInvoice
     /// </remarks>
     public Result Cancel(string reason)
     {
-        if (Status != PurchaseInvoiceStatus.Posted)
+        if (Status == PurchaseInvoiceStatus.Cancelled)
         {
             return Result.Failure(Error.BusinessRule(
-                "PurchaseInvoice.NotPosted",
-                $"Only a posted purchase can be cancelled, and '{Number}' is {Status}."));
+                "PurchaseInvoice.AlreadyCancelled", $"Purchase '{Number}' is already cancelled."));
         }
 
         if (string.IsNullOrWhiteSpace(reason))
@@ -735,6 +780,83 @@ public sealed class PurchaseInvoice
 
         Status = PurchaseInvoiceStatus.Cancelled;
         CancellationReason = reason.Trim();
+
+        return Result.Success();
+    }
+
+    /// <summary>The checks a draft's header has to pass, on entry and on every revision.</summary>
+    private static Result CheckHeader(
+        FirmId firmId,
+        Ledger supplier,
+        Warehouse warehouse,
+        TaxMode mode,
+        PurchaseDocumentKind kind,
+        PurchaseInvoiceId? returnsInvoiceId,
+        PurchaseOrderId? purchaseOrderId)
+    {
+        if (!Enum.IsDefined(mode))
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.UnknownMode", $"'{mode}' is not a recognised tax mode."));
+        }
+
+        if (!Enum.IsDefined(kind))
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.UnknownKind",
+                $"'{kind}' is not a kind of purchase document."));
+        }
+
+        // A purchase that says which purchase it returns is a document confused about what
+        // it is, and the confusion reaches the accounts: the posting reads the kind to
+        // decide which way the goods and the money move.
+        if (kind == PurchaseDocumentKind.Invoice && returnsInvoiceId is not null)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.NotAReturn",
+                "Only a return may name the purchase it is against."));
+        }
+
+        // An order is a promise to buy, so goods going back cannot be raised from one. A
+        // return that filled an order would take the order's outstanding quantity down as
+        // though the supplier had delivered, which is the opposite of what happened.
+        if (kind == PurchaseDocumentKind.Return && purchaseOrderId is not null)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.ReturnFromOrder",
+                "A return cannot be raised from a purchase order."));
+        }
+
+        // Bought from somebody who is not a supplier. A purchase booked against a bank
+        // account or an expense head would sit in the creditors report for ever, and the
+        // party is the one thing on a purchase nobody re-reads before posting.
+        if (supplier.Kind != LedgerKind.Supplier)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotASupplier",
+                $"'{supplier.Name}' is not a supplier account."));
+        }
+
+        if (supplier.FirmId != firmId || warehouse.FirmId != firmId)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.NotInFirm",
+                "The supplier and the warehouse must both belong to the selected firm."));
+        }
+
+        if (!supplier.IsActive)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.SupplierWithdrawn",
+                $"'{supplier.Name}' has been withdrawn from use."));
+        }
+
+        if (!warehouse.IsActive)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.WarehouseWithdrawn",
+                $"Warehouse '{warehouse.Name}' has been withdrawn from use."));
+        }
 
         return Result.Success();
     }
@@ -783,14 +905,29 @@ public sealed class PurchaseInvoice
                 : Result.Success();
         }
 
-        // One number per unit received, whole units only - the same rule the receipt
-        // enforces, because it is the same fact about the goods.
-        if (stockQuantity != decimal.Truncate(stockQuantity) || serials.Count != stockQuantity)
+        // At most one number per unit received, and whole units wherever any are named -
+        // the same rule the receipt enforces. Not one for every unit: five handsets in a
+        // carton of which two have their numbers to hand are recorded as two numbers, and
+        // the other three arrive like any other stock.
+        if (serials.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        if (stockQuantity != decimal.Truncate(stockQuantity))
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.SerialQuantityFractional",
+                $"'{product.Code}' is identified unit by unit, so {stockQuantity:0.######} of "
+                + "it cannot carry serial numbers."));
+        }
+
+        if (serials.Count > stockQuantity)
         {
             return Result.Failure(Error.Validation(
                 "PurchaseInvoice.SerialCountMismatch",
-                $"'{product.Code}' arrives {stockQuantity} units on this line, so that many "
-                + $"serial numbers are needed and {serials.Count} were given."));
+                $"'{product.Code}' arrives {stockQuantity:0.######} units on this line, so at most "
+                + $"that many serial numbers can be named and {serials.Count} were given."));
         }
 
         // Two boxes with the same number on them is a number that identifies neither, and

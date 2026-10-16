@@ -248,7 +248,9 @@ export function SearchSelect({
           className="animate-drop z-[70] max-h-72 w-[var(--radix-popover-trigger-width)] min-w-64 overflow-y-auto overscroll-contain rounded-2xl border border-line/80 bg-surface/98 backdrop-blur-xl p-1.5 shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10"
         >
           {rows.length === 0 && (
-            <p className="px-3 py-4 text-center text-xs text-ink-muted">{t('common.noMatches')}</p>
+            <p className="px-3 py-4 text-center text-xs text-ink-muted">
+              {t('common.noMatches')}
+            </p>
           )}
 
           {rows.map((option, index) => (
@@ -267,7 +269,8 @@ export function SearchSelect({
                 index === active
                   ? 'bg-brand-500/10 text-brand-700 dark:bg-brand-500/20 dark:text-brand-200'
                   : 'text-ink hover:bg-surface-3',
-                option.value === value && 'font-semibold text-brand-600 dark:text-brand-300',
+                option.value === value &&
+                  'font-semibold text-brand-600 dark:text-brand-300',
               )}
             >
               <div className="flex items-center gap-2.5 min-w-0 flex-1">

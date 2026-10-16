@@ -165,17 +165,29 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void A_line_priced_finer_than_its_currency_is_refused_rather_than_quietly_rounded()
+    public void A_line_priced_finer_than_its_currency_is_stated_at_the_currency()
     {
-        // Why the rounding difference is nil on every invoice today: the engine returns
-        // the taxable amount at the currency's scale, and a line whose price implies
-        // more precision than that no longer agrees with it. Refusing is right - the
-        // alternative prints a total its own lines contradict - but it does mean Round
-        // Off is a posting nothing currently produces.
+        // A weighed quantity or a price to three places: 3 at 33.333 is 99.999, which an
+        // invoice in riyals states as 100.00 and taxes on that, as the engine does. It
+        // used to be refused, and with it nearly every price keyed tax-inclusive - whose
+        // exclusive rate never comes out in whole dirhams - with a message about a tax
+        // assessment nobody at a counter could act on.
         SalesInvoice invoice = Draft().Value;
         UnitOfMeasure each = BaseUnit();
 
         invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(99.999m, 5.0004m))
+            .IsSuccess.ShouldBeTrue();
+
+        invoice.Taxable.Amount.ShouldBe(100.00m);
+    }
+
+    [Fact]
+    public void An_assessment_for_a_different_amount_is_still_refused()
+    {
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+
+        invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(90m, 4.5m))
             .Error.Code.ShouldBe("SalesInvoice.TaxNotForThisLine");
     }
 
@@ -208,27 +220,47 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void Only_a_posted_invoice_can_be_cancelled_and_only_with_a_reason()
+    public void An_invoice_is_cancelled_only_once_and_only_with_a_reason()
     {
-        Draft().Value.Cancel("wrong customer").Error.Code.ShouldBe("SalesInvoice.NotPosted");
+        SalesInvoice draft = Draft().Value;
+        draft.Cancel("wrong customer").IsSuccess.ShouldBeTrue();
+        draft.Status.ShouldBe(SalesInvoiceStatus.Cancelled);
 
         SalesInvoice posted = Posted();
 
         posted.Cancel("  ").Error.Code.ShouldBe("SalesInvoice.CancellationReasonRequired");
         posted.Cancel("Raised against the wrong customer").IsSuccess.ShouldBeTrue();
         posted.Status.ShouldBe(SalesInvoiceStatus.Cancelled);
+        posted.Cancel("again").Error.Code.ShouldBe("SalesInvoice.AlreadyCancelled");
     }
 
     [Fact]
-    public void A_serialised_product_needs_one_number_for_every_unit_sold()
+    public void A_posted_invoice_reopens_as_a_draft_that_forgets_what_posting_produced()
     {
+        SalesInvoice posted = Posted();
+        posted.RecordPosting(StockDocumentId.NewId(), null, VoucherId.NewId()).IsSuccess.ShouldBeTrue();
+
+        posted.Reopen().IsSuccess.ShouldBeTrue();
+
+        posted.Status.ShouldBe(SalesInvoiceStatus.Draft);
+        posted.StockDocumentId.ShouldBeNull();
+        posted.JournalVoucherId.ShouldBeNull();
+        posted.PostedAtUtc.ShouldBeNull();
+        posted.Reopen().Error.Code.ShouldBe("SalesInvoice.NotPosted");
+    }
+
+    [Fact]
+    public void A_serialised_product_sells_without_its_numbers_when_none_are_to_hand()
+    {
+        // The firm asked for this: a counter selling a handset whose box is not to hand
+        // should not be stopped at the till. The units named are the units that leave.
         SalesInvoice invoice = Draft().Value;
         UnitOfMeasure each = BaseUnit();
         Product handset = Stocked(each);
         handset.SetTracking(false, true);
 
         invoice.AddLine(handset, each, 2m, 2m, 900m, Assessed(1_800m, 90m))
-            .Error.Code.ShouldBe("SalesInvoice.SerialCountMismatch");
+            .IsSuccess.ShouldBeTrue();
     }
 
     [Fact]

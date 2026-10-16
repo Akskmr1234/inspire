@@ -63,7 +63,34 @@ public sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
             .UsePropertyAccessMode(PropertyAccessMode.Field)
             .HasField("_permissions");
 
+        builder.Property(r => r.RestrictsMenu).IsRequired().HasDefaultValue(false);
+
+        builder.HasMany(r => r.Menus)
+            .WithOne()
+            .HasForeignKey(menu => menu.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(r => r.Menus)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_menus");
+
         ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}
+
+/// <summary>Maps <see cref="RoleMenu"/> to the <c>role_menus</c> table.</summary>
+public sealed class RoleMenuConfiguration : IEntityTypeConfiguration<RoleMenu>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<RoleMenu> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("role_menus");
+        builder.HasKey(menu => new { menu.RoleId, menu.MenuCode });
+        builder.Property(menu => menu.MenuCode).HasMaxLength(RoleMenu.MaximumCodeLength);
+
+        builder.HasIndex(menu => menu.TenantId).HasDatabaseName("ix_role_menus_tenant");
     }
 }
 

@@ -149,6 +149,31 @@ public sealed class GetMenuTests
     }
 
     [Fact]
+    public async Task A_role_that_chose_its_menus_shows_only_those_it_may_open()
+    {
+        // The role chose the trial balance and the cash book, but holds no permission
+        // for the cash book: choosing narrows what permissions reach, never widens it.
+        Fixture fixture = new(
+            "accounting:report:view",
+            chosenMenus: new HashSet<string>(["reports.trial-balance", "reports.cash-book"]));
+        fixture.Heading("reports", "Reports");
+        fixture.Link(
+            "reports.trial-balance", "Trial balance", "/tb", parentCode: "reports",
+            permission: "accounting:report:view");
+        fixture.Link(
+            "reports.day-book", "Day book", "/db", parentCode: "reports",
+            permission: "accounting:report:view");
+        fixture.Link(
+            "reports.cash-book", "Cash book", "/cb", parentCode: "reports",
+            permission: "accounting:cash:view");
+
+        MenuResponse menu = (await fixture.Handle()).Value;
+
+        menu.Items.Single().Children.Select(entry => entry.Code)
+            .ShouldBe(["reports.trial-balance"]);
+    }
+
+    [Fact]
     public async Task Resolving_a_menu_for_nobody_is_refused()
     {
         // Platform work runs as the system actor, which is not a person and has no
@@ -171,7 +196,8 @@ public sealed class GetMenuTests
         internal Fixture(
             string? heldPermission = null,
             bool firmSelected = true,
-            bool signedIn = true)
+            bool signedIn = true,
+            IReadOnlySet<string>? chosenMenus = null)
         {
             FirmId firmId = FirmId.NewId();
             UserId userId = UserId.NewId();
@@ -180,6 +206,9 @@ public sealed class GetMenuTests
             reader
                 .ReadAsync(Arg.Any<FirmId>(), Arg.Any<CancellationToken>())
                 .Returns(_ => _rows);
+            reader
+                .ReadChosenMenusAsync(Arg.Any<UserId>(), Arg.Any<CancellationToken>())
+                .Returns(chosenMenus);
 
             IPermissionChecker permissions = Substitute.For<IPermissionChecker>();
             permissions

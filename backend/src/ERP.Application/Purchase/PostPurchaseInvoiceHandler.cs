@@ -494,11 +494,7 @@ public sealed class PostPurchaseInvoiceCommandHandler
             }
 
             series = created.Value;
-            series.SetFormat(
-                prefix: invoice.IsReturn ? "PRN" : "PR",
-                suffix: null,
-                separator: "/",
-                financialYearLabel: year.Code);
+            NumberingDefaults.Apply(series, year.Code);
 
             _numbering.Add(series);
         }

@@ -51,6 +51,8 @@ import {
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
+import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
 
 /**
@@ -508,6 +510,11 @@ function OrderEntryDialog({
     referenceNumber: '',
     narration: '',
   });
+  // The number the series will issue this order, read without reserving it.
+  const { next: nextNumber } = useNextNumber(
+    kind === 'purchase' ? DocumentType.purchaseOrder : DocumentType.salesOrder,
+    draft.date,
+  );
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
   const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
   const [busy, setBusy] = useState(false);
@@ -544,6 +551,9 @@ function OrderEntryDialog({
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
     ledgers.data ?? [],
     setCharges,
+  );
+  const chargeSetup = useChargeSetup(
+    kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
   );
 
   const valuation = useQuery<StockValuationReport, ApiError>({
@@ -745,7 +755,11 @@ function OrderEntryDialog({
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         <Field label={t('orders.number')}>
-          <input value={t('orders.numberOnSave')} disabled className="field-input" />
+          <input
+            value={nextNumber ?? t('orders.numberOnSave')}
+            disabled
+            className="field-input font-mono"
+          />
         </Field>
 
         <DateField
@@ -971,6 +985,8 @@ function OrderEntryDialog({
         charges={charges}
         ledgers={ledgers.data ?? []}
         onChange={setCharges}
+        setup={chargeSetup}
+        nonTax={mode === PurchaseTaxMode.nonTax}
       />
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
@@ -978,7 +994,7 @@ function OrderEntryDialog({
           gross={totals.gross}
           discount={totals.discount}
           tax={totals.tax}
-          charges={chargeTotal(charges, ledgers.data ?? [])}
+          charges={chargeTotal(charges, ledgers.data ?? [], chargeSetup)}
         />
       </div>
 

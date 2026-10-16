@@ -750,4 +750,3 @@ export function fixtureFor(path: string): unknown {
   }
   return fixtures[clean];
 }
-

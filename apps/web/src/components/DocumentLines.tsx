@@ -7,7 +7,12 @@ import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
-import { chargesFor, type ChargeDocument } from '@/lib/charges';
+import {
+  chargesFor,
+  enterableCharges,
+  type ChargeDocument,
+  type ChargeSetup,
+} from '@/lib/charges';
 import { useSettings } from '@/stores/settings';
 
 /**
@@ -360,7 +365,10 @@ export function useDefaultCharges(
     const usable = new Set(chargeLedgers(ledgers).map((ledger) => ledger.ledgerId));
 
     const fromAdditional = (additionalLedgerDefaults ?? [])
-      .filter((l) => l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId))
+      .filter(
+        (l) =>
+          l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId),
+      )
       .map((l) => ({
         key: crypto.randomUUID(),
         ledgerId: l.ledgerId,
@@ -398,6 +406,7 @@ export function useDefaultCharges(
 export function chargeTotal(
   charges: readonly DraftCharge[],
   ledgers: readonly LedgerSummary[],
+  setup?: readonly ChargeSetup[],
 ): number {
   let total = 0;
 
@@ -409,7 +418,11 @@ export function chargeTotal(
       continue;
     }
 
-    total += chargeAdds(ledger) ? amount : -amount;
+    // The firm's own setup where it has arrived; the code's guess until then.
+    const set = setup?.find((candidate) => candidate.ledgerId === charge.ledgerId);
+    const adds = set ? set.isAddition : chargeAdds(ledger);
+
+    total += adds ? amount : -amount;
   }
 
   return total;
@@ -429,23 +442,42 @@ export function ChargesPanel({
   ledgers,
   onChange,
   currency,
+  setup,
+  nonTax = false,
 }: {
   readonly charges: readonly DraftCharge[];
   readonly ledgers: readonly LedgerSummary[];
   readonly onChange: (charges: readonly DraftCharge[]) => void;
   readonly currency?: string;
+  /** The firm's charge setup for the document; offered and signed from it once it arrives. */
+  readonly setup?: readonly ChargeSetup[] | undefined;
+  readonly nonTax?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  const available = useMemo(() => chargeLedgers(ledgers), [ledgers]);
+  const available = useMemo(
+    () =>
+      setup
+        ? enterableCharges(setup, nonTax).map((charge) => ({
+            ledgerId: charge.ledgerId,
+            label: `${charge.code} — ${charge.name}`,
+            adds: charge.isAddition,
+          }))
+        : chargeLedgers(ledgers).map((ledger) => ({
+            ledgerId: ledger.ledgerId,
+            label: `${ledger.code} — ${ledger.name}`,
+            adds: chargeAdds(ledger),
+          })),
+    [setup, nonTax, ledgers],
+  );
 
-  const options: readonly SelectOption[] = available.map((ledger) => ({
-    value: ledger.ledgerId,
-    label: `${ledger.code} — ${ledger.name}`,
-    detail: chargeAdds(ledger) ? t('documents.chargeAdds') : t('documents.chargeDeducts'),
+  const options: readonly SelectOption[] = available.map((charge) => ({
+    value: charge.ledgerId,
+    label: charge.label,
+    detail: charge.adds ? t('documents.chargeAdds') : t('documents.chargeDeducts'),
   }));
 
-  const total = chargeTotal(charges, ledgers);
+  const total = chargeTotal(charges, ledgers, setup);
 
   return (
     <section className="panel space-y-3">

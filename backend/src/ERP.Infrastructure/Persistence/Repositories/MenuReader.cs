@@ -1,4 +1,5 @@
 using ERP.Application.Platform.Menus;
+using ERP.Domain.Identity;
 using ERP.Domain.Platform;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,28 @@ public sealed class MenuReader : IMenuReader
                 item.SortOrder,
                 item.RequiredPermission))
             .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>?> ReadChosenMenusAsync(
+        UserId userId,
+        CancellationToken cancellationToken = default)
+    {
+        List<Role> roles = await _context.Roles
+            .AsNoTracking()
+            .Include(role => role.Menus)
+            .Where(role => _context.Set<UserRole>()
+                .Any(link => link.UserId == userId && link.RoleId == role.Id))
+            .ToListAsync(cancellationToken);
+
+        if (roles.Count == 0 || roles.Exists(role => role.GrantsAllPermissions || !role.RestrictsMenu))
+        {
+            return null;
+        }
+
+        return roles
+            .SelectMany(role => role.Menus.Select(menu => menu.MenuCode))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>Reads every menu row of a firm, hidden entries included.</summary>

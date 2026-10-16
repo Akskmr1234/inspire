@@ -172,7 +172,11 @@ export function LoginPage(): React.JSX.Element {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 title={showPassword ? 'Hide password' : 'Show password'}
               >
-                {showPassword ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                {showPassword ? (
+                  <IconEyeOff className="size-4" />
+                ) : (
+                  <IconEye className="size-4" />
+                )}
               </button>
             </div>
           </div>

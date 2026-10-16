@@ -145,17 +145,48 @@ public sealed class PurchaseInvoiceTests
         line.Error.Code.ShouldBe("PurchaseInvoice.ExpiryWithoutBatch");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void A_serialised_product_takes_any_number_of_serials_up_to_the_quantity(int named)
+    {
+        // Five handsets in a carton, of which some have their numbers to hand: every
+        // count from none to five is a purchase the firm can record.
+        PurchaseInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure unit) = Serialised();
+
+        Result<PurchaseInvoiceLine> line = invoice.AddLine(
+            product, unit, 5m, 5m, 100m, Assessed(500m, 0m),
+            serialNumbers: [.. Enumerable.Range(1, named).Select(index => $"SN-{index}")]);
+
+        line.IsSuccess.ShouldBeTrue();
+    }
+
     [Fact]
-    public void A_serialised_product_needs_one_number_for_every_unit_arriving()
+    public void More_serials_than_units_arriving_is_refused()
     {
         PurchaseInvoice invoice = Draft().Value;
         (Product product, UnitOfMeasure unit) = Serialised();
 
         Result<PurchaseInvoiceLine> line = invoice.AddLine(
-            product, unit, 3m, 3m, 100m, Assessed(300m, 0m),
-            serialNumbers: ["SN-1", "SN-2"]);
+            product, unit, 2m, 2m, 100m, Assessed(200m, 0m),
+            serialNumbers: ["SN-1", "SN-2", "SN-3"]);
 
         line.Error.Code.ShouldBe("PurchaseInvoice.SerialCountMismatch");
+    }
+
+    [Fact]
+    public void Serials_on_a_fractional_quantity_are_refused()
+    {
+        PurchaseInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure unit) = Serialised();
+
+        Result<PurchaseInvoiceLine> line = invoice.AddLine(
+            product, unit, 1.5m, 1.5m, 100m, Assessed(150m, 0m),
+            serialNumbers: ["SN-1"]);
+
+        line.Error.Code.ShouldBe("PurchaseInvoice.SerialQuantityFractional");
     }
 
     [Fact]
@@ -233,19 +264,18 @@ public sealed class PurchaseInvoiceTests
     }
 
     [Fact]
-    public void A_line_priced_finer_than_its_currency_is_refused_rather_than_quietly_rounded()
+    public void A_line_priced_finer_than_its_currency_is_stated_at_the_currency()
     {
-        // Why the rounding difference is nil on every purchase today, exactly as it is on
-        // every sale: the engine returns the taxable amount at the currency's scale, and a
-        // line whose price implies more precision than that no longer agrees with it.
-        // Refusing is right - the alternative prints a total its own lines contradict -
-        // but it does mean Round Off is a posting nothing currently produces.
+        // As on a sale: a supplier's price to four places in a three-place currency is
+        // stated, and taxed, at three. It used to be refused outright.
         PurchaseInvoice invoice = Draft(currency: Kwd).Value;
         (Product product, UnitOfMeasure unit) = Plain();
 
         invoice.AddLine(
             product, unit, 1m, 1m, 10.1235m, Assessed(10.1235m, 0m, Kwd))
-            .Error.Code.ShouldBe("PurchaseInvoice.TaxNotForThisLine");
+            .IsSuccess.ShouldBeTrue();
+
+        invoice.Taxable.Amount.ShouldBe(10.124m);
     }
 
     [Fact]
@@ -359,11 +389,11 @@ public sealed class PurchaseInvoiceTests
     }
 
     [Fact]
-    public void Cancelling_needs_a_posted_purchase_and_a_reason()
+    public void Cancelling_needs_a_reason_and_happens_once()
     {
         PurchaseInvoice draft = Draft().Value;
-        draft.Cancel("Entered against the wrong supplier")
-            .Error.Code.ShouldBe("PurchaseInvoice.NotPosted");
+        draft.Cancel("Entered against the wrong supplier").IsSuccess.ShouldBeTrue();
+        draft.Cancel("again").Error.Code.ShouldBe("PurchaseInvoice.AlreadyCancelled");
 
         PurchaseInvoice invoice = Posted();
         invoice.Cancel("  ").Error.Code.ShouldBe("PurchaseInvoice.CancellationReasonRequired");

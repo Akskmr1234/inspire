@@ -196,7 +196,7 @@ public sealed class SalesEndpointTests
     }
 
     [Fact]
-    public async Task A_draft_cannot_be_cancelled_and_a_reason_is_required()
+    public async Task A_draft_can_be_cancelled_once_and_a_reason_is_required()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
         SalesFixtures fixtures = await ArrangeAsync(client);
@@ -204,12 +204,16 @@ public sealed class SalesEndpointTests
         Guid invoiceId = await EnterAsync(client, fixtures, 1m, 10m);
 
         (await client.PostAsJsonAsync(
-            $"{Invoices}/{invoiceId}/cancel", new { Reason = "Nothing happened yet" }))
-            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
-
-        (await client.PostAsJsonAsync(
             $"{Invoices}/{invoiceId}/cancel", new { Reason = string.Empty }))
             .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        (await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel", new { Reason = "Nothing happened yet" }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await client.PostAsJsonAsync(
+            $"{Invoices}/{invoiceId}/cancel", new { Reason = "Again" }))
+            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
@@ -268,7 +272,11 @@ public sealed class SalesEndpointTests
 
         // A return raises no bill of its own; it settles the one the sale raised.
         result.BillId.ShouldBeNull();
-        result.StockDocumentNumber.ShouldStartWith("SR");
+
+        // The goods coming back carry a number of their own, not the return's prefix:
+        // "SR" on both made two documents answer to one number.
+        result.StockDocumentNumber.ShouldStartWith("SRN/");
+        result.StockDocumentNumber.ShouldNotBe(credit.Number);
 
         (await OutstandingAsync(client, fixtures.CustomerId)).ShouldBe(0m);
 

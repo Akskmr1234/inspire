@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
+import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import { ReportFrame } from '@/components/ReportFrame';
 import { Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, useDefaultChoice } from '@/components/SearchSelect';
@@ -16,7 +17,12 @@ import {
   type CategorySummary,
   type UnitSummary,
 } from '@/lib/inventory';
-import { createProduct, listProducts, saveProductTab, type ProductSummary } from '@/lib/products';
+import {
+  createProduct,
+  listProducts,
+  saveProductTab,
+  type ProductSummary,
+} from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
@@ -34,6 +40,7 @@ import { moneyAlways } from '@/lib/money';
 export function ProductsPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const serialsOn = useSerialNumbersEnabled();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [initialEditorTab, setInitialEditorTab] = useState<
@@ -154,15 +161,15 @@ export function ProductsPage(): React.JSX.Element {
       value: (row) =>
         [
           row.tracksBatches ? t('products.batchShort') : '',
-          row.tracksSerialNumbers ? t('products.serialShort') : '',
+          serialsOn && row.tracksSerialNumbers ? t('products.serialShort') : '',
         ]
           .filter(Boolean)
           .join(' · '),
       render: (row) => (
         <div className="flex flex-wrap items-center gap-1">
-          {row.tracksSerialNumbers && (
+          {serialsOn && row.tracksSerialNumbers && (
             <span className="inline-flex items-center rounded bg-purple-50 dark:bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/20">
-              Serial / IMEI
+              {t('products.serialShort')}
             </span>
           )}
           {row.tracksBatches && (
@@ -170,7 +177,7 @@ export function ProductsPage(): React.JSX.Element {
               {t('products.batchShort')}
             </span>
           )}
-          {!row.tracksSerialNumbers && !row.tracksBatches && (
+          {!(serialsOn && row.tracksSerialNumbers) && !row.tracksBatches && (
             <span className="text-ink-muted text-xs">—</span>
           )}
         </div>
@@ -311,7 +318,11 @@ function AddProduct({
   readonly categories: readonly CategorySummary[];
   readonly busy: boolean;
   readonly onCancel: () => void;
-  readonly onSubmit: (body: object, mode: 'save' | 'detail', tracksSerialNumbers: boolean) => void;
+  readonly onSubmit: (
+    body: object,
+    mode: 'save' | 'detail',
+    tracksSerialNumbers: boolean,
+  ) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -325,7 +336,8 @@ function AddProduct({
     queryFn: () => listMaster<BrandSummary>('brands', false),
   });
 
-  const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } = useSettings();
+  const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } =
+    useSettings();
 
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
@@ -335,6 +347,7 @@ function AddProduct({
   const [brandId, setBrandId] = useState(defaultBrandId ?? '');
   const [itemType, setItemType] = useState(String(defaultItemType ?? 1));
   const [tracksSerialNumbers, setTracksSerialNumbers] = useState(false);
+  const serialsOn = useSerialNumbersEnabled();
 
   const categoryOptions = useMemo(
     () =>
@@ -479,17 +492,20 @@ function AddProduct({
           />
         </Field>
 
-        <div className="sm:col-span-2 pt-1">
-          <label className="flex items-center gap-2 cursor-pointer font-medium text-xs text-ink hover:text-ink-strong select-none">
-            <input
-              type="checkbox"
-              checked={tracksSerialNumbers}
-              onChange={(e) => setTracksSerialNumbers(e.target.checked)}
-              className="rounded border-line text-brand-600 focus:ring-brand-500"
-            />
-            <span>{t('products.tracksSerialNumbers')}</span>
-          </label>
-        </div>
+        {/* Offered only where the firm has switched serial numbers on in Settings. */}
+        {serialsOn && (
+          <div className="sm:col-span-2 pt-1">
+            <label className="flex items-center gap-2 cursor-pointer font-medium text-xs text-ink hover:text-ink-strong select-none">
+              <input
+                type="checkbox"
+                checked={tracksSerialNumbers}
+                onChange={(e) => setTracksSerialNumbers(e.target.checked)}
+                className="rounded border-line text-brand-600 focus:ring-brand-500"
+              />
+              <span>{t('products.tracksSerialNumbers')}</span>
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="form-actions flex items-center justify-end gap-2">

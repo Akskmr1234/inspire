@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { ApiError, request } from '@/lib/api';
 import { TaxRegime } from '@/lib/states';
 import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
 
@@ -118,6 +119,14 @@ export interface AppSettings {
   readonly enableItemDiscount: boolean;
   /** Whether automatic FIFO batch assignment is enabled. */
   readonly enableAutoBatch: boolean;
+  /**
+   * Whether serial numbers (IMEI) are offered on documents and products at all.
+   *
+   * Off by default: a firm that does not track handsets by number should never be
+   * asked for one. On, the numbers are offered where a product is tracked by serial
+   * number and are always optional.
+   */
+  readonly enableSerialNumbers: boolean;
   /** Default item type (1: Stocked, 2: Service, 3: Non-Stock). */
   readonly defaultItemType: number;
   /** Default brand identifier. */
@@ -128,41 +137,9 @@ export interface AppSettings {
   readonly defaultCreditAccountId: string;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
-  /** Prefix for sales invoice numbers (e.g. 'INV-'). */
-  readonly invoicePrefix: string;
-  /** Suffix for sales invoice numbers (e.g. '/2026'). */
-  readonly invoiceSuffix: string;
-  /** Prefix for sales returns (e.g. 'RET-'). */
-  readonly salesReturnPrefix: string;
-  /** Suffix for sales returns (e.g. '/2026'). */
-  readonly salesReturnSuffix: string;
-  /** Prefix for purchase invoices (e.g. 'PI-'). */
-  readonly purchaseInvoicePrefix: string;
-  /** Suffix for purchase invoices (e.g. '/2026'). */
-  readonly purchaseInvoiceSuffix: string;
-  /** Prefix for purchase orders (e.g. 'PO-'). */
-  readonly purchaseOrderPrefix: string;
-  /** Suffix for purchase orders. */
-  readonly purchaseOrderSuffix: string;
-  /** Prefix for sales orders (e.g. 'SO-'). */
-  readonly salesOrderPrefix: string;
-  /** Suffix for sales orders. */
-  readonly salesOrderSuffix: string;
-  /** Prefix for payment vouchers (e.g. 'PAY-'). */
-  readonly paymentVoucherPrefix: string;
-  /** Prefix for receipt vouchers (e.g. 'REC-'). */
-  readonly receiptVoucherPrefix: string;
   /** Application-wide default theme ('light' or 'dark') applied for all users. */
   readonly defaultTheme: 'light' | 'dark';
-  /** Default invoice print format across the system ('A4', 'A5', or 'thermal'). */
-  readonly defaultInvoicePrintFormat: InvoicePrintFormat;
-  /** Branch-wise configured invoice print format overrides (branchId -> format). */
-  readonly branchInvoicePrintFormats: Readonly<Record<string, InvoicePrintFormat>>;
-  /** Customer-assigned invoice print format / template overrides (customerId -> format). */
-  readonly customerInvoicePrintFormats: Readonly<Record<string, InvoicePrintFormat>>;
 }
-
-export type InvoicePrintFormat = 'A4' | 'A5' | 'thermal';
 
 export interface DefaultAdditionalLedgerConfig {
   readonly id: string;
@@ -209,48 +186,14 @@ const DEFAULTS: AppSettings = {
   enableFreeQuantity: true,
   enableItemDiscount: true,
   enableAutoBatch: true,
+  enableSerialNumbers: false,
   defaultItemType: 1,
   defaultBrandId: '',
   defaultDebitAccountId: '',
   defaultCreditAccountId: '',
   defaultAdditionalLedgers: [],
-  invoicePrefix: 'INV-',
-  invoiceSuffix: '',
-  salesReturnPrefix: 'RET-',
-  salesReturnSuffix: '',
-  purchaseInvoicePrefix: 'PI-',
-  purchaseInvoiceSuffix: '',
-  purchaseOrderPrefix: 'PO-',
-  purchaseOrderSuffix: '',
-  salesOrderPrefix: 'SO-',
-  salesOrderSuffix: '',
-  paymentVoucherPrefix: 'PAY-',
-  receiptVoucherPrefix: 'REC-',
   defaultTheme: 'light',
-  defaultInvoicePrintFormat: 'A4',
-  branchInvoicePrintFormats: {},
-  customerInvoicePrintFormats: {},
 };
-
-/**
- * Resolves the effective invoice print format following precedence:
- * 1. Specific template assigned to the customer
- * 2. Specific format configured for the active branch
- * 3. System default invoice print format (defaults to 'A4')
- */
-export function getEffectiveInvoicePrintFormat(
-  settings: AppSettings,
-  customerId?: string | null,
-  branchId?: string | null,
-): InvoicePrintFormat {
-  if (customerId && settings.customerInvoicePrintFormats[customerId]) {
-    return settings.customerInvoicePrintFormats[customerId]!;
-  }
-  if (branchId && settings.branchInvoicePrintFormats[branchId]) {
-    return settings.branchInvoicePrintFormats[branchId]!;
-  }
-  return settings.defaultInvoicePrintFormat || 'A4';
-}
 
 const STORAGE_KEY = 'erp.settings';
 
@@ -271,29 +214,113 @@ function read(): AppSettings {
   }
 }
 
+/**
+ * Settings that stay with this browser instead of following the firm.
+ *
+ * How many rows a list shows is a question about the screen in front of somebody,
+ * and a laptop and a wall-mounted counter display want different answers.
+ */
+const DEVICE_ONLY: readonly (keyof AppSettings)[] = ['pageSize'];
+
+/** The name the firm's copy is stored under on the server. */
+const SERVER_KEY = 'preferences';
+
+/** Where the firm's copy stands, for the screen that edits it. */
+export type SettingsSync =
+  /** Not yet read from the server: what is on screen is this browser's copy. */
+  | 'local'
+  /** Read from, and kept in step with, the firm's copy. */
+  | 'firm'
+  /** The firm's copy could be read but this user may not change it. */
+  | 'read-only';
+
 interface SettingsState extends AppSettings {
+  /** Where these settings came from, and whether changes reach the firm. */
+  readonly sync: SettingsSync;
   /** Changes some of the settings and writes them back. */
   update: (patch: Partial<AppSettings>) => void;
   /** Puts everything back to what a fresh installation starts with. */
   reset: () => void;
+  /**
+   * Replaces this browser's copy with the firm's.
+   *
+   * Called once somebody is signed in. A firm that has never saved its settings is
+   * seeded from the first workstation that has, so the counter that was set up
+   * before this change carries its setup to every other one.
+   */
+  hydrate: () => Promise<void>;
+}
+
+/** The part of the settings the firm shares. */
+function shared(settings: AppSettings): Partial<AppSettings> {
+  const copy: Record<string, unknown> = { ...settings };
+
+  for (const key of DEVICE_ONLY) {
+    delete copy[key];
+  }
+
+  return copy as Partial<AppSettings>;
+}
+
+/** Only the settings themselves, without the store's own fields and actions. */
+function settingsOf(state: SettingsState): AppSettings {
+  const copy: Record<string, unknown> = {};
+
+  for (const key of Object.keys(DEFAULTS) as (keyof AppSettings)[]) {
+    copy[key] = state[key];
+  }
+
+  return copy as unknown as AppSettings;
+}
+
+function store(settings: AppSettings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // A browser with storage disabled still gets the setting for this session.
+    // Losing it on reload is a smaller failure than refusing to apply it.
+  }
+}
+
+let pending: number | undefined;
+
+/**
+ * Writes the firm's copy, a moment after the last change.
+ *
+ * Debounced so a field typed into a character at a time is one request, not one per
+ * keystroke. A refusal is remembered rather than retried: a user without the right
+ * to change the firm's settings keeps their changes in this browser, and the screen
+ * says so.
+ */
+function saveToFirm(settings: AppSettings, onRefused: () => void): void {
+  window.clearTimeout(pending);
+  pending = window.setTimeout(() => {
+    void request<void>(`/settings/${SERVER_KEY}`, {
+      method: 'PUT',
+      body: { value: JSON.stringify(shared(settings)) },
+    }).catch((failure: unknown) => {
+      if (failure instanceof ApiError && failure.status === 403) {
+        onRefused();
+      }
+    });
+  }, 600);
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
   ...read(),
+  sync: 'local',
 
   update: (patch) => {
     const next: AppSettings = {
-      ...get(),
+      ...settingsOf(get()),
       ...patch,
     };
 
     set(next);
+    store(next);
 
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // A browser with storage disabled still gets the setting for this session.
-      // Losing it on reload is a smaller failure than refusing to apply it.
+    if (get().sync === 'firm') {
+      saveToFirm(next, () => set({ sync: 'read-only' }));
     }
   },
 
@@ -305,6 +332,58 @@ export const useSettings = create<SettingsState>((set, get) => ({
     } catch {
       // As above.
     }
+
+    if (get().sync === 'firm') {
+      saveToFirm(DEFAULTS, () => set({ sync: 'read-only' }));
+    }
+  },
+
+  hydrate: async () => {
+    let held: string | null;
+
+    try {
+      held = (await request<{ readonly value: string | null }>(`/settings/${SERVER_KEY}`))
+        .value;
+    } catch {
+      // No firm selected, or the server is unreachable: carry on with this browser's
+      // copy, which is what every screen used before there was a firm copy at all.
+      return;
+    }
+
+    const local = settingsOf(get());
+
+    if (held === null) {
+      // Nobody has saved the firm's settings yet. If this browser was set up, its
+      // setup becomes the firm's; if the user may not do that, it stays local.
+      set({ sync: 'firm' });
+
+      if (JSON.stringify(shared(local)) !== JSON.stringify(shared(DEFAULTS))) {
+        saveToFirm(local, () => set({ sync: 'read-only' }));
+      }
+
+      return;
+    }
+
+    let firm: Partial<AppSettings>;
+
+    try {
+      firm = JSON.parse(held) as Partial<AppSettings>;
+    } catch {
+      return;
+    }
+
+    const device: Partial<AppSettings> = {};
+
+    for (const key of DEVICE_ONLY) {
+      (device as Record<string, unknown>)[key] = local[key];
+    }
+
+    // Over the defaults, as `read` does, so a setting added since the firm last saved
+    // arrives at its default rather than as `undefined`.
+    const next: AppSettings = { ...DEFAULTS, ...firm, ...device };
+
+    set({ ...next, sync: 'firm' });
+    store(next);
   },
 }));
 
