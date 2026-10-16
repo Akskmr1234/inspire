@@ -55,6 +55,14 @@ const TransactionSummaryPage = lazyScreen(
   'TransactionSummaryPage',
 );
 const CashFlowPage = lazyScreen(() => import('@/pages/CashFlowPage'), 'CashFlowPage');
+const LedgerStatementPage = lazyScreen(
+  () => import('@/pages/LedgerStatementPage'),
+  'LedgerStatementPage',
+);
+const OutstandingPage = lazyScreen(
+  () => import('@/pages/OutstandingPage'),
+  'OutstandingPage',
+);
 const MenuAdministrationPage = lazyScreen(
   () => import('@/pages/MenuAdministrationPage'),
   'MenuAdministrationPage',
@@ -257,6 +265,18 @@ export function App(): React.JSX.Element {
                 element={<CashBankBookPage book="bank-book" />}
               />
               <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
+              <Route
+                path="/accounting/ledger-statement"
+                element={<LedgerStatementPage />}
+              />
+              <Route
+                path="/accounting/debtors"
+                element={<OutstandingPage key="debtors" side="debtors" />}
+              />
+              <Route
+                path="/accounting/creditors"
+                element={<OutstandingPage key="creditors" side="creditors" />}
+              />
               <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
               <Route path="/settings/menu" element={<MenuAdministrationPage />} />
               <Route path="/settings/users" element={<UsersPage />} />

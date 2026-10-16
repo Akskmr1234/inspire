@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
@@ -39,6 +40,7 @@ import { savePrintSetup, usePrintSetup } from '@/lib/printing';
  */
 export function CustomersPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const settings = useSettings();
   const regime = settings.taxRegime;
   const { setup: printSetup } = usePrintSetup();
@@ -139,6 +141,13 @@ export function CustomersPage(): React.JSX.Element {
       render: (row) => (
         <span className="inline-flex gap-1.5">
           <RowAction label={t('common.edit')} disabled={busy} onClick={() => edit(row)} />
+          <RowAction
+            label={t('ledgerMaster.statement')}
+            disabled={false}
+            onClick={() =>
+              navigate(`/accounting/ledger-statement?ledger=${row.customerId}`)
+            }
+          />
           <RowAction
             label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
             tone={row.isActive ? 'danger' : 'neutral'}

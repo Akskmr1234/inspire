@@ -362,6 +362,62 @@ public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, I
         return Result.Success();
     }
 
+    /// <summary>Files the ledger under another group of the same firm.</summary>
+    /// <param name="group">The group it should report under.</param>
+    /// <returns>Success, or the reason it may not move there.</returns>
+    /// <remarks>
+    /// Safe at any time, postings or not: a balance is summed from postings and a group
+    /// only decides where that sum is shown, so moving a ledger moves its whole history
+    /// to the new heading and nothing has to be re-posted.
+    /// </remarks>
+    public Result MoveTo(AccountGroup group)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+
+        if (group.FirmId != FirmId)
+        {
+            return Result.Failure(Error.Validation(
+                "Ledger.GroupInAnotherFirm", "That account group belongs to another firm."));
+        }
+
+        AccountGroupId = group.Id;
+        return Result.Success();
+    }
+
+    /// <summary>Changes what an ordinary ledger represents.</summary>
+    /// <param name="kind">General, cash, bank or employee.</param>
+    /// <returns>Success, or the reason the kind may not change.</returns>
+    /// <remarks>
+    /// Only among the kinds that carry no records of their own. A customer or supplier has
+    /// bills against it, a tax ledger is on the firm's tax map and a charge has its
+    /// per-document setup, and turning any of those into something else - or something
+    /// else into one - would leave those records pointing at an account that no longer
+    /// is what they say.
+    /// </remarks>
+    public Result ChangeKind(LedgerKind kind)
+    {
+        if (kind == Kind)
+        {
+            return Result.Success();
+        }
+
+        if (!IsPlain(Kind) || !IsPlain(kind))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Ledger.KindFixed",
+                $"'{Name}' is a {Kind} ledger and cannot become a {kind} ledger."));
+        }
+
+        Kind = kind;
+        return Result.Success();
+    }
+
+    /// <summary>Whether a kind is one an ordinary ledger may freely take.</summary>
+    /// <param name="kind">The kind.</param>
+    /// <returns><see langword="true"/> for general, cash, bank and employee ledgers.</returns>
+    public static bool IsPlain(LedgerKind kind) =>
+        kind is LedgerKind.General or LedgerKind.Cash or LedgerKind.Bank or LedgerKind.Employee;
+
     /// <summary>Stops the ledger accepting new postings.</summary>
     /// <remarks>
     /// Historical entries are untouched, so past reports continue to reconcile.

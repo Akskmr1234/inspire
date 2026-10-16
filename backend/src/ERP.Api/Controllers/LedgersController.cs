@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Accounting.Ledgers;
 using ERP.Application.Accounting.Reports;
+using ERP.Domain.Accounting;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -79,4 +81,130 @@ public sealed class LedgersController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Reads one ledger with everything its form shows.</summary>
+    /// <param name="id">The ledger to read.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Its code, name, group, kind, opening balance and contact details.</returns>
+    /// <response code="200">The ledger.</response>
+    /// <response code="404">No such ledger in the selected firm.</response>
+    [HttpGet("{id:guid}")]
+    [RequiresPermission("accounting", "ledger", "view")]
+    [ProducesResponseType(typeof(LedgerDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        Result<LedgerDetail> result = await _sender.Send(new GetLedgerQuery(id), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Creates a ledger: an expense or income head, a bank account, cash, an employee.</summary>
+    /// <param name="request">The ledger.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The ledger as created.</returns>
+    /// <response code="201">Created.</response>
+    /// <response code="400">A detail is missing, or the kind belongs on another screen.</response>
+    /// <response code="409">The code is already used.</response>
+    [HttpPost]
+    [RequiresPermission("accounting", "ledger", "create")]
+    [ProducesResponseType(typeof(LedgerDetail), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] SaveLedgerRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<LedgerDetail> result = await _sender.Send(
+            new CreateLedgerCommand(request.Code, request.ToInput()), cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"{Request.Path.Value?.TrimEnd('/')}/{result.Value.LedgerId}", result.Value)
+            : Problem(result.Error);
+    }
+
+    /// <summary>Corrects a ledger. Its code stays as it is.</summary>
+    /// <param name="id">The ledger.</param>
+    /// <param name="request">The ledger as it should be.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The ledger as it now stands.</returns>
+    /// <response code="200">Saved.</response>
+    /// <response code="404">No such ledger in the selected firm.</response>
+    /// <response code="422">A customer, supplier, tax or charge ledger, changed on its own screen.</response>
+    [HttpPut("{id:guid}")]
+    [RequiresPermission("accounting", "ledger", "edit")]
+    [ProducesResponseType(typeof(LedgerDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] SaveLedgerRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<LedgerDetail> result = await _sender.Send(
+            new UpdateLedgerCommand(id, request.ToInput()), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Withdraws a ledger from use, or puts it back.</summary>
+    /// <param name="id">The ledger.</param>
+    /// <param name="request">Whether it may be posted to.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The ledger as it now stands.</returns>
+    /// <response code="200">Saved.</response>
+    /// <response code="404">No such ledger in the selected firm.</response>
+    [HttpPost("{id:guid}/active")]
+    [RequiresPermission("accounting", "ledger", "edit")]
+    [ProducesResponseType(typeof(LedgerDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetActiveAsync(
+        Guid id,
+        [FromBody] SetLedgerActiveRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<LedgerDetail> result = await _sender.Send(
+            new SetLedgerActiveCommand(id, request.IsActive), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 }
+
+/// <summary>A ledger as the chart of accounts enters or corrects it.</summary>
+/// <param name="Name">Its name.</param>
+/// <param name="AccountGroupId">The group it reports under.</param>
+/// <param name="Kind">General, cash, bank or employee.</param>
+/// <param name="Code">Its code, on creation only. Made from the name when omitted.</param>
+/// <param name="NameArabic">The same in Arabic.</param>
+/// <param name="OpeningBalance">What stood on it when the books were taken on.</param>
+/// <param name="OpeningSide">Which side that balance falls on.</param>
+/// <param name="Phone">A telephone number.</param>
+/// <param name="Email">An email address.</param>
+/// <param name="Address">An address, or a bank's branch and account number.</param>
+public sealed record SaveLedgerRequest(
+    string Name,
+    [property: JsonRequired] Guid AccountGroupId,
+    [property: JsonRequired] LedgerKind Kind,
+    string? Code = null,
+    string? NameArabic = null,
+    decimal OpeningBalance = 0m,
+    EntrySide OpeningSide = EntrySide.Debit,
+    string? Phone = null,
+    string? Email = null,
+    string? Address = null)
+{
+    /// <summary>The ledger as the command takes it.</summary>
+    /// <returns>The input.</returns>
+    public LedgerInput ToInput() =>
+        new(Name, NameArabic, AccountGroupId, Kind, OpeningBalance, OpeningSide, Phone, Email, Address);
+}
+
+/// <summary>Whether a ledger may be posted to.</summary>
+/// <param name="IsActive">True to allow postings, false to withdraw it.</param>
+public sealed record SetLedgerActiveRequest([property: JsonRequired] bool IsActive);

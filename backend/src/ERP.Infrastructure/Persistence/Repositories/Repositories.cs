@@ -220,6 +220,26 @@ public sealed class LedgerRepository : ILedgerRepository
 
     /// <inheritdoc />
     public void Add(Ledger ledger) => _context.Ledgers.Add(ledger);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AccountGroup>> ListGroupsAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        await _context.AccountGroups
+            .Where(group => group.FirmId == firmId)
+            .OrderBy(group => group.Code)
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> IsGroupCodeInUseAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default) =>
+        _context.AccountGroups.AnyAsync(
+            group => group.FirmId == firmId && group.Code == code, cancellationToken);
+
+    /// <inheritdoc />
+    public void AddGroup(AccountGroup group) => _context.AccountGroups.Add(group);
 }
 
 /// <summary>The EF Core additional-charge repository.</summary>

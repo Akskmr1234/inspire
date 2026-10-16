@@ -1,11 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { DateRangeControls, ReportFrame } from '@/components/ReportFrame';
+import { RowAction } from '@/components/MasterFrame';
+import { GroupEditor, LedgerEditor, useAccountGroups } from '@/components/LedgerEditors';
 import { request, type ApiError } from '@/lib/api';
+import { groupPaths, isPlainKind, type AccountGroupSummary } from '@/lib/ledgers';
+import { useSession } from '@/stores/session';
 import {
   HierarchicalAccountsTable,
   type ReportColumn,
@@ -66,6 +70,8 @@ interface TrialBalance {
   readonly totalClosingCredit: number;
 }
 
+type ViewMode = 'hierarchy' | 'grid' | 'groups';
+
 function startOfYear(): string {
   return `${new Date().getFullYear()}-01-01`;
 }
@@ -75,24 +81,37 @@ function endOfYear(): string {
 }
 
 /**
- * The chart of accounts / General Ledger report.
+ * The chart of accounts: every ledger under its group and head, with its balances, and
+ * the place a firm opens and corrects its own ledgers and groups.
  *
- * Formatted as a unified hierarchical report:
- * Account Head (Asset, Liability, Equity, Income, Expense) → Group → Ledger/Individual Account → Transactions/Details.
- * Supports expand/collapse with subtotals at all levels and grand total, plus transaction drill-down.
+ * Three views of one list: the tree with balances, a flat grid to search and sort, and
+ * the groups themselves. Customers, suppliers, tax and charge ledgers appear here like
+ * any other, but are opened and corrected on their own screens, which also keep their
+ * terms, registration or setup.
  */
 export function LedgersPage(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const can = useSession((s) => s.can);
   const [from, setFrom] = useState(startOfYear());
   const [to, setTo] = useState(endOfYear());
   const [range, setRange] = useState({ from: startOfYear(), to: endOfYear() });
-  const [viewMode, setViewMode] = useState<'hierarchy' | 'grid'>('hierarchy');
+  const [viewMode, setViewMode] = useState<ViewMode>('hierarchy');
+  // A ledger being edited: its id, 'new', or nothing.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [groupEditing, setGroupEditing] = useState<AccountGroupSummary | 'new' | null>(
+    null,
+  );
+
+  const canCreate = can('accounting:ledger:create');
+  const canEdit = can('accounting:ledger:edit');
 
   const query = useQuery<readonly LedgerSummary[], ApiError>({
     queryKey: ['ledgers'],
     queryFn: () => request<readonly LedgerSummary[]>('/accounting/ledgers'),
   });
+
+  const groups = useAccountGroups();
 
   const tbQuery = useQuery<TrialBalance, ApiError>({
     queryKey: ['trial-balance-for-ledgers', range.from, range.to],
@@ -122,6 +141,35 @@ export function LedgersPage(): React.JSX.Element {
     });
     return map;
   }, [tbQuery.data]);
+
+  const kindById = useMemo(
+    () => new Map((query.data ?? []).map((ledger) => [ledger.ledgerId, ledger.kind])),
+    [query.data],
+  );
+
+  const ledgerActions = useCallback(
+    (ledgerId: string): React.ReactNode => (
+      <>
+        <RowAction
+          disabled={false}
+          label={t('ledgerMaster.statement')}
+          onClick={() =>
+            navigate(
+              `/accounting/ledger-statement?ledger=${ledgerId}&from=${range.from}&to=${range.to}`,
+            )
+          }
+        />
+        {canEdit && isPlainKind(kindById.get(ledgerId) ?? 0) && (
+          <RowAction
+            disabled={false}
+            label={t('common.edit')}
+            onClick={() => setEditing(ledgerId)}
+          />
+        )}
+      </>
+    ),
+    [t, navigate, range, canEdit, kindById],
+  );
 
   const hierarchyColumns = useMemo<readonly ReportColumn[]>(
     () => [
@@ -154,6 +202,7 @@ export function LedgersPage(): React.JSX.Element {
         key: 'name',
         header: t('ledgers.name'),
         value: (row) => row.name,
+        wide: true,
       },
       {
         key: 'kind',
@@ -180,97 +229,253 @@ export function LedgersPage(): React.JSX.Element {
         key: 'currency',
         header: t('ledgers.currency'),
         value: (row) => row.currency,
+        hiddenByDefault: true,
       },
       {
         key: 'billWise',
         header: t('ledgers.billWise'),
         value: (row) => (row.isBillWise ? t('common.yes') : t('common.no')),
+        hiddenByDefault: true,
+      },
+      {
+        key: 'actions',
+        header: '',
+        value: () => null,
+        render: (row) => (
+          <span className="flex justify-end gap-1">{ledgerActions(row.ledgerId)}</span>
+        ),
       },
     ],
-    [t],
+    [t, ledgerActions],
   );
+
+  const views: readonly [ViewMode, string][] = [
+    ['hierarchy', t('reports.hierarchicalTree')],
+    ['grid', t('reports.flatList')],
+    ['groups', t('ledgerMaster.groups')],
+  ];
 
   const controls = (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <DateRangeControls
-        from={from}
-        to={to}
-        onFromChange={setFrom}
-        onToChange={setTo}
-        onApply={() => setRange({ from, to })}
-        busy={query.isFetching || tbQuery.isFetching}
-      />
+      {viewMode !== 'groups' ? (
+        <DateRangeControls
+          from={from}
+          to={to}
+          onFromChange={setFrom}
+          onToChange={setTo}
+          onApply={() => setRange({ from, to })}
+          busy={query.isFetching || tbQuery.isFetching}
+        />
+      ) : (
+        <span />
+      )}
 
-      <div className="flex items-center rounded-lg border border-line bg-surface-2 p-0.5 text-xs">
-        <button
-          type="button"
-          onClick={() => setViewMode('hierarchy')}
-          className={clsx(
-            'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition',
-            viewMode === 'hierarchy'
-              ? 'bg-surface text-ink shadow-2xs font-semibold'
-              : 'text-ink-muted hover:text-ink',
-          )}
-        >
-          <span>🌳</span>
-          <span>{t('reports.hierarchicalTree') || 'Hierarchical Tree'}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setViewMode('grid')}
-          className={clsx(
-            'flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition',
-            viewMode === 'grid'
-              ? 'bg-surface text-ink shadow-2xs font-semibold'
-              : 'text-ink-muted hover:text-ink',
-          )}
-        >
-          <span>📋</span>
-          <span>{t('reports.flatList') || 'Flat Grid'}</span>
-        </button>
+      <div
+        role="group"
+        aria-label={t('ledgerMaster.view')}
+        className="flex items-center rounded-lg border border-line bg-surface-2 p-0.5 text-xs"
+      >
+        {views.map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={viewMode === mode}
+            onClick={() => setViewMode(mode)}
+            className={clsx(
+              'rounded-md px-2.5 py-1 font-medium transition',
+              viewMode === mode
+                ? 'bg-surface font-semibold text-ink shadow-2xs'
+                : 'text-ink-muted hover:text-ink',
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
     </div>
   );
 
+  const actions = canCreate && (
+    <>
+      <button
+        type="button"
+        className="btn-secondary btn-sm hidden sm:inline-flex"
+        onClick={() => setGroupEditing('new')}
+      >
+        {t('ledgerMaster.newGroup')}
+      </button>
+      <button
+        type="button"
+        className="btn-primary btn-sm"
+        onClick={() => setEditing('new')}
+      >
+        {t('ledgerMaster.newLedger')}
+      </button>
+    </>
+  );
+
   return (
-    <ReportFrame title={t('nav.ledgers')} controls={controls} query={query}>
-      {(data) => {
-        if (viewMode === 'grid') {
+    <>
+      <ReportFrame
+        title={t('nav.ledgers')}
+        controls={controls}
+        actions={actions}
+        query={query}
+      >
+        {(data) => {
+          if (viewMode === 'groups') {
+            return (
+              <GroupsTable
+                groups={groups.data ?? []}
+                ledgers={data}
+                canEdit={canEdit}
+                canCreate={canCreate}
+                onRename={setGroupEditing}
+                onNew={() => setGroupEditing('new')}
+              />
+            );
+          }
+
+          if (viewMode === 'grid') {
+            return (
+              <DataGrid
+                gridKey="ledgers"
+                rows={data}
+                columns={gridColumns}
+                rowKey={(row) => row.ledgerId}
+              />
+            );
+          }
+
+          const heads = buildChartOfAccountsHierarchy(data, balancesMap);
+          const grandTotals = tbQuery.data
+            ? {
+                opening: tbQuery.data.totalOpeningDebit - tbQuery.data.totalOpeningCredit,
+                debit: tbQuery.data.totalPeriodDebit,
+                credit: tbQuery.data.totalPeriodCredit,
+                closing: tbQuery.data.totalClosingDebit - tbQuery.data.totalClosingCredit,
+              }
+            : undefined;
+
           return (
-            <DataGrid
-              gridKey="ledgers"
-              rows={data}
-              columns={gridColumns}
-              rowKey={(row) => row.ledgerId}
+            <HierarchicalAccountsTable
+              heads={heads}
+              columns={hierarchyColumns}
+              currency={data[0]?.currency}
+              fromDate={range.from}
+              toDate={range.to}
+              initialExpandLevel={2}
+              grandTotals={grandTotals}
+              ledgerActions={ledgerActions}
+              onVoucherClick={(vNum) => {
+                navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+              }}
             />
           );
-        }
+        }}
+      </ReportFrame>
 
-        const heads = buildChartOfAccountsHierarchy(data, balancesMap);
-        const grandTotals = tbQuery.data
-          ? {
-              opening: tbQuery.data.totalOpeningDebit - tbQuery.data.totalOpeningCredit,
-              debit: tbQuery.data.totalPeriodDebit,
-              credit: tbQuery.data.totalPeriodCredit,
-              closing: tbQuery.data.totalClosingDebit - tbQuery.data.totalClosingCredit,
-            }
-          : undefined;
+      {editing !== null && (
+        <LedgerEditor
+          ledgerId={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {groupEditing !== null && (
+        <GroupEditor
+          group={groupEditing === 'new' ? null : groupEditing}
+          onClose={() => setGroupEditing(null)}
+        />
+      )}
+    </>
+  );
+}
 
-        return (
-          <HierarchicalAccountsTable
-            heads={heads}
-            columns={hierarchyColumns}
-            currency="AED"
-            fromDate={range.from}
-            toDate={range.to}
-            initialExpandLevel={2}
-            grandTotals={grandTotals}
-            onVoucherClick={(vNum) => {
-              navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
-            }}
-          />
-        );
-      }}
-    </ReportFrame>
+/** The account groups, each with its place in the tree and how many ledgers it holds. */
+function GroupsTable({
+  groups,
+  ledgers,
+  canEdit,
+  canCreate,
+  onRename,
+  onNew,
+}: {
+  readonly groups: readonly AccountGroupSummary[];
+  readonly ledgers: readonly LedgerSummary[];
+  readonly canEdit: boolean;
+  readonly canCreate: boolean;
+  readonly onRename: (group: AccountGroupSummary) => void;
+  readonly onNew: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const paths = useMemo(() => groupPaths(groups), [groups]);
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ledger of ledgers)
+      map.set(ledger.groupCode, (map.get(ledger.groupCode) ?? 0) + 1);
+    return map;
+  }, [ledgers]);
+  const sorted = useMemo(
+    () =>
+      [...groups].sort((a, b) =>
+        (paths.get(a.accountGroupId) ?? '').localeCompare(
+          paths.get(b.accountGroupId) ?? '',
+        ),
+      ),
+    [groups, paths],
+  );
+
+  const columns: readonly GridColumn<AccountGroupSummary>[] = [
+    { key: 'code', header: t('ledgerMaster.code'), value: (g) => g.code },
+    {
+      key: 'path',
+      header: t('ledgerMaster.group'),
+      value: (g) => paths.get(g.accountGroupId) ?? g.name,
+      wide: true,
+    },
+    {
+      key: 'nature',
+      header: t('ledgers.nature'),
+      value: (g) => t(`accountNatures.${NATURE_NAME[g.nature]}`),
+    },
+    {
+      key: 'ledgers',
+      header: t('ledgerMaster.ledgerCount'),
+      value: (g) => counts.get(g.code) ?? 0,
+      numeric: true,
+    },
+    {
+      key: 'actions',
+      header: '',
+      value: () => null,
+      render: (g) =>
+        canEdit && !g.isSystemGroup ? (
+          <span className="flex justify-end">
+            <RowAction
+              disabled={false}
+              label={t('ledgerMaster.rename')}
+              onClick={() => onRename(g)}
+            />
+          </span>
+        ) : null,
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      {canCreate && (
+        <div className="flex justify-end sm:hidden">
+          <button type="button" className="btn-secondary btn-sm" onClick={onNew}>
+            {t('ledgerMaster.newGroup')}
+          </button>
+        </div>
+      )}
+      <DataGrid
+        gridKey="account-groups"
+        rows={sorted}
+        columns={columns}
+        rowKey={(g) => g.accountGroupId}
+      />
+    </div>
   );
 }
