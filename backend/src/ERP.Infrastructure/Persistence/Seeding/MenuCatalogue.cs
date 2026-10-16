@@ -482,6 +482,25 @@ public static class MenuCatalogue
                     "/settings/roles",
                     "platform:role:view"),
 
+                // How each document prints - preview, layout, printer, copies, and a
+                // second run - and the layouts themselves. Readable by anybody who may
+                // read settings; the designer behind the print-template permission.
+                new(
+                    "settings.printing",
+                    "Print settings",
+                    "إعدادات الطباعة",
+                    "platform",
+                    "/settings/printing",
+                    "platform:setting:view"),
+
+                new(
+                    "settings.print-templates",
+                    "Print templates",
+                    "قوالب الطباعة",
+                    "printing",
+                    "/settings/print-templates",
+                    "printing:template:view"),
+
                 // Clearing a firm's data to hand it over or to test from nothing. Behind
                 // the permission to delete the firm, the nearest grant to what it does.
                 new(

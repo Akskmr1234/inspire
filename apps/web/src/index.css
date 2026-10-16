@@ -38,6 +38,21 @@
   --color-brand-900: oklch(0.325 0.11 262);
   --color-brand-950: oklch(0.22 0.08 262);
 
+  /* "primary" is what several screens were written against, and it was never defined:
+     their highlights rendered as nothing, and a selected tab as white text on no
+     background. It is the brand colour under another name. */
+  --color-primary-50: var(--color-brand-50);
+  --color-primary-100: var(--color-brand-100);
+  --color-primary-200: var(--color-brand-200);
+  --color-primary-300: var(--color-brand-300);
+  --color-primary-400: var(--color-brand-400);
+  --color-primary-500: var(--color-brand-500);
+  --color-primary-600: var(--color-brand-600);
+  --color-primary-700: var(--color-brand-700);
+  --color-primary-800: var(--color-brand-800);
+  --color-primary-900: var(--color-brand-900);
+  --color-primary-950: var(--color-brand-950);
+
   /* ---------------------------------------------------------------------
      Semantic surface tokens.
 
@@ -1201,7 +1216,29 @@
    Everything below is deliberately outside `@layer`, so it wins against the utility
    classes it has to override without an arms race of specificity.
    ======================================================================== */
+/* A document being printed is rendered into its own container at the end of the body,
+   so the screen behind the dialog that asked for it never reaches the printer. */
+.print-root {
+  display: none;
+}
+
 @media print {
+  body:has(> .print-root) > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block !important;
+  }
+
+  .print-root .printed-document {
+    break-after: page;
+  }
+
+  .print-root .printed-document:last-child {
+    break-after: auto;
+  }
+
   /* Ink is white and text is black whatever the reader had on screen. Overriding
      the tokens rather than each rule means every card, table and badge follows,
      including ones written after this. */

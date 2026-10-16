@@ -6,7 +6,11 @@ import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/Repo
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { request, type ApiError } from '@/lib/api';
 import { SearchSelect } from '@/components/SearchSelect';
-import { VoucherCancelDialog, VoucherEditDialog } from '@/components/VoucherEditDialog';
+import {
+  VoucherCancelDialog,
+  VoucherEditDialog,
+  VoucherPrintDialog,
+} from '@/components/VoucherEditDialog';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
 const STATUS_NAME: Record<number, string> = { 1: 'Draft', 2: 'Posted', 3: 'Cancelled' };
@@ -128,6 +132,7 @@ export function VoucherReportPage(): React.JSX.Element {
   // A voucher being corrected or cancelled from the list, and what came of it.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<VoucherReportLine | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const finished = (message: string): void => {
@@ -353,6 +358,13 @@ export function VoucherReportPage(): React.JSX.Element {
                           <span className="text-ink-subtle">{voucher.currency}</span>
                         </td>
                         <td className="py-1.5 text-end whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setPrintingId(voucher.voucherId)}
+                            className="row-action row-action-neutral me-1"
+                          >
+                            {t('printing.print')}
+                          </button>
                           {voucher.status !== CANCELLED && (
                             <span className="inline-flex gap-1">
                               <button
@@ -395,6 +407,10 @@ export function VoucherReportPage(): React.JSX.Element {
           onClose={() => setEditingId(null)}
           onSaved={finished}
         />
+      )}
+
+      {printingId && (
+        <VoucherPrintDialog voucherId={printingId} onClose={() => setPrintingId(null)} />
       )}
 
       {cancelling && (

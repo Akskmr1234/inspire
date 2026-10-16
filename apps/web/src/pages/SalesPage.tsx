@@ -9,7 +9,8 @@ import { DateField, Field as FormField, SelectField, TextField } from '@/compone
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { IconBarcode, IconClose, IconPrinter } from '@/components/icons';
-import { InvoicePrintView } from '@/components/InvoicePrintView';
+import { PrintCenter } from '@/components/print/PrintCenter';
+import { printableSale } from '@/lib/printing';
 import {
   DocumentTotals,
   productOption,
@@ -1963,14 +1964,6 @@ function DocumentDialog({
     [customers.data, document?.customerLedgerId],
   );
 
-  const matchedWarehouse = useMemo(
-    () =>
-      warehouses.data?.find(
-        (w) => w.id === document?.warehouseId || w.code === document?.warehouseId,
-      ),
-    [warehouses.data, document?.warehouseId],
-  );
-
   return (
     <Modal
       title={
@@ -2039,12 +2032,22 @@ function DocumentDialog({
           </div>
 
           {activeTab === 'print' ? (
-            <InvoicePrintView
-              invoice={document}
-              customer={matchedCustomer}
-              warehouse={matchedWarehouse}
-              products={products.data ?? []}
-              onClose={onClose}
+            <PrintCenter
+              document={printableSale(
+                document,
+                {
+                  customers: customers.data ?? [],
+                  products: products.data ?? [],
+                  warehouses: warehouses.data ?? [],
+                },
+                {
+                  taxable: t('printing.taxable'),
+                  tax: t('printing.taxTotal'),
+                  charges: t('printing.charges'),
+                  roundOff: t('printing.roundOff'),
+                },
+              )}
+              onDone={onClose}
             />
           ) : (
             <>

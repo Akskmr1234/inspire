@@ -8,6 +8,8 @@ import { IconClose } from '@/components/icons';
 import { request, type ApiError } from '@/lib/api';
 import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { moneyAlways } from '@/lib/money';
+import { printableVoucher, type VoucherForPrint } from '@/lib/printing';
+import { PrintCenter } from '@/components/print/PrintCenter';
 
 const DEBIT = 1;
 const CREDIT = 2;
@@ -413,6 +415,40 @@ export function VoucherCancelDialog({
           {t('vouchers.cancelVoucher')}
         </ModalButton>
       </div>
+    </Modal>
+  );
+}
+
+/** A receipt, payment or journal on paper. */
+export function VoucherPrintDialog({
+  voucherId,
+  onClose,
+}: {
+  readonly voucherId: string;
+  readonly onClose: () => void;
+}): React.JSX.Element {
+  const voucher = useQuery<VoucherForPrint, ApiError>({
+    queryKey: ['voucher', voucherId],
+    queryFn: () => request<VoucherForPrint>(`/accounting/vouchers/${voucherId}`),
+  });
+
+  const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers', 'all'],
+    queryFn: () => listLedgers(false),
+  });
+
+  return (
+    <Modal title={voucher.data?.number ?? '…'} size="fullscreen" onClose={onClose}>
+      {(voucher.isPending || ledgers.isPending) && <Spinner />}
+      {voucher.isError && (
+        <p className="alert-error">{voucher.error.detail || voucher.error.code}</p>
+      )}
+      {voucher.data && ledgers.data && (
+        <PrintCenter
+          document={printableVoucher(voucher.data, ledgers.data)}
+          onDone={onClose}
+        />
+      )}
     </Modal>
   );
 }

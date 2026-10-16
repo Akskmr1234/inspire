@@ -32,6 +32,8 @@ import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { PrintCenter } from '@/components/print/PrintCenter';
+import { printablePurchase } from '@/lib/printing';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -1290,6 +1292,7 @@ function DocumentDialog({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
+  const [printing, setPrinting] = useState(false);
 
   const query = useQuery<PurchaseInvoiceDetail, ApiError>({
     queryKey: ['purchase-invoice', id],
@@ -1297,6 +1300,18 @@ function DocumentDialog({
   });
 
   const document = query.data;
+
+  if (printing && document) {
+    return (
+      <Modal
+        title={document.header.number}
+        size="fullscreen"
+        onClose={() => setPrinting(false)}
+      >
+        <PurchasePrint document={document} onDone={() => setPrinting(false)} />
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={document?.header.number ?? t('purchase.document')} onClose={onClose}>
@@ -1432,13 +1447,16 @@ function DocumentDialog({
             </>
           )}
 
-          {document.header.status !== PurchaseInvoiceStatus.cancelled && (
-            <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <ModalButton onClick={() => setPrinting(true)}>
+              {t('printing.print')}
+            </ModalButton>
+            {document.header.status !== PurchaseInvoiceStatus.cancelled && (
               <ModalButton disabled={busy} onClick={() => onEdit(document)}>
                 {t('purchase.edit')}
               </ModalButton>
-            </div>
-          )}
+            )}
+          </div>
 
           {document.header.status !== PurchaseInvoiceStatus.cancelled && (
             <div className="flex flex-wrap items-end justify-end gap-2">
@@ -1528,5 +1546,53 @@ function NumberCell({
         )}
       />
     </td>
+  );
+}
+
+/** A purchase on paper, with what it names looked up. */
+function PurchasePrint({
+  document,
+  onDone,
+}: {
+  readonly document: PurchaseInvoiceDetail;
+  readonly onDone: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
+    queryKey: ['suppliers', 'picker'],
+    queryFn: () => listSuppliers('', true),
+  });
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+  });
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+  });
+
+  if (suppliers.isPending || warehouses.isPending || products.isPending) {
+    return <p className="text-sm text-ink-muted">{t('common.loading')}</p>;
+  }
+
+  return (
+    <PrintCenter
+      document={printablePurchase(
+        document,
+        {
+          suppliers: suppliers.data ?? [],
+          products: products.data ?? [],
+          warehouses: warehouses.data ?? [],
+        },
+        {
+          taxable: t('printing.taxable'),
+          tax: t('printing.taxTotal'),
+          charges: t('printing.charges'),
+          roundOff: t('printing.roundOff'),
+        },
+      )}
+      onDone={onDone}
+    />
   );
 }
