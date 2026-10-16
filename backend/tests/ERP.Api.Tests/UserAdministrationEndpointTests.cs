@@ -17,6 +17,11 @@ public sealed class UserAdministrationEndpointTests
     private const string Users = "/api/v1/platform/users";
     private const string Roles = "/api/v1/platform/roles";
 
+    private static readonly string[] CounterPermissions =
+        ["sales:invoice:view", "sales:invoice:create", "sales:customer:view"];
+
+    private static readonly string[] CounterMenus = ["transactions.sales"];
+
     private readonly ApiFactory _factory;
 
     public UserAdministrationEndpointTests(ApiFactory factory) => _factory = factory;
@@ -31,8 +36,8 @@ public sealed class UserAdministrationEndpointTests
         {
             Name = $"Counter {tag}",
             Description = "Sells over the counter",
-            PermissionCodes = new[] { "sales:invoice:view", "sales:invoice:create", "sales:customer:view" },
-            MenuCodes = new[] { "transactions.sales" },
+            PermissionCodes = CounterPermissions,
+            MenuCodes = CounterMenus,
         });
 
         createdRole.StatusCode.ShouldBe(HttpStatusCode.Created, await createdRole.Content.ReadAsStringAsync());

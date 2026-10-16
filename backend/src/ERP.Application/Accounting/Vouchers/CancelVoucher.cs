@@ -177,15 +177,15 @@ public sealed class CancelVoucherCommandHandler
         IReadOnlyList<Cheque> cheques =
             await _cheques.FindRecordedByAsync(voucher.Id, cancellationToken);
 
-        foreach (Cheque cheque in cheques)
+        Cheque? presented = cheques.FirstOrDefault(
+            cheque => cheque.Status is ChequeStatus.Deposited or ChequeStatus.Cleared);
+
+        if (presented is not null)
         {
-            if (cheque.Status is ChequeStatus.Deposited or ChequeStatus.Cleared)
-            {
-                return Result.Failure(Error.BusinessRule(
-                    "Cheque.AlreadyPresented",
-                    $"Cheque '{cheque.ChequeNumber}' on '{voucher.Number}' has already gone "
-                    + "to the bank. Bounce or reverse it from the cheque register instead."));
-            }
+            return Result.Failure(Error.BusinessRule(
+                "Cheque.AlreadyPresented",
+                $"Cheque '{presented.ChequeNumber}' on '{voucher.Number}' has already gone "
+                + "to the bank. Bounce or reverse it from the cheque register instead."));
         }
 
         IReadOnlyList<Bill> settled = await _bills.FindAllocatedByAsync(voucher.Id, cancellationToken);

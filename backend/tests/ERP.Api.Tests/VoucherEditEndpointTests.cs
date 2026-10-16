@@ -137,7 +137,11 @@ public sealed class VoucherEditEndpointTests
 
     private static ReceiptRequest Receipt(Guid cash, TestMasters masters, SalesInvoiceDetail sale, decimal amount)
     {
-        (object _, object[] lines) = ReceiptParts(cash, masters, sale.BillId!.Value, amount);
+        (object _, object[] lines) = ReceiptParts(
+            cash,
+            masters,
+            sale.BillId ?? throw new InvalidOperationException("The sale raised no bill."),
+            amount);
 
         return new ReceiptRequest(VoucherType.CashReceipt, Today, lines);
     }

@@ -244,9 +244,9 @@ public sealed class PurchaseController : ApiControllerBase
 /// <param name="Post">Post a draft once it is corrected. A posted purchase is always posted again.</param>
 /// <param name="Reason">Why a posted purchase was changed.</param>
 public sealed record UpdatePurchaseInvoiceRequest(
-    DateOnly Date,
-    Guid SupplierLedgerId,
-    Guid WarehouseId,
+    [property: JsonRequired] DateOnly Date,
+    [property: JsonRequired] Guid SupplierLedgerId,
+    [property: JsonRequired] Guid WarehouseId,
     IReadOnlyList<PurchaseInvoiceLineInput> Lines,
     IReadOnlyList<PurchaseInvoiceChargeInput>? Charges = null,
     TaxMode? Mode = null,

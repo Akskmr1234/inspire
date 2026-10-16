@@ -168,7 +168,7 @@ public sealed class VouchersController : ApiControllerBase
 /// <param name="PostImmediately">Post a draft once corrected. A posted voucher is always posted again.</param>
 /// <param name="Reason">Why a posted voucher was changed.</param>
 public sealed record UpdateVoucherRequest(
-    DateOnly Date,
+    [property: JsonRequired] DateOnly Date,
     IReadOnlyList<CreateVoucherLine> Lines,
     string? CurrencyCode = null,
     decimal ExchangeRate = 1m,

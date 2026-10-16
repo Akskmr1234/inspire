@@ -63,7 +63,7 @@ public sealed class RolesController : ApiControllerBase
     /// <param name="id">The role.</param>
     /// <param name="request">The role as it should be.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The role.</returns>
+    /// <returns>The role as it now stands.</returns>
     [HttpPut("{id:guid}")]
     [RequiresPermission("platform", "role", "edit")]
     [ProducesResponseType(typeof(RoleSummary), StatusCodes.Status200OK)]
