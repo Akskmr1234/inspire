@@ -25,6 +25,7 @@ namespace ERP.Domain.Identity;
 public sealed class Role : AggregateRoot<RoleId>, ITenantScoped, IAuditable, ISoftDeletable
 {
     private readonly List<RolePermission> _permissions = [];
+    private readonly List<RoleMenu> _menus = [];
 
     private Role(RoleId id, TenantId tenantId, string name, string description, bool isSystemRole)
         : base(id)
@@ -82,6 +83,24 @@ public sealed class Role : AggregateRoot<RoleId>, ITenantScoped, IAuditable, ISo
 
     /// <summary>Gets the permissions granted by this role.</summary>
     public IReadOnlyCollection<RolePermission> Permissions => _permissions.AsReadOnly();
+
+    /// <summary>
+    /// Gets a value indicating whether the role sees only the menus it names, rather
+    /// than every menu its permissions reach.
+    /// </summary>
+    /// <remarks>
+    /// Off for every role until somebody chooses its menus, so the roles that existed
+    /// before menus could be chosen keep showing what they always showed.
+    /// </remarks>
+    public bool RestrictsMenu { get; private set; }
+
+    /// <summary>Gets the menus the role shows, by code, when it restricts its menu.</summary>
+    /// <remarks>
+    /// By code rather than by the menu row, because every firm has its own copy of the
+    /// menu tree and a role reaches across firms: "sales.invoices" is the same entry in
+    /// each of them.
+    /// </remarks>
+    public IReadOnlyCollection<RoleMenu> Menus => _menus.AsReadOnly();
 
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -194,6 +213,30 @@ public sealed class Role : AggregateRoot<RoleId>, ITenantScoped, IAuditable, ISo
         Raise(new RolePermissionsChanged(Id, TenantId));
     }
 
+    /// <summary>Chooses the menus the role shows.</summary>
+    /// <param name="menuCodes">
+    /// The menu entries by code, or <see langword="null"/> to show every menu the role's
+    /// permissions reach.
+    /// </param>
+    /// <remarks>
+    /// The menu is what somebody sees, not what they may do: an entry left out here
+    /// is gone from the menu, while what the role may read or change is still its
+    /// permissions. Both are chosen on the same screen for that reason.
+    /// </remarks>
+    public void ChooseMenus(IEnumerable<string>? menuCodes)
+    {
+        _menus.Clear();
+        RestrictsMenu = menuCodes is not null;
+
+        foreach (string code in (menuCodes ?? [])
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            _menus.Add(new RoleMenu(Id, code, TenantId));
+        }
+    }
+
     /// <summary>Renames the role and updates its description.</summary>
     /// <param name="name">The new name.</param>
     /// <param name="description">The new description.</param>
@@ -252,6 +295,36 @@ public sealed class RolePermission : ITenantScoped
 
     /// <summary>Gets the permission granted.</summary>
     public PermissionId PermissionId { get; private set; }
+
+    /// <inheritdoc />
+    public TenantId TenantId { get; private set; }
+}
+
+/// <summary>A menu entry a role shows.</summary>
+public sealed class RoleMenu : ITenantScoped
+{
+    /// <summary>The longest a menu code may be.</summary>
+    public const int MaximumCodeLength = 100;
+
+    /// <summary>Initialises a new instance of the <see cref="RoleMenu"/> class.</summary>
+    /// <param name="roleId">The role.</param>
+    /// <param name="menuCode">The menu entry's code.</param>
+    /// <param name="tenantId">The owning tenant.</param>
+    internal RoleMenu(RoleId roleId, string menuCode, TenantId tenantId)
+    {
+        RoleId = roleId;
+        MenuCode = menuCode;
+        TenantId = tenantId;
+    }
+
+    /// <summary>Constructor for EF Core materialisation.</summary>
+    private RoleMenu() => MenuCode = string.Empty;
+
+    /// <summary>Gets the role.</summary>
+    public RoleId RoleId { get; private set; }
+
+    /// <summary>Gets the menu entry's code.</summary>
+    public string MenuCode { get; private set; }
 
     /// <inheritdoc />
     public TenantId TenantId { get; private set; }

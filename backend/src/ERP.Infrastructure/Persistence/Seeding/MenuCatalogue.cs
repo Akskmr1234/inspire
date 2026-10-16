@@ -463,6 +463,25 @@ public static class MenuCatalogue
                     "/settings/menu",
                     "platform:menu:view"),
 
+                // Who may sign in, and what each role does and sees. Behind the
+                // permissions that guard the screens' own endpoints, so the entry is
+                // never offered to somebody the screen would refuse.
+                new(
+                    "settings.users",
+                    "Users",
+                    "المستخدمون",
+                    "platform",
+                    "/settings/users",
+                    "platform:user:view"),
+
+                new(
+                    "settings.roles",
+                    "Roles and menus",
+                    "الأدوار والقوائم",
+                    "platform",
+                    "/settings/roles",
+                    "platform:role:view"),
+
                 // No permission: everything behind it is a preference about how this
                 // browser behaves - the tax rates a picker offers, whether Arabic
                 // names are translated, how many rows a page holds - and none of it

@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
+import { HomeRedirect } from '@/components/HomeRedirect';
 import { lazyScreen } from '@/lib/screens';
 import { ReportSkeleton } from '@/components/ReportFrame';
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
@@ -58,6 +59,8 @@ const MenuAdministrationPage = lazyScreen(
   () => import('@/pages/MenuAdministrationPage'),
   'MenuAdministrationPage',
 );
+const UsersPage = lazyScreen(() => import('@/pages/UsersPage'), 'UsersPage');
+const RolesPage = lazyScreen(() => import('@/pages/RolesPage'), 'RolesPage');
 const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
 const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
@@ -247,6 +250,8 @@ export function App(): React.JSX.Element {
               <Route path="/accounting/cash-flow" element={<CashFlowPage />} />
               <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
               <Route path="/settings/menu" element={<MenuAdministrationPage />} />
+              <Route path="/settings/users" element={<UsersPage />} />
+              <Route path="/settings/roles" element={<RolesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
@@ -290,10 +295,7 @@ export function App(): React.JSX.Element {
                 path="/accounting/cheque-register"
                 element={<ChequeRegisterPage />}
               />
-              <Route
-                path="*"
-                element={<Navigate to="/accounting/trial-balance" replace />}
-              />
+              <Route path="*" element={<HomeRedirect />} />
             </>
           )}
         </Route>

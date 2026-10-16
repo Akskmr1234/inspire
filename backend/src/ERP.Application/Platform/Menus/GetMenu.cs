@@ -74,6 +74,17 @@ public interface IMenuReader
     Task<IReadOnlyList<MenuItemRow>> ReadAsync(
         FirmId firmId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>The menus a user's roles have chosen, if every one of them has chosen.</summary>
+    /// <param name="userId">The user.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>
+    /// The menu codes the user's roles show between them, or <see langword="null"/> where
+    /// any of their roles shows every menu its permissions reach.
+    /// </returns>
+    Task<IReadOnlySet<string>?> ReadChosenMenusAsync(
+        UserId userId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Handles <see cref="GetMenuQuery"/>.</summary>
@@ -136,7 +147,18 @@ public sealed class GetMenuQueryHandler : IQueryHandler<GetMenuQuery, MenuRespon
         // reach everything - which is also the account most likely to notice.
         bool holdsEverything = held.Contains(WildcardPermission);
 
-        ILookup<Guid?, MenuItemRow> byParent = rows.ToLookup(row => row.ParentId);
+        // Roles whose menus were chosen narrow what the permissions reach. A role that
+        // was never given a choice - every role from before menus could be chosen -
+        // leaves the user's menu to their permissions alone.
+        IReadOnlySet<string>? chosen = holdsEverything
+            ? null
+            : await _reader.ReadChosenMenusAsync(_currentUser.UserId, cancellationToken);
+
+        ILookup<Guid?, MenuItemRow> byParent = rows
+            .Where(row => chosen is null
+                || string.IsNullOrWhiteSpace(row.Route)
+                || chosen.Contains(row.Code))
+            .ToLookup(row => row.ParentId);
 
         return Result.Success(new MenuResponse(Build(null, byParent, held, holdsEverything)));
     }

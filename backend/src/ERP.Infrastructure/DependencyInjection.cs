@@ -9,6 +9,7 @@ using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
+using ERP.Application.Platform.Users;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
 using ERP.Infrastructure.Persistence.Reporting;
@@ -62,6 +63,7 @@ public static class DependencyInjection
         services.AddMemoryCache(options => options.SizeLimit = 50_000);
         services.AddScoped<IPermissionChecker, CachedPermissionChecker>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<IUserAdministration, UserAdministration>();
 
         services.AddOptions<SeedOptions>()
             .Bind(configuration.GetSection(SeedOptions.SectionName))

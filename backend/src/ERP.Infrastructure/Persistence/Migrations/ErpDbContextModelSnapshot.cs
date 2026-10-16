@@ -1201,6 +1201,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<bool>("RestrictsMenu")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("restricts_menu");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -1223,6 +1229,30 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("roles", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Identity.RoleMenu", b =>
+                {
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
+
+                    b.Property<string>("MenuCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("menu_code");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("RoleId", "MenuCode")
+                        .HasName("pk_role_menus");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_role_menus_tenant");
+
+                    b.ToTable("role_menus", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Identity.RolePermission", b =>
@@ -5436,6 +5466,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Identity.RoleMenu", b =>
+                {
+                    b.HasOne("ERP.Domain.Identity.Role", null)
+                        .WithMany("Menus")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_menus_roles_role_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Identity.RolePermission", b =>
                 {
                     b.HasOne("ERP.Domain.Identity.Permission", null)
@@ -6238,6 +6278,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ERP.Domain.Identity.Role", b =>
                 {
+                    b.Navigation("Menus");
+
                     b.Navigation("Permissions");
                 });
 
