@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
 import { prefetchScreens } from '@/lib/screens';
+import { useSettings } from '@/stores/settings';
 import { ReportSkeleton } from '@/components/ReportFrame';
 import { currentDisplayName, type ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -47,6 +48,12 @@ export function AppShell(): React.JSX.Element {
   // Once signed in, fetch the rest of the screens behind the one on show. See
   // `prefetchScreens`.
   useEffect(() => prefetchScreens(), []);
+
+  // And read the firm's settings over this browser's copy, so every counter works to
+  // the same setup. See `useSettings.hydrate`.
+  useEffect(() => {
+    void useSettings.getState().hydrate();
+  }, []);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);

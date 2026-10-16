@@ -3228,6 +3228,67 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("dashboard_widgets", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Platform.FirmSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000000)
+                        .HasColumnType("text")
+                        .HasColumnName("value");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_firm_settings");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_firm_settings_tenant");
+
+                    b.HasIndex("FirmId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_firm_settings_firm_key");
+
+                    b.ToTable("firm_settings", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Platform.GridLayout", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5731,6 +5792,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_dashboard_widgets_dashboards_dashboard_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Platform.FirmSetting", b =>
+                {
+                    b.HasOne("ERP.Domain.Tenancy.Firm", null)
+                        .WithMany()
+                        .HasForeignKey("FirmId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_firm_settings_firms_firm_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Platform.GridLayout", b =>

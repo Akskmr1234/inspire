@@ -157,6 +157,16 @@ public sealed class BillAllocationIdConverter : ValueConverter<BillAllocationId,
     }
 }
 
+/// <summary>Converts <see cref="FirmSettingId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class FirmSettingIdConverter : ValueConverter<FirmSettingId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="FirmSettingIdConverter"/> class.</summary>
+    public FirmSettingIdConverter()
+        : base(id => id.Value, value => FirmSettingId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="GridLayoutId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class GridLayoutIdConverter : ValueConverter<GridLayoutId, Guid>
 {

@@ -91,6 +91,10 @@ export function SettingsPage(): React.JSX.Element {
     <section className="page">
       <PageHeading title={t('settings.title')} subtitle={t('settings.subtitle')} />
 
+      {settings.sync === 'read-only' && (
+        <p className="alert-warn text-sm">{t('settings.storedReadOnly')}</p>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <SettingsCard title={t('settings.taxTitle')} hint={t('settings.taxHint')}>
           <SelectField
@@ -367,7 +371,17 @@ export function SettingsPage(): React.JSX.Element {
         </div>
       </div>
 
-      <p className="text-xs text-ink-muted">{t('settings.storedLocally')}</p>
+      <p
+        className={
+          settings.sync === 'read-only' ? 'alert-warn text-xs' : 'text-xs text-ink-muted'
+        }
+      >
+        {settings.sync === 'firm'
+          ? t('settings.storedForFirm')
+          : settings.sync === 'read-only'
+            ? t('settings.storedReadOnly')
+            : t('settings.storedLocally')}
+      </p>
     </section>
   );
 }

@@ -1195,7 +1195,11 @@ const en = {
     pageSizeHint: 'Between 5 and 500.',
     reset: 'Reset all settings',
     storedLocally:
-      'These settings are held in this browser. They change how the screens behave and never what a saved document means.',
+      'These settings could not be read from the server, so this browser’s own copy is in use. They change how the screens behave and never what a saved document means.',
+    storedForFirm:
+      'Shared by every workstation in this firm: a change here reaches every counter. Rows per page stays with this browser.',
+    storedReadOnly:
+      'Only an administrator can change the firm’s settings. What you change here applies to this browser until you next sign in.',
   },
   profile: {
     anonymous: 'User',
@@ -2457,7 +2461,11 @@ const ar = {
     pageSizeHint: 'بين 5 و 500.',
     reset: 'إعادة تعيين جميع الإعدادات',
     storedLocally:
-      'تُحفظ هذه الإعدادات في هذا المتصفح. تغيّر سلوك الشاشات ولا تغيّر معنى أي مستند محفوظ.',
+      'تعذّرت قراءة هذه الإعدادات من الخادم، فتُستخدم نسخة هذا المتصفح. تغيّر سلوك الشاشات ولا تغيّر معنى أي مستند محفوظ.',
+    storedForFirm:
+      'مشتركة بين جميع أجهزة هذه المنشأة: أي تغيير هنا يصل إلى كل نقطة بيع. يبقى عدد الصفوف في الصفحة خاصاً بهذا المتصفح.',
+    storedReadOnly:
+      'لا يغيّر إعدادات المنشأة إلا المسؤول. ما تغيّره هنا يسري على هذا المتصفح حتى تسجيل الدخول التالي.',
   },
   profile: {
     anonymous: 'مستخدم',

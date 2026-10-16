@@ -2,6 +2,7 @@ using ERP.Application;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
@@ -619,6 +620,28 @@ public sealed class GridLayoutRepository : IGridLayoutRepository
 
     /// <inheritdoc />
     public void Remove(GridLayout layout) => _context.GridLayouts.Remove(layout);
+}
+
+/// <summary>EF Core implementation of <see cref="IFirmSettingRepository"/>.</summary>
+public sealed class FirmSettingRepository : IFirmSettingRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="FirmSettingRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public FirmSettingRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<FirmSetting?> FindAsync(
+        FirmId firmId,
+        string key,
+        CancellationToken cancellationToken = default) =>
+        _context.FirmSettings.FirstOrDefaultAsync(
+            setting => setting.FirmId == firmId && setting.Key == key,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(FirmSetting setting) => _context.FirmSettings.Add(setting);
 }
 
 /// <summary>Reads and writes dashboards.</summary>

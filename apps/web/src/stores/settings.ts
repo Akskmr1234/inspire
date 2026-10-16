@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { ApiError, request } from '@/lib/api';
 import { TaxRegime } from '@/lib/states';
 import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
 
@@ -271,29 +272,113 @@ function read(): AppSettings {
   }
 }
 
+/**
+ * Settings that stay with this browser instead of following the firm.
+ *
+ * How many rows a list shows is a question about the screen in front of somebody,
+ * and a laptop and a wall-mounted counter display want different answers.
+ */
+const DEVICE_ONLY: readonly (keyof AppSettings)[] = ['pageSize'];
+
+/** The name the firm's copy is stored under on the server. */
+const SERVER_KEY = 'preferences';
+
+/** Where the firm's copy stands, for the screen that edits it. */
+export type SettingsSync =
+  /** Not yet read from the server: what is on screen is this browser's copy. */
+  | 'local'
+  /** Read from, and kept in step with, the firm's copy. */
+  | 'firm'
+  /** The firm's copy could be read but this user may not change it. */
+  | 'read-only';
+
 interface SettingsState extends AppSettings {
+  /** Where these settings came from, and whether changes reach the firm. */
+  readonly sync: SettingsSync;
   /** Changes some of the settings and writes them back. */
   update: (patch: Partial<AppSettings>) => void;
   /** Puts everything back to what a fresh installation starts with. */
   reset: () => void;
+  /**
+   * Replaces this browser's copy with the firm's.
+   *
+   * Called once somebody is signed in. A firm that has never saved its settings is
+   * seeded from the first workstation that has, so the counter that was set up
+   * before this change carries its setup to every other one.
+   */
+  hydrate: () => Promise<void>;
+}
+
+/** The part of the settings the firm shares. */
+function shared(settings: AppSettings): Partial<AppSettings> {
+  const copy: Record<string, unknown> = { ...settings };
+
+  for (const key of DEVICE_ONLY) {
+    delete copy[key];
+  }
+
+  return copy as Partial<AppSettings>;
+}
+
+/** Only the settings themselves, without the store's own fields and actions. */
+function settingsOf(state: SettingsState): AppSettings {
+  const copy: Record<string, unknown> = {};
+
+  for (const key of Object.keys(DEFAULTS) as (keyof AppSettings)[]) {
+    copy[key] = state[key];
+  }
+
+  return copy as unknown as AppSettings;
+}
+
+function store(settings: AppSettings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // A browser with storage disabled still gets the setting for this session.
+    // Losing it on reload is a smaller failure than refusing to apply it.
+  }
+}
+
+let pending: number | undefined;
+
+/**
+ * Writes the firm's copy, a moment after the last change.
+ *
+ * Debounced so a field typed into a character at a time is one request, not one per
+ * keystroke. A refusal is remembered rather than retried: a user without the right
+ * to change the firm's settings keeps their changes in this browser, and the screen
+ * says so.
+ */
+function saveToFirm(settings: AppSettings, onRefused: () => void): void {
+  window.clearTimeout(pending);
+  pending = window.setTimeout(() => {
+    void request<void>(`/settings/${SERVER_KEY}`, {
+      method: 'PUT',
+      body: { value: JSON.stringify(shared(settings)) },
+    }).catch((failure: unknown) => {
+      if (failure instanceof ApiError && failure.status === 403) {
+        onRefused();
+      }
+    });
+  }, 600);
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
   ...read(),
+  sync: 'local',
 
   update: (patch) => {
     const next: AppSettings = {
-      ...get(),
+      ...settingsOf(get()),
       ...patch,
     };
 
     set(next);
+    store(next);
 
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // A browser with storage disabled still gets the setting for this session.
-      // Losing it on reload is a smaller failure than refusing to apply it.
+    if (get().sync === 'firm') {
+      saveToFirm(next, () => set({ sync: 'read-only' }));
     }
   },
 
@@ -305,6 +390,58 @@ export const useSettings = create<SettingsState>((set, get) => ({
     } catch {
       // As above.
     }
+
+    if (get().sync === 'firm') {
+      saveToFirm(DEFAULTS, () => set({ sync: 'read-only' }));
+    }
+  },
+
+  hydrate: async () => {
+    let held: string | null;
+
+    try {
+      held = (await request<{ readonly value: string | null }>(`/settings/${SERVER_KEY}`))
+        .value;
+    } catch {
+      // No firm selected, or the server is unreachable: carry on with this browser's
+      // copy, which is what every screen used before there was a firm copy at all.
+      return;
+    }
+
+    const local = settingsOf(get());
+
+    if (held === null) {
+      // Nobody has saved the firm's settings yet. If this browser was set up, its
+      // setup becomes the firm's; if the user may not do that, it stays local.
+      set({ sync: 'firm' });
+
+      if (JSON.stringify(shared(local)) !== JSON.stringify(shared(DEFAULTS))) {
+        saveToFirm(local, () => set({ sync: 'read-only' }));
+      }
+
+      return;
+    }
+
+    let firm: Partial<AppSettings>;
+
+    try {
+      firm = JSON.parse(held) as Partial<AppSettings>;
+    } catch {
+      return;
+    }
+
+    const device: Partial<AppSettings> = {};
+
+    for (const key of DEVICE_ONLY) {
+      (device as Record<string, unknown>)[key] = local[key];
+    }
+
+    // Over the defaults, as `read` does, so a setting added since the firm last saved
+    // arrives at its default rather than as `undefined`.
+    const next: AppSettings = { ...DEFAULTS, ...firm, ...device };
+
+    set({ ...next, sync: 'firm' });
+    store(next);
   },
 }));
 
