@@ -25,8 +25,10 @@ internal sealed record TestMasters(
     /// <summary>Creates a customer, a supplier, a warehouse and a product, all uniquely named.</summary>
     /// <param name="client">An authenticated client.</param>
     /// <param name="serialised">Whether the product is tracked by serial number.</param>
+    /// <param name="billWise">Whether receipts from the customer are set against bills.</param>
     /// <returns>The masters.</returns>
-    internal static async Task<TestMasters> ArrangeAsync(HttpClient client, bool serialised = false)
+    internal static async Task<TestMasters> ArrangeAsync(
+        HttpClient client, bool serialised = false, bool billWise = false)
     {
         string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
@@ -61,7 +63,10 @@ internal sealed record TestMasters(
         Guid supplierId = (await supplier.Content.ReadFromJsonAsync<SupplierResponse>())!.SupplierId;
 
         HttpResponseMessage customer = await client.PostAsJsonAsync(
-            "/api/v1/sales/customers", new { Code = $"TCU{suffix}", Name = $"Customer {suffix}" });
+            "/api/v1/sales/customers",
+            billWise
+                ? new { Code = $"TCU{suffix}", Name = $"Customer {suffix}", Terms = (object?)new { IsBillWise = true } }
+                : new { Code = $"TCU{suffix}", Name = $"Customer {suffix}", Terms = (object?)null });
         customer.StatusCode.ShouldBe(HttpStatusCode.Created, await customer.Content.ReadAsStringAsync());
         Guid customerId = (await customer.Content.ReadFromJsonAsync<CustomerResponse>())!.CustomerId;
 

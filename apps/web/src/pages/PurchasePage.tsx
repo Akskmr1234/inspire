@@ -47,6 +47,7 @@ import {
   PurchaseDocumentKind,
   PurchaseInvoiceStatus,
   PurchaseTaxMode,
+  updatePurchaseInvoice,
   type PurchaseInvoiceDetail,
   type PurchaseInvoiceSummary,
   type PurchaseLineInput,
@@ -85,6 +86,29 @@ function emptyLine(taxRate: number): DraftLine {
     batchNumber: '',
     expiresOn: '',
     serialNumbers: '',
+  };
+}
+
+/** A saved line as the entry screen holds it, for a correction to start from. */
+function lineFrom(line: PurchaseInvoiceDetail['lines'][number]): DraftLine {
+  const headRate = line.components.reduce((sum, head) => sum + head.percentage, 0);
+  const taxRate =
+    headRate > 0
+      ? headRate
+      : line.taxable > 0
+        ? Math.round((line.tax / line.taxable) * 10000) / 100
+        : 0;
+
+  return {
+    key: crypto.randomUUID(),
+    productId: line.productId,
+    quantity: String(line.quantity),
+    rate: String(line.rate),
+    taxPercentage: String(taxRate),
+    discount: String(line.discount),
+    batchNumber: line.batchNumber ?? '',
+    expiresOn: line.expiresOn ?? '',
+    serialNumbers: line.serialNumbers.join('\n'),
   };
 }
 
@@ -145,6 +169,8 @@ export function PurchasePage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  // The document being corrected, read back in full so the entry screen starts from it.
+  const [editing, setEditing] = useState<PurchaseInvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -349,14 +375,20 @@ export function PurchasePage({
       {/* Outside the frame on purpose: it replaces its children with a skeleton
           whenever the list goes back to pending — a page change or a filter — and an
           invoice half entered should not go with them. */}
-      {entering && (
+      {(entering || editing) && (
         <EntryDialog
-          kind={kind}
-          onClose={() => setEntering(false)}
+          kind={editing?.kind ?? kind}
+          {...(editing ? { editing } : {})}
+          onClose={() => {
+            setEntering(false);
+            setEditing(null);
+          }}
           onSaved={(message) => {
             setEntering(false);
+            setEditing(null);
             setNotice(message);
             void queryClient.invalidateQueries({ queryKey: ['purchase-invoices'] });
+            void queryClient.invalidateQueries({ queryKey: ['purchase-invoice'] });
           }}
           onError={setError}
         />
@@ -386,6 +418,10 @@ export function PurchasePage({
               return t('purchase.cancelledNotice');
             })
           }
+          onEdit={(document) => {
+            setViewing(null);
+            setEditing(document);
+          }}
         />
       )}
     </>
@@ -411,11 +447,14 @@ interface HeaderDraft {
 /** Enters a draft: the header, the lines, then whatever is charged beside them. */
 function EntryDialog({
   kind,
+  editing,
   onClose,
   onSaved,
   onError,
 }: {
   readonly kind: number;
+  /** A saved document being corrected. Absent, a new one is being entered. */
+  readonly editing?: PurchaseInvoiceDetail;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
@@ -426,24 +465,37 @@ function EntryDialog({
   const isReturn = isPurchaseReturn(kind);
   const today = new Date().toISOString().slice(0, 10);
 
-  const [mode, setMode] = useState<number>(PurchaseTaxMode.tax);
+  const [mode, setMode] = useState<number>(editing?.mode ?? PurchaseTaxMode.tax);
   const [draft, setDraft] = useState<HeaderDraft>({
-    date: today,
-    supplierId: '',
-    warehouseId: '',
-    supplierInvoiceNumber: '',
-    supplierInvoiceDate: '',
-    returnsInvoiceId: '',
-    narration: '',
+    date: editing?.date ?? today,
+    supplierId: editing?.supplierLedgerId ?? '',
+    warehouseId: editing?.warehouseId ?? '',
+    supplierInvoiceNumber: editing?.supplierInvoiceNumber ?? '',
+    supplierInvoiceDate: editing?.supplierInvoiceDate ?? '',
+    returnsInvoiceId: editing?.returnsInvoiceId ?? '',
+    narration: editing?.narration ?? '',
   });
+  const [editReason, setEditReason] = useState('');
   // The number the series will issue this document, read without reserving it. The
   // field said "issued when the draft is saved" and nothing more; now it says which.
   const { next: nextNumber } = useNextNumber(
-    isReturn ? DocumentType.purchaseReturn : DocumentType.purchaseInvoice,
+    editing
+      ? null
+      : isReturn
+        ? DocumentType.purchaseReturn
+        : DocumentType.purchaseInvoice,
     draft.date,
   );
-  const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
-  const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
+  const [lines, setLines] = useState<readonly DraftLine[]>(() =>
+    editing ? editing.lines.map(lineFrom) : [emptyLine(defaultTaxRate)],
+  );
+  const [charges, setCharges] = useState<readonly DraftCharge[]>(() =>
+    (editing?.charges ?? []).map((charge) => ({
+      key: crypto.randomUUID(),
+      ledgerId: charge.ledgerId,
+      amount: String(charge.amount),
+    })),
+  );
   const [busy, setBusy] = useState(false);
 
   const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
@@ -653,7 +705,7 @@ function EntryDialog({
           serialNumbers: splitSerials(line.serialNumbers),
         }));
 
-      const header = await createPurchaseInvoice({
+      const input = {
         date: draft.date,
         supplierLedgerId: draft.supplierId,
         warehouseId: draft.warehouseId,
@@ -678,7 +730,19 @@ function EntryDialog({
           ? draft.supplierInvoiceDate || null
           : null,
         narration: draft.narration.trim() || null,
-      });
+      };
+
+      if (editing) {
+        const header = await updatePurchaseInvoice(editing.header.purchaseInvoiceId, {
+          ...input,
+          reason: editReason.trim() || null,
+        });
+
+        onSaved(t('purchase.updatedNotice', { number: header.number }));
+        return;
+      }
+
+      const header = await createPurchaseInvoice(input);
 
       onSaved(t('purchase.savedNotice', { number: header.number }));
     } catch (failure) {
@@ -696,10 +760,30 @@ function EntryDialog({
 
   return (
     <Modal
-      title={isReturn ? t('purchase.newReturn') : t('purchase.newInvoice')}
+      title={
+        editing
+          ? t('purchase.editDocument', { number: editing.header.number })
+          : isReturn
+            ? t('purchase.newReturn')
+            : t('purchase.newInvoice')
+      }
       size="full"
       onClose={onClose}
     >
+      {editing && editing.header.status === PurchaseInvoiceStatus.posted && (
+        <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
+          <p className="min-w-0 flex-1">{t('purchase.editPostedHint')}</p>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('purchase.editReason')}</span>
+            <input
+              value={editReason}
+              onChange={(event) => setEditReason(event.target.value)}
+              className="field-input-sm w-64"
+              maxLength={400}
+            />
+          </label>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         {/*
           The document's own number is not asked for: it is issued by the branch's
@@ -710,7 +794,7 @@ function EntryDialog({
         */}
         <Field label={t('purchase.documentNumber')}>
           <input
-            value={nextNumber ?? t('purchase.numberOnSave')}
+            value={editing?.header.number ?? nextNumber ?? t('purchase.numberOnSave')}
             disabled
             className="field-input font-mono"
           />
@@ -1195,12 +1279,14 @@ function DocumentDialog({
   onClose,
   onPost,
   onCancel,
+  onEdit,
 }: {
   readonly id: string;
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
   readonly onCancel: (id: string, reason: string) => void;
+  readonly onEdit: (document: PurchaseInvoiceDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
@@ -1346,7 +1432,15 @@ function DocumentDialog({
             </>
           )}
 
-          {document.header.status === PurchaseInvoiceStatus.posted && (
+          {document.header.status !== PurchaseInvoiceStatus.cancelled && (
+            <div className="flex justify-end">
+              <ModalButton disabled={busy} onClick={() => onEdit(document)}>
+                {t('purchase.edit')}
+              </ModalButton>
+            </div>
+          )}
+
+          {document.header.status !== PurchaseInvoiceStatus.cancelled && (
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('purchase.cancelReason')}

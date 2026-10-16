@@ -161,3 +161,39 @@ public sealed class CreatePurchaseInvoiceCommandValidator
         });
     }
 }
+
+/// <summary>Corrects a purchase, keeping its number.</summary>
+/// <param name="PurchaseInvoiceId">The purchase.</param>
+/// <param name="Changes">The purchase as it should be: header, lines and charges, in full.</param>
+/// <param name="Post">
+/// Whether to post it once corrected. A purchase that was posted is always posted again, so
+/// this matters only for a draft.
+/// </param>
+/// <param name="Reason">
+/// Why a posted purchase was changed, written onto the receipt and journal it replaces.
+/// </param>
+/// <remarks>
+/// A draft is simply rewritten. A posted purchase is reopened first - its receipt, bill and
+/// journal cancelled and kept as the record that it was posted once - then rewritten and
+/// posted again, in one transaction. Refused, as cancelling is, once the supplier has been
+/// paid against it, and refused by the stock itself where goods it brought in have since
+/// been sold.
+/// </remarks>
+public sealed record UpdatePurchaseInvoiceCommand(
+    Guid PurchaseInvoiceId,
+    CreatePurchaseInvoiceCommand Changes,
+    bool Post = false,
+    string? Reason = null) : ICommand<PurchaseInvoiceResponse>, ITransactional;
+
+/// <summary>Validates <see cref="UpdatePurchaseInvoiceCommand"/>.</summary>
+public sealed class UpdatePurchaseInvoiceCommandValidator
+    : AbstractValidator<UpdatePurchaseInvoiceCommand>
+{
+    /// <summary>Initialises a new instance of the <see cref="UpdatePurchaseInvoiceCommandValidator"/> class.</summary>
+    public UpdatePurchaseInvoiceCommandValidator()
+    {
+        RuleFor(c => c.PurchaseInvoiceId).NotEqual(Guid.Empty);
+        RuleFor(c => c.Changes).NotNull().SetValidator(new CreatePurchaseInvoiceCommandValidator());
+        RuleFor(c => c.Reason).MaximumLength(400);
+    }
+}

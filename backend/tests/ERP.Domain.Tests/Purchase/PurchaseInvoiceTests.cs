@@ -390,11 +390,11 @@ public sealed class PurchaseInvoiceTests
     }
 
     [Fact]
-    public void Cancelling_needs_a_posted_purchase_and_a_reason()
+    public void Cancelling_needs_a_reason_and_happens_once()
     {
         PurchaseInvoice draft = Draft().Value;
-        draft.Cancel("Entered against the wrong supplier")
-            .Error.Code.ShouldBe("PurchaseInvoice.NotPosted");
+        draft.Cancel("Entered against the wrong supplier").IsSuccess.ShouldBeTrue();
+        draft.Cancel("again").Error.Code.ShouldBe("PurchaseInvoice.AlreadyCancelled");
 
         PurchaseInvoice invoice = Posted();
         invoice.Cancel("  ").Error.Code.ShouldBe("PurchaseInvoice.CancellationReasonRequired");

@@ -300,12 +300,24 @@ public sealed class VoucherTests
     }
 
     [Fact]
-    public void A_draft_cannot_be_cancelled()
+    public void A_draft_can_be_cancelled_but_only_once()
     {
         Voucher voucher = Draft();
         voucher.AddLine(Cash, EntrySide.Debit, 10m);
 
-        voucher.Cancel("Mistake").Error.Code.ShouldBe("Voucher.NotPosted");
+        voucher.Cancel("Mistake").IsSuccess.ShouldBeTrue();
+        voucher.Status.ShouldBe(VoucherStatus.Cancelled);
+        voucher.Cancel("Mistake").Error.Code.ShouldBe("Voucher.AlreadyCancelled");
+    }
+
+    [Fact]
+    public void A_posted_voucher_reopens_as_a_draft_and_can_be_revised()
+    {
+        Voucher voucher = Posted();
+
+        voucher.Reopen().IsSuccess.ShouldBeTrue();
+        voucher.Status.ShouldBe(VoucherStatus.Draft);
+        voucher.Reopen().Error.Code.ShouldBe("Voucher.NotPosted");
     }
 
     [Fact]

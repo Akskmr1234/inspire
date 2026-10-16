@@ -99,7 +99,9 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
 
         // The supplier's number, unique per supplier. A supplier's invoice entered twice
         // is input tax reclaimed twice, which is the expensive kind of duplicate: it is
-        // caught by an assessor rather than by a reader of the creditors report.
+        // caught by an assessor rather than by a reader of the creditors report. A
+        // cancelled purchase reclaims nothing, so it gives the number up and the invoice
+        // can be entered again correctly.
         builder
             .HasIndex(invoice => new
             {
@@ -108,7 +110,7 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
                 invoice.SupplierInvoiceNumber,
             })
             .IsUnique()
-            .HasFilter("supplier_invoice_number IS NOT NULL AND is_deleted = false")
+            .HasFilter("supplier_invoice_number IS NOT NULL AND is_deleted = false AND status <> 3")
             .HasDatabaseName("ix_purchase_invoices_supplier_number");
 
         // The list screen's own query: a firm's purchases over a date range, newest first.

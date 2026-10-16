@@ -27,6 +27,18 @@ namespace ERP.Application.Purchase;
 public sealed record CancelPurchaseInvoiceCommand(Guid PurchaseInvoiceId, string Reason)
     : ICommand, ITransactional;
 
+/// <summary>Takes a posted purchase back to a draft, so it can be corrected and posted again.</summary>
+/// <param name="PurchaseInvoiceId">The purchase.</param>
+/// <param name="Reason">Why, written onto the receipt and the journal that are cancelled.</param>
+/// <remarks>
+/// The first half of editing a posted purchase, and never sent on its own by the API: a
+/// purchase left reopened would be goods the books no longer show. <see
+/// cref="UpdatePurchaseInvoiceCommand"/> sends it, revises the draft and posts it again
+/// inside the one transaction.
+/// </remarks>
+public sealed record ReopenPurchaseInvoiceCommand(Guid PurchaseInvoiceId, string Reason)
+    : ICommand, ITransactional;
+
 /// <summary>Validates <see cref="CancelPurchaseInvoiceCommand"/>.</summary>
 public sealed class CancelPurchaseInvoiceCommandValidator
     : AbstractValidator<CancelPurchaseInvoiceCommand>
@@ -63,7 +75,7 @@ public sealed class CancelPurchaseInvoiceCommandValidator
 /// </para>
 /// </remarks>
 public sealed class CancelPurchaseInvoiceCommandHandler
-    : ICommandHandler<CancelPurchaseInvoiceCommand>
+    : ICommandHandler<CancelPurchaseInvoiceCommand>, ICommandHandler<ReopenPurchaseInvoiceCommand>
 {
     private readonly IPurchaseInvoiceRepository _invoices;
     private readonly IPurchaseOrderRepository _orders;
@@ -138,12 +150,38 @@ public sealed class CancelPurchaseInvoiceCommandHandler
     }
 
     /// <inheritdoc />
-    public async Task<Result> Handle(
+    public Task<Result> Handle(
         CancelPurchaseInvoiceCommand request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        return UndoAsync(request.PurchaseInvoiceId, request.Reason, reopen: false, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result> Handle(
+        ReopenPurchaseInvoiceCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return UndoAsync(request.PurchaseInvoiceId, request.Reason, reopen: true, cancellationToken);
+    }
+
+    /// <summary>Puts back what posting moved, then cancels the purchase or reopens it.</summary>
+    /// <remarks>
+    /// One path for both, because what has to be put back is the same either way. They part
+    /// at the end: a cancelled purchase gives its order the goods back and keeps its links
+    /// to what it raised, while a reopened one is still the delivery against that order and
+    /// drops the links, last, once they have been followed.
+    /// </remarks>
+    private async Task<Result> UndoAsync(
+        Guid purchaseInvoiceId,
+        string reason,
+        bool reopen,
+        CancellationToken cancellationToken)
+    {
         if (_tenantContext.FirmId is not { } firmId)
         {
             return Result.Failure(Error.Forbidden(
@@ -152,7 +190,7 @@ public sealed class CancelPurchaseInvoiceCommandHandler
         }
 
         PurchaseInvoice? invoice = await _invoices.FindAsync(
-            PurchaseInvoiceId.From(request.PurchaseInvoiceId), cancellationToken);
+            PurchaseInvoiceId.From(purchaseInvoiceId), cancellationToken);
 
         if (invoice is null || invoice.FirmId != firmId)
         {
@@ -185,11 +223,20 @@ public sealed class CancelPurchaseInvoiceCommandHandler
             return Result.Failure(Error.BusinessRule(
                 "Bill.PartlySettled",
                 $"Bill '{outstanding.BillNumber}' has {outstanding.SettledAmount} allocated "
-                + "against it and cannot be withdrawn. Raise a purchase return instead, "
-                + "which leaves the payment where it was made."));
+                + "against it and cannot be withdrawn. "
+                + (reopen
+                    ? "Cancel the payment or return set against it first, then edit the purchase."
+                    : "Raise a purchase return instead, which leaves the payment where it was made.")));
         }
 
-        Result cancelled = invoice.Cancel(request.Reason);
+        if (reopen && invoice.Status != PurchaseInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotPosted",
+                $"Only a posted purchase can be reopened, and '{invoice.Number}' is {invoice.Status}."));
+        }
+
+        Result cancelled = reopen ? Result.Success() : invoice.Cancel(reason);
 
         if (cancelled.IsFailure)
         {
@@ -210,21 +257,25 @@ public sealed class CancelPurchaseInvoiceCommandHandler
             return released;
         }
 
-        Result taken = await TakeGoodsBackAsync(invoice, firm, request.Reason, cancellationToken);
+        string note = reopen ? $"edited: {reason}" : $"cancelled: {reason}";
+
+        Result taken = await TakeGoodsBackAsync(invoice, firm, note, cancellationToken);
 
         if (taken.IsFailure)
         {
             return taken;
         }
 
-        Result reversed = await CancelJournalAsync(invoice, request.Reason, cancellationToken);
+        Result reversed = await CancelJournalAsync(invoice, note, cancellationToken);
 
         if (reversed.IsFailure)
         {
             return reversed;
         }
 
-        Result reopened = await ReleaseOrderAsync(invoice, cancellationToken);
+        Result reopened = reopen
+            ? invoice.Reopen()
+            : await ReleaseOrderAsync(invoice, cancellationToken);
 
         if (reopened.IsFailure)
         {
@@ -382,7 +433,7 @@ public sealed class CancelPurchaseInvoiceCommandHandler
                 $"The receipt purchase '{invoice.Number}' raised no longer exists."));
         }
 
-        Result cancelled = document.Cancel($"Purchase {invoice.Number} cancelled: {reason}");
+        Result cancelled = document.Cancel($"Purchase {invoice.Number} {reason}");
 
         if (cancelled.IsFailure)
         {
@@ -432,6 +483,6 @@ public sealed class CancelPurchaseInvoiceCommandHandler
 
         return journal.Status == VoucherStatus.Cancelled
             ? Result.Success()
-            : journal.Cancel($"Purchase {invoice.Number} cancelled: {reason}");
+            : journal.Cancel($"Purchase {invoice.Number} {reason}");
     }
 }

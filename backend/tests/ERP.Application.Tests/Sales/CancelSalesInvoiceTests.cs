@@ -110,13 +110,15 @@ public sealed class CancelSalesInvoiceTests
     }
 
     [Fact]
-    public async Task A_draft_has_nothing_to_cancel()
+    public async Task A_draft_is_cancelled_without_anything_to_put_back()
     {
         SalesPostingFixture fixture = new();
 
         await fixture.Create();
 
-        (await fixture.Cancel()).Error.Code.ShouldBe("SalesInvoice.NotPosted");
+        (await fixture.Cancel()).IsSuccess.ShouldBeTrue();
+        fixture.Created.Status.ShouldBe(SalesInvoiceStatus.Cancelled);
+        fixture.Created.StockDocumentId.ShouldBeNull();
     }
 
     [Fact]
@@ -128,7 +130,7 @@ public sealed class CancelSalesInvoiceTests
         await fixture.Post();
 
         (await fixture.Cancel()).IsSuccess.ShouldBeTrue();
-        (await fixture.Cancel()).Error.Code.ShouldBe("SalesInvoice.NotPosted");
+        (await fixture.Cancel()).Error.Code.ShouldBe("SalesInvoice.AlreadyCancelled");
     }
 
     [Fact]

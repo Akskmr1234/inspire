@@ -25,6 +25,18 @@ namespace ERP.Application.Sales;
 public sealed record CancelSalesInvoiceCommand(Guid SalesInvoiceId, string Reason)
     : ICommand, ITransactional;
 
+/// <summary>Takes a posted invoice back to a draft, so it can be corrected and posted again.</summary>
+/// <param name="SalesInvoiceId">The invoice.</param>
+/// <param name="Reason">Why, written onto the issue and the journal that are cancelled.</param>
+/// <remarks>
+/// The first half of editing a posted invoice, and never sent on its own by the API: an
+/// invoice left reopened would be a sale the books no longer show. <see
+/// cref="UpdateSalesInvoiceCommand"/> sends it, revises the draft and posts it again inside
+/// the one transaction, so the number on the customer's copy stays the number on the sale.
+/// </remarks>
+public sealed record ReopenSalesInvoiceCommand(Guid SalesInvoiceId, string Reason)
+    : ICommand, ITransactional;
+
 /// <summary>Validates <see cref="CancelSalesInvoiceCommand"/>.</summary>
 public sealed class CancelSalesInvoiceCommandValidator
     : AbstractValidator<CancelSalesInvoiceCommand>
@@ -55,7 +67,7 @@ public sealed class CancelSalesInvoiceCommandValidator
 /// </para>
 /// </remarks>
 public sealed class CancelSalesInvoiceCommandHandler
-    : ICommandHandler<CancelSalesInvoiceCommand>
+    : ICommandHandler<CancelSalesInvoiceCommand>, ICommandHandler<ReopenSalesInvoiceCommand>
 {
     private readonly ISalesInvoiceRepository _invoices;
     private readonly ISalesOrderRepository _orders;
@@ -130,12 +142,39 @@ public sealed class CancelSalesInvoiceCommandHandler
     }
 
     /// <inheritdoc />
-    public async Task<Result> Handle(
+    public Task<Result> Handle(
         CancelSalesInvoiceCommand request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        return UndoAsync(request.SalesInvoiceId, request.Reason, reopen: false, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result> Handle(
+        ReopenSalesInvoiceCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return UndoAsync(request.SalesInvoiceId, request.Reason, reopen: true, cancellationToken);
+    }
+
+    /// <summary>Puts back what posting moved, then cancels the invoice or reopens it.</summary>
+    /// <remarks>
+    /// One path for both, because what has to be put back is the same either way: the
+    /// goods, the bill, the credit a return set against a sale, and the journal. They part
+    /// only at the end - a cancelled invoice gives its order the goods back, while a
+    /// reopened one is still the delivery against that order and the edit settles what it
+    /// takes.
+    /// </remarks>
+    private async Task<Result> UndoAsync(
+        Guid salesInvoiceId,
+        string reason,
+        bool reopen,
+        CancellationToken cancellationToken)
+    {
         if (_tenantContext.FirmId is not { } firmId)
         {
             return Result.Failure(Error.Forbidden(
@@ -144,7 +183,7 @@ public sealed class CancelSalesInvoiceCommandHandler
         }
 
         SalesInvoice? invoice = await _invoices.FindAsync(
-            SalesInvoiceId.From(request.SalesInvoiceId), cancellationToken);
+            SalesInvoiceId.From(salesInvoiceId), cancellationToken);
 
         if (invoice is null || invoice.FirmId != firmId)
         {
@@ -176,11 +215,22 @@ public sealed class CancelSalesInvoiceCommandHandler
             return Result.Failure(Error.BusinessRule(
                 "Bill.PartlySettled",
                 $"Bill '{outstanding.BillNumber}' has {outstanding.SettledAmount} allocated "
-                + "against it and cannot be withdrawn. Raise a credit note instead, which "
-                + "leaves the payment where it was made."));
+                + "against it and cannot be withdrawn. "
+                + (reopen
+                    ? "Cancel the receipt or return set against it first, then edit the invoice."
+                    : "Raise a credit note instead, which leaves the payment where it was made.")));
         }
 
-        Result cancelled = invoice.Cancel(request.Reason);
+        // Reopening clears the invoice's links to its issue and journal, so it happens
+        // last, once they have been followed and put back; cancelling keeps them.
+        if (reopen && invoice.Status != SalesInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotPosted",
+                $"Only a posted invoice can be reopened, and '{invoice.Number}' is {invoice.Status}."));
+        }
+
+        Result cancelled = reopen ? Result.Success() : invoice.Cancel(reason);
 
         if (cancelled.IsFailure)
         {
@@ -201,25 +251,36 @@ public sealed class CancelSalesInvoiceCommandHandler
             return released;
         }
 
-        Result reopened = await ReleaseOrderAsync(invoice, cancellationToken);
+        Result reopened = reopen
+            ? Result.Success()
+            : await ReleaseOrderAsync(invoice, cancellationToken);
 
         if (reopened.IsFailure)
         {
             return reopened;
         }
 
-        Result returned = await ReturnGoodsAsync(invoice, firm, request.Reason, cancellationToken);
+        string note = reopen ? $"edited: {reason}" : $"cancelled: {reason}";
+
+        Result returned = await ReturnGoodsAsync(invoice, firm, note, cancellationToken);
 
         if (returned.IsFailure)
         {
             return returned;
         }
 
-        Result reversed = await CancelJournalAsync(invoice, request.Reason, cancellationToken);
+        Result reversed = await CancelJournalAsync(invoice, note, cancellationToken);
 
         if (reversed.IsFailure)
         {
             return reversed;
+        }
+
+        Result drafted = reopen ? invoice.Reopen() : Result.Success();
+
+        if (drafted.IsFailure)
+        {
+            return drafted;
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -372,7 +433,7 @@ public sealed class CancelSalesInvoiceCommandHandler
                 $"The issue invoice '{invoice.Number}' raised no longer exists."));
         }
 
-        Result cancelled = document.Cancel($"Sales invoice {invoice.Number} cancelled: {reason}");
+        Result cancelled = document.Cancel($"Sales invoice {invoice.Number} {reason}");
 
         if (cancelled.IsFailure)
         {
@@ -422,6 +483,6 @@ public sealed class CancelSalesInvoiceCommandHandler
 
         return journal.Status == VoucherStatus.Cancelled
             ? Result.Success()
-            : journal.Cancel($"Sales invoice {invoice.Number} cancelled: {reason}");
+            : journal.Cancel($"Sales invoice {invoice.Number} {reason}");
     }
 }

@@ -47,8 +47,11 @@ import {
   postSalesInvoice,
   SalesDocumentKind,
   SalesInvoiceStatus,
+  TaxMode,
+  updateSalesInvoice,
   type PagedResult,
   type SalesInvoiceDetail,
+  type SalesInvoiceLineDetail,
   type SalesInvoiceSummary,
   type SalesLineInput,
   type SalesChargeInput,
@@ -68,6 +71,8 @@ interface DraftLine {
   discount: string;
   /** The batch sold, where the product is tracked in batches. */
   batchNumber: string;
+  /** The batch as a saved line remembers it, until somebody picks another. */
+  batchId?: string | undefined;
   expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
@@ -96,6 +101,31 @@ const emptyLine: DraftLine = {
   expiresOn: '',
   serialNumbers: [],
 };
+
+/** A saved line as the entry screen holds it, for a correction to start from. */
+function linesFrom(line: SalesInvoiceLineDetail): DraftLine {
+  // The rate the line was taxed at: its heads added up, CGST and SGST making the GST
+  // rate between them; worked back from the amounts where it carried no heads.
+  const headRate = line.components.reduce((sum, head) => sum + head.percentage, 0);
+  const taxRate =
+    headRate > 0
+      ? headRate
+      : line.taxable > 0
+        ? Math.round((line.tax / line.taxable) * 10000) / 100
+        : 0;
+
+  return {
+    ...emptyLine,
+    productId: line.productId,
+    quantity: String(line.quantity),
+    rate: String(line.rate),
+    inclusiveRate: (line.rate * (1 + taxRate / 100)).toFixed(2),
+    taxPercentage: String(taxRate),
+    discount: String(line.discount),
+    batchId: line.batchId ?? undefined,
+    serialNumbers: line.serialNumbers ?? [],
+  };
+}
 
 /**
  * Sales invoices and credit notes.
@@ -131,6 +161,9 @@ export function SalesPage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
+  // The document being corrected, read back in full so the entry screen can start
+  // from what it says.
+  const [editing, setEditing] = useState<SalesInvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -318,14 +351,20 @@ export function SalesPage({
       {/* Outside the frame on purpose: it replaces its children with a skeleton
           whenever the list goes back to pending — a page change or a filter — and an
           invoice half entered should not go with them. */}
-      {entering && (
+      {(entering || editing) && (
         <EntryDialog
-          initialKind={kindFilter}
-          onClose={() => setEntering(false)}
+          initialKind={editing?.kind ?? kindFilter}
+          {...(editing ? { editing } : {})}
+          onClose={() => {
+            setEntering(false);
+            setEditing(null);
+          }}
           onSaved={(message) => {
             setEntering(false);
+            setEditing(null);
             setNotice(message);
             void queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
+            void queryClient.invalidateQueries({ queryKey: ['sales-invoice'] });
           }}
           onError={setError}
         />
@@ -356,6 +395,10 @@ export function SalesPage({
               return t('sales.cancelledNotice');
             })
           }
+          onEdit={(document) => {
+            setViewing(null);
+            setEditing(document);
+          }}
         />
       )}
     </>
@@ -469,11 +512,14 @@ function AdditionalLedgersSection({
 /** Enters a draft: the header, then the lines. */
 function EntryDialog({
   initialKind = SalesDocumentKind.invoice,
+  editing,
   onClose,
   onSaved,
   onError,
 }: {
   readonly initialKind?: number;
+  /** A saved document being corrected. Absent, a new one is being entered. */
+  readonly editing?: SalesInvoiceDetail;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
@@ -485,18 +531,29 @@ function EntryDialog({
   const today = new Date().toISOString().slice(0, 10);
 
   const [kind] = useState<number>(initialKind);
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(editing?.date ?? today);
 
-  // The number the server will give this document, read from its own series.
+  // The number the server will give this document, read from its own series. A
+  // document being corrected already has its number and keeps it.
   const { next: nextNumber } = useNextNumber(
-    isReturn(kind) ? DocumentType.salesReturn : DocumentType.salesInvoice,
+    editing
+      ? null
+      : isReturn(kind)
+        ? DocumentType.salesReturn
+        : DocumentType.salesInvoice,
     date,
   );
-  const nextInvoiceNo = nextNumber ?? t('numbering.issuedOnSave');
-  const [customerId, setCustomerId] = useState(settings.defaultCustomerId || '');
-  const [warehouseId, setWarehouseId] = useState('');
-  const [reference, setReference] = useState('');
-  const [returnsInvoiceId, setReturnsInvoiceId] = useState('');
+  const nextInvoiceNo =
+    editing?.header.number ?? nextNumber ?? t('numbering.issuedOnSave');
+  const [customerId, setCustomerId] = useState(
+    editing?.customerLedgerId ?? (settings.defaultCustomerId || ''),
+  );
+  const [warehouseId, setWarehouseId] = useState(editing?.warehouseId ?? '');
+  const [reference, setReference] = useState(editing?.referenceNumber ?? '');
+  const [returnsInvoiceId, setReturnsInvoiceId] = useState(
+    editing?.returnsInvoiceId ?? '',
+  );
+  const [editReason, setEditReason] = useState('');
   const [paymentMode, setPaymentMode] = useState<string>(
     settings.defaultPaymentMode || 'Cash',
   );
@@ -504,9 +561,13 @@ function EntryDialog({
   const [billingman, setBillingman] = useState<string>(
     settings.defaultBillingman || 'Primary',
   );
-  const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(
-    (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
-  );
+  const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(() => {
+    const fallback = (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX';
+
+    if (!editing) return fallback;
+
+    return editing.mode === TaxMode.nonTax ? 'NT' : fallback === 'NT' ? 'TAX' : fallback;
+  });
   const [rateType, setRateType] = useState<'retail' | 'wholesale' | 'mrp'>(
     settings.defaultSalesRateType || 'retail',
   );
@@ -518,12 +579,21 @@ function EntryDialog({
   const [barcodeInput, setBarcodeInput] = useState('');
   const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
 
-  const [narration, setNarration] = useState('');
+  const [narration, setNarration] = useState(editing?.narration ?? '');
   const [paidAmount, setPaidAmount] = useState<string>('');
   const [cashGiven, setCashGiven] = useState<string>('');
   const [additionalLedgers, setAdditionalLedgers] = useState<
     readonly AdditionalLedgerItem[]
   >(() => {
+    if (editing) {
+      return editing.charges.map((charge) => ({
+        id: Math.random().toString(36).slice(2, 9),
+        ledgerId: charge.ledgerId,
+        isAddition: charge.isAddition,
+        amount: String(charge.amount),
+      }));
+    }
+
     const targetType = isReturn(initialKind) ? 'SalesReturn' : 'Sales';
     return (settings.defaultAdditionalLedgers ?? [])
       .filter((l) => l.transactionType === targetType && l.isDefaultActive)
@@ -540,17 +610,21 @@ function EntryDialog({
   // Started at the mode's rate. It used to start at '0', and choosing a product only
   // filled the rate in when the line had none — but '0' is a string, so it always
   // had one, and every line of a taxed invoice went out at zero per cent.
-  const [lines, setLines] = useState<readonly DraftLine[]>(() => [
-    {
-      ...emptyLine,
-      taxPercentage: String(
-        modeTaxRate(
-          (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
-          settings.defaultTaxRate,
-        ),
-      ),
-    },
-  ]);
+  const [lines, setLines] = useState<readonly DraftLine[]>(() =>
+    editing
+      ? editing.lines.map((line) => linesFrom(line))
+      : [
+          {
+            ...emptyLine,
+            taxPercentage: String(
+              modeTaxRate(
+                (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
+                settings.defaultTaxRate,
+              ),
+            ),
+          },
+        ],
+  );
   const [busy, setBusy] = useState(false);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
@@ -923,13 +997,16 @@ function EntryDialog({
           rate: Number(line.rate || 0),
           taxPercentage: Number(line.taxPercentage || 0),
           discount: enableDiscount ? Number(line.discount || 0) : 0,
+          // A number picked on the screen wins; a saved line that kept its batch sends
+          // the batch it remembered.
           batchNumber: line.batchNumber || null,
+          batchId: line.batchNumber ? null : (line.batchId ?? null),
           serialNumbers: line.serialNumbers,
         }));
 
       // A blank reference takes the invoice's own number, as the firm asked: the
       // number the server's series will issue, never one made up on this screen.
-      const finalReference = reference.trim() || nextNumber || '';
+      const finalReference = reference.trim() || (editing ? '' : nextNumber || '');
 
       // Requirement 7: addition ledgers mapped into charges
       const chargesPayload: readonly SalesChargeInput[] = additionalLedgers
@@ -939,17 +1016,39 @@ function EntryDialog({
           amount: Number(row.amount),
         }));
 
-      const header = await createSalesInvoice({
+      const input = {
         date,
         customerLedgerId: customerId,
         warehouseId,
         lines: payload,
         kind,
         returnsInvoiceId: isReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
-        referenceNumber: finalReference,
+        referenceNumber: finalReference || null,
         narration: narration.trim() || null,
         charges: chargesPayload,
-      });
+        // Non-tax is the exception somebody chooses, so it is the one sent; otherwise
+        // the server takes the mode from the firm's regime, or keeps the document's.
+        mode:
+          taxMode === 'NT'
+            ? TaxMode.nonTax
+            : editing && editing.mode !== TaxMode.nonTax
+              ? editing.mode
+              : editing
+                ? TaxMode.tax
+                : null,
+      };
+
+      if (editing) {
+        const header = await updateSalesInvoice(editing.header.salesInvoiceId, {
+          ...input,
+          reason: editReason.trim() || null,
+        });
+
+        onSaved(t('sales.updatedNotice', { number: header.number }));
+        return;
+      }
+
+      const header = await createSalesInvoice(input);
 
       onSaved(t('sales.savedNotice', { number: header.number }));
     } catch (failure) {
@@ -962,10 +1061,30 @@ function EntryDialog({
 
   return (
     <Modal
-      title={isReturn(kind) ? t('sales.newReturn') : t('sales.newInvoice')}
+      title={
+        editing
+          ? t('sales.editDocument', { number: editing.header.number })
+          : isReturn(kind)
+            ? t('sales.newReturn')
+            : t('sales.newInvoice')
+      }
       onClose={onClose}
       size="fullscreen"
     >
+      {editing && editing.header.status === SalesInvoiceStatus.posted && (
+        <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
+          <p className="min-w-0 flex-1">{t('sales.editPostedHint')}</p>
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">{t('sales.editReason')}</span>
+            <input
+              value={editReason}
+              onChange={(event) => setEditReason(event.target.value)}
+              className="field-input-sm w-64"
+              maxLength={400}
+            />
+          </label>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
         {/* Document Numbers */}
         <div className="space-y-2">
@@ -1534,11 +1653,24 @@ function LineRow({
     }
   }, [offerPicker, serialDirection, serials.data]);
 
+  // A saved line names its batch by identifier; show it by number where the shelf
+  // still lists it, and otherwise leave it to be sent back as it was.
+  useEffect(() => {
+    if (!line.batchId || line.batchNumber || !batches.data) return;
+
+    const kept = batches.data.find((b) => b.batchId === line.batchId);
+
+    if (kept) {
+      onChange({ batchNumber: kept.batchNumber, expiresOn: kept.expiresOn ?? '' });
+    }
+  }, [line.batchId, line.batchNumber, batches.data]);
+
   // Auto Batch FIFO
   useEffect(() => {
     if (
       autoBatch &&
       needsBatch &&
+      !line.batchId &&
       (!line.batchNumber || line.batchNumber === '') &&
       batches.data &&
       batches.data.length > 0
@@ -1573,6 +1705,7 @@ function LineRow({
         inclusiveRate: incRate,
         taxPercentage: String(defaultTax),
         batchNumber: '',
+        batchId: undefined,
         expiresOn: '',
         serialNumbers: [],
       });
@@ -1583,6 +1716,7 @@ function LineRow({
       onChange({
         productId: value,
         batchNumber: '',
+        batchId: undefined,
         expiresOn: '',
         serialNumbers: [],
       });
@@ -1780,6 +1914,7 @@ function DocumentDialog({
   onClose,
   onPost,
   onCancel,
+  onEdit,
   initialPrint = false,
 }: {
   readonly id: string;
@@ -1787,6 +1922,7 @@ function DocumentDialog({
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
   readonly onCancel: (id: string, reason: string) => void;
+  readonly onEdit: (document: SalesInvoiceDetail) => void;
   readonly initialPrint?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -2012,14 +2148,20 @@ function DocumentDialog({
                   </ModalButton>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-end gap-2">
+                  {document.header.status !== SalesInvoiceStatus.cancelled && (
+                    <ModalButton disabled={busy} onClick={() => onEdit(document)}>
+                      {t('sales.edit')}
+                    </ModalButton>
+                  )}
+
                   {document.header.status === SalesInvoiceStatus.draft && (
                     <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
                       {t('sales.post')}
                     </ModalButton>
                   )}
 
-                  {document.header.status === SalesInvoiceStatus.posted && (
+                  {document.header.status !== SalesInvoiceStatus.cancelled && (
                     <div className="flex flex-wrap items-end justify-end gap-2">
                       <Field label={t('sales.cancelReason')}>
                         <input

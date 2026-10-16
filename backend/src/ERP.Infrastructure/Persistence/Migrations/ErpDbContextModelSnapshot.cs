@@ -331,7 +331,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FirmId", "LedgerId", "BillNumber")
                         .IsUnique()
-                        .HasDatabaseName("ix_bills_party_reference");
+                        .HasDatabaseName("ix_bills_party_reference")
+                        .HasFilter("status <> 4");
 
                     b.HasIndex("FirmId", "LedgerId", "Status")
                         .HasDatabaseName("ix_bills_open_by_party")
@@ -3644,7 +3645,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("FirmId", "SupplierLedgerId", "SupplierInvoiceNumber")
                         .IsUnique()
                         .HasDatabaseName("ix_purchase_invoices_supplier_number")
-                        .HasFilter("supplier_invoice_number IS NOT NULL AND is_deleted = false");
+                        .HasFilter("supplier_invoice_number IS NOT NULL AND is_deleted = false AND status <> 3");
 
                     b.ToTable("purchase_invoices", (string)null);
                 });

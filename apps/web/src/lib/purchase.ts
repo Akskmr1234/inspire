@@ -189,7 +189,8 @@ export async function getPurchaseInvoice(id: string): Promise<PurchaseInvoiceDet
 }
 
 /** Enters a document as a draft. Nothing moves until it is posted. */
-export async function createPurchaseInvoice(input: {
+/** What the entry screen sends, for a new document or a correction. */
+export interface PurchaseInvoiceInput {
   readonly date: string;
   readonly supplierLedgerId: string;
   readonly warehouseId: string;
@@ -203,9 +204,33 @@ export async function createPurchaseInvoice(input: {
   readonly supplierInvoiceNumber?: string | null;
   readonly supplierInvoiceDate?: string | null;
   readonly narration?: string | null;
-}): Promise<PurchaseInvoiceHeader> {
+}
+
+export async function createPurchaseInvoice(
+  input: PurchaseInvoiceInput,
+): Promise<PurchaseInvoiceHeader> {
   return request<PurchaseInvoiceHeader>('/purchase/invoices', {
     method: 'POST',
+    body: input,
+  });
+}
+
+/**
+ * Corrects a purchase, keeping its number.
+ *
+ * A draft is rewritten (and posted if asked). A posted one has its receipt, bill and
+ * journal cancelled and is posted again as corrected, in one step on the server. Refused
+ * once the supplier has been paid against it or the goods it brought in have gone out.
+ */
+export async function updatePurchaseInvoice(
+  id: string,
+  input: PurchaseInvoiceInput & {
+    readonly post?: boolean;
+    readonly reason?: string | null;
+  },
+): Promise<PurchaseInvoiceHeader> {
+  return request<PurchaseInvoiceHeader>(`/purchase/invoices/${id}`, {
+    method: 'PUT',
     body: input,
   });
 }

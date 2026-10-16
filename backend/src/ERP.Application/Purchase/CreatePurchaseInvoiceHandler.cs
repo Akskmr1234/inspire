@@ -10,6 +10,7 @@ using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
+using MediatR;
 
 namespace ERP.Application.Purchase;
 
@@ -29,7 +30,8 @@ namespace ERP.Application.Purchase;
 /// </para>
 /// </remarks>
 public sealed class CreatePurchaseInvoiceCommandHandler
-    : ICommandHandler<CreatePurchaseInvoiceCommand, PurchaseInvoiceResponse>
+    : ICommandHandler<CreatePurchaseInvoiceCommand, PurchaseInvoiceResponse>,
+        ICommandHandler<UpdatePurchaseInvoiceCommand, PurchaseInvoiceResponse>
 {
     private readonly IPurchaseInvoiceRepository _invoices;
     private readonly IInventoryMasterRepository _masters;
@@ -39,8 +41,10 @@ public sealed class CreatePurchaseInvoiceCommandHandler
     private readonly INumberingSeriesRepository _numbering;
     private readonly IFinancialYearRepository _financialYears;
     private readonly IFirmRepository _firms;
+    private readonly IPurchaseOrderRepository _orders;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISender _sender;
 
     /// <summary>Initialises a new instance of the <see cref="CreatePurchaseInvoiceCommandHandler"/> class.</summary>
     /// <param name="invoices">The purchase invoice repository.</param>
@@ -51,8 +55,12 @@ public sealed class CreatePurchaseInvoiceCommandHandler
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="orders">The purchase order repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="sender">
+    /// Sends the reopening and the posting an edit wraps, which join this transaction.
+    /// </param>
     public CreatePurchaseInvoiceCommandHandler(
         IPurchaseInvoiceRepository invoices,
         IInventoryMasterRepository masters,
@@ -62,8 +70,10 @@ public sealed class CreatePurchaseInvoiceCommandHandler
         INumberingSeriesRepository numbering,
         IFinancialYearRepository financialYears,
         IFirmRepository firms,
+        IPurchaseOrderRepository orders,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISender sender)
     {
         _invoices = invoices;
         _masters = masters;
@@ -73,8 +83,10 @@ public sealed class CreatePurchaseInvoiceCommandHandler
         _numbering = numbering;
         _financialYears = financialYears;
         _firms = firms;
+        _orders = orders;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _sender = sender;
     }
 
     /// <inheritdoc />
@@ -107,7 +119,7 @@ public sealed class CreatePurchaseInvoiceCommandHandler
         // to be refused.
         if (request.SupplierInvoiceNumber?.Trim() is { Length: > 0 } reference
             && await _invoices.IsSupplierInvoiceNumberInUseAsync(
-                firmId, context.Supplier.Id, reference, cancellationToken))
+                firmId, context.Supplier.Id, reference, cancellationToken: cancellationToken))
         {
             return Result.Failure<PurchaseInvoiceResponse>(Error.Conflict(
                 "PurchaseInvoice.SupplierInvoiceAlreadyEntered",
@@ -170,6 +182,140 @@ public sealed class CreatePurchaseInvoiceCommandHandler
         _invoices.Add(invoice);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(Describe(invoice));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<PurchaseInvoiceResponse>> Handle(
+        UpdatePurchaseInvoiceCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(Error.Forbidden(
+                "PurchaseInvoice.NoFirmSelected",
+                "A firm must be selected before correcting a purchase."));
+        }
+
+        PurchaseInvoiceId id = PurchaseInvoiceId.From(request.PurchaseInvoiceId);
+        PurchaseInvoice? invoice = await _invoices.FindAsync(id, cancellationToken);
+
+        if (invoice is null || invoice.FirmId != firmId)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(Error.NotFound(
+                "PurchaseInvoice.NotFound", "That purchase does not exist in the selected firm."));
+        }
+
+        if (invoice.Status == PurchaseInvoiceStatus.Cancelled)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(Error.BusinessRule(
+                "PurchaseInvoice.Cancelled",
+                $"'{invoice.Number}' has been cancelled and cannot be edited. Enter it again "
+                + "as a new purchase."));
+        }
+
+        bool wasPosted = invoice.Status == PurchaseInvoiceStatus.Posted;
+
+        if (wasPosted)
+        {
+            string reason = string.IsNullOrWhiteSpace(request.Reason)
+                ? "corrected"
+                : request.Reason.Trim();
+
+            Result reopened = await SendAsync(
+                new ReopenPurchaseInvoiceCommand(request.PurchaseInvoiceId, reason),
+                cancellationToken);
+
+            if (reopened.IsFailure)
+            {
+                return Result.Failure<PurchaseInvoiceResponse>(reopened.Error);
+            }
+        }
+
+        // The kind is the document's own: a purchase edited into a return would be a debit
+        // note numbered in the purchase series.
+        CreatePurchaseInvoiceCommand changes = request.Changes with { Kind = invoice.Kind };
+
+        Result<Context> loaded = await LoadAsync(changes, firmId, cancellationToken);
+
+        if (loaded.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(loaded.Error);
+        }
+
+        Context context = loaded.Value;
+
+        if (changes.SupplierInvoiceNumber?.Trim() is { Length: > 0 } reference
+            && await _invoices.IsSupplierInvoiceNumberInUseAsync(
+                firmId, context.Supplier.Id, reference, id, cancellationToken))
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(Error.Conflict(
+                "PurchaseInvoice.SupplierInvoiceAlreadyEntered",
+                $"'{context.Supplier.Name}' invoice '{reference}' is already on file."));
+        }
+
+        TaxMode mode = changes.Mode ?? invoice.Mode;
+
+        List<(ProductId Product, decimal Quantity)> before =
+            [.. invoice.Lines.Select(line => (line.ProductId, line.Quantity))];
+
+        Result revised = invoice.Revise(
+            context.Year,
+            changes.Date,
+            context.Supplier,
+            context.Warehouse,
+            mode,
+            changes.ReturnsInvoiceId is { } returns ? PurchaseInvoiceId.From(returns) : null);
+
+        if (revised.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(revised.Error);
+        }
+
+        Result lined = AddLines(invoice, changes, context, mode);
+
+        if (lined.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(lined.Error);
+        }
+
+        Result charged = AddCharges(invoice, changes, context);
+
+        if (charged.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(charged.Error);
+        }
+
+        Result details = invoice.SetSupplierDocument(
+            changes.SupplierInvoiceNumber, changes.SupplierInvoiceDate, changes.Narration);
+
+        if (details.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(details.Error);
+        }
+
+        Result ordered = await ResyncOrderAsync(invoice, before, cancellationToken);
+
+        if (ordered.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoiceResponse>(ordered.Error);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (wasPosted || request.Post)
+        {
+            Result posted = await SendAsync(
+                new PostPurchaseInvoiceCommand(request.PurchaseInvoiceId), cancellationToken);
+
+            if (posted.IsFailure)
+            {
+                return Result.Failure<PurchaseInvoiceResponse>(posted.Error);
+            }
+        }
 
         return Result.Success(Describe(invoice));
     }
@@ -390,6 +536,109 @@ public sealed class CreatePurchaseInvoiceCommandHandler
             products,
             units,
             mapped.ToDictionary(charge => charge.LedgerId)));
+    }
+
+    /// <summary>Puts the order's figures right after a purchase raised from it changes.</summary>
+    /// <remarks>
+    /// The sales side's rule, mirrored: what the purchase took off the order before the
+    /// edit is given back and what it carries now is taken, by product, as far as the order
+    /// goes. An order somebody has closed is left as it is.
+    /// </remarks>
+    private async Task<Result> ResyncOrderAsync(
+        PurchaseInvoice invoice,
+        IReadOnlyList<(ProductId Product, decimal Quantity)> before,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.PurchaseOrderId is not { } orderId)
+        {
+            return Result.Success();
+        }
+
+        PurchaseOrder? order = await _orders.FindAsync(orderId, cancellationToken);
+
+        if (order is null
+            || order.Status is not (PurchaseOrderStatus.Confirmed or PurchaseOrderStatus.Completed))
+        {
+            return Result.Success();
+        }
+
+        Dictionary<PurchaseOrderLineId, decimal> released = Match(
+            order.Lines, before, line => line.InvoicedQuantity);
+
+        if (released.Count > 0)
+        {
+            Result given = order.ReleaseInvoiced(released);
+
+            if (given.IsFailure)
+            {
+                return given;
+            }
+        }
+
+        Dictionary<PurchaseOrderLineId, decimal> taken = Match(
+            order.Lines,
+            [.. invoice.Lines.Select(line => (line.ProductId, line.Quantity))],
+            line => line.OutstandingQuantity);
+
+        return taken.Count == 0 ? Result.Success() : order.RecordInvoiced(taken);
+    }
+
+    /// <summary>Spreads quantities of each product across the order lines that have room.</summary>
+    private static Dictionary<PurchaseOrderLineId, decimal> Match(
+        IReadOnlyList<PurchaseOrderLine> lines,
+        IReadOnlyList<(ProductId Product, decimal Quantity)> wanted,
+        Func<PurchaseOrderLine, decimal> room)
+    {
+        Dictionary<PurchaseOrderLineId, decimal> matched = [];
+        Dictionary<PurchaseOrderLineId, decimal> left = lines.ToDictionary(line => line.Id, room);
+
+        foreach ((ProductId product, decimal quantity) in wanted)
+        {
+            decimal remaining = quantity;
+
+            foreach (PurchaseOrderLine line in lines.Where(line => line.ProductId == product))
+            {
+                if (remaining <= 0m)
+                {
+                    break;
+                }
+
+                decimal taken = Math.Min(remaining, left[line.Id]);
+
+                if (taken <= 0m)
+                {
+                    continue;
+                }
+
+                matched[line.Id] = matched.GetValueOrDefault(line.Id) + taken;
+                left[line.Id] -= taken;
+                remaining -= taken;
+            }
+        }
+
+        return matched;
+    }
+
+    /// <summary>Sends a command that joins this transaction, and hands back its failure.</summary>
+    /// <remarks>
+    /// A nested command that fails throws to unwind the transaction it joined; caught here,
+    /// its failure becomes this command's, and this command's own rollback undoes the lot.
+    /// </remarks>
+    private async Task<Result> SendAsync<TCommand>(
+        TCommand command,
+        CancellationToken cancellationToken)
+        where TCommand : notnull
+    {
+        try
+        {
+            object? response = await _sender.Send((object)command, cancellationToken);
+
+            return response as Result ?? Result.Success();
+        }
+        catch (TransactionRollbackException rollback) when (rollback.Response is Result failed)
+        {
+            return failed;
+        }
     }
 
     /// <summary>Takes the next number, creating the series if there is none.</summary>

@@ -10,6 +10,7 @@ using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
+using MediatR;
 
 namespace ERP.Application.Sales;
 
@@ -28,8 +29,14 @@ namespace ERP.Application.Sales;
 /// that was charged rather than the tax today's rates would produce.
 /// </para>
 /// </remarks>
+/// <remarks>
+/// Also handles <see cref="UpdateSalesInvoiceCommand"/>, because correcting an invoice is
+/// entering its lines again: the same products, units, batches, serials and tax, checked
+/// the same way. Two copies of that would drift until an edit accepted what entry refused.
+/// </remarks>
 public sealed class CreateSalesInvoiceCommandHandler
-    : ICommandHandler<CreateSalesInvoiceCommand, SalesInvoiceResponse>
+    : ICommandHandler<CreateSalesInvoiceCommand, SalesInvoiceResponse>,
+        ICommandHandler<UpdateSalesInvoiceCommand, SalesInvoiceResponse>
 {
     private readonly ISalesInvoiceRepository _invoices;
     private readonly IInventoryMasterRepository _masters;
@@ -41,8 +48,10 @@ public sealed class CreateSalesInvoiceCommandHandler
     private readonly INumberingSeriesRepository _numbering;
     private readonly IFinancialYearRepository _financialYears;
     private readonly IFirmRepository _firms;
+    private readonly ISalesOrderRepository _orders;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISender _sender;
 
     /// <summary>Initialises a new instance of the <see cref="CreateSalesInvoiceCommandHandler"/> class.</summary>
     /// <param name="invoices">The sales invoice repository.</param>
@@ -55,8 +64,12 @@ public sealed class CreateSalesInvoiceCommandHandler
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="orders">The sales order repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="sender">
+    /// Sends the reopening and the posting an edit wraps, which join this transaction.
+    /// </param>
     public CreateSalesInvoiceCommandHandler(
         ISalesInvoiceRepository invoices,
         IInventoryMasterRepository masters,
@@ -68,8 +81,10 @@ public sealed class CreateSalesInvoiceCommandHandler
         INumberingSeriesRepository numbering,
         IFinancialYearRepository financialYears,
         IFirmRepository firms,
+        ISalesOrderRepository orders,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISender sender)
     {
         _invoices = invoices;
         _masters = masters;
@@ -81,8 +96,10 @@ public sealed class CreateSalesInvoiceCommandHandler
         _numbering = numbering;
         _financialYears = financialYears;
         _firms = firms;
+        _orders = orders;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _sender = sender;
     }
 
     /// <inheritdoc />
@@ -164,6 +181,128 @@ public sealed class CreateSalesInvoiceCommandHandler
         _invoices.Add(invoice);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(Describe(invoice));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<SalesInvoiceResponse>> Handle(
+        UpdateSalesInvoiceCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<SalesInvoiceResponse>(Error.Forbidden(
+                "SalesInvoice.NoFirmSelected",
+                "A firm must be selected before correcting an invoice."));
+        }
+
+        SalesInvoiceId id = SalesInvoiceId.From(request.SalesInvoiceId);
+        SalesInvoice? invoice = await _invoices.FindAsync(id, cancellationToken);
+
+        if (invoice is null || invoice.FirmId != firmId)
+        {
+            return Result.Failure<SalesInvoiceResponse>(Error.NotFound(
+                "SalesInvoice.NotFound", "That invoice does not exist in the selected firm."));
+        }
+
+        if (invoice.Status == SalesInvoiceStatus.Cancelled)
+        {
+            return Result.Failure<SalesInvoiceResponse>(Error.BusinessRule(
+                "SalesInvoice.Cancelled",
+                $"'{invoice.Number}' has been cancelled and cannot be edited. Enter it again "
+                + "as a new invoice."));
+        }
+
+        bool wasPosted = invoice.Status == SalesInvoiceStatus.Posted;
+
+        if (wasPosted)
+        {
+            string reason = string.IsNullOrWhiteSpace(request.Reason)
+                ? "corrected"
+                : request.Reason.Trim();
+
+            Result reopened = await SendAsync(
+                new ReopenSalesInvoiceCommand(request.SalesInvoiceId, reason), cancellationToken);
+
+            if (reopened.IsFailure)
+            {
+                return Result.Failure<SalesInvoiceResponse>(reopened.Error);
+            }
+        }
+
+        // The kind is the document's own: a sale edited into a return would be a credit
+        // note numbered in the invoice series.
+        CreateSalesInvoiceCommand changes = request.Changes with { Kind = invoice.Kind };
+
+        Result<Context> loaded = await LoadAsync(changes, firmId, cancellationToken);
+
+        if (loaded.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(loaded.Error);
+        }
+
+        Context context = loaded.Value;
+        TaxMode mode = changes.Mode ?? invoice.Mode;
+
+        List<(ProductId Product, decimal Quantity)> before =
+            [.. invoice.Lines.Select(line => (line.ProductId, line.Quantity))];
+
+        Result revised = invoice.Revise(
+            context.Year,
+            changes.Date,
+            context.Customer,
+            context.Warehouse,
+            mode,
+            changes.ReturnsInvoiceId is { } returns ? SalesInvoiceId.From(returns) : null);
+
+        if (revised.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(revised.Error);
+        }
+
+        Result lined = AddLines(invoice, changes, context, mode);
+
+        if (lined.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(lined.Error);
+        }
+
+        Result charged = AddCharges(invoice, changes, context);
+
+        if (charged.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(charged.Error);
+        }
+
+        Result details = invoice.SetDetails(changes.ReferenceNumber, changes.Narration);
+
+        if (details.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(details.Error);
+        }
+
+        Result ordered = await ResyncOrderAsync(invoice, before, cancellationToken);
+
+        if (ordered.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(ordered.Error);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (wasPosted || request.Post)
+        {
+            Result posted = await SendAsync(
+                new PostSalesInvoiceCommand(request.SalesInvoiceId), cancellationToken);
+
+            if (posted.IsFailure)
+            {
+                return Result.Failure<SalesInvoiceResponse>(posted.Error);
+            }
+        }
 
         return Result.Success(Describe(invoice));
     }
@@ -548,6 +687,112 @@ public sealed class CreateSalesInvoiceCommandHandler
         }
 
         return Result.Success(resolved);
+    }
+
+    /// <summary>Puts the order's figures right after an invoice raised from it changes.</summary>
+    /// <remarks>
+    /// What the invoice took off the order before the edit is given back, and what it
+    /// carries now is taken - by product, the way a cancellation gives it back, because an
+    /// invoice line does not name the order line it came from. More than the order still
+    /// has outstanding is taken as far as the order goes: the extra is a sale beyond the
+    /// order, which is the customer's business, and refusing it would refuse the edit.
+    /// An order somebody has closed is left as it is.
+    /// </remarks>
+    private async Task<Result> ResyncOrderAsync(
+        SalesInvoice invoice,
+        IReadOnlyList<(ProductId Product, decimal Quantity)> before,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.SalesOrderId is not { } orderId)
+        {
+            return Result.Success();
+        }
+
+        SalesOrder? order = await _orders.FindAsync(orderId, cancellationToken);
+
+        if (order is null
+            || order.Status is not (SalesOrderStatus.Confirmed or SalesOrderStatus.Completed))
+        {
+            return Result.Success();
+        }
+
+        Dictionary<SalesOrderLineId, decimal> released = Match(
+            order.Lines, before, line => line.InvoicedQuantity);
+
+        if (released.Count > 0)
+        {
+            Result given = order.ReleaseInvoiced(released);
+
+            if (given.IsFailure)
+            {
+                return given;
+            }
+        }
+
+        Dictionary<SalesOrderLineId, decimal> taken = Match(
+            order.Lines,
+            [.. invoice.Lines.Select(line => (line.ProductId, line.Quantity))],
+            line => line.OutstandingQuantity);
+
+        return taken.Count == 0 ? Result.Success() : order.RecordInvoiced(taken);
+    }
+
+    /// <summary>Spreads quantities of each product across the order lines that have room.</summary>
+    private static Dictionary<SalesOrderLineId, decimal> Match(
+        IReadOnlyList<SalesOrderLine> lines,
+        IReadOnlyList<(ProductId Product, decimal Quantity)> wanted,
+        Func<SalesOrderLine, decimal> room)
+    {
+        Dictionary<SalesOrderLineId, decimal> matched = [];
+        Dictionary<SalesOrderLineId, decimal> left = lines.ToDictionary(line => line.Id, room);
+
+        foreach ((ProductId product, decimal quantity) in wanted)
+        {
+            decimal remaining = quantity;
+
+            foreach (SalesOrderLine line in lines.Where(line => line.ProductId == product))
+            {
+                if (remaining <= 0m)
+                {
+                    break;
+                }
+
+                decimal taken = Math.Min(remaining, left[line.Id]);
+
+                if (taken <= 0m)
+                {
+                    continue;
+                }
+
+                matched[line.Id] = matched.GetValueOrDefault(line.Id) + taken;
+                left[line.Id] -= taken;
+                remaining -= taken;
+            }
+        }
+
+        return matched;
+    }
+
+    /// <summary>Sends a command that joins this transaction, and hands back its failure.</summary>
+    /// <remarks>
+    /// A nested command that fails throws to unwind the transaction it joined; caught here,
+    /// its failure becomes this command's, and this command's own rollback undoes the lot.
+    /// </remarks>
+    private async Task<Result> SendAsync<TCommand>(
+        TCommand command,
+        CancellationToken cancellationToken)
+        where TCommand : notnull
+    {
+        try
+        {
+            object? response = await _sender.Send((object)command, cancellationToken);
+
+            return response as Result ?? Result.Success();
+        }
+        catch (TransactionRollbackException rollback) when (rollback.Response is Result failed)
+        {
+            return failed;
+        }
     }
 
     /// <summary>Takes the next number, creating the series if there is none.</summary>

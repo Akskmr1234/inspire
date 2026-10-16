@@ -51,6 +51,21 @@ public interface IVoucherRepository
     /// <summary>Adds a voucher.</summary>
     /// <param name="voucher">The voucher to add.</param>
     void Add(Voucher voucher);
+
+    /// <summary>Names the document whose posting wrote a voucher, if one did.</summary>
+    /// <param name="id">The voucher.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// The number of the invoice, stock document or cheque that raised it, or
+    /// <see langword="null"/> where somebody entered it by hand.
+    /// </returns>
+    /// <remarks>
+    /// A journal an invoice wrote is that invoice's to undo: cancelled on its own, the
+    /// sale would stand with no entry in the books behind it.
+    /// </remarks>
+    Task<string?> FindRaisingDocumentAsync(
+        VoucherId id,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Reads ledgers.</summary>
@@ -193,6 +208,14 @@ public interface IBillRepository
         VoucherId voucherId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the bills a voucher raised, with their allocations.</summary>
+    /// <param name="voucherId">The voucher.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The bills it raised, cancelled ones included.</returns>
+    Task<IReadOnlyList<Bill>> FindRaisedByAsync(
+        VoucherId voucherId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds a bill.</summary>
     /// <param name="bill">The bill to add.</param>
     void Add(Bill bill);
@@ -224,6 +247,14 @@ public interface IChequeRepository
         FirmId firmId,
         LedgerId partyLedgerId,
         IEnumerable<string> chequeNumbers,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the cheques a voucher recorded changing hands.</summary>
+    /// <param name="voucherId">The voucher.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The cheques, whatever has happened to them since.</returns>
+    Task<IReadOnlyList<Cheque>> FindRecordedByAsync(
+        VoucherId voucherId,
         CancellationToken cancellationToken = default);
 
     /// <summary>Adds a cheque.</summary>
@@ -919,8 +950,12 @@ public interface IPurchaseInvoiceRepository
     /// <param name="firmId">The firm.</param>
     /// <param name="supplierLedgerId">The supplier.</param>
     /// <param name="supplierInvoiceNumber">The number printed on their invoice.</param>
+    /// <param name="except">A purchase to leave out: the one being corrected.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns><see langword="true"/> where that supplier's invoice is already on file.</returns>
+    /// <returns>
+    /// <see langword="true"/> where that supplier's invoice is already on a purchase that
+    /// has not been cancelled.
+    /// </returns>
     /// <remarks>
     /// Asked before the document is built, so the commonest mistake in a purchase ledger -
     /// keying the same supplier invoice twice - is reported as itself. The unique index
@@ -931,6 +966,7 @@ public interface IPurchaseInvoiceRepository
         FirmId firmId,
         LedgerId supplierLedgerId,
         string supplierInvoiceNumber,
+        PurchaseInvoiceId? except = null,
         CancellationToken cancellationToken = default);
 }
 

@@ -208,15 +208,33 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void Only_a_posted_invoice_can_be_cancelled_and_only_with_a_reason()
+    public void An_invoice_is_cancelled_only_once_and_only_with_a_reason()
     {
-        Draft().Value.Cancel("wrong customer").Error.Code.ShouldBe("SalesInvoice.NotPosted");
+        SalesInvoice draft = Draft().Value;
+        draft.Cancel("wrong customer").IsSuccess.ShouldBeTrue();
+        draft.Status.ShouldBe(SalesInvoiceStatus.Cancelled);
 
         SalesInvoice posted = Posted();
 
         posted.Cancel("  ").Error.Code.ShouldBe("SalesInvoice.CancellationReasonRequired");
         posted.Cancel("Raised against the wrong customer").IsSuccess.ShouldBeTrue();
         posted.Status.ShouldBe(SalesInvoiceStatus.Cancelled);
+        posted.Cancel("again").Error.Code.ShouldBe("SalesInvoice.AlreadyCancelled");
+    }
+
+    [Fact]
+    public void A_posted_invoice_reopens_as_a_draft_that_forgets_what_posting_produced()
+    {
+        SalesInvoice posted = Posted();
+        posted.RecordPosting(StockDocumentId.NewId(), null, VoucherId.NewId()).IsSuccess.ShouldBeTrue();
+
+        posted.Reopen().IsSuccess.ShouldBeTrue();
+
+        posted.Status.ShouldBe(SalesInvoiceStatus.Draft);
+        posted.StockDocumentId.ShouldBeNull();
+        posted.JournalVoucherId.ShouldBeNull();
+        posted.PostedAtUtc.ShouldBeNull();
+        posted.Reopen().Error.Code.ShouldBe("SalesInvoice.NotPosted");
     }
 
     [Fact]
