@@ -5,13 +5,7 @@ import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
-import {
-  DateField,
-  Field,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from '@/components/Form';
+import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
@@ -38,6 +32,11 @@ import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import {
+  SerialLineSummary,
+  SerialPickerDialog,
+  useSerialNumbersEnabled,
+} from '@/components/SerialNumbers';
 import {
   cancelPurchaseInvoice,
   createPurchaseInvoice,
@@ -877,6 +876,7 @@ function EntryDialog({
                 key={line.key}
                 line={line}
                 isReturn={isReturn}
+                warehouseId={draft.warehouseId}
                 products={products.data ?? []}
                 productOptions={productOptions}
                 taxRates={taxRates}
@@ -937,6 +937,7 @@ function EntryDialog({
 function LineRow({
   line,
   isReturn,
+  warehouseId,
   products,
   productOptions,
   taxRates,
@@ -948,6 +949,8 @@ function LineRow({
 }: {
   readonly line: DraftLine;
   readonly isReturn: boolean;
+  /** Where the goods go to or come from, for the units a return can send back. */
+  readonly warehouseId: string;
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly taxRates: readonly number[];
@@ -965,8 +968,11 @@ function LineRow({
 
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
-  const needsSerials = product?.tracksSerialNumbers === true;
-  const named = splitSerials(line.serialNumbers).length;
+  // Offered only where the firm has switched serial numbers on, and always optional:
+  // a purchase of five may name five, four, two or none of them.
+  const serialsOn = useSerialNumbersEnabled();
+  const needsSerials = serialsOn && product?.tracksSerialNumbers === true;
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   /*
     How far the batch and serial sub-row reaches: product, quantity, rate, net and
@@ -1148,23 +1154,35 @@ function LineRow({
               )}
 
               {needsSerials && (
-                <TextAreaField
-                  label={t('purchase.serialsNamed', {
-                    named,
-                    wanted: Number.isFinite(wanted) ? wanted : 0,
-                  })}
-                  size="sm"
-                  mono
-                  rows={2}
-                  value={line.serialNumbers}
-                  onChange={(value) => onChange({ serialNumbers: value })}
-                  placeholder={t('purchase.serialsHint')}
-                  className="w-full sm:w-72"
-                />
+                <div className="self-end">
+                  <SerialLineSummary
+                    chosen={splitSerials(line.serialNumbers)}
+                    quantity={wanted}
+                    onOpen={() => setPickerOpen(true)}
+                  />
+                </div>
               )}
             </div>
           </td>
         </tr>
+      )}
+
+      {pickerOpen && product && (
+        <SerialPickerDialog
+          productId={product.id}
+          productLabel={`${product.code} — ${product.description}`}
+          warehouseId={warehouseId}
+          // A purchase brings new numbers in; a return to the supplier sends back
+          // units that are on the shelf.
+          direction={isReturn ? 'out' : 'in'}
+          chosen={splitSerials(line.serialNumbers)}
+          quantity={wanted}
+          onClose={() => setPickerOpen(false)}
+          onDone={(serials, quantity) => {
+            onChange({ serialNumbers: serials.join('\n'), quantity: String(quantity) });
+            setPickerOpen(false);
+          }}
+        />
       )}
     </>
   );

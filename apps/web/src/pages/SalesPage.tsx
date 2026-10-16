@@ -20,6 +20,12 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import {
+  SerialLineSummary,
+  SerialPickerDialog,
+  useSerialNumbersEnabled,
+  type SerialDirection,
+} from '@/components/SerialNumbers';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -27,6 +33,8 @@ import { listProducts, type ProductSummary } from '@/lib/products';
 import {
   fetchProductBatches,
   fetchProductSerials,
+  findSerial,
+  SerialStatus,
   type BatchStockRow,
   type SerialNumberView,
 } from '@/lib/stock';
@@ -63,8 +71,6 @@ interface DraftLine {
   expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
-  /** Whether the line requires serial/IMEI tracking (defaults from product master or toggled). */
-  requiresSerial?: boolean;
 }
 
 /**
@@ -696,23 +702,10 @@ function EntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
-  const handleBarcodeScan = (scannedCode: string): void => {
-    const code = scannedCode.trim();
-    if (!code) return;
+  const serialsOn = settings.enableSerialNumbers;
 
-    const found = products.data?.find(
-      (p) =>
-        p.code.toLowerCase() === code.toLowerCase() ||
-        p.id.toLowerCase() === code.toLowerCase() ||
-        p.description.toLowerCase().includes(code.toLowerCase()),
-    );
-
-    if (!found) {
-      setBarcodeNotice(t('sales.scanProductNotFound'));
-      window.setTimeout(() => setBarcodeNotice(null), 3000);
-      return;
-    }
-
+  /** Adds one unit of a product to the invoice, with its serial number if it has one. */
+  const addScanned = (found: ProductSummary, serial: string | null): void => {
     const defaultTax = modeTaxRate(taxMode, settings.defaultTaxRate);
     const baseRate =
       rateType === 'wholesale'
@@ -724,10 +717,21 @@ function EntryDialog({
 
     const existingIndex = lines.findIndex((l) => l.productId === found.id);
     const existing = existingIndex >= 0 ? lines[existingIndex] : undefined;
-    if (existingIndex >= 0 && existing) {
-      const nextQty = String(Number(existing.quantity || '0') + 1);
-      change(existingIndex, { quantity: nextQty });
-      setBarcodeNotice(`${found.code} (Qty: ${nextQty})`);
+
+    if (existing && serial && existing.serialNumbers.includes(serial)) {
+      setBarcodeNotice(t('serials.alreadyChosen', { number: serial }));
+    } else if (existingIndex >= 0 && existing) {
+      // One more of what is already on the invoice. A scanned unit joins its line's
+      // serials, and the quantity only grows when every unit counted already has one,
+      // so scanning the boxes of a line typed as "3" names those three.
+      const serialNumbers = serial
+        ? [...existing.serialNumbers, serial]
+        : existing.serialNumbers;
+      const counted = Number(existing.quantity || '0');
+      const nextQty = serial && serialNumbers.length <= counted ? counted : counted + 1;
+
+      change(existingIndex, { quantity: String(nextQty), serialNumbers });
+      setBarcodeNotice(`${found.code}${serial ? ` · ${serial}` : ''} (Qty: ${nextQty})`);
     } else {
       const emptyIndex = lines.findIndex((l) => !l.productId);
       const newLine: DraftLine = {
@@ -740,17 +744,84 @@ function EntryDialog({
         discount: '0',
         batchNumber: '',
         expiresOn: '',
-        serialNumbers: [],
+        serialNumbers: serial ? [serial] : [],
       };
       if (emptyIndex >= 0) {
         setLines((prev) => prev.map((l, idx) => (idx === emptyIndex ? newLine : l)));
       } else {
         setLines((prev) => [...prev, newLine]);
       }
-      setBarcodeNotice(`${t('sales.scanProductSuccess')}: ${found.code}`);
+      setBarcodeNotice(
+        `${t('sales.scanProductSuccess')}: ${found.code}${serial ? ` · ${serial}` : ''}`,
+      );
     }
 
     setBarcodeInput('');
+    window.setTimeout(() => setBarcodeNotice(null), 3000);
+  };
+
+  /*
+    What a scan finds, most exact first.
+
+    A product's own code; then, where the firm tracks serial numbers, a unit on the
+    shelf whose number it is - which picks the product and the unit together, so
+    scanning an IMEI is one action instead of choosing a phone and then choosing which
+    one; then the server's own search, which also matches the product's barcodes. The
+    old match took the first product whose name merely contained what was scanned, so
+    a scan of "A4" could add whatever product happened to mention A4.
+  */
+  const handleBarcodeScan = async (scannedCode: string): Promise<void> => {
+    const code = scannedCode.trim();
+    if (!code) return;
+
+    const all = products.data ?? [];
+    const byCode = all.find((p) => p.code.toLowerCase() === code.toLowerCase());
+
+    if (byCode) {
+      addScanned(byCode, null);
+      return;
+    }
+
+    if (serialsOn && !isReturn(kind)) {
+      try {
+        const units = await findSerial(code);
+        const unit = units.find(
+          (candidate) =>
+            (candidate.status === SerialStatus.inStock ||
+              candidate.status === SerialStatus.returnedFromCustomer) &&
+            (warehouseId === '' || candidate.warehouseId === warehouseId),
+        );
+        const product = unit ? all.find((p) => p.id === unit.productId) : undefined;
+
+        if (unit && product) {
+          addScanned(product, unit.number);
+          return;
+        }
+
+        if (units.length > 0) {
+          setBarcodeNotice(t('serials.notOnShelf', { number: code }));
+          window.setTimeout(() => setBarcodeNotice(null), 3000);
+          return;
+        }
+      } catch {
+        // Not a serial number the server knows; fall through to the product search.
+      }
+    }
+
+    try {
+      const matches = await listProducts(code, '', false);
+      const only = matches.length === 1 ? matches[0] : undefined;
+      const product = only ? (all.find((p) => p.id === only.id) ?? only) : undefined;
+
+      if (product) {
+        addScanned(product, null);
+        return;
+      }
+    } catch {
+      // Fall through to "not found".
+    }
+
+    setBarcodeNotice(t('sales.scanProductNotFound'));
     window.setTimeout(() => setBarcodeNotice(null), 3000);
   };
 
@@ -980,7 +1051,7 @@ function EntryDialog({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleBarcodeScan(barcodeInput);
+                    void handleBarcodeScan(barcodeInput);
                   }
                 }}
                 placeholder={t('sales.barcodePlaceholder')}
@@ -988,7 +1059,7 @@ function EntryDialog({
               />
               <button
                 type="button"
-                onClick={() => handleBarcodeScan(barcodeInput)}
+                onClick={() => void handleBarcodeScan(barcodeInput)}
                 className="absolute end-1.5 p-1 text-ink-muted hover:text-brand-600 transition"
                 title="Scan / Read Barcode"
               >
@@ -1125,6 +1196,7 @@ function EntryDialog({
                 products={products.data ?? []}
                 productOptions={productOptions}
                 warehouseId={warehouseId}
+                serialDirection={isReturn(kind) ? 'back' : 'out'}
                 rateType={rateType}
                 modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
                 reverseCalc={reverseCalc}
@@ -1379,6 +1451,7 @@ function LineRow({
   products,
   productOptions,
   warehouseId,
+  serialDirection,
   rateType,
   modeRate,
   reverseCalc,
@@ -1394,6 +1467,8 @@ function LineRow({
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly warehouseId: string;
+  /** Out of stock for a sale, back from the customer for a return. */
+  readonly serialDirection: SerialDirection;
   readonly rateType: 'retail' | 'wholesale' | 'mrp';
   /** The rate the tax mode starts a line at. */
   readonly modeRate: number;
@@ -1413,10 +1488,14 @@ function LineRow({
     Number(line.quantity) * Number(line.rate) -
     (enableDiscount ? Number(line.discount || 0) : 0);
 
-  const [customSerialInput, setCustomSerialInput] = useState('');
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
-  const needsSerials = line.requiresSerial ?? product?.tracksSerialNumbers === true;
+  const serialsOn = useSerialNumbersEnabled();
+  // Offered where the firm has switched serial numbers on and the product is tracked
+  // by them - never as a box on every line, and never demanded.
+  const needsSerials = serialsOn && product?.tracksSerialNumbers === true;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [offerPicker, setOfferPicker] = useState(false);
 
   const batches = useQuery<readonly BatchStockRow[], ApiError>({
     queryKey: ['sales-line-batches', line.productId, warehouseId],
@@ -1424,11 +1503,36 @@ function LineRow({
     enabled: needsBatch && line.productId !== '' && warehouseId !== '',
   });
 
+  // What the shelf holds, read only to decide whether to offer the picker the moment
+  // a serialised product is chosen for a sale. The firm asked for exactly that: a popup
+  // of the available numbers, when there are any.
   const serials = useQuery<readonly SerialNumberView[], ApiError>({
     queryKey: ['sales-line-serials', line.productId, warehouseId],
     queryFn: () => fetchProductSerials(line.productId, warehouseId),
-    enabled: needsSerials && line.productId !== '' && warehouseId !== '',
+    enabled:
+      offerPicker &&
+      serialDirection === 'out' &&
+      line.productId !== '' &&
+      warehouseId !== '',
   });
+
+  useEffect(() => {
+    if (!offerPicker || serialDirection !== 'out' || !serials.data) {
+      return;
+    }
+
+    setOfferPicker(false);
+
+    if (
+      serials.data.some(
+        (unit) =>
+          unit.status === SerialStatus.inStock ||
+          unit.status === SerialStatus.returnedFromCustomer,
+      )
+    ) {
+      setPickerOpen(true);
+    }
+  }, [offerPicker, serialDirection, serials.data]);
 
   // Auto Batch FIFO
   useEffect(() => {
@@ -1448,18 +1552,6 @@ function LineRow({
       }
     }
   }, [autoBatch, needsBatch, line.batchNumber, batches.data]);
-
-  const toggleSerial = (number: string): void => {
-    const chosen = new Set(line.serialNumbers);
-
-    if (chosen.has(number)) {
-      chosen.delete(number);
-    } else {
-      chosen.add(number);
-    }
-
-    onChange({ serialNumbers: [...chosen] });
-  };
 
   const handleProductSelect = (value: string): void => {
     const chosen = products.find((candidate) => candidate.id === value);
@@ -1483,15 +1575,16 @@ function LineRow({
         batchNumber: '',
         expiresOn: '',
         serialNumbers: [],
-        requiresSerial: chosen.tracksSerialNumbers,
       });
+      // A serialised product just chosen for goods going out: if the shelf holds
+      // numbered units, the picker opens by itself (see the effect below).
+      setOfferPicker(serialsOn && chosen.tracksSerialNumbers);
     } else {
       onChange({
         productId: value,
         batchNumber: '',
         expiresOn: '',
         serialNumbers: [],
-        requiresSerial: false,
       });
     }
   };
@@ -1514,25 +1607,6 @@ function LineRow({
             label={t('sales.product')}
             placeholder={t('sales.chooseProduct')}
           />
-          {line.productId !== '' && (
-            <div className="mt-1 flex items-center gap-1.5">
-              <label className="flex items-center gap-1 text-[11px] font-medium text-ink-muted hover:text-ink cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={needsSerials}
-                  onChange={(e) => onChange({ requiresSerial: e.target.checked })}
-                  className="rounded border-line text-purple-600 focus:ring-purple-500 size-3"
-                />
-                <span
-                  className={clsx(
-                    needsSerials && 'font-semibold text-purple-700 dark:text-purple-300',
-                  )}
-                >
-                  {t('products.requiresSerialImei')}
-                </span>
-              </label>
-            </div>
-          )}
         </td>
         <NumberCell
           label={t('sales.quantity')}
@@ -1669,100 +1743,31 @@ function LineRow({
               )}
 
               {needsSerials && (
-                <div className="flex flex-col gap-2 w-full">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">
-                      {t('sales.serialsChosen', {
-                        chosen: line.serialNumbers.length,
-                        wanted: Number.isFinite(wanted) ? wanted : 0,
-                      })}
-                    </span>
-                    <span className="text-[10px] text-ink-muted">
-                      Select warehouse units or scan/type IMEI below
-                    </span>
-                  </div>
-
-                  {/* Custom Serial/IMEI input */}
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="Type/Scan Serial or IMEI & press Enter"
-                      value={customSerialInput}
-                      onChange={(e) => setCustomSerialInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const val = customSerialInput.trim();
-                          if (val && !line.serialNumbers.includes(val)) {
-                            onChange({ serialNumbers: [...line.serialNumbers, val] });
-                            setCustomSerialInput('');
-                          }
-                        }
-                      }}
-                      className="field-input-sm w-64 text-xs font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const val = customSerialInput.trim();
-                        if (val && !line.serialNumbers.includes(val)) {
-                          onChange({ serialNumbers: [...line.serialNumbers, val] });
-                          setCustomSerialInput('');
-                        }
-                      }}
-                      className="btn-secondary btn-xs text-xs"
-                    >
-                      Add
-                    </button>
-                  </div>
-
-                  {/* Selected & Warehouse units list */}
-                  <div className="flex max-h-24 flex-wrap gap-1.5 overflow-auto pt-1">
-                    {/* Chosen serials rendered as tags */}
-                    {line.serialNumbers.map((num) => (
-                      <span
-                        key={num}
-                        className="inline-flex items-center gap-1 rounded bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 text-xs font-mono font-medium text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-500/30"
-                      >
-                        <span>{num}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleSerial(num)}
-                          className="hover:text-red-500 font-bold ml-0.5"
-                          title="Remove"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-
-                    {/* Warehouse available serials */}
-                    {(serials.data ?? [])
-                      .filter((unit) => !line.serialNumbers.includes(unit.number))
-                      .map((unit) => (
-                        <button
-                          key={unit.serialNumberId}
-                          type="button"
-                          onClick={() => toggleSerial(unit.number)}
-                          className="rounded-md border border-dashed border-line bg-surface px-2 py-0.5 text-xs font-mono transition hover:border-purple-500 hover:bg-purple-50/50 dark:hover:bg-purple-500/10 text-ink-muted"
-                          title="Click to select this serial number"
-                        >
-                          + {unit.number}
-                        </button>
-                      ))}
-
-                    {line.serialNumbers.length === 0 &&
-                      (serials.data ?? []).length === 0 && (
-                        <span className="text-xs text-ink-muted italic">
-                          {t('sales.noSerials')} — scan or type IMEI above
-                        </span>
-                      )}
-                  </div>
-                </div>
+                <SerialLineSummary
+                  chosen={line.serialNumbers}
+                  quantity={wanted}
+                  onOpen={() => setPickerOpen(true)}
+                />
               )}
             </div>
           </td>
         </tr>
+      )}
+
+      {pickerOpen && product && (
+        <SerialPickerDialog
+          productId={product.id}
+          productLabel={`${product.code} — ${product.description}`}
+          warehouseId={warehouseId}
+          direction={serialDirection}
+          chosen={line.serialNumbers}
+          quantity={wanted}
+          onClose={() => setPickerOpen(false)}
+          onDone={(serialNumbers, quantity) => {
+            onChange({ serialNumbers, quantity: String(quantity) });
+            setPickerOpen(false);
+          }}
+        />
       )}
     </>
   );

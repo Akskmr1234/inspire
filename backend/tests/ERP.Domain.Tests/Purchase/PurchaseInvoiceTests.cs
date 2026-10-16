@@ -145,17 +145,48 @@ public sealed class PurchaseInvoiceTests
         line.Error.Code.ShouldBe("PurchaseInvoice.ExpiryWithoutBatch");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void A_serialised_product_takes_any_number_of_serials_up_to_the_quantity(int named)
+    {
+        // Five handsets in a carton, of which some have their numbers to hand: every
+        // count from none to five is a purchase the firm can record.
+        PurchaseInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure unit) = Serialised();
+
+        Result<PurchaseInvoiceLine> line = invoice.AddLine(
+            product, unit, 5m, 5m, 100m, Assessed(500m, 0m),
+            serialNumbers: [.. Enumerable.Range(1, named).Select(index => $"SN-{index}")]);
+
+        line.IsSuccess.ShouldBeTrue();
+    }
+
     [Fact]
-    public void A_serialised_product_needs_one_number_for_every_unit_arriving()
+    public void More_serials_than_units_arriving_is_refused()
     {
         PurchaseInvoice invoice = Draft().Value;
         (Product product, UnitOfMeasure unit) = Serialised();
 
         Result<PurchaseInvoiceLine> line = invoice.AddLine(
-            product, unit, 3m, 3m, 100m, Assessed(300m, 0m),
-            serialNumbers: ["SN-1", "SN-2"]);
+            product, unit, 2m, 2m, 100m, Assessed(200m, 0m),
+            serialNumbers: ["SN-1", "SN-2", "SN-3"]);
 
         line.Error.Code.ShouldBe("PurchaseInvoice.SerialCountMismatch");
+    }
+
+    [Fact]
+    public void Serials_on_a_fractional_quantity_are_refused()
+    {
+        PurchaseInvoice invoice = Draft().Value;
+        (Product product, UnitOfMeasure unit) = Serialised();
+
+        Result<PurchaseInvoiceLine> line = invoice.AddLine(
+            product, unit, 1.5m, 1.5m, 100m, Assessed(150m, 0m),
+            serialNumbers: ["SN-1"]);
+
+        line.Error.Code.ShouldBe("PurchaseInvoice.SerialQuantityFractional");
     }
 
     [Fact]

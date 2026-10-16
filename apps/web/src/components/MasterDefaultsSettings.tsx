@@ -494,6 +494,13 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             checked={settings.enableAutoBatch}
             onChange={(checked) => settings.update({ enableAutoBatch: checked })}
           />
+
+          <CheckField
+            label={t('settings.enableSerialNumbers')}
+            hint={t('settings.enableSerialNumbersHint')}
+            checked={settings.enableSerialNumbers}
+            onChange={(checked) => settings.update({ enableSerialNumbers: checked })}
+          />
         </div>
       </div>
 

@@ -8,6 +8,11 @@ import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { IconBarcode } from '@/components/icons';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
+import {
+  SerialLineSummary,
+  SerialPickerDialog,
+  useSerialNumbersEnabled,
+} from '@/components/SerialNumbers';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
@@ -18,7 +23,6 @@ import {
   carriesRate,
   createStockDocument,
   fetchProductBatches,
-  fetchProductSerials,
   getStockDocument,
   isCount,
   isTransfer,
@@ -29,7 +33,6 @@ import {
   StockDocumentStatus,
   StockDocumentType,
   type BatchStockRow,
-  type SerialNumberView,
   type StockDocumentDetail,
   type StockDocumentSummary,
   type StockLineInput,
@@ -464,7 +467,11 @@ function StockEntry({
       (product) => product.id === productId && product.tracksBatches,
     );
 
+  // Only where the firm has switched serial numbers on. Off, no line asks for one and
+  // the server takes the document without them.
+  const serialsOn = useSerialNumbersEnabled();
   const serialised = (productId: string): boolean =>
+    serialsOn &&
     (products.data ?? []).some(
       (product) => product.id === productId && product.tracksSerialNumbers,
     );
@@ -796,6 +803,11 @@ function StockEntry({
                         line={line}
                         type={type}
                         warehouseId={warehouseId}
+                        productLabel={
+                          (products.data ?? []).find(
+                            (product) => product.id === line.productId,
+                          )?.description ?? ''
+                        }
                         onChange={(patch) => update(line.key, patch)}
                       />
                     ) : (
@@ -976,124 +988,68 @@ function BatchCell({
 /**
  * The units a line moves: written down on the way in, picked on the way out.
  *
- * Both controls are lists rather than one box per unit, because the quantity is not
- * known when the row is drawn and a storekeeper receiving forty handsets is pasting a
- * column out of a spreadsheet or scanning them one after another. The count is shown
- * against what the line needs, so a short list is visible before the server refuses it.
+ * A summary and the picker, the same one the sales and purchase screens use, in place
+ * of a textarea on the way in and a native multi-select on the way out. The numbers are
+ * optional: a line may name every unit it moves, some of them, or none, and the count
+ * is shown as how many of how many rather than as a shortfall to be made good.
  */
 function SerialCell({
   line,
   type,
   warehouseId,
+  productLabel,
   onChange,
 }: {
   readonly line: DraftLine;
   readonly type: number;
   readonly warehouseId: string;
+  readonly productLabel: string;
   readonly onChange: (patch: Partial<DraftLine>) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const naming = opensBatches(type);
-
-  // Only where a choice has to be made. A receipt names the numbers on the cases in
-  // front of it, so asking the server what is in stock would be a round trip nobody
-  // reads.
-  const units = useQuery<readonly SerialNumberView[], ApiError>({
-    queryKey: ['product-serials', line.productId, warehouseId],
-    queryFn: () => fetchProductSerials(line.productId, warehouseId),
-    enabled: !naming && Boolean(line.productId && warehouseId),
-  });
-
-  const entered = parseSerials(line.serialNumbers).length;
-  const needed = Math.abs(Number(line.quantity) || 0);
-
-  const counter = (
-    <span
-      className={clsx(
-        'text-xs',
-        entered === needed && needed > 0
-          ? 'text-ink-muted'
-          : 'text-amber-700 dark:text-amber-300',
-      )}
-    >
-      {t('stock.unitsCounted', { count: entered, needed: trim(needed) })}
-    </span>
-  );
-
-  if (naming) {
-    return (
-      <div className="flex flex-col gap-1">
-        <textarea
-          value={line.serialNumbers}
-          onChange={(event) => onChange({ serialNumbers: event.target.value })}
-          placeholder={t('stock.unitsPlaceholder')}
-          rows={2}
-          className="field-input-sm w-full font-mono text-xs sm:w-56"
-        />
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            placeholder="Scan serial…"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                const target = e.target as HTMLInputElement;
-                const val = target.value.trim();
-                if (val) {
-                  const next = line.serialNumbers
-                    ? `${line.serialNumbers.trim()}\n${val}`
-                    : val;
-                  onChange({ serialNumbers: next });
-                  target.value = '';
-                }
-              }
-            }}
-            className="field-input-sm w-full font-mono text-[11px] sm:w-32"
-            title="Scan serial barcode and press Enter"
-          />
-          <input
-            type="date"
-            value={line.warrantyUntil}
-            onChange={(event) => onChange({ warrantyUntil: event.target.value })}
-            title={t('stock.warrantyUntil')}
-            className="field-input-sm w-full text-xs sm:w-32"
-          />
-        </div>
-        {counter}
-      </div>
-    );
-  }
-
-  const available = units.data ?? [];
-
-  if (units.isSuccess && available.length === 0) {
-    return <span className="text-xs text-amber-600">{t('stock.unitsNone')}</span>;
-  }
+  const quantity = Math.abs(Number(line.quantity) || 0);
 
   return (
     <div className="flex flex-col gap-1">
-      <select
-        multiple
-        size={Math.min(4, Math.max(2, available.length))}
-        value={parseSerials(line.serialNumbers)}
-        onChange={(event) =>
-          onChange({
-            serialNumbers: [...event.target.selectedOptions]
-              .map((option) => option.value)
-              .join('\n'),
-          })
-        }
-        aria-label={t('stock.unitsChoose')}
-        className="field-input-sm w-full font-mono text-xs sm:w-56"
-      >
-        {available.map((unit) => (
-          <option key={unit.serialNumberId} value={unit.number}>
-            {unit.number}
-            {unit.isUnderWarranty ? ' ✓' : ''}
-          </option>
-        ))}
-      </select>
-      {counter}
+      <SerialLineSummary
+        chosen={parseSerials(line.serialNumbers)}
+        quantity={quantity}
+        onOpen={() => setOpen(true)}
+      />
+
+      {/* A warranty belongs to units arriving; units going out carry theirs. */}
+      {naming && (
+        <input
+          type="date"
+          value={line.warrantyUntil}
+          onChange={(event) => onChange({ warrantyUntil: event.target.value })}
+          title={t('stock.warrantyUntil')}
+          aria-label={t('stock.warrantyUntil')}
+          className="field-input-sm w-full text-xs sm:w-36"
+        />
+      )}
+
+      {open && (
+        <SerialPickerDialog
+          productId={line.productId}
+          productLabel={productLabel}
+          warehouseId={warehouseId}
+          direction={naming ? 'in' : 'out'}
+          chosen={parseSerials(line.serialNumbers)}
+          quantity={quantity}
+          onClose={() => setOpen(false)}
+          onDone={(serials, total) => {
+            const sign = Number(line.quantity) < 0 ? -1 : 1;
+            onChange({
+              serialNumbers: serials.join('\n'),
+              quantity: String(sign * total),
+            });
+            setOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

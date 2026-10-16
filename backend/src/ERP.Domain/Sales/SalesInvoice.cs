@@ -790,13 +790,29 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 : Result.Success();
         }
 
-        // One number per unit sold, whole units only - the same rule the stock document
-        // enforces, because it is the same fact about the goods.
-        return stockQuantity != decimal.Truncate(stockQuantity) || offered != stockQuantity
+        // At most one number per unit sold, and whole units wherever any are named - the
+        // same rule the stock document enforces, because it is the same fact about the
+        // goods. Not one for every unit: a firm records the numbers it has, and a counter
+        // selling a phone whose box it cannot find should not be stopped at the till by a
+        // rule about the box. The units it does name are the ones that leave stock.
+        if (offered == 0)
+        {
+            return Result.Success();
+        }
+
+        if (stockQuantity != decimal.Truncate(stockQuantity))
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.SerialQuantityFractional",
+                $"'{product.Code}' is identified unit by unit, so {stockQuantity:0.######} of "
+                + "it cannot carry serial numbers."));
+        }
+
+        return offered > stockQuantity
             ? Result.Failure(Error.Validation(
                 "SalesInvoice.SerialCountMismatch",
-                $"'{product.Code}' sells {stockQuantity} units on this line, so that many "
-                + $"serial numbers are needed and {offered} were given."))
+                $"'{product.Code}' sells {stockQuantity:0.######} units on this line, so at most "
+                + $"that many serial numbers can be named and {offered} were given."))
             : Result.Success();
     }
 

@@ -783,14 +783,29 @@ public sealed class PurchaseInvoice
                 : Result.Success();
         }
 
-        // One number per unit received, whole units only - the same rule the receipt
-        // enforces, because it is the same fact about the goods.
-        if (stockQuantity != decimal.Truncate(stockQuantity) || serials.Count != stockQuantity)
+        // At most one number per unit received, and whole units wherever any are named -
+        // the same rule the receipt enforces. Not one for every unit: five handsets in a
+        // carton of which two have their numbers to hand are recorded as two numbers, and
+        // the other three arrive like any other stock.
+        if (serials.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        if (stockQuantity != decimal.Truncate(stockQuantity))
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.SerialQuantityFractional",
+                $"'{product.Code}' is identified unit by unit, so {stockQuantity:0.######} of "
+                + "it cannot carry serial numbers."));
+        }
+
+        if (serials.Count > stockQuantity)
         {
             return Result.Failure(Error.Validation(
                 "PurchaseInvoice.SerialCountMismatch",
-                $"'{product.Code}' arrives {stockQuantity} units on this line, so that many "
-                + $"serial numbers are needed and {serials.Count} were given."));
+                $"'{product.Code}' arrives {stockQuantity:0.######} units on this line, so at most "
+                + $"that many serial numbers can be named and {serials.Count} were given."));
         }
 
         // Two boxes with the same number on them is a number that identifies neither, and

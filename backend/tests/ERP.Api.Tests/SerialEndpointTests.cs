@@ -44,22 +44,31 @@ public sealed class SerialEndpointTests
     }
 
     [Fact]
-    public async Task A_line_needs_one_number_for_every_unit_it_moves()
+    public async Task A_line_names_as_many_units_as_it_has_numbers_for_up_to_what_it_moves()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
         SerialFixtures fixtures = await SerialFixtures.CreateAsync(client);
 
-        // Two moving, one named: the other unit would go untracked for ever.
-        HttpResponseMessage short_ = await SendAsync(
+        // Two moving, one named: the firm asked for exactly this - the numbers it has
+        // are recorded and the other unit arrives as plain stock.
+        HttpResponseMessage partial = await SendAsync(
             client, StockDocumentType.MaterialReceipt, fixtures.MainId,
-            [Line(fixtures.ProductId, 2m, rate: 900m, serials: ["IMEI-001"])]);
+            [Line(fixtures.ProductId, 2m, rate: 900m, serials: ["IMEI-P01"])]);
 
-        short_.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        partial.StatusCode.ShouldBe(
+            HttpStatusCode.Created, await partial.Content.ReadAsStringAsync());
+
+        // Three named on two units is a number that belongs to nothing.
+        HttpResponseMessage over = await SendAsync(
+            client, StockDocumentType.MaterialReceipt, fixtures.MainId,
+            [Line(fixtures.ProductId, 2m, rate: 900m, serials: ["IMEI-O01", "IMEI-O02", "IMEI-O03"])]);
+
+        over.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
 
         // Half a handset is not a thing.
         HttpResponseMessage fractional = await SendAsync(
             client, StockDocumentType.MaterialReceipt, fixtures.MainId,
-            [Line(fixtures.ProductId, 1.5m, rate: 900m, serials: ["IMEI-001", "IMEI-002"])]);
+            [Line(fixtures.ProductId, 1.5m, rate: 900m, serials: ["IMEI-F01"])]);
 
         fractional.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }

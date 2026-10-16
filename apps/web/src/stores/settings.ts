@@ -119,6 +119,14 @@ export interface AppSettings {
   readonly enableItemDiscount: boolean;
   /** Whether automatic FIFO batch assignment is enabled. */
   readonly enableAutoBatch: boolean;
+  /**
+   * Whether serial numbers (IMEI) are offered on documents and products at all.
+   *
+   * Off by default: a firm that does not track handsets by number should never be
+   * asked for one. On, the numbers are offered where a product is tracked by serial
+   * number and are always optional.
+   */
+  readonly enableSerialNumbers: boolean;
   /** Default item type (1: Stocked, 2: Service, 3: Non-Stock). */
   readonly defaultItemType: number;
   /** Default brand identifier. */
@@ -186,6 +194,7 @@ const DEFAULTS: AppSettings = {
   enableFreeQuantity: true,
   enableItemDiscount: true,
   enableAutoBatch: true,
+  enableSerialNumbers: false,
   defaultItemType: 1,
   defaultBrandId: '',
   defaultDebitAccountId: '',

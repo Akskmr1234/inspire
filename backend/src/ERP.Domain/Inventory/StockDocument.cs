@@ -610,7 +610,20 @@ public sealed class StockDocument
         // the rest from somewhere, and the two lots leave at two costs and carry two
         // expiry dates. Each moves its own batch position, so neither is valued at
         // something the other has just changed.
-        bool duplicated = _lines
+        //
+        // A stock movement raised by an invoice is the other exception. An invoice may
+        // sell one product on two lines - at two prices, or once with a discount and once
+        // without - and the goods that leave are simply both lines' worth. Neither line is
+        // a mistake, and a receipt or an issue of the same position twice is valued the
+        // way two separate documents would be: a receipt averages in, an issue leaves at
+        // the average it does not change. Refusing it left an invoice that saved and then
+        // could never be posted.
+        bool raisedByInvoice = Type is StockDocumentType.SalesIssue
+            or StockDocumentType.SalesReturn
+            or StockDocumentType.PurchaseReceipt
+            or StockDocumentType.PurchaseReturn;
+
+        bool duplicated = !raisedByInvoice && _lines
             .GroupBy(line => (line.ProductId, line.BatchId))
             .Any(group => group.Count() > 1);
 
@@ -767,22 +780,30 @@ public sealed class StockDocument
                 : Result.Success();
         }
 
+        // At most one unit named per unit moved, and whole units wherever any are named.
+        // Not one for every unit: a firm names the units whose numbers it has, and the
+        // rest move as plain stock. Nothing to check where none are named.
+        if (offered == 0)
+        {
+            return Result.Success();
+        }
+
         decimal units = Math.Abs(stockQuantity);
 
         if (units != decimal.Truncate(units))
         {
             return Result.Failure(Error.Validation(
                 "StockDocument.SerialQuantityFractional",
-                $"'{product.Code}' is tracked by serial number, so {stockQuantity} of it "
+                $"'{product.Code}' is tracked by serial number, so {stockQuantity:0.######} of it "
                 + "is not a quantity that can be identified unit by unit."));
         }
 
-        if (offered != units)
+        if (offered > units)
         {
             return Result.Failure(Error.Validation(
                 "StockDocument.SerialCountMismatch",
-                $"'{product.Code}' moves {units} units on this line, so {units} serial "
-                + $"numbers are needed and {offered} were given."));
+                $"'{product.Code}' moves {units:0.######} units on this line, so at most that "
+                + $"many serial numbers can be named and {offered} were given."));
         }
 
         foreach (SerialNumber serial in serials ?? [])

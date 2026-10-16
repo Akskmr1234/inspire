@@ -198,8 +198,9 @@ public sealed class CreateSalesInvoiceCommandHandler
         Context context,
         TaxMode mode)
     {
-        foreach (SalesInvoiceLineInput input in request.Lines)
+        for (int index = 0; index < request.Lines.Count; index++)
         {
+            SalesInvoiceLineInput input = request.Lines[index];
             Product product = context.Products[ProductId.From(input.ProductId)];
             UnitOfMeasure stockUnit = context.Units[product.StockUnitId];
 
@@ -231,10 +232,14 @@ public sealed class CreateSalesInvoiceCommandHandler
             TaxAssessment assessment = TaxCalculator.Calculate(
                 taxable, rate.Value, ContextFor(context, mode));
 
-            Batch? batch = context.Batches.GetValueOrDefault(input.ProductId);
+            // By the line's position, not by its product. Keyed by product, two lines of
+            // one product shared the first line's batch and the first line's serials, so
+            // a unit sold on line one was sold again on line two and the posting refused
+            // it as already gone.
+            Batch? batch = context.Batches.GetValueOrDefault(index);
 
             IReadOnlyCollection<SerialNumber> units =
-                context.Serials.GetValueOrDefault(input.ProductId) ?? [];
+                context.Serials.GetValueOrDefault(index) ?? [];
 
             Result<SalesInvoiceLine> added = invoice.AddLine(
                 product,
@@ -391,7 +396,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             }
         }
 
-        Result<Dictionary<Guid, Batch>> batches = await ResolveBatchesAsync(
+        Result<Dictionary<int, Batch>> batches = await ResolveBatchesAsync(
             request, firmId, cancellationToken);
 
         if (batches.IsFailure)
@@ -399,7 +404,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             return Result.Failure<Context>(batches.Error);
         }
 
-        Result<Dictionary<Guid, IReadOnlyCollection<SerialNumber>>> serials =
+        Result<Dictionary<int, IReadOnlyCollection<SerialNumber>>> serials =
             await ResolveSerialsAsync(request, firmId, cancellationToken);
 
         if (serials.IsFailure)
@@ -428,12 +433,12 @@ public sealed class CreateSalesInvoiceCommandHandler
     /// already exists, and a sales line naming one that does not is a typo rather than a
     /// new batch of stock nobody bought.
     /// </remarks>
-    private async Task<Result<Dictionary<Guid, Batch>>> ResolveBatchesAsync(
+    private async Task<Result<Dictionary<int, Batch>>> ResolveBatchesAsync(
         CreateSalesInvoiceCommand request,
         FirmId firmId,
         CancellationToken cancellationToken)
     {
-        Dictionary<Guid, Batch> resolved = [];
+        Dictionary<int, Batch> resolved = [];
 
         List<BatchId> ids =
         [
@@ -458,8 +463,9 @@ public sealed class CreateSalesInvoiceCommandHandler
                 ? new Dictionary<(ProductId, string), Batch>()
                 : await _batches.GetByNumbersAsync(firmId, numbers, cancellationToken);
 
-        foreach (SalesInvoiceLineInput line in request.Lines)
+        for (int index = 0; index < request.Lines.Count; index++)
         {
+            SalesInvoiceLineInput line = request.Lines[index];
             Batch? batch = null;
 
             if (line.BatchId is { } id)
@@ -475,7 +481,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             if (batch is null && (line.BatchId is not null
                 || !string.IsNullOrWhiteSpace(line.BatchNumber)))
             {
-                return Result.Failure<Dictionary<Guid, Batch>>(Error.NotFound(
+                return Result.Failure<Dictionary<int, Batch>>(Error.NotFound(
                     "SalesInvoice.BatchNotFound",
                     $"No batch '{line.BatchNumber ?? line.BatchId.ToString()}' exists for "
                     + "that product."));
@@ -483,7 +489,7 @@ public sealed class CreateSalesInvoiceCommandHandler
 
             if (batch is not null)
             {
-                resolved[line.ProductId] = batch;
+                resolved[index] = batch;
             }
         }
 
@@ -491,13 +497,13 @@ public sealed class CreateSalesInvoiceCommandHandler
     }
 
     /// <summary>Finds the units each line names, by their numbers within the product.</summary>
-    private async Task<Result<Dictionary<Guid, IReadOnlyCollection<SerialNumber>>>>
+    private async Task<Result<Dictionary<int, IReadOnlyCollection<SerialNumber>>>>
         ResolveSerialsAsync(
             CreateSalesInvoiceCommand request,
             FirmId firmId,
             CancellationToken cancellationToken)
     {
-        Dictionary<Guid, IReadOnlyCollection<SerialNumber>> resolved = [];
+        Dictionary<int, IReadOnlyCollection<SerialNumber>> resolved = [];
 
         List<(ProductId Product, string Number)> wanted =
         [
@@ -516,8 +522,9 @@ public sealed class CreateSalesInvoiceCommandHandler
         IReadOnlyDictionary<(ProductId Product, string Number), SerialNumber> found =
             await _serials.GetByNumbersAsync(firmId, wanted, cancellationToken);
 
-        foreach (SalesInvoiceLineInput line in request.Lines)
+        for (int index = 0; index < request.Lines.Count; index++)
         {
+            SalesInvoiceLineInput line = request.Lines[index];
             List<SerialNumber> units = [];
 
             foreach (string number in line.SerialNumbers ?? [])
@@ -525,7 +532,7 @@ public sealed class CreateSalesInvoiceCommandHandler
                 if (!found.TryGetValue(
                     (ProductId.From(line.ProductId), number.Trim()), out SerialNumber? serial))
                 {
-                    return Result.Failure<Dictionary<Guid, IReadOnlyCollection<SerialNumber>>>(
+                    return Result.Failure<Dictionary<int, IReadOnlyCollection<SerialNumber>>>(
                         Error.NotFound(
                             "SalesInvoice.SerialNotFound",
                             $"No unit numbered '{number}' exists for that product."));
@@ -536,7 +543,7 @@ public sealed class CreateSalesInvoiceCommandHandler
 
             if (units.Count > 0)
             {
-                resolved[line.ProductId] = units;
+                resolved[index] = units;
             }
         }
 
@@ -589,7 +596,7 @@ public sealed class CreateSalesInvoiceCommandHandler
         Warehouse Warehouse,
         IReadOnlyDictionary<ProductId, Product> Products,
         IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units,
-        IReadOnlyDictionary<Guid, Batch> Batches,
-        IReadOnlyDictionary<Guid, IReadOnlyCollection<SerialNumber>> Serials,
+        IReadOnlyDictionary<int, Batch> Batches,
+        IReadOnlyDictionary<int, IReadOnlyCollection<SerialNumber>> Serials,
         IReadOnlyDictionary<LedgerId, AdditionalLedger> Charges);
 }

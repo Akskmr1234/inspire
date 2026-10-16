@@ -23,6 +23,7 @@ import {
 import { moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
 import { useSettings } from '@/stores/settings';
+import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import {
   createStockDocument,
   fetchStockLedger,
@@ -574,6 +575,7 @@ function DetailsTab({
   readonly busy: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const serialsOn = useSerialNumbersEnabled();
 
   const [form, setForm] = useState({
     purchaseUnitId: product.purchaseUnitId,
@@ -712,11 +714,14 @@ function DetailsTab({
         />
         {/* Both at once is allowed and normal: a handset arrives in a batch and
             still carries its own IMEI. */}
-        <Check
-          label={t('products.tracksSerialNumbers')}
-          checked={form.tracksSerialNumbers}
-          onChange={(value) => setForm({ ...form, tracksSerialNumbers: value })}
-        />
+        {/* Offered only where the firm has switched serial numbers on in Settings. */}
+        {serialsOn && (
+          <Check
+            label={t('products.tracksSerialNumbers')}
+            checked={form.tracksSerialNumbers}
+            onChange={(value) => setForm({ ...form, tracksSerialNumbers: value })}
+          />
+        )}
         <Check
           label={t('products.isPacking')}
           checked={form.isPacking}
@@ -1102,6 +1107,7 @@ function OpeningStockTab({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { preferredWarehouseId } = useSettings();
+  const serialsOn = useSerialNumbersEnabled();
 
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -1311,7 +1317,7 @@ function OpeningStockTab({
             </>
           )}
 
-          {product.tracksSerialNumbers && (
+          {serialsOn && product.tracksSerialNumbers && (
             <div className="sm:col-span-2">
               <Field label={t('stock.units')}>
                 <textarea

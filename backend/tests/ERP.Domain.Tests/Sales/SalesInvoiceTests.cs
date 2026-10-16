@@ -220,15 +220,17 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void A_serialised_product_needs_one_number_for_every_unit_sold()
+    public void A_serialised_product_sells_without_its_numbers_when_none_are_to_hand()
     {
+        // The firm asked for this: a counter selling a handset whose box is not to hand
+        // should not be stopped at the till. The units named are the units that leave.
         SalesInvoice invoice = Draft().Value;
         UnitOfMeasure each = BaseUnit();
         Product handset = Stocked(each);
         handset.SetTracking(false, true);
 
         invoice.AddLine(handset, each, 2m, 2m, 900m, Assessed(1_800m, 90m))
-            .Error.Code.ShouldBe("SalesInvoice.SerialCountMismatch");
+            .IsSuccess.ShouldBeTrue();
     }
 
     [Fact]
