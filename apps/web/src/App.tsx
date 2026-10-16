@@ -61,6 +61,7 @@ const MenuAdministrationPage = lazyScreen(
 );
 const UsersPage = lazyScreen(() => import('@/pages/UsersPage'), 'UsersPage');
 const RolesPage = lazyScreen(() => import('@/pages/RolesPage'), 'RolesPage');
+const DataResetPage = lazyScreen(() => import('@/pages/DataResetPage'), 'DataResetPage');
 const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
 const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
@@ -252,6 +253,7 @@ export function App(): React.JSX.Element {
               <Route path="/settings/menu" element={<MenuAdministrationPage />} />
               <Route path="/settings/users" element={<UsersPage />} />
               <Route path="/settings/roles" element={<RolesPage />} />
+              <Route path="/settings/data" element={<DataResetPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />

@@ -482,6 +482,16 @@ public static class MenuCatalogue
                     "/settings/roles",
                     "platform:role:view"),
 
+                // Clearing a firm's data to hand it over or to test from nothing. Behind
+                // the permission to delete the firm, the nearest grant to what it does.
+                new(
+                    "settings.data",
+                    "Clear data",
+                    "مسح البيانات",
+                    "platform",
+                    "/settings/data",
+                    "platform:firm:delete"),
+
                 // No permission: everything behind it is a preference about how this
                 // browser behaves - the tax rates a picker offers, whether Arabic
                 // names are translated, how many rows a page holds - and none of it
