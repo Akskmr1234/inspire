@@ -127,11 +127,11 @@ export function SalesPage({
   const nextInvoiceNo = useMemo(() => {
     const items = query.data?.items ?? [];
     const prefix = isSalesReturn
-      ? (settings.salesReturnPrefix || 'RET-')
-      : (settings.invoicePrefix || 'INV-');
+      ? settings.salesReturnPrefix || 'RET-'
+      : settings.invoicePrefix || 'INV-';
     const suffix = isSalesReturn
-      ? (settings.salesReturnSuffix || '')
-      : (settings.invoiceSuffix || '');
+      ? settings.salesReturnSuffix || ''
+      : settings.invoiceSuffix || '';
     if (items.length === 0) return `${prefix}1001${suffix}`;
     const nums = items
       .map((item) => {
@@ -278,7 +278,11 @@ export function SalesPage({
   return (
     <>
       <ReportFrame
-        title={isSalesReturn ? (t('sales.salesReturns') || 'Sales Returns') : (t('sales.salesInvoices') || 'Sales Invoices')}
+        title={
+          isSalesReturn
+            ? t('sales.salesReturns') || 'Sales Returns'
+            : t('sales.salesInvoices') || 'Sales Invoices'
+        }
         controls={controls}
         query={query}
       >
@@ -293,12 +297,16 @@ export function SalesPage({
               rows={result.items}
               columns={columns}
               rowKey={(row) => row.salesInvoiceId}
-              emptyMessage={isSalesReturn ? (t('sales.noReturns') || 'No sales returns in this range.') : t('sales.none')}
+              emptyMessage={
+                isSalesReturn
+                  ? t('sales.noReturns') || 'No sales returns in this range.'
+                  : t('sales.none')
+              }
               actions={
                 <GridAction
                   label={
                     isSalesReturn
-                      ? (t('sales.newSalesReturn') || 'New return')
+                      ? t('sales.newSalesReturn') || 'New return'
                       : t('sales.newInvoice')
                   }
                   onClick={() => setEntering(true)}
@@ -386,10 +394,7 @@ function AdditionalLedgersSection({
     onChange(rows.filter((r) => r.id !== id));
   };
 
-  const updateRow = (
-    id: string,
-    patch: Partial<AdditionalLedgerItem>,
-  ): void => {
+  const updateRow = (id: string, patch: Partial<AdditionalLedgerItem>): void => {
     onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
@@ -402,9 +407,7 @@ function AdditionalLedgersSection({
       </div>
 
       {rows.length === 0 ? (
-        <p className="py-2 text-center text-xs text-ink-muted">
-          {t('sales.none')}
-        </p>
+        <p className="py-2 text-center text-xs text-ink-muted">{t('sales.none')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -499,9 +502,13 @@ function EntryDialog({
   const [warehouseId, setWarehouseId] = useState('');
   const [reference, setReference] = useState('');
   const [returnsInvoiceId, setReturnsInvoiceId] = useState('');
-  const [paymentMode, setPaymentMode] = useState<string>(settings.defaultPaymentMode || 'Cash');
+  const [paymentMode, setPaymentMode] = useState<string>(
+    settings.defaultPaymentMode || 'Cash',
+  );
   const [salesman, setSalesman] = useState<string>(settings.defaultSalesman || 'Primary');
-  const [billingman, setBillingman] = useState<string>(settings.defaultBillingman || 'Primary');
+  const [billingman, setBillingman] = useState<string>(
+    settings.defaultBillingman || 'Primary',
+  );
   const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(
     (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
   );
@@ -519,20 +526,22 @@ function EntryDialog({
   const [narration, setNarration] = useState('');
   const [paidAmount, setPaidAmount] = useState<string>('');
   const [cashGiven, setCashGiven] = useState<string>('');
-  const [additionalLedgers, setAdditionalLedgers] = useState<readonly AdditionalLedgerItem[]>(
-    () => {
-      const targetType = isReturn(initialKind) ? 'SalesReturn' : 'Sales';
-      return (settings.defaultAdditionalLedgers ?? [])
-        .filter((l) => l.transactionType === targetType && l.isDefaultActive)
-        .map((l) => ({
-          id: Math.random().toString(36).slice(2, 9),
-          ledgerId: l.ledgerId,
-          isAddition: l.isAddition,
-          amount: l.defaultAmount || '0.00',
-        }));
-    },
+  const [additionalLedgers, setAdditionalLedgers] = useState<
+    readonly AdditionalLedgerItem[]
+  >(() => {
+    const targetType = isReturn(initialKind) ? 'SalesReturn' : 'Sales';
+    return (settings.defaultAdditionalLedgers ?? [])
+      .filter((l) => l.transactionType === targetType && l.isDefaultActive)
+      .map((l) => ({
+        id: Math.random().toString(36).slice(2, 9),
+        ledgerId: l.ledgerId,
+        isAddition: l.isAddition,
+        amount: l.defaultAmount || '0.00',
+      }));
+  });
+  const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>(
+    'general',
   );
-  const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>('general');
   const [lines, setLines] = useState<readonly DraftLine[]>([{ ...emptyLine }]);
   const [busy, setBusy] = useState(false);
 
@@ -707,8 +716,8 @@ function EntryDialog({
       rateType === 'wholesale'
         ? found.wholesaleRate || found.retailRate
         : rateType === 'mrp'
-        ? found.maximumRetailPrice || found.retailRate
-        : found.retailRate;
+          ? found.maximumRetailPrice || found.retailRate
+          : found.retailRate;
     const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
 
     const existingIndex = lines.findIndex((l) => l.productId === found.id);
@@ -776,8 +785,8 @@ function EntryDialog({
           newRateType === 'wholesale'
             ? prod.wholesaleRate || prod.retailRate
             : newRateType === 'mrp'
-            ? prod.maximumRetailPrice || prod.retailRate
-            : prod.retailRate;
+              ? prod.maximumRetailPrice || prod.retailRate
+              : prod.retailRate;
         const taxPct = Number(l.taxPercentage || 0);
         return {
           ...l,
@@ -887,7 +896,9 @@ function EntryDialog({
         {/* Document Numbers */}
         <div className="space-y-2">
           <TextField
-            label={isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')}
+            label={
+              isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')
+            }
             value={nextInvoiceNo}
             disabled
             onChange={() => {}}
@@ -1017,7 +1028,9 @@ function EntryDialog({
             <SelectField<'retail' | 'wholesale' | 'mrp'>
               label={t('sales.salesRateType')}
               value={rateType}
-              onChange={(val) => handleRateTypeChange(val as 'retail' | 'wholesale' | 'mrp')}
+              onChange={(val) =>
+                handleRateTypeChange(val as 'retail' | 'wholesale' | 'mrp')
+              }
               options={[
                 { value: 'retail', label: 'Retail' },
                 { value: 'wholesale', label: 'Wholesale' },
@@ -1025,7 +1038,11 @@ function EntryDialog({
               ]}
               size="sm"
             />
-            <FormField label={t('sales.warehouse')} required error={errors['warehouseId']}>
+            <FormField
+              label={t('sales.warehouse')}
+              required
+              error={errors['warehouseId']}
+            >
               <SearchSelect
                 value={warehouseId}
                 onChange={setWarehouseId}
@@ -1048,7 +1065,9 @@ function EntryDialog({
       {isReturn(kind) && (
         <div className="flex flex-wrap items-center justify-between gap-3 bg-surface-2/60 p-2.5 rounded-xl border border-line">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink-muted">{t('sales.againstInvoice')}:</span>
+            <span className="text-xs font-semibold text-ink-muted">
+              {t('sales.againstInvoice')}:
+            </span>
             <div className="w-80">
               <SearchSelect
                 value={returnsInvoiceId}
@@ -1071,7 +1090,6 @@ function EntryDialog({
           </p>
         </div>
       )}
-
 
       {/* Line Items Table */}
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -1251,11 +1269,15 @@ function EntryDialog({
             </div>
             <div className="flex justify-between text-ink-muted">
               <span>{t('sales.taxable')}</span>
-              <span className="font-mono tabular-nums">{moneyAlways(totals.taxable)}</span>
+              <span className="font-mono tabular-nums">
+                {moneyAlways(totals.taxable)}
+              </span>
             </div>
             {totals.tax > 0 && (
               <div className="flex justify-between text-ink-muted">
-                <span>{t('sales.tax')} ({taxMode})</span>
+                <span>
+                  {t('sales.tax')} ({taxMode})
+                </span>
                 <span className="font-mono tabular-nums">{moneyAlways(totals.tax)}</span>
               </div>
             )}
@@ -1375,12 +1397,14 @@ function LineRow({
   const { t } = useTranslation();
 
   const product = products.find((candidate) => candidate.id === line.productId);
-  const net = Number(line.quantity) * Number(line.rate) - (enableDiscount ? Number(line.discount || 0) : 0);
+  const net =
+    Number(line.quantity) * Number(line.rate) -
+    (enableDiscount ? Number(line.discount || 0) : 0);
 
   const [customSerialInput, setCustomSerialInput] = useState('');
   const wanted = Number(line.quantity);
   const needsBatch = product?.tracksBatches === true;
-  const needsSerials = line.requiresSerial ?? (product?.tracksSerialNumbers === true);
+  const needsSerials = line.requiresSerial ?? product?.tracksSerialNumbers === true;
 
   const batches = useQuery<readonly BatchStockRow[], ApiError>({
     queryKey: ['sales-line-batches', line.productId, warehouseId],
@@ -1432,8 +1456,8 @@ function LineRow({
         rateType === 'wholesale'
           ? chosen.wholesaleRate || chosen.retailRate
           : rateType === 'mrp'
-          ? chosen.maximumRetailPrice || chosen.retailRate
-          : chosen.retailRate;
+            ? chosen.maximumRetailPrice || chosen.retailRate
+            : chosen.retailRate;
       const defaultTax = Number(
         line.taxPercentage || (taxMode === 'NT' ? 0 : taxMode === 'TAX' ? 5 : 18),
       );
@@ -1485,7 +1509,11 @@ function LineRow({
                   onChange={(e) => onChange({ requiresSerial: e.target.checked })}
                   className="rounded border-line text-purple-600 focus:ring-purple-500 size-3"
                 />
-                <span className={clsx(needsSerials && 'font-semibold text-purple-700 dark:text-purple-300')}>
+                <span
+                  className={clsx(
+                    needsSerials && 'font-semibold text-purple-700 dark:text-purple-300',
+                  )}
+                >
                   {t('products.requiresSerialImei')}
                 </span>
               </label>
@@ -1515,7 +1543,9 @@ function LineRow({
               const inc = Number(val);
               const taxPct = Number(line.taxPercentage || 0);
               const exc =
-                Number.isFinite(inc) && inc > 0 ? (inc / (1 + taxPct / 100)).toFixed(4) : '';
+                Number.isFinite(inc) && inc > 0
+                  ? (inc / (1 + taxPct / 100)).toFixed(4)
+                  : '';
               onChange({ inclusiveRate: val, rate: exc });
             }}
           />
@@ -1525,7 +1555,9 @@ function LineRow({
             value={line.rate}
             error={errors['rate']}
             subtitle={
-              line.inclusiveRate ? `Incl: ${moneyAlways(Number(line.inclusiveRate))}` : undefined
+              line.inclusiveRate
+                ? `Incl: ${moneyAlways(Number(line.inclusiveRate))}`
+                : undefined
             }
             onChange={(val) => {
               const r = Number(val);
@@ -1602,14 +1634,12 @@ function LineRow({
                           isExpired
                             ? 'bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-300 ring-1 ring-red-500/30'
                             : isNearExpiry
-                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 ring-1 ring-amber-500/30'
-                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 ring-1 ring-amber-500/30'
+                              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
                         )}
                       >
-                        {isExpired
-                          ? t('sales.batchExpired')
-                          : t('sales.batchExpiresOn')}
-                        : {line.expiresOn}
+                        {isExpired ? t('sales.batchExpired') : t('sales.batchExpiresOn')}:{' '}
+                        {line.expiresOn}
                       </span>
                     </div>
                   )}
@@ -1707,11 +1737,12 @@ function LineRow({
                         </button>
                       ))}
 
-                    {line.serialNumbers.length === 0 && (serials.data ?? []).length === 0 && (
-                      <span className="text-xs text-ink-muted italic">
-                        {t('sales.noSerials')} — scan or type IMEI above
-                      </span>
-                    )}
+                    {line.serialNumbers.length === 0 &&
+                      (serials.data ?? []).length === 0 && (
+                        <span className="text-xs text-ink-muted italic">
+                          {t('sales.noSerials')} — scan or type IMEI above
+                        </span>
+                      )}
                   </div>
                 </div>
               )}
@@ -1780,9 +1811,7 @@ function DocumentDialog({
   const matchedWarehouse = useMemo(
     () =>
       warehouses.data?.find(
-        (w) =>
-          w.id === document?.warehouseId ||
-          w.code === document?.warehouseId,
+        (w) => w.id === document?.warehouseId || w.code === document?.warehouseId,
       ),
     [warehouses.data, document?.warehouseId],
   );
@@ -1791,8 +1820,8 @@ function DocumentDialog({
     <Modal
       title={
         document?.header.number
-          ? `${document.header.number} — ${activeTab === 'print' ? (t('sales.print') || 'Print Preview') : (t('sales.document') || 'Document Details')}`
-          : (t('sales.document') || 'Document Details')
+          ? `${document.header.number} — ${activeTab === 'print' ? t('sales.print') || 'Print Preview' : t('sales.document') || 'Document Details'}`
+          : t('sales.document') || 'Document Details'
       }
       onClose={onClose}
       size="fullscreen"
@@ -1839,7 +1868,9 @@ function DocumentDialog({
                 )}
               >
                 <IconPrinter className="size-3.5" />
-                <span>{t('sales.printInvoice') || 'Print / Formats (A4 / A5 / POS)'}</span>
+                <span>
+                  {t('sales.printInvoice') || 'Print / Formats (A4 / A5 / POS)'}
+                </span>
               </button>
             </div>
 
@@ -1878,7 +1909,9 @@ function DocumentDialog({
                   <thead className="text-xs text-ink-muted">
                     <tr>
                       <th className="px-2 py-1 text-start">#</th>
-                      <th className="px-2 py-1 text-start">{t('sales.product')} & Serial / IMEI</th>
+                      <th className="px-2 py-1 text-start">
+                        {t('sales.product')} & Serial / IMEI
+                      </th>
                       <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
                       <th className="px-2 py-1 text-end">{t('sales.rate')}</th>
                       <th className="px-2 py-1 text-end">{t('sales.taxable')}</th>
@@ -1903,7 +1936,9 @@ function DocumentDialog({
                               </div>
                             )}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
+                          <td className="px-2 py-1 text-end font-mono">
+                            {line.quantity}
+                          </td>
                           <td className="px-2 py-1 text-end font-mono">
                             {moneyAlways(line.rate)}
                           </td>
@@ -2109,4 +2144,3 @@ function Select<TValue extends string | number>({
 export function SalesReturnsPage(): React.JSX.Element {
   return <SalesPage kind={SalesDocumentKind.return} />;
 }
-

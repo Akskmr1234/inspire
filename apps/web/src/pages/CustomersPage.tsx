@@ -99,7 +99,8 @@ export function CustomersPage(): React.JSX.Element {
     {
       key: 'invoiceTemplate',
       header: t('settings.customerInvoiceTemplate'),
-      value: (row) => settings.customerInvoicePrintFormats[row.customerId] || 'Default (Branch)',
+      value: (row) =>
+        settings.customerInvoicePrintFormats[row.customerId] || 'Default (Branch)',
       render: (row) => {
         const assigned = settings.customerInvoicePrintFormats[row.customerId];
         return (
@@ -114,10 +115,10 @@ export function CustomersPage(): React.JSX.Element {
             {assigned === 'A4'
               ? 'A4 Format'
               : assigned === 'A5'
-              ? 'A5 Compact'
-              : assigned === 'thermal'
-              ? 'Thermal (80mm)'
-              : 'Default (Branch)'}
+                ? 'A5 Compact'
+                : assigned === 'thermal'
+                  ? 'Thermal (80mm)'
+                  : 'Default (Branch)'}
           </span>
         );
       },
@@ -332,7 +333,8 @@ function CustomerForm({
 
         const nextCustomerFormats = { ...settings.customerInvoicePrintFormats };
         if (assignedTemplate) {
-          nextCustomerFormats[existing.customerId] = assignedTemplate as InvoicePrintFormat;
+          nextCustomerFormats[existing.customerId] =
+            assignedTemplate as InvoicePrintFormat;
         } else {
           delete nextCustomerFormats[existing.customerId];
         }

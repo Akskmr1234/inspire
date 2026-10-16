@@ -126,8 +126,18 @@ export function LedgersPage(): React.JSX.Element {
   const hierarchyColumns = useMemo<readonly ReportColumn[]>(
     () => [
       { key: 'opening', header: t('reports.openingBalance') || 'Opening', align: 'end' },
-      { key: 'debit', header: t('reports.debit') || 'Debit', align: 'end', blankZero: true },
-      { key: 'credit', header: t('reports.credit') || 'Credit', align: 'end', blankZero: true },
+      {
+        key: 'debit',
+        header: t('reports.debit') || 'Debit',
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'credit',
+        header: t('reports.credit') || 'Credit',
+        align: 'end',
+        blankZero: true,
+      },
       { key: 'closing', header: t('reports.closingBalance') || 'Closing', align: 'end' },
     ],
     [t],

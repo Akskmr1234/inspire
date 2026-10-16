@@ -81,7 +81,10 @@ export function setDefaultAppTheme(theme: Theme): void {
     localStorage.setItem(DEFAULT_THEME_KEY, theme);
     localStorage.setItem(THEME_KEY, theme);
 
-    const s = JSON.parse(localStorage.getItem('erp.settings') || '{}') as Record<string, unknown>;
+    const s = JSON.parse(localStorage.getItem('erp.settings') || '{}') as Record<
+      string,
+      unknown
+    >;
     s['defaultTheme'] = theme;
     localStorage.setItem('erp.settings', JSON.stringify(s));
   } catch {
@@ -293,4 +296,3 @@ if (typeof window !== 'undefined') {
     // Unsupported fallback.
   }
 }
-

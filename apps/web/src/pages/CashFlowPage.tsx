@@ -95,8 +95,18 @@ export function CashFlowPage(): React.JSX.Element {
 
   const columns = useMemo<readonly ReportColumn[]>(
     () => [
-      { key: 'inflow', header: t('reports.cashIn') || 'Cash In', align: 'end', blankZero: true },
-      { key: 'outflow', header: t('reports.cashOut') || 'Cash Out', align: 'end', blankZero: true },
+      {
+        key: 'inflow',
+        header: t('reports.cashIn') || 'Cash In',
+        align: 'end',
+        blankZero: true,
+      },
+      {
+        key: 'outflow',
+        header: t('reports.cashOut') || 'Cash Out',
+        align: 'end',
+        blankZero: true,
+      },
       {
         key: 'net',
         header: t('cheques.net') || 'Net Movement',
@@ -220,7 +230,9 @@ export function CashFlowPage(): React.JSX.Element {
                 initialExpandLevel={3}
                 grandTotals={grandTotals}
                 onVoucherClick={(vNum) => {
-                  navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                  navigate(
+                    `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                  );
                 }}
               />
             </div>

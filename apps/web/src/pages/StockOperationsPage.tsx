@@ -693,9 +693,7 @@ function StockEntry({
           </button>
         </div>
         {barcodeNotice && (
-          <span className="text-xs font-medium text-accent">
-            {barcodeNotice}
-          </span>
+          <span className="text-xs font-medium text-accent">{barcodeNotice}</span>
         )}
       </div>
 

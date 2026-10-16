@@ -65,7 +65,11 @@ export function Modal({
                 ? 'fixed inset-0 h-screen max-h-screen w-screen max-w-none rounded-none border-0 ring-0 m-0 z-50'
                 : clsx(
                     'max-h-[92vh] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl my-auto',
-                    size === 'full' ? 'max-w-7xl' : size === 'wide' ? 'max-w-5xl' : 'max-w-2xl',
+                    size === 'full'
+                      ? 'max-w-7xl'
+                      : size === 'wide'
+                        ? 'max-w-5xl'
+                        : 'max-w-2xl',
                   ),
             )}
           >
@@ -144,12 +148,7 @@ export function ModalButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={clsx(
-        'btn px-4 py-2 text-sm',
-        primary
-          ? 'btn-primary'
-          : 'btn-secondary',
-      )}
+      className={clsx('btn px-4 py-2 text-sm', primary ? 'btn-primary' : 'btn-secondary')}
     >
       {children}
     </button>

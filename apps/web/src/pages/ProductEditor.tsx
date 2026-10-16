@@ -14,7 +14,12 @@ import {
   setProductFlag,
   type ProductDetail,
 } from '@/lib/products';
-import { listMaster, type BrandSummary, type UnitSummary, type WarehouseSummary } from '@/lib/inventory';
+import {
+  listMaster,
+  type BrandSummary,
+  type UnitSummary,
+  type WarehouseSummary,
+} from '@/lib/inventory';
 import { moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
 import { useSettings } from '@/stores/settings';
@@ -36,7 +41,8 @@ export function ProductEditor({
   onClose,
 }: {
   readonly productId: string;
-  readonly initialTab?: 'description' | 'details' | 'barcodes' | 'openingStock' | undefined;
+  readonly initialTab?:
+    'description' | 'details' | 'barcodes' | 'openingStock' | undefined;
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -1132,7 +1138,9 @@ function OpeningStockTab({
     mutationFn: async () => {
       const qtyNum = Number(quantity);
       if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-        throw new Error(t('stock.quantityPositive') || 'Quantity must be greater than zero');
+        throw new Error(
+          t('stock.quantityPositive') || 'Quantity must be greater than zero',
+        );
       }
       const rateNum = Number(rate);
       if (!Number.isFinite(rateNum) || rateNum < 0) {
@@ -1179,7 +1187,9 @@ function OpeningStockTab({
       await queryClient.invalidateQueries({ queryKey: ['product', product.id] });
     },
     onError: (err: any) => {
-      setError(err?.detail || err?.message || err?.code || 'Failed to post opening stock');
+      setError(
+        err?.detail || err?.message || err?.code || 'Failed to post opening stock',
+      );
     },
   });
 
@@ -1203,7 +1213,9 @@ function OpeningStockTab({
           {t('stock.onHand')}: {ledgerQuery.data?.closingQuantity ?? 0} {stockUnit}
         </h3>
         <p className="mt-1 text-xs text-ink-muted">
-          {t('stock.opening')}: {ledgerQuery.data?.openingQuantity ?? 0} · {t('stock.totalIn')}: {ledgerQuery.data?.totalIn ?? 0} · {t('stock.totalOut')}: {ledgerQuery.data?.totalOut ?? 0}
+          {t('stock.opening')}: {ledgerQuery.data?.openingQuantity ?? 0} ·{' '}
+          {t('stock.totalIn')}: {ledgerQuery.data?.totalIn ?? 0} · {t('stock.totalOut')}:{' '}
+          {ledgerQuery.data?.totalOut ?? 0}
         </p>
       </div>
 
@@ -1266,7 +1278,12 @@ function OpeningStockTab({
             />
           </Field>
 
-          <Field label={t('stock.totalValue', { currency: product.currency, value: '' }) || 'Total Value'}>
+          <Field
+            label={
+              t('stock.totalValue', { currency: product.currency, value: '' }) ||
+              'Total Value'
+            }
+          >
             <div className="field-input bg-surface-2 flex items-center justify-end font-semibold text-ink">
               {moneyAlways(totalValue)} {product.currency}
             </div>
@@ -1301,7 +1318,10 @@ function OpeningStockTab({
                   rows={2}
                   value={serialNumbers}
                   onChange={(e) => setSerialNumbers(e.target.value)}
-                  placeholder={t('stock.unitsPlaceholder') || 'Enter serial numbers separated by commas or lines'}
+                  placeholder={
+                    t('stock.unitsPlaceholder') ||
+                    'Enter serial numbers separated by commas or lines'
+                  }
                   className="field-input"
                 />
               </Field>

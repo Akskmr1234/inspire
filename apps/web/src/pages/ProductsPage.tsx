@@ -16,7 +16,12 @@ import {
   type CategorySummary,
   type UnitSummary,
 } from '@/lib/inventory';
-import { createProduct, listProducts, saveProductTab, type ProductSummary } from '@/lib/products';
+import {
+  createProduct,
+  listProducts,
+  saveProductTab,
+  type ProductSummary,
+} from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
@@ -311,7 +316,11 @@ function AddProduct({
   readonly categories: readonly CategorySummary[];
   readonly busy: boolean;
   readonly onCancel: () => void;
-  readonly onSubmit: (body: object, mode: 'save' | 'detail', tracksSerialNumbers: boolean) => void;
+  readonly onSubmit: (
+    body: object,
+    mode: 'save' | 'detail',
+    tracksSerialNumbers: boolean,
+  ) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -325,7 +334,8 @@ function AddProduct({
     queryFn: () => listMaster<BrandSummary>('brands', false),
   });
 
-  const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } = useSettings();
+  const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } =
+    useSettings();
 
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');

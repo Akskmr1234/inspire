@@ -11,7 +11,11 @@ import {
 } from '@/lib/inventory';
 import { listProducts, createProduct } from '@/lib/products';
 import { createSalesInvoice, postSalesInvoice, type SalesLineInput } from '@/lib/sales';
-import { createPurchaseInvoice, postPurchaseInvoice, type PurchaseLineInput } from '@/lib/purchase';
+import {
+  createPurchaseInvoice,
+  postPurchaseInvoice,
+  type PurchaseLineInput,
+} from '@/lib/purchase';
 import { createSalesOrder, createPurchaseOrder } from '@/lib/orders';
 import { listLedgers } from '@/lib/ledgers';
 
@@ -55,8 +59,14 @@ export async function populateSampleTransactions(): Promise<SampleDataSummary> {
   let categories = await listMaster<CategorySummary>('categories', false);
   if (categories.length === 0) {
     try {
-      await createMaster('categories', { code: 'CAT-ELEC', name: 'Electronics & IT Hardware' });
-      await createMaster('categories', { code: 'CAT-OFF', name: 'Office Equipment & Supplies' });
+      await createMaster('categories', {
+        code: 'CAT-ELEC',
+        name: 'Electronics & IT Hardware',
+      });
+      await createMaster('categories', {
+        code: 'CAT-OFF',
+        name: 'Office Equipment & Supplies',
+      });
       categories = await listMaster<CategorySummary>('categories', false);
     } catch {
       // Ignore
@@ -253,18 +263,22 @@ export async function populateSampleTransactions(): Promise<SampleDataSummary> {
   const ledgers = await listLedgers(false);
   const customerLedger1 =
     customers[0]?.customerId ||
-    ledgers.find((l) => l.name.toLowerCase().includes('customer') || l.groupName.toLowerCase().includes('debtor'))?.ledgerId ||
+    ledgers.find(
+      (l) =>
+        l.name.toLowerCase().includes('customer') ||
+        l.groupName.toLowerCase().includes('debtor'),
+    )?.ledgerId ||
     '';
-  const customerLedger2 =
-    customers[1]?.customerId ||
-    customerLedger1;
+  const customerLedger2 = customers[1]?.customerId || customerLedger1;
   const supplierLedger1 =
     suppliers[0]?.supplierId ||
-    ledgers.find((l) => l.name.toLowerCase().includes('supplier') || l.groupName.toLowerCase().includes('creditor'))?.ledgerId ||
+    ledgers.find(
+      (l) =>
+        l.name.toLowerCase().includes('supplier') ||
+        l.groupName.toLowerCase().includes('creditor'),
+    )?.ledgerId ||
     '';
-  const supplierLedger2 =
-    suppliers[1]?.supplierId ||
-    supplierLedger1;
+  const supplierLedger2 = suppliers[1]?.supplierId || supplierLedger1;
 
   const prod1 = products[0]?.id || '';
   const prod2 = products[1]?.id || prod1;
@@ -458,7 +472,8 @@ export async function populateSampleTransactions(): Promise<SampleDataSummary> {
         lines: pRetLines,
         kind: 2,
         supplierInvoiceNumber: 'RMA-RETURN-042',
-        narration: 'Defective batch items returned to supplier under warranty replacement.',
+        narration:
+          'Defective batch items returned to supplier under warranty replacement.',
       });
       purchaseInvoicesCreated++;
     } catch {
@@ -520,7 +535,9 @@ export async function populateSampleTransactions(): Promise<SampleDataSummary> {
         l.name.toLowerCase().includes('bank') ||
         l.name.toLowerCase().includes('cash') ||
         l.code.startsWith('10'),
-    )?.ledgerId || ledgers[0]?.ledgerId || '';
+    )?.ledgerId ||
+    ledgers[0]?.ledgerId ||
+    '';
 
   if (customerLedger1 && bankOrCashLedger) {
     try {

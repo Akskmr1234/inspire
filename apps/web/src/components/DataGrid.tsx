@@ -668,7 +668,9 @@ export function DataGrid<TRow>({
                       }}
                       className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
                     >
-                      <span className="grid size-4 place-items-center text-xs font-bold text-ink-subtle">❄</span>
+                      <span className="grid size-4 place-items-center text-xs font-bold text-ink-subtle">
+                        ❄
+                      </span>
                       <span>{frozen > 0 ? 'Unfreeze Columns' : 'Freeze Columns'}</span>
                     </button>
                   )}

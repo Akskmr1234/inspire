@@ -79,15 +79,9 @@ const CategoriesPage = named(() => import('@/pages/CategoriesPage'), 'Categories
 const BrandsPage = named(() => import('@/pages/CategoriesPage'), 'BrandsPage');
 const WarehousesPage = named(() => import('@/pages/WarehousesPage'), 'WarehousesPage');
 const CustomersPage = named(() => import('@/pages/CustomersPage'), 'CustomersPage');
-const ProductsPage = named(
-  () => import('@/pages/ProductsPage'),
-  'ProductsPage',
-);
+const ProductsPage = named(() => import('@/pages/ProductsPage'), 'ProductsPage');
 const SalesPage = named(() => import('@/pages/SalesPage'), 'SalesPage');
-const SalesReturnsPage = named(
-  () => import('@/pages/SalesPage'),
-  'SalesReturnsPage',
-);
+const SalesReturnsPage = named(() => import('@/pages/SalesPage'), 'SalesReturnsPage');
 const PurchasePage = named(() => import('@/pages/PurchasePage'), 'PurchasePage');
 const PurchaseReturnsPage = named(
   () => import('@/pages/PurchasePage'),

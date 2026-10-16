@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { useSettings, getEffectiveInvoicePrintFormat, type InvoicePrintFormat } from '@/stores/settings';
+import {
+  useSettings,
+  getEffectiveInvoicePrintFormat,
+  type InvoicePrintFormat,
+} from '@/stores/settings';
 import { useSession } from '@/stores/session';
 import { moneyAlways } from '@/lib/money';
 import { IconClose, IconPrinter } from '@/components/icons';
@@ -117,7 +121,8 @@ export function InvoicePrintView({
     branchId,
   );
 
-  const [activeFormat, setActiveFormat] = useState<InvoicePrintFormat>(defaultResolvedFormat);
+  const [activeFormat, setActiveFormat] =
+    useState<InvoicePrintFormat>(defaultResolvedFormat);
 
   const handlePrint = (): void => {
     window.print();
@@ -133,11 +138,12 @@ export function InvoicePrintView({
   const docSubtitle = isReturnDoc ? 'إشعار دائن' : 'فاتورة ضريبية';
 
   // Format reason badge
-  const formatReason = customer?.customerId && settings.customerInvoicePrintFormats[customer.customerId]
-    ? 'Customer Assigned Template'
-    : branchId && settings.branchInvoicePrintFormats[branchId]
-    ? 'Branch Default Template'
-    : 'System Default Template';
+  const formatReason =
+    customer?.customerId && settings.customerInvoicePrintFormats[customer.customerId]
+      ? 'Customer Assigned Template'
+      : branchId && settings.branchInvoicePrintFormats[branchId]
+        ? 'Branch Default Template'
+        : 'System Default Template';
 
   return (
     <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
@@ -170,8 +176,8 @@ export function InvoicePrintView({
               activeFormat === 'thermal'
                 ? '80mm auto'
                 : activeFormat === 'A5'
-                ? 'A5 portrait'
-                : 'A4 portrait'
+                  ? 'A5 portrait'
+                  : 'A4 portrait'
             };
           }
         }
@@ -323,18 +329,24 @@ function A4InvoiceLayout({
         <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
           <div className="space-y-1">
             <h1 className="text-2xl font-black tracking-tight text-slate-950 uppercase">
-              {tenantCode ? `${tenantCode.toUpperCase()} ENTERPRISE` : 'INSPIRE ERP COMMERCE'}
+              {tenantCode
+                ? `${tenantCode.toUpperCase()} ENTERPRISE`
+                : 'INSPIRE ERP COMMERCE'}
             </h1>
             <p className="text-slate-600 font-medium">
               Commercial Hub & Distribution Centre · General Trading & Services
             </p>
             {warehouse && (
               <p className="text-slate-500">
-                Location: <span className="font-semibold text-slate-700">{warehouse.name} ({warehouse.code})</span>
+                Location:{' '}
+                <span className="font-semibold text-slate-700">
+                  {warehouse.name} ({warehouse.code})
+                </span>
               </p>
             )}
             <p className="text-slate-500">
-              Tax / TRN Reg No: <span className="font-mono font-bold text-slate-800">100293847500003</span>
+              Tax / TRN Reg No:{' '}
+              <span className="font-mono font-bold text-slate-800">100293847500003</span>
             </p>
           </div>
 
@@ -345,7 +357,9 @@ function A4InvoiceLayout({
             <p className="text-slate-500 text-[11px] font-semibold">{docSubtitle}</p>
             <div className="pt-2 font-mono">
               <span className="text-slate-500">Invoice No: </span>
-              <span className="font-bold text-slate-950 text-sm">{invoice.header.number}</span>
+              <span className="font-bold text-slate-950 text-sm">
+                {invoice.header.number}
+              </span>
             </div>
             <div className="font-mono text-slate-600">
               <span>Date: </span>
@@ -354,7 +368,9 @@ function A4InvoiceLayout({
             {invoice.referenceNumber && (
               <div className="font-mono text-slate-600">
                 <span>Ref: </span>
-                <span className="font-medium text-slate-800">{invoice.referenceNumber}</span>
+                <span className="font-medium text-slate-800">
+                  {invoice.referenceNumber}
+                </span>
               </div>
             )}
           </div>
@@ -370,12 +386,16 @@ function A4InvoiceLayout({
               {customer?.name || invoice.customerLedgerId || 'Walk-in Customer'}
             </p>
             {customer?.code && (
-              <p className="text-slate-600 font-mono text-[11px]">Customer ID: {customer.code}</p>
+              <p className="text-slate-600 font-mono text-[11px]">
+                Customer ID: {customer.code}
+              </p>
             )}
             {customer?.contact.addressLine1 && (
               <p className="text-slate-600">
                 {customer.contact.addressLine1}
-                {customer.contact.addressLine2 ? `, ${customer.contact.addressLine2}` : ''}
+                {customer.contact.addressLine2
+                  ? `, ${customer.contact.addressLine2}`
+                  : ''}
               </p>
             )}
             {(customer?.contact.mobileNumber || customer?.contact.phone) && (
@@ -398,7 +418,9 @@ function A4InvoiceLayout({
               <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
                 <div>
                   <span className="text-slate-500 block">Currency:</span>
-                  <span className="font-mono font-bold text-slate-900">{invoice.currency || 'USD'}</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {invoice.currency || 'USD'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Dispatch Mode:</span>
@@ -432,17 +454,24 @@ function A4InvoiceLayout({
             <tbody className="divide-y divide-slate-200">
               {invoice.lines.map((line, index) => {
                 const prod = productMap.get(line.productId);
-                const desc = prod?.description || `Product (${line.productId.slice(0, 8)})`;
+                const desc =
+                  prod?.description || `Product (${line.productId.slice(0, 8)})`;
                 const code = prod?.code;
                 const lineTotal = line.taxable + line.tax;
                 const serials = line.serialNumberIds ?? [];
 
                 return (
                   <tr key={line.lineNumber || index} className="align-top">
-                    <td className="py-2.5 px-2 text-center font-mono text-slate-500">{index + 1}</td>
+                    <td className="py-2.5 px-2 text-center font-mono text-slate-500">
+                      {index + 1}
+                    </td>
                     <td className="py-2.5 px-3">
                       <div className="font-bold text-slate-900">{desc}</div>
-                      {code && <div className="text-[10px] text-slate-500 font-mono">Code: {code}</div>}
+                      {code && (
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          Code: {code}
+                        </div>
+                      )}
                       {serials.length > 0 && (
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           <span className="text-[10px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.2 rounded border border-brand-200">
@@ -459,13 +488,21 @@ function A4InvoiceLayout({
                         </div>
                       )}
                     </td>
-                    <td className="py-2.5 px-2 text-end font-mono font-medium">{line.quantity}</td>
-                    <td className="py-2.5 px-2 text-end font-mono">{moneyAlways(line.rate)}</td>
+                    <td className="py-2.5 px-2 text-end font-mono font-medium">
+                      {line.quantity}
+                    </td>
+                    <td className="py-2.5 px-2 text-end font-mono">
+                      {moneyAlways(line.rate)}
+                    </td>
                     <td className="py-2.5 px-2 text-end font-mono text-slate-500">
                       {line.discount > 0 ? moneyAlways(line.discount) : '—'}
                     </td>
-                    <td className="py-2.5 px-2 text-end font-mono">{moneyAlways(line.taxable)}</td>
-                    <td className="py-2.5 px-2 text-end font-mono text-slate-600">{moneyAlways(line.tax)}</td>
+                    <td className="py-2.5 px-2 text-end font-mono">
+                      {moneyAlways(line.taxable)}
+                    </td>
+                    <td className="py-2.5 px-2 text-end font-mono text-slate-600">
+                      {moneyAlways(line.tax)}
+                    </td>
                     <td className="py-2.5 px-3 text-end font-mono font-bold text-slate-950">
                       {moneyAlways(lineTotal)}
                     </td>
@@ -492,9 +529,16 @@ function A4InvoiceLayout({
 
             <div className="space-y-1 text-[10px] text-slate-500 bg-slate-50 p-3 rounded border border-slate-200">
               <p className="font-bold uppercase text-slate-600">Terms & Conditions:</p>
-              <p>1. Goods once sold will not be returned without authorized authorization.</p>
-              <p>2. Serial/IMEI carries warranty as specified by the equipment manufacturer.</p>
-              <p>3. Disputes subject to exclusive jurisdiction of local commercial courts.</p>
+              <p>
+                1. Goods once sold will not be returned without authorized authorization.
+              </p>
+              <p>
+                2. Serial/IMEI carries warranty as specified by the equipment
+                manufacturer.
+              </p>
+              <p>
+                3. Disputes subject to exclusive jurisdiction of local commercial courts.
+              </p>
             </div>
           </div>
 
@@ -534,7 +578,9 @@ function A4InvoiceLayout({
           </div>
 
           <div className="text-right">
-            <p className="font-semibold">For {tenantCode ? tenantCode.toUpperCase() : 'INSPIRE ERP'}</p>
+            <p className="font-semibold">
+              For {tenantCode ? tenantCode.toUpperCase() : 'INSPIRE ERP'}
+            </p>
             <p className="text-[10px] text-slate-400">Authorized Signatory</p>
             <div className="mt-8 w-48 border-b border-slate-400 ml-auto" />
           </div>
@@ -584,8 +630,12 @@ function A5InvoiceLayout({
             <span className="font-bold text-xs uppercase bg-slate-800 text-white px-2 py-0.5 rounded">
               {docTitle}
             </span>
-            <div className="font-mono font-bold text-xs pt-1">{invoice.header.number}</div>
-            <div className="font-mono text-[10px] text-slate-500">Date: {invoice.date}</div>
+            <div className="font-mono font-bold text-xs pt-1">
+              {invoice.header.number}
+            </div>
+            <div className="font-mono text-[10px] text-slate-500">
+              Date: {invoice.date}
+            </div>
           </div>
         </div>
 
@@ -597,13 +647,17 @@ function A5InvoiceLayout({
               {customer?.name || invoice.customerLedgerId || 'Walk-in Customer'}
             </p>
             {customer?.contact.mobileNumber && (
-              <p className="font-mono text-slate-600">Mob: {customer.contact.mobileNumber}</p>
+              <p className="font-mono text-slate-600">
+                Mob: {customer.contact.mobileNumber}
+              </p>
             )}
           </div>
           {customer?.taxDetails.registrationNumber && (
             <div className="text-right font-mono">
               <span className="text-slate-400 text-[9px]">TRN:</span>
-              <p className="font-medium text-slate-700">{customer.taxDetails.registrationNumber}</p>
+              <p className="font-medium text-slate-700">
+                {customer.taxDetails.registrationNumber}
+              </p>
             </div>
           )}
         </div>
@@ -629,7 +683,9 @@ function A5InvoiceLayout({
 
                 return (
                   <tr key={line.lineNumber || idx} className="align-top">
-                    <td className="py-1.5 px-1 text-center font-mono text-slate-500">{idx + 1}</td>
+                    <td className="py-1.5 px-1 text-center font-mono text-slate-500">
+                      {idx + 1}
+                    </td>
                     <td className="py-1.5 px-1.5">
                       <div className="font-bold text-slate-900">{desc}</div>
                       {serials.length > 0 && (
@@ -638,8 +694,12 @@ function A5InvoiceLayout({
                         </div>
                       )}
                     </td>
-                    <td className="py-1.5 px-1 text-end font-mono font-medium">{line.quantity}</td>
-                    <td className="py-1.5 px-1 text-end font-mono">{moneyAlways(line.rate)}</td>
+                    <td className="py-1.5 px-1 text-end font-mono font-medium">
+                      {line.quantity}
+                    </td>
+                    <td className="py-1.5 px-1 text-end font-mono">
+                      {moneyAlways(line.rate)}
+                    </td>
                     <td className="py-1.5 px-1.5 text-end font-mono font-bold text-slate-950">
                       {moneyAlways(total)}
                     </td>
@@ -655,7 +715,9 @@ function A5InvoiceLayout({
       <div className="pt-3 border-t border-slate-800 space-y-2">
         <div className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200">
           <div className="space-y-0.5">
-            <span className="text-[9px] uppercase font-bold text-slate-400">Net Payable:</span>
+            <span className="text-[9px] uppercase font-bold text-slate-400">
+              Net Payable:
+            </span>
             <p className="text-[10px] text-slate-600 italic">{grandTotalWords}</p>
           </div>
           <div className="font-mono font-black text-sm text-slate-950">
@@ -700,9 +762,7 @@ function ThermalInvoiceLayout({
           <h2 className="text-sm font-black uppercase tracking-tight">
             {tenantCode ? tenantCode.toUpperCase() : 'INSPIRE POS'}
           </h2>
-          <p className="text-[10px]">
-            {warehouse?.name || 'Retail Counter'}
-          </p>
+          <p className="text-[10px]">{warehouse?.name || 'Retail Counter'}</p>
           <p className="text-[10px]">Tax Reg: 100293847500003</p>
           <div className="border-t border-dashed border-black my-1.5" />
           <div className="font-bold text-xs uppercase">{docTitle}</div>

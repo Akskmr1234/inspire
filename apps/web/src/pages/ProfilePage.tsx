@@ -8,13 +8,7 @@ import { Spinner } from '@/components/ReportFrame';
 import { ApiError, fetchCurrentUserProfile, type UserProfile } from '@/lib/api';
 import { useSession, setDefaultAppTheme, type Theme } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
-import {
-  IconCheck,
-  IconClose,
-  IconMoon,
-  IconSun,
-  IconLogout,
-} from '@/components/icons';
+import { IconCheck, IconClose, IconMoon, IconSun, IconLogout } from '@/components/icons';
 
 function initials(name: string | null): string {
   if (!name) return 'SA';
@@ -141,17 +135,18 @@ export function ProfilePage(): React.JSX.Element {
   };
 
   const isSuperAdmin = permissions.has('*');
-  const effectiveDisplayName = profile?.displayName || displayName || 'System Administrator';
+  const effectiveDisplayName =
+    profile?.displayName || displayName || 'System Administrator';
   const effectiveUserName = profile?.userName || 'admin';
-  const effectiveEmail = profile?.email || `${effectiveUserName.toLowerCase()}@inspire-erp.local`;
-  const effectiveTenant = tenantCode || (profile?.tenantId ? `Tenant #${profile.tenantId.slice(0, 8)}` : 'Inspire ERP Main');
+  const effectiveEmail =
+    profile?.email || `${effectiveUserName.toLowerCase()}@inspire-erp.local`;
+  const effectiveTenant =
+    tenantCode ||
+    (profile?.tenantId ? `Tenant #${profile.tenantId.slice(0, 8)}` : 'Inspire ERP Main');
 
   return (
     <div className="page space-y-6">
-      <PageHeading
-        title={t('profile.title')}
-        subtitle={t('profile.subtitle')}
-      />
+      <PageHeading title={t('profile.title')} subtitle={t('profile.subtitle')} />
 
       {/* Hero Profile Banner Card */}
       <div className="card animate-rise overflow-hidden shadow-float">
@@ -219,7 +214,11 @@ export function ProfilePage(): React.JSX.Element {
             </span>
             <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium">
               <IconKey className="size-3.5 text-ink-muted" />
-              <span>{isSuperAdmin ? t('profile.allPermissions') : t('profile.permissionCount', { count: permissions.size })}</span>
+              <span>
+                {isSuperAdmin
+                  ? t('profile.allPermissions')
+                  : t('profile.permissionCount', { count: permissions.size })}
+              </span>
             </span>
             <span className="badge-neutral inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium">
               <span className="size-2 rounded-full bg-brand-500" />
@@ -394,11 +393,15 @@ export function ProfilePage(): React.JSX.Element {
               <div>
                 <dt className="text-ink-muted mb-1">Active Branch</dt>
                 <dd className="rounded-lg border border-line/60 bg-surface-2/40 px-3 py-2 font-medium text-ink">
-                  {profile?.branchId ? `Branch #${profile.branchId}` : 'All Branches (HQ)'}
+                  {profile?.branchId
+                    ? `Branch #${profile.branchId}`
+                    : 'All Branches (HQ)'}
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <span className="text-ink-muted mb-1 block text-xs">Tenant Identifier</span>
+                <span className="text-ink-muted mb-1 block text-xs">
+                  Tenant Identifier
+                </span>
                 <CopyableValue value={profile?.tenantId ?? 'default-tenant'} mono />
               </div>
               <div className="sm:col-span-2">
@@ -421,9 +424,7 @@ export function ProfilePage(): React.JSX.Element {
               <h3 className="text-base font-semibold text-ink">
                 {t('changePassword.title')}
               </h3>
-              <p className="text-xs text-ink-muted">
-                {t('profile.securitySubtitle')}
-              </p>
+              <p className="text-xs text-ink-muted">{t('profile.securitySubtitle')}</p>
             </div>
           </div>
 
@@ -460,7 +461,11 @@ export function ProfilePage(): React.JSX.Element {
                   className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
                   aria-label={showCurrentPw ? 'Hide password' : 'Show password'}
                 >
-                  {showCurrentPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                  {showCurrentPw ? (
+                    <IconEyeOff className="size-4" />
+                  ) : (
+                    <IconEye className="size-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -487,7 +492,11 @@ export function ProfilePage(): React.JSX.Element {
                     className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
                     aria-label={showNewPw ? 'Hide password' : 'Show password'}
                   >
-                    {showNewPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                    {showNewPw ? (
+                      <IconEyeOff className="size-4" />
+                    ) : (
+                      <IconEye className="size-4" />
+                    )}
                   </button>
                 </div>
                 <p className="field-hint">{t('changePassword.policy')}</p>
@@ -514,18 +523,18 @@ export function ProfilePage(): React.JSX.Element {
                     className="btn-icon absolute end-1.5 top-1/2 -translate-y-1/2 size-7 text-ink-subtle hover:text-ink"
                     aria-label={showConfirmPw ? 'Hide password' : 'Show password'}
                   >
-                    {showConfirmPw ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+                    {showConfirmPw ? (
+                      <IconEyeOff className="size-4" />
+                    ) : (
+                      <IconEye className="size-4" />
+                    )}
                   </button>
                 </div>
               </div>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
-              <button
-                type="submit"
-                disabled={pwBusy}
-                className="btn-primary flex-1 py-2"
-              >
+              <button type="submit" disabled={pwBusy} className="btn-primary flex-1 py-2">
                 {pwBusy && <Spinner />}
                 {pwBusy ? t('changePassword.working') : t('changePassword.submit')}
               </button>
@@ -547,7 +556,8 @@ export function ProfilePage(): React.JSX.Element {
               </span>
             </div>
             <p className="text-xs text-ink-muted mt-1">
-              Select the appearance theme. When updated here, this theme is set as the application-wide default theme for all users and workstations.
+              Select the appearance theme. When updated here, this theme is set as the
+              application-wide default theme for all users and workstations.
             </p>
           </div>
 
@@ -568,7 +578,9 @@ export function ProfilePage(): React.JSX.Element {
                   <span>Light Theme</span>
                 </span>
                 {theme === 'light' && (
-                  <span className="badge-brand text-[10px] py-0.5 px-1.5">Active Default</span>
+                  <span className="badge-brand text-[10px] py-0.5 px-1.5">
+                    Active Default
+                  </span>
                 )}
               </div>
               <div className="h-16 w-full rounded border border-line/60 bg-slate-50 p-2 flex flex-col gap-1.5 justify-center shadow-inner">
@@ -596,7 +608,9 @@ export function ProfilePage(): React.JSX.Element {
                   <span>Dark Theme</span>
                 </span>
                 {theme === 'dark' && (
-                  <span className="badge-brand text-[10px] py-0.5 px-1.5">Active Default</span>
+                  <span className="badge-brand text-[10px] py-0.5 px-1.5">
+                    Active Default
+                  </span>
                 )}
               </div>
               <div className="h-16 w-full rounded border border-slate-700 bg-slate-900 p-2 flex flex-col gap-1.5 justify-center shadow-inner">
@@ -611,7 +625,8 @@ export function ProfilePage(): React.JSX.Element {
 
           <div className="pt-4 border-t border-line flex items-center justify-between">
             <span className="text-xs text-ink-muted">
-              More system-wide master defaults, rounding, numbering and series options are available in System Settings.
+              More system-wide master defaults, rounding, numbering and series options are
+              available in System Settings.
             </span>
             <button
               type="button"
@@ -648,7 +663,9 @@ export function ProfilePage(): React.JSX.Element {
                 <span>Super Administrator Privilege (*)</span>
               </div>
               <p className="text-xs text-ink-muted">
-                Your role carries wildcard system permissions. You have complete authority to manage inventory, accounting, sales, purchasing, menu structures, and user configurations.
+                Your role carries wildcard system permissions. You have complete authority
+                to manage inventory, accounting, sales, purchasing, menu structures, and
+                user configurations.
               </p>
             </div>
           ) : (
@@ -702,9 +719,7 @@ export function ProfilePage(): React.JSX.Element {
             </div>
             <div className="rounded-lg border border-line p-3">
               <dt className="text-ink-muted">Currency Precision</dt>
-              <dd className="font-medium text-ink mt-1">
-                {settings.decimals} Decimals
-              </dd>
+              <dd className="font-medium text-ink mt-1">{settings.decimals} Decimals</dd>
             </div>
           </dl>
 
@@ -746,7 +761,13 @@ function TabButton({
           : 'border-transparent text-ink-muted hover:border-line-strong hover:text-ink',
       )}
     >
-      <span className={clsx(active ? 'text-brand-600 dark:text-brand-400' : 'text-ink-subtle group-hover:text-ink')}>
+      <span
+        className={clsx(
+          active
+            ? 'text-brand-600 dark:text-brand-400'
+            : 'text-ink-subtle group-hover:text-ink',
+        )}
+      >
         {icon}
       </span>
       <span>{label}</span>
@@ -772,7 +793,12 @@ function CopyableValue({
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-line/60 bg-surface-2/60 px-3 py-1.5 transition hover:border-line-strong">
-      <span className={clsx('truncate text-xs text-ink select-all', mono && 'font-mono text-[11px]')}>
+      <span
+        className={clsx(
+          'truncate text-xs text-ink select-all',
+          mono && 'font-mono text-[11px]',
+        )}
+      >
         {value}
       </span>
       <button

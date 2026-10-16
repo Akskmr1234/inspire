@@ -4,7 +4,14 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { CheckField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
-import { IconCheck, IconClose, IconMoon, IconPlus, IconSparkles, IconSun } from '@/components/icons';
+import {
+  IconCheck,
+  IconClose,
+  IconMoon,
+  IconPlus,
+  IconSparkles,
+  IconSun,
+} from '@/components/icons';
 import { useSession, setDefaultAppTheme } from '@/stores/session';
 import { populateSampleTransactions } from '@/lib/sampleData';
 import { currentBranchId, type ApiError } from '@/lib/api';
@@ -142,9 +149,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
         <h3 className="text-base font-semibold text-ink">
           {t('settings.masterDefaultsTitle')}
         </h3>
-        <p className="mt-1 text-sm text-ink-muted">
-          {t('settings.masterDefaultsHint')}
-        </p>
+        <p className="mt-1 text-sm text-ink-muted">{t('settings.masterDefaultsHint')}</p>
       </div>
 
       {/* Main Dropdown Defaults */}
@@ -347,7 +352,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             </span>
           </div>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Configure the default interface appearance. The selected theme applies as the default for all users and workstations across the application.
+            Configure the default interface appearance. The selected theme applies as the
+            default for all users and workstations across the application.
           </p>
         </div>
 
@@ -401,7 +407,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             Transaction Numbering & Series
           </h4>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Customise prefix and suffix formats for invoices, returns, orders, and payment vouchers.
+            Customise prefix and suffix formats for invoices, returns, orders, and payment
+            vouchers.
           </p>
         </div>
 
@@ -484,7 +491,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.purchaseInvoicePrefix}
-                  onChange={(e) => settings.update({ purchaseInvoicePrefix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ purchaseInvoicePrefix: e.target.value })
+                  }
                   placeholder="PI-"
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -494,7 +503,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.purchaseInvoiceSuffix}
-                  onChange={(e) => settings.update({ purchaseInvoiceSuffix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ purchaseInvoiceSuffix: e.target.value })
+                  }
                   placeholder="/2026"
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -548,7 +559,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.purchaseOrderPrefix}
-                  onChange={(e) => settings.update({ purchaseOrderPrefix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ purchaseOrderPrefix: e.target.value })
+                  }
                   placeholder="PO-"
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -558,7 +571,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.purchaseOrderSuffix}
-                  onChange={(e) => settings.update({ purchaseOrderSuffix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ purchaseOrderSuffix: e.target.value })
+                  }
                   placeholder=""
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -580,7 +595,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.paymentVoucherPrefix}
-                  onChange={(e) => settings.update({ paymentVoucherPrefix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ paymentVoucherPrefix: e.target.value })
+                  }
                   placeholder="PAY-"
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -590,7 +607,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <input
                   type="text"
                   value={settings.receiptVoucherPrefix}
-                  onChange={(e) => settings.update({ receiptVoucherPrefix: e.target.value })}
+                  onChange={(e) =>
+                    settings.update({ receiptVoucherPrefix: e.target.value })
+                  }
                   placeholder="REC-"
                   className="field-input-sm w-full font-mono text-xs"
                 />
@@ -639,9 +658,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           <SelectField
             label={t('settings.quantityDecimals')}
             value={String(settings.quantityDecimals ?? 2)}
-            onChange={(value) =>
-              settings.update({ quantityDecimals: Number(value) })
-            }
+            onChange={(value) => settings.update({ quantityDecimals: Number(value) })}
             options={[
               { value: '0', label: '0 decimals (1)' },
               { value: '1', label: '1 decimal (1.0)' },
@@ -669,9 +686,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           <CheckField
             label={t('settings.enableReverseCalculation')}
             checked={settings.enableReverseCalculation}
-            onChange={(checked) =>
-              settings.update({ enableReverseCalculation: checked })
-            }
+            onChange={(checked) => settings.update({ enableReverseCalculation: checked })}
           />
 
           <CheckField
@@ -762,7 +777,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                 <tr className="text-ink-muted">
                   <th className="px-3 py-2 text-start font-semibold">Ledger</th>
                   <th className="w-32 px-3 py-2 text-center font-semibold">Effect</th>
-                  <th className="w-28 px-3 py-2 text-end font-semibold">Default Amount</th>
+                  <th className="w-28 px-3 py-2 text-end font-semibold">
+                    Default Amount
+                  </th>
                   <th className="w-24 px-3 py-2 text-center font-semibold">Active</th>
                   <th className="w-10 px-2 py-2" />
                 </tr>
@@ -773,9 +790,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                     <td className="px-3 py-1.5">
                       <SearchSelect
                         value={row.ledgerId}
-                        onChange={(ledgerId) =>
-                          updateDefaultLedger(row.id, { ledgerId })
-                        }
+                        onChange={(ledgerId) => updateDefaultLedger(row.id, { ledgerId })}
                         options={(ledgers.data ?? []).map((l) => ({
                           value: l.ledgerId,
                           label: `${l.code} — ${l.name}`,
@@ -882,16 +897,24 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                   <tr className="border-b border-line bg-surface-2/60 text-ink-muted text-start">
                     <th className="px-3 py-2 font-medium">Branch / Warehouse</th>
                     <th className="px-3 py-2 font-medium">Code</th>
-                    <th className="px-3 py-2 font-medium">Assigned Invoice Print Format</th>
+                    <th className="px-3 py-2 font-medium">
+                      Assigned Invoice Print Format
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {(warehouses.data ?? []).map((wh) => {
-                    const currentBranchFmt = settings.branchInvoicePrintFormats[wh.id] || '';
+                    const currentBranchFmt =
+                      settings.branchInvoicePrintFormats[wh.id] || '';
                     return (
                       <tr key={wh.id} className="hover:bg-surface-2/30">
                         <td className="px-3 py-2 font-medium text-ink">
-                          {wh.name} {wh.isDefault && <span className="text-[10px] text-accent font-normal">(Default)</span>}
+                          {wh.name}{' '}
+                          {wh.isDefault && (
+                            <span className="text-[10px] text-accent font-normal">
+                              (Default)
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 font-mono text-ink-muted">{wh.code}</td>
                         <td className="px-3 py-2">
@@ -914,7 +937,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
                             </option>
                             <option value="A4">A4 Format (Standard Tax Invoice)</option>
                             <option value="A5">A5 Format (Compact Half-Page)</option>
-                            <option value="thermal">Thermal Printer (80mm POS Roll)</option>
+                            <option value="thermal">
+                              Thermal Printer (80mm POS Roll)
+                            </option>
                           </select>
                         </td>
                       </tr>
@@ -936,7 +961,8 @@ export function MasterDefaultsSettings(): React.JSX.Element {
               <span>Sample Demo Transactions & Masters</span>
             </h4>
             <p className="mt-0.5 text-xs text-ink-muted">
-              Populate realistic demo transactions (Sales Invoices, Returns, Purchases, Orders, and Vouchers) and demo master records.
+              Populate realistic demo transactions (Sales Invoices, Returns, Purchases,
+              Orders, and Vouchers) and demo master records.
             </p>
           </div>
 
@@ -947,7 +973,9 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             className="btn-primary btn-sm flex items-center gap-1.5 shrink-0"
           >
             <IconSparkles className={clsx('size-3.5', seeding && 'animate-spin')} />
-            <span>{seeding ? 'Generating Sample Data…' : 'Generate Sample Transactions'}</span>
+            <span>
+              {seeding ? 'Generating Sample Data…' : 'Generate Sample Transactions'}
+            </span>
           </button>
         </div>
 
@@ -961,4 +989,3 @@ export function MasterDefaultsSettings(): React.JSX.Element {
     </div>
   );
 }
-

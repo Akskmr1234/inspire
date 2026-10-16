@@ -200,7 +200,9 @@ export function CashBankBookPage({
                     <tbody>
                       <tr className="text-ink-muted">
                         <td colSpan={5}>{t('reports.openingBalance')}</td>
-                        <td className="cell-numeric">{balance(account.openingBalance)}</td>
+                        <td className="cell-numeric">
+                          {balance(account.openingBalance)}
+                        </td>
                       </tr>
 
                       {account.lines.map((line) => (
@@ -241,7 +243,9 @@ export function CashBankBookPage({
                         <td colSpan={3}>{t('reports.totals')}</td>
                         <td className="cell-numeric">{money(account.totalReceipts)}</td>
                         <td className="cell-numeric">{money(account.totalPayments)}</td>
-                        <td className="cell-numeric">{balance(account.closingBalance)}</td>
+                        <td className="cell-numeric">
+                          {balance(account.closingBalance)}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>

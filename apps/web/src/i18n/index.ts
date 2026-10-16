@@ -164,7 +164,8 @@ const en = {
     accountHierarchy: 'Account Structure / Hierarchy',
     transactionDetails: 'Transactions / Postings',
     entries: 'entries',
-    noTransactionsPeriod: 'No transaction postings for this account in the selected date range.',
+    noTransactionsPeriod:
+      'No transaction postings for this account in the selected date range.',
     subtotal: 'Subtotal',
     totalHead: 'Total',
     grandTotal: 'Grand Total',
@@ -1156,7 +1157,8 @@ const en = {
     listsHint: 'How much of a list is shown at once.',
     pageSize: 'Rows per page',
     masterDefaultsTitle: 'Master Defaults & Dropdown Values',
-    masterDefaultsHint: 'Configure initial choices for all main dropdowns and sales features.',
+    masterDefaultsHint:
+      'Configure initial choices for all main dropdowns and sales features.',
     defaultCustomer: 'Default Customer',
     defaultSupplier: 'Default Supplier',
     defaultSalesman: 'Default Salesman',
@@ -1166,9 +1168,11 @@ const en = {
     quantityDecimals: 'Quantity Decimal Places',
     quantityDecimalsHint: 'Number of decimal places for product quantities.',
     enableDeviceAttributes: 'Enable Device Attributes',
-    enableDeviceAttributesHint: 'Show device attributes (Device, Colour, Battery, RAM, Storage) in product details.',
+    enableDeviceAttributesHint:
+      'Show device attributes (Device, Colour, Battery, RAM, Storage) in product details.',
     enableReverseCalculation: 'Enable Reverse Calculation',
-    enableReverseCalculationHint: 'Allow entering tax-inclusive rates with automatic reverse computation in sales.',
+    enableReverseCalculationHint:
+      'Allow entering tax-inclusive rates with automatic reverse computation in sales.',
     enableFreeQuantity: 'Enable Free Quantity',
     enableFreeQuantityHint: 'Show free quantity column on sales invoice lines.',
     enableItemDiscount: 'Enable Item Discount',
@@ -1176,10 +1180,12 @@ const en = {
     enableAutoBatch: 'Enable Auto Batch',
     enableAutoBatchHint: 'Automatically pick FIFO batches for sales line items.',
     additionalLedgerDefaults: 'Additional Ledger Defaults',
-    additionalLedgerDefaultsHint: 'Configure standing default additional ledgers for each transaction type.',
+    additionalLedgerDefaultsHint:
+      'Configure standing default additional ledgers for each transaction type.',
     addDefaultLedger: 'Add Default Ledger',
     invoicePrintFormatsTitle: 'Invoice Print & Template Formats',
-    invoicePrintFormatsHint: 'Configure system default, branch-specific, and customer invoice print formats.',
+    invoicePrintFormatsHint:
+      'Configure system default, branch-specific, and customer invoice print formats.',
     defaultInvoicePrintFormat: 'Default Invoice Print Format',
     branchInvoicePrintFormats: 'Branch-wise Invoice Print Formats',
     customerInvoiceTemplate: 'Assigned Invoice Template',
@@ -1194,7 +1200,8 @@ const en = {
   profile: {
     anonymous: 'User',
     title: 'User Profile',
-    subtitle: 'Manage your account information, appearance preferences, security, and session settings',
+    subtitle:
+      'Manage your account information, appearance preferences, security, and session settings',
     active: 'Active Session',
     passwordManaged: 'Password managed',
     myProfile: 'My Profile',
@@ -2424,9 +2431,11 @@ const ar = {
     quantityDecimals: 'المنازل العشرية للكمية',
     quantityDecimalsHint: 'عدد المنازل العشرية لكميات الأصناف.',
     enableDeviceAttributes: 'تفعيل سمات الأجهزة',
-    enableDeviceAttributesHint: 'عرض سمات الجهاز (الجهاز، اللون، البطارية، الرام، السعة) في تفاصيل المنتج.',
+    enableDeviceAttributesHint:
+      'عرض سمات الجهاز (الجهاز، اللون، البطارية، الرام، السعة) في تفاصيل المنتج.',
     enableReverseCalculation: 'تفعيل الحساب العكسي',
-    enableReverseCalculationHint: 'السماح بإدخال الأسعار شاملة الضريبة مع الحساب العكسي التلقائي.',
+    enableReverseCalculationHint:
+      'السماح بإدخال الأسعار شاملة الضريبة مع الحساب العكسي التلقائي.',
     enableFreeQuantity: 'تفعيل الكمية المجانية',
     enableFreeQuantityHint: 'عرض عمود الكمية المجانية في سطور المبيعات.',
     enableItemDiscount: 'تفعيل خصم الصنف',
@@ -2437,7 +2446,8 @@ const ar = {
     additionalLedgerDefaultsHint: 'إعداد الحسابات الإضافية الافتراضية لكل نوع حركة',
     addDefaultLedger: 'إضافة حساب افتراضي',
     invoicePrintFormatsTitle: 'تنسيقات طباعة وقوالب الفواتير',
-    invoicePrintFormatsHint: 'تهيئة تنسيق الفاتورة الافتراضي للنظام والفروع وتعيين قوالب مخصصة للعملاء.',
+    invoicePrintFormatsHint:
+      'تهيئة تنسيق الفاتورة الافتراضي للنظام والفروع وتعيين قوالب مخصصة للعملاء.',
     defaultInvoicePrintFormat: 'تنسيق طباعة الفاتورة الافتراضي',
     branchInvoicePrintFormats: 'تنسيقات طباعة الفواتير حسب الفرع',
     customerInvoiceTemplate: 'قالب الفاتورة المخصص',

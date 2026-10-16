@@ -596,9 +596,10 @@ function MoneyEntry({
   });
 
   const count = vouchersCount.data?.lines?.length ?? 0;
-  const rawPrefix = direction === 'payment'
-    ? (paymentVoucherPrefix || 'PAY-')
-    : (receiptVoucherPrefix || 'REC-');
+  const rawPrefix =
+    direction === 'payment'
+      ? paymentVoucherPrefix || 'PAY-'
+      : receiptVoucherPrefix || 'REC-';
   const prefix = rawPrefix.endsWith('-') ? rawPrefix : `${rawPrefix}-`;
   const transactionNo = `${prefix}${String(1001 + count).padStart(4, '0')}`;
 
@@ -653,7 +654,11 @@ function MoneyEntry({
   ]);
 
   useEffect(() => {
-    if (paymentEntries.length === 1 && !paymentEntries[0]?.accountId && accounts.length > 0) {
+    if (
+      paymentEntries.length === 1 &&
+      !paymentEntries[0]?.accountId &&
+      accounts.length > 0
+    ) {
       const defaultAcc = accounts[0]?.ledgerId ?? '';
       setPaymentEntries([{ ...paymentEntries[0]!, accountId: defaultAcc }]);
       setDraft((curr) => ({ ...curr, accountId: defaultAcc }));
@@ -681,10 +686,7 @@ function MoneyEntry({
     ]);
   };
 
-  const updatePaymentEntry = (
-    id: string,
-    patch: Partial<PaymentEntryLine>,
-  ): void => {
+  const updatePaymentEntry = (id: string, patch: Partial<PaymentEntryLine>): void => {
     setPaymentEntries((current) => {
       const next = current.map((item) => (item.id === id ? { ...item, ...patch } : item));
       const nextTotal = next.reduce((sum, item) => {
@@ -1107,9 +1109,7 @@ function MoneyEntry({
 
         <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
           {t(
-            direction === 'receipt'
-              ? 'vouchers.receiptEffect'
-              : 'vouchers.paymentEffect',
+            direction === 'receipt' ? 'vouchers.receiptEffect' : 'vouchers.paymentEffect',
           )}
         </p>
 

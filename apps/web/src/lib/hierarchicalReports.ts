@@ -56,7 +56,10 @@ export function buildTrialBalanceHierarchy(
 
   rows.forEach((row) => {
     const ledgerInfo = ledgersMap?.get(row.ledgerId) ?? ledgersMap?.get(row.ledgerCode);
-    const nature = row.nature ?? ledgerInfo?.nature ?? inferNatureFromGroup(row.groupCode, row.groupName);
+    const nature =
+      row.nature ??
+      ledgerInfo?.nature ??
+      inferNatureFromGroup(row.groupCode, row.groupName);
 
     let headGroups = byHead.get(nature);
     if (!headGroups) {
@@ -150,14 +153,14 @@ export function buildProfitAndLossHierarchy(
   }[],
   ledgersMap?: ReadonlyMap<string, LedgerSummary>,
 ): readonly ReportHead[] {
-  function buildHead(
-    nature: 4 | 5,
-    lines: typeof incomeLines,
-  ): ReportHead | null {
+  function buildHead(nature: 4 | 5, lines: typeof incomeLines): ReportHead | null {
     if (lines.length === 0) return null;
 
     const meta = getHeadMeta(nature);
-    const groupsMap = new Map<string, { code: string; name: string; ledgers: ReportLedger[] }>();
+    const groupsMap = new Map<
+      string,
+      { code: string; name: string; ledgers: ReportLedger[] }
+    >();
 
     lines.forEach((line) => {
       const gKey = line.groupCode || 'OTHER';
@@ -171,7 +174,10 @@ export function buildProfitAndLossHierarchy(
         groupsMap.set(gKey, group);
       }
 
-      const ledgerId = line.ledgerId || ledgersMap?.get(line.ledgerCode)?.ledgerId || `pl-${line.ledgerCode}`;
+      const ledgerId =
+        line.ledgerId ||
+        ledgersMap?.get(line.ledgerCode)?.ledgerId ||
+        `pl-${line.ledgerCode}`;
 
       group.ledgers.push({
         id: ledgerId,
@@ -251,7 +257,10 @@ export function buildBalanceSheetHierarchy(
     extraEquityRow?: { label: string; amount: number } | undefined,
   ): ReportHead | null {
     const meta = getHeadMeta(nature);
-    const groupsMap = new Map<string, { code: string; name: string; ledgers: ReportLedger[] }>();
+    const groupsMap = new Map<
+      string,
+      { code: string; name: string; ledgers: ReportLedger[] }
+    >();
 
     lines.forEach((line) => {
       const gKey = line.groupCode || 'OTHER';
@@ -265,7 +274,10 @@ export function buildBalanceSheetHierarchy(
         groupsMap.set(gKey, group);
       }
 
-      const ledgerId = line.ledgerId || ledgersMap?.get(line.ledgerCode)?.ledgerId || `bs-${line.ledgerCode}`;
+      const ledgerId =
+        line.ledgerId ||
+        ledgersMap?.get(line.ledgerCode)?.ledgerId ||
+        `bs-${line.ledgerCode}`;
 
       group.ledgers.push({
         id: ledgerId,
@@ -326,7 +338,9 @@ export function buildBalanceSheetHierarchy(
   const equityHead = buildSection(
     3,
     equity,
-    retainedEarnings !== undefined ? { label: 'Retained Earnings (Period Result)', amount: retainedEarnings } : undefined,
+    retainedEarnings !== undefined
+      ? { label: 'Retained Earnings (Period Result)', amount: retainedEarnings }
+      : undefined,
   );
 
   const heads: ReportHead[] = [];
@@ -379,8 +393,11 @@ export function buildDayBookHierarchy(
 
   entries.forEach((voucher) => {
     voucher.lines.forEach((line) => {
-      const ledgerInfo = ledgersMap?.get(line.ledgerId) ?? ledgersMap?.get(line.ledgerCode);
-      const nature = ledgerInfo?.nature ?? inferNatureFromGroup(ledgerInfo?.groupCode, line.ledgerName);
+      const ledgerInfo =
+        ledgersMap?.get(line.ledgerId) ?? ledgersMap?.get(line.ledgerCode);
+      const nature =
+        ledgerInfo?.nature ??
+        inferNatureFromGroup(ledgerInfo?.groupCode, line.ledgerName);
       const groupCode = ledgerInfo?.groupCode ?? 'GEN';
       const groupName = ledgerInfo?.groupName ?? 'General Accounts';
 
@@ -418,7 +435,10 @@ export function buildDayBookHierarchy(
   });
 
   // Organize by Head and Group
-  const byHead = new Map<number, Map<string, { code: string; name: string; ledgers: ReportLedger[] }>>();
+  const byHead = new Map<
+    number,
+    Map<string, { code: string; name: string; ledgers: ReportLedger[] }>
+  >();
   [1, 2, 3, 4, 5].forEach((n) => byHead.set(n, new Map()));
 
   ledgerMap.forEach((l) => {
@@ -513,7 +533,10 @@ export function buildCashBankBookHierarchy(
 ): readonly ReportHead[] {
   const meta = getHeadMeta(1); // Asset
 
-  const groupName = bookType === 'cash-book' ? 'Cash in Hand & Till Accounts' : 'Bank Accounts & Facilities';
+  const groupName =
+    bookType === 'cash-book'
+      ? 'Cash in Hand & Till Accounts'
+      : 'Bank Accounts & Facilities';
   const groupCode = bookType === 'cash-book' ? 'CASH' : 'BANK';
 
   const ledgers: ReportLedger[] = accounts.map((acc) => {
@@ -662,9 +685,15 @@ export function buildAccountGroupSummaryHierarchy(
  */
 export function buildChartOfAccountsHierarchy(
   ledgers: readonly LedgerSummary[],
-  balancesMap?: ReadonlyMap<string, { opening: number; debit: number; credit: number; closing: number }>,
+  balancesMap?: ReadonlyMap<
+    string,
+    { opening: number; debit: number; credit: number; closing: number }
+  >,
 ): readonly ReportHead[] {
-  const byHead = new Map<number, Map<string, { code: string; name: string; ledgers: ReportLedger[] }>>();
+  const byHead = new Map<
+    number,
+    Map<string, { code: string; name: string; ledgers: ReportLedger[] }>
+  >();
   [1, 2, 3, 4, 5].forEach((n) => byHead.set(n, new Map()));
 
   ledgers.forEach((l) => {
@@ -754,9 +783,16 @@ export function buildCashFlowHierarchy(
     readonly net: number;
   }[],
 ): readonly ReportHead[] {
-  const CATEGORY_META: Record<number, { name: string; nameArabic: string; tone: 'asset' | 'income' | 'expense' }> = {
+  const CATEGORY_META: Record<
+    number,
+    { name: string; nameArabic: string; tone: 'asset' | 'income' | 'expense' }
+  > = {
     1: { name: 'Operating Activities', nameArabic: 'الأنشطة التشغيلية', tone: 'asset' },
-    2: { name: 'Investing Activities', nameArabic: 'الأنشطة الاستثمارية', tone: 'income' },
+    2: {
+      name: 'Investing Activities',
+      nameArabic: 'الأنشطة الاستثمارية',
+      tone: 'income',
+    },
     3: { name: 'Financing Activities', nameArabic: 'الأنشطة التمويلية', tone: 'expense' },
   };
 
@@ -808,13 +844,22 @@ export function buildCashFlowHierarchy(
 
 function inferNatureFromGroup(code?: string | null, name?: string | null): number {
   const upper = `${code ?? ''} ${name ?? ''}`.toUpperCase();
-  if (upper.includes('ASSET') || upper.includes('BANK') || upper.includes('CASH') || upper.includes('DEBTOR')) {
+  if (
+    upper.includes('ASSET') ||
+    upper.includes('BANK') ||
+    upper.includes('CASH') ||
+    upper.includes('DEBTOR')
+  ) {
     return 1;
   }
   if (upper.includes('LIAB') || upper.includes('CREDITOR') || upper.includes('PAYABLE')) {
     return 2;
   }
-  if (upper.includes('EQUITY') || upper.includes('CAPITAL') || upper.includes('RETAINED')) {
+  if (
+    upper.includes('EQUITY') ||
+    upper.includes('CAPITAL') ||
+    upper.includes('RETAINED')
+  ) {
     return 3;
   }
   if (upper.includes('INCOME') || upper.includes('REVENUE') || upper.includes('SALE')) {

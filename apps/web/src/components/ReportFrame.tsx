@@ -41,7 +41,11 @@ function FilterBar({
             className="size-4 text-ink-muted"
             aria-hidden="true"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h18m-14 5h10m-7 5h4" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 4.5h18m-14 5h10m-7 5h4"
+            />
           </svg>
           {t('reports.filters')}
         </span>

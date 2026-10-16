@@ -74,9 +74,7 @@ export function ProfitAndLossPage(): React.JSX.Element {
   }, [ledgersQuery.data]);
 
   const columns = useMemo<readonly ReportColumn[]>(
-    () => [
-      { key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' },
-    ],
+    () => [{ key: 'amount', header: t('reports.amount') || 'Amount', align: 'end' }],
     [t],
   );
 
@@ -168,7 +166,9 @@ export function ProfitAndLossPage(): React.JSX.Element {
                   emptyMessage={t('reports.noIncome') || 'No income records'}
                   grandTotals={{ amount: data.totalIncome }}
                   onVoucherClick={(vNum) => {
-                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                    navigate(
+                      `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                    );
                   }}
                 />
 
@@ -181,7 +181,9 @@ export function ProfitAndLossPage(): React.JSX.Element {
                   emptyMessage={t('reports.noExpenses') || 'No expense records'}
                   grandTotals={{ amount: data.totalExpenses }}
                   onVoucherClick={(vNum) => {
-                    navigate(`/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`);
+                    navigate(
+                      `/accounting/voucher-report?posted=${encodeURIComponent(vNum)}`,
+                    );
                   }}
                 />
               </div>

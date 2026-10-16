@@ -360,7 +360,10 @@ export function useDefaultCharges(
     const usable = new Set(chargeLedgers(ledgers).map((ledger) => ledger.ledgerId));
 
     const fromAdditional = (additionalLedgerDefaults ?? [])
-      .filter((l) => l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId))
+      .filter(
+        (l) =>
+          l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId),
+      )
       .map((l) => ({
         key: crypto.randomUUID(),
         ledgerId: l.ledgerId,

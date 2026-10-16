@@ -90,7 +90,10 @@ export function MenuAdministrationPage(): React.JSX.Element {
     });
   };
 
-  const handleDropOnItem = (targetEntry: MenuAdminEntry, targetParentId: string | null): void => {
+  const handleDropOnItem = (
+    targetEntry: MenuAdminEntry,
+    targetParentId: string | null,
+  ): void => {
     if (!draggedItem || !dragTarget || draggedItem.id === targetEntry.id) {
       setDraggedItem(null);
       setDragTarget(null);
@@ -105,7 +108,11 @@ export function MenuAdministrationPage(): React.JSX.Element {
         const newOrder = (targetEntry.children.length + 1) * 10;
         await moveMenuItem(sourceId, targetEntry.id, newOrder);
       } else if (position === 'before') {
-        await moveMenuItem(sourceId, targetParentId, Math.max(1, targetEntry.sortOrder - 1));
+        await moveMenuItem(
+          sourceId,
+          targetParentId,
+          Math.max(1, targetEntry.sortOrder - 1),
+        );
       } else {
         await moveMenuItem(sourceId, targetParentId, targetEntry.sortOrder + 1);
       }
@@ -149,7 +156,8 @@ export function MenuAdministrationPage(): React.JSX.Element {
               </span>
               <span>
                 <strong>Drag & Drop to reorder:</strong> Grab any menu row using the{' '}
-                <strong className="text-ink">⠿ grip icon</strong> to move it up, down, or into a heading.
+                <strong className="text-ink">⠿ grip icon</strong> to move it up, down, or
+                into a heading.
               </span>
             </div>
 
@@ -246,9 +254,21 @@ function EntryRows({
   readonly search: string;
   readonly collapsedIds: ReadonlySet<string>;
   readonly toggleCollapse: (id: string) => void;
-  readonly draggedItem: { id: string; parentId: string | null; sortOrder: number; label: string } | null;
+  readonly draggedItem: {
+    id: string;
+    parentId: string | null;
+    sortOrder: number;
+    label: string;
+  } | null;
   readonly dragTarget: DragTargetInfo | null;
-  readonly setDraggedItem: (item: { id: string; parentId: string | null; sortOrder: number; label: string } | null) => void;
+  readonly setDraggedItem: (
+    item: {
+      id: string;
+      parentId: string | null;
+      sortOrder: number;
+      label: string;
+    } | null,
+  ) => void;
   readonly setDragTarget: (target: DragTargetInfo | null) => void;
   readonly onDropOnItem: (entry: MenuAdminEntry, parentId: string | null) => void;
   readonly run: (action: () => Promise<void>) => void;
