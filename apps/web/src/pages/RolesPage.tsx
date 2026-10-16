@@ -90,7 +90,7 @@ export function RolesPage(): React.JSX.Element {
       {(roles.isPending || permissions.isPending || menu.isPending) && <Spinner />}
 
       {roles.data && permissions.data && menu.data && (
-        <div className="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
           <ul className="panel h-fit divide-y divide-line p-0">
             {roles.data.map((role) => (
               <li key={role.roleId}>
@@ -249,7 +249,7 @@ function RoleEditor({
 
   return (
     <div className="space-y-4">
-      <div className="panel grid gap-3 sm:grid-cols-2">
+      <div className="panel grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField
           label={t('roles.name')}
           value={name}

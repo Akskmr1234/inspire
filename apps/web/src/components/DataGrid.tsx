@@ -1155,7 +1155,7 @@ function GridFooter({
 const NARROW = '(max-width: 639px)';
 
 /** Tracks whether the viewport is below the table breakpoint. */
-function useIsNarrow(): boolean {
+export function useIsNarrow(): boolean {
   const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW).matches);
 
   useEffect(() => {

@@ -1321,7 +1321,7 @@ function DocumentDialog({
     <Modal title={document?.header.number ?? t('purchase.document')} onClose={onClose}>
       {query.isLoading && (
         <div className="space-y-3" aria-busy="true">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <div key={index}>
                 <span className="skeleton block h-2 w-16 rounded" />
@@ -1335,7 +1335,7 @@ function DocumentDialog({
 
       {document && (
         <>
-          <div className="grid gap-2 text-sm sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('purchase.documentNumber')} value={document.header.number} />
             <Detail label={t('purchase.date')} value={document.date} />
             {/* The one field on this panel that is a state rather than a fact, so it

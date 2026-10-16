@@ -7,6 +7,7 @@ import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
 import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import { useIsNarrow } from '@/components/DataGrid';
 import { IconClose, IconPlus } from '@/components/icons';
 import { ApiError, request } from '@/lib/api';
 import {
@@ -185,6 +186,82 @@ export function VoucherEntryPage(): React.JSX.Element {
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
+  // A line's controls, shared by the table and by the cards a phone gets instead.
+  const narrow = useIsNarrow();
+
+  const sideControl = (line: DraftLine, className?: string): React.JSX.Element => (
+    <SearchSelect
+      label={t('vouchers.side')}
+      {...(className ? { className } : {})}
+      size="sm"
+      value={String(line.side)}
+      onChange={(value) =>
+        update(line.key, {
+          side: Number(value) === CREDIT ? CREDIT : DEBIT,
+        })
+      }
+      options={[
+        { value: String(DEBIT), label: t('reports.debit') },
+        { value: String(CREDIT), label: t('reports.credit') },
+      ]}
+    />
+  );
+
+  /*
+    A picker that can be typed into, in place of a native select of the whole chart
+    of accounts. The browser's own type-ahead matches the start of an option, which
+    here is the account code — so looking a ledger up by its name, which is what
+    everybody does, was impossible.
+  */
+  const ledgerControl = (line: DraftLine): React.JSX.Element => (
+    <SearchSelect
+      value={line.ledgerId}
+      onChange={(ledgerId) => update(line.key, { ledgerId })}
+      options={ledgerOptions}
+      disabled={ledgers.isPending}
+      size="sm"
+      label={t('vouchers.ledger')}
+      placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+    />
+  );
+
+  const narrationControl = (line: DraftLine, className = ''): React.JSX.Element => (
+    <input
+      aria-label={t('vouchers.lineNarration')}
+      className={clsx('field-input-sm', className)}
+      value={line.narration}
+      onChange={(e) => update(line.key, { narration: e.target.value })}
+    />
+  );
+
+  // End-aligned like the caption above and the total below.
+  const amountControl = (line: DraftLine, className = ''): React.JSX.Element => (
+    <input
+      aria-label={
+        line.side === DEBIT ? t('vouchers.debitAmount') : t('vouchers.creditAmount')
+      }
+      type="number"
+      inputMode="decimal"
+      step="0.01"
+      min="0"
+      className={clsx('field-input-sm text-end font-mono tabular-nums', className)}
+      value={line.amount}
+      onChange={(e) => update(line.key, { amount: e.target.value })}
+    />
+  );
+
+  const removeControl = (line: DraftLine): React.JSX.Element => (
+    <button
+      type="button"
+      aria-label={t('vouchers.removeLine')}
+      disabled={lines.length <= 2}
+      onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+      className="grid size-7 place-items-center rounded-md text-ink-subtle transition hover:bg-red-50 hover:text-red-600 active:scale-90 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+    >
+      ✕
+    </button>
+  );
+
   /*
     Naming a party puts them on the first line that has no ledger yet, or opens one
     if every line is spoken for. Choosing them a second time moves the line rather
@@ -265,7 +342,7 @@ export function VoucherEntryPage(): React.JSX.Element {
         </div>
       )}
 
-      <div className="panel grid gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="panel grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
         <SelectField
           label={t('vouchers.type')}
           required
@@ -316,146 +393,111 @@ export function VoucherEntryPage(): React.JSX.Element {
         />
       </div>
 
-      <div className="table-wrap">
-        {/*
-          A floor width, because five editable controls per row cannot be squeezed
-          into a phone's width without every select becoming unreadable. The table
-          scrolls sideways instead, which keeps each control at a usable size.
-        */}
-        <table className="table min-w-[56rem]">
-          <thead>
-            <tr>
-              <th className="text-start">{t('vouchers.side')}</th>
-              <th className="text-start">{t('vouchers.ledger')}</th>
-              <th className="text-start">{t('vouchers.lineNarration')}</th>
-              <th className="text-end">{t('reports.debit')}</th>
-              <th className="text-end">{t('reports.credit')}</th>
-              <th className="w-10 text-end" />
-            </tr>
-          </thead>
-
-          <tbody>
-            {lines.map((line) => (
-              <tr key={line.key}>
-                <td className="py-2">
-                  <SearchSelect
-                    label={t('vouchers.side')}
-                    className="w-28"
-                    size="sm"
-                    value={String(line.side)}
-                    onChange={(value) =>
-                      update(line.key, {
-                        side: Number(value) === CREDIT ? CREDIT : DEBIT,
-                      })
-                    }
-                    options={[
-                      { value: String(DEBIT), label: t('reports.debit') },
-                      { value: String(CREDIT), label: t('reports.credit') },
-                    ]}
-                  />
-                </td>
-
-                <td className="min-w-56 py-2">
-                  {/*
-                    A picker that can be typed into, in place of a native select of
-                    the whole chart of accounts. The browser's own type-ahead
-                    matches the start of an option, which here is the account code —
-                    so looking a ledger up by its name, which is what everybody
-                    does, was impossible.
-                  */}
-                  <SearchSelect
-                    value={line.ledgerId}
-                    onChange={(ledgerId) => update(line.key, { ledgerId })}
-                    options={ledgerOptions}
-                    disabled={ledgers.isPending}
-                    size="sm"
-                    label={t('vouchers.ledger')}
-                    placeholder={
-                      ledgers.isPending ? t('common.loading') : t('common.choose')
-                    }
-                  />
-                </td>
-
-                <td className="py-2">
-                  <input
-                    aria-label={t('vouchers.lineNarration')}
-                    className="field-input-sm min-w-40"
-                    value={line.narration}
-                    onChange={(e) => update(line.key, { narration: e.target.value })}
-                  />
-                </td>
-
-                {/*
-                  A single amount box appears under whichever column the line's side
-                  selects, and the other shows a dash. The domain stores one positive
-                  amount plus a side, so offering two editable boxes would invite a
-                  row with both filled in - which has no meaning.
-                */}
-                {/* End-aligned like the caption above and the total below. The
-                    box is a fixed width rather than the cell's, so without this it
-                    floated at the left of a column whose heading and total were
-                    both flush right. */}
-                <td className="py-2 text-end">
-                  {line.side === DEBIT ? (
-                    <input
-                      aria-label={t('vouchers.debitAmount')}
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min="0"
-                      className="field-input-sm text-end font-mono tabular-nums"
-                      value={line.amount}
-                      onChange={(e) => update(line.key, { amount: e.target.value })}
-                    />
-                  ) : (
-                    <span className="block text-end text-ink-subtle">—</span>
-                  )}
-                </td>
-
-                <td className="py-2 text-end">
-                  {line.side === CREDIT ? (
-                    <input
-                      aria-label={t('vouchers.creditAmount')}
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min="0"
-                      className="field-input-sm text-end font-mono tabular-nums"
-                      value={line.amount}
-                      onChange={(e) => update(line.key, { amount: e.target.value })}
-                    />
-                  ) : (
-                    <span className="block text-end text-ink-subtle">—</span>
-                  )}
-                </td>
-
-                <td className="px-2 py-2 text-end">
-                  <button
-                    type="button"
-                    aria-label={t('vouchers.removeLine')}
-                    disabled={lines.length <= 2}
-                    onClick={() =>
-                      setLines((current) => current.filter((l) => l.key !== line.key))
-                    }
-                    className="grid size-7 place-items-center rounded-md text-ink-subtle transition hover:bg-red-50 hover:text-red-600 active:scale-90 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                  >
-                    ✕
-                  </button>
-                </td>
+      {narrow ? (
+        /*
+          A card per line on a phone. The table needs 56rem for five usable controls,
+          and scrolled sideways the amount - the one thing being entered - started
+          off the screen.
+        */
+        <div className="space-y-3">
+          {lines.map((line, index) => (
+            <div key={line.key} className="panel space-y-2.5 p-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-ink-muted">#{index + 1}</span>
+                <div className="flex-1">{sideControl(line)}</div>
+                {removeControl(line)}
+              </div>
+              {ledgerControl(line)}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="field-label">
+                    {line.side === DEBIT ? t('reports.debit') : t('reports.credit')}
+                  </span>
+                  {amountControl(line, 'w-full')}
+                </div>
+                <div>
+                  <span className="field-label">{t('vouchers.lineNarration')}</span>
+                  {narrationControl(line, 'w-full')}
+                </div>
+              </div>
+            </div>
+          ))}
+          <dl className="panel grid grid-cols-2 gap-2 p-3 text-sm">
+            <div>
+              <dt className="text-xs text-ink-muted">{t('reports.debit')}</dt>
+              <dd className="font-mono font-semibold tabular-nums">
+                {money(totals.debit)}
+              </dd>
+            </div>
+            <div className="text-end">
+              <dt className="text-xs text-ink-muted">{t('reports.credit')}</dt>
+              <dd className="font-mono font-semibold tabular-nums">
+                {money(totals.credit)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          {/*
+            A floor width, because five editable controls per row cannot be squeezed
+            into a narrow width without every select becoming unreadable. The table
+            scrolls sideways instead, which keeps each control at a usable size.
+          */}
+          <table className="table min-w-[56rem]">
+            <thead>
+              <tr>
+                <th className="text-start">{t('vouchers.side')}</th>
+                <th className="text-start">{t('vouchers.ledger')}</th>
+                <th className="text-start">{t('vouchers.lineNarration')}</th>
+                <th className="text-end">{t('reports.debit')}</th>
+                <th className="text-end">{t('reports.credit')}</th>
+                <th className="w-10 text-end" />
               </tr>
-            ))}
-          </tbody>
+            </thead>
 
-          <tfoot>
-            <tr>
-              <td colSpan={3}>{t('vouchers.total')}</td>
-              <td className="cell-numeric">{money(totals.debit)}</td>
-              <td className="cell-numeric">{money(totals.credit)}</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+            <tbody>
+              {lines.map((line) => (
+                <tr key={line.key}>
+                  <td className="py-2">{sideControl(line, 'w-28')}</td>
+                  <td className="min-w-56 py-2">{ledgerControl(line)}</td>
+                  <td className="py-2">{narrationControl(line, 'min-w-40')}</td>
+                  {/*
+                    A single amount box appears under whichever column the line's side
+                    selects, and the other shows a dash. The domain stores one positive
+                    amount plus a side, so offering two editable boxes would invite a
+                    row with both filled in - which has no meaning.
+                  */}
+                  <td className="py-2 text-end">
+                    {line.side === DEBIT ? (
+                      amountControl(line)
+                    ) : (
+                      <span className="block text-end text-ink-subtle">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-end">
+                    {line.side === CREDIT ? (
+                      amountControl(line)
+                    ) : (
+                      <span className="block text-end text-ink-subtle">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-end">{removeControl(line)}</td>
+                </tr>
+              ))}
+            </tbody>
+
+            <tfoot>
+              <tr>
+                <td colSpan={3}>{t('vouchers.total')}</td>
+                <td className="cell-numeric">{money(totals.debit)}</td>
+                <td className="cell-numeric">{money(totals.credit)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <button
@@ -868,7 +910,7 @@ function MoneyEntry({
         }}
       >
         {/* Transaction Header Grid (Requirements 9 & 15) */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border border-line bg-surface-2/40 p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border border-line bg-surface-2/40 p-4">
           <TextField
             label={t('vouchers.transactionNo')}
             value={transactionNo}
@@ -907,7 +949,7 @@ function MoneyEntry({
         </div>
 
         {/* Primary Account & Mode Selection (Requirement 10) */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
             <Field
               label={

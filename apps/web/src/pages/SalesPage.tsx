@@ -2038,7 +2038,7 @@ function DocumentDialog({
     >
       {query.isLoading && (
         <div className="space-y-3" aria-busy="true">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {Array.from({ length: 6 }, (_, index) => (
               <div key={index}>
                 <span className="skeleton block h-2 w-16 rounded" />
@@ -2113,7 +2113,7 @@ function DocumentDialog({
             />
           ) : (
             <>
-              <div className="grid gap-2 text-sm sm:grid-cols-3 bg-surface-2/30 p-3 rounded-xl border border-line">
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3 bg-surface-2/30 p-3 rounded-xl border border-line">
                 <Detail label={t('sales.date')} value={document.date} />
                 <div>
                   <span className="text-xs text-ink-muted">{t('sales.customer')}</span>

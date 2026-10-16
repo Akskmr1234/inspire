@@ -1088,7 +1088,7 @@ function OrderDialog({
 
       {order && (
         <>
-          <div className="grid gap-2 text-sm sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
             <Detail label={t('orders.number')} value={order.number} />
             <Detail label={t('orders.date')} value={order.date} />
             <Detail label={t('orders.expectedOn')} value={order.expectedOn ?? '—'} />

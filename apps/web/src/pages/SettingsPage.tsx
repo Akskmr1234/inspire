@@ -95,7 +95,7 @@ export function SettingsPage(): React.JSX.Element {
         <p className="alert-warn text-sm">{t('settings.storedReadOnly')}</p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SettingsCard title={t('settings.taxTitle')} hint={t('settings.taxHint')}>
           <SelectField
             label={t('settings.regime')}

@@ -169,7 +169,7 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
         {data.isReconciled ? t('tax.reconciled') : t('tax.notReconciled')}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Figure label={t('tax.taxableSupplies')} value={data.taxableSupplies} />
         <Figure label={t('tax.zeroRated')} value={data.zeroRatedSupplies} />
         <Figure label={t('tax.taxablePurchases')} value={data.taxablePurchases} />
@@ -315,7 +315,7 @@ function InputRows({ report }: { readonly report: InputTaxReport }): React.JSX.E
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Figure label={t('tax.taxablePurchases')} value={report.taxablePurchases} />
         <Figure label={t('tax.zeroRatedPurchases')} value={report.zeroRatedPurchases} />
       </div>

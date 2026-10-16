@@ -162,7 +162,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           {t('settings.documentsTitle')}
         </h4>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label={t('settings.defaultCustomer')}>
             <SearchSelect
               value={settings.defaultCustomerId}
@@ -413,7 +413,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           {t('settings.decimalsTitle')}
         </h4>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SelectField
             label={t('settings.decimals')}
             value={String(places)}
@@ -464,7 +464,7 @@ export function MasterDefaultsSettings(): React.JSX.Element {
           {t('settings.title')} Options
         </h4>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <CheckField
             label={t('settings.enableDeviceAttributes')}
             checked={settings.enableDeviceAttributes}
