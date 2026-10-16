@@ -1,3 +1,4 @@
+using System.Globalization;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
@@ -218,7 +219,9 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
         {
             return Result.Failure<Money>(Error.BusinessRule(
                 "StockBalance.Insufficient",
-                $"Only {Quantity} is on hand, so {outgoing} cannot be issued."));
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Only {Quantity:0.######} is on hand, so {outgoing:0.######} cannot be issued.")));
         }
 
         Quantity -= outgoing;
@@ -273,7 +276,9 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
             occurredAtUtc,
             outgoing => Error.BusinessRule(
                 "StockBalance.Insufficient",
-                $"Only {Quantity} is on hand, so {outgoing} cannot be issued."),
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Only {Quantity:0.######} is on hand, so {outgoing:0.######} cannot be issued.")),
             Error.BusinessRule(
                 "StockBalance.IssueBelowZero",
                 "Issuing those goods at what they cost would leave the remaining stock "

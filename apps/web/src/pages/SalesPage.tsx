@@ -66,6 +66,17 @@ interface DraftLine {
   requiresSerial?: boolean;
 }
 
+/**
+ * The rate a line starts at under a tax mode.
+ *
+ * Non-tax is nothing; a taxed sale starts at the firm's own default rate from
+ * Settings rather than a five written into the screen, so a firm whose VAT is not
+ * five per cent is not correcting every line.
+ */
+function modeTaxRate(mode: 'NT' | 'TAX' | 'GST', defaultTaxRate: number): number {
+  return mode === 'NT' ? 0 : mode === 'TAX' ? defaultTaxRate : 18;
+}
+
 const emptyLine: DraftLine = {
   productId: '',
   quantity: '1',
@@ -542,7 +553,20 @@ function EntryDialog({
   const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>(
     'general',
   );
-  const [lines, setLines] = useState<readonly DraftLine[]>([{ ...emptyLine }]);
+  // Started at the mode's rate. It used to start at '0', and choosing a product only
+  // filled the rate in when the line had none — but '0' is a string, so it always
+  // had one, and every line of a taxed invoice went out at zero per cent.
+  const [lines, setLines] = useState<readonly DraftLine[]>(() => [
+    {
+      ...emptyLine,
+      taxPercentage: String(
+        modeTaxRate(
+          (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
+          settings.defaultTaxRate,
+        ),
+      ),
+    },
+  ]);
   const [busy, setBusy] = useState(false);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
@@ -711,7 +735,7 @@ function EntryDialog({
       return;
     }
 
-    const defaultTax = taxMode === 'NT' ? 0 : taxMode === 'TAX' ? 5 : 18;
+    const defaultTax = modeTaxRate(taxMode, settings.defaultTaxRate);
     const baseRate =
       rateType === 'wholesale'
         ? found.wholesaleRate || found.retailRate
@@ -754,7 +778,7 @@ function EntryDialog({
 
   const handleTaxModeChange = (newMode: 'NT' | 'TAX' | 'GST'): void => {
     setTaxMode(newMode);
-    const newTaxPct = newMode === 'NT' ? 0 : newMode === 'TAX' ? 5 : 18;
+    const newTaxPct = modeTaxRate(newMode, settings.defaultTaxRate);
     setLines((prev) =>
       prev.map((l) => {
         const updated = { ...l, taxPercentage: String(newTaxPct) };
@@ -1123,7 +1147,7 @@ function EntryDialog({
                 productOptions={productOptions}
                 warehouseId={warehouseId}
                 rateType={rateType}
-                taxMode={taxMode}
+                modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
                 reverseCalc={reverseCalc}
                 autoBatch={autoBatch}
                 enableFreeQty={enableFreeQty}
@@ -1143,7 +1167,15 @@ function EntryDialog({
       <div className="flex flex-wrap items-center gap-4">
         <button
           type="button"
-          onClick={() => setLines((previous) => [...previous, { ...emptyLine }])}
+          onClick={() =>
+            setLines((previous) => [
+              ...previous,
+              {
+                ...emptyLine,
+                taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
+              },
+            ])
+          }
           className="btn-secondary btn-sm"
         >
           {t('sales.addLine')}
@@ -1369,7 +1401,7 @@ function LineRow({
   productOptions,
   warehouseId,
   rateType,
-  taxMode,
+  modeRate,
   reverseCalc,
   autoBatch,
   enableFreeQty,
@@ -1384,7 +1416,8 @@ function LineRow({
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly warehouseId: string;
   readonly rateType: 'retail' | 'wholesale' | 'mrp';
-  readonly taxMode: 'NT' | 'TAX' | 'GST';
+  /** The rate the tax mode starts a line at. */
+  readonly modeRate: number;
   readonly reverseCalc: boolean;
   readonly autoBatch: boolean;
   readonly enableFreeQty: boolean;
@@ -1458,14 +1491,16 @@ function LineRow({
           : rateType === 'mrp'
             ? chosen.maximumRetailPrice || chosen.retailRate
             : chosen.retailRate;
-      const defaultTax = Number(
-        line.taxPercentage || (taxMode === 'NT' ? 0 : taxMode === 'TAX' ? 5 : 18),
-      );
+      // A product chosen afresh starts at the mode's rate, like its price starts at
+      // the master's: whatever the previous product on this line carried is not a
+      // rate anybody chose for this one.
+      const defaultTax = modeRate;
       const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
       onChange({
         productId: value,
         rate: String(baseRate),
         inclusiveRate: incRate,
+        taxPercentage: String(defaultTax),
         batchNumber: '',
         expiresOn: '',
         serialNumbers: [],

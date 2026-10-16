@@ -1,3 +1,4 @@
+using System.Globalization;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
@@ -198,7 +199,9 @@ public sealed class BatchBalance : AggregateRoot<BatchBalanceId>, IFirmScoped, I
         {
             return Result.Failure<Money>(Error.BusinessRule(
                 "BatchBalance.Insufficient",
-                $"Only {Quantity} of this batch is on hand, so {outgoing} cannot be issued."));
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Only {Quantity:0.######} of this batch is on hand, so {outgoing:0.######} cannot be issued.")));
         }
 
         Quantity -= outgoing;

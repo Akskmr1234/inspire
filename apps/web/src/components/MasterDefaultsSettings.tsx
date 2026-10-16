@@ -63,16 +63,19 @@ export function MasterDefaultsSettings(): React.JSX.Element {
   const [selectedTxType, setSelectedTxType] = useState<string>('Sales');
   const [seeding, setSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<string | null>(null);
+  const [seedProblems, setSeedProblems] = useState<readonly string[]>([]);
 
   const runSeeder = async (): Promise<void> => {
     try {
       setSeeding(true);
       setSeedResult(null);
+      setSeedProblems([]);
       const res = await populateSampleTransactions();
       await queryClient.invalidateQueries();
       setSeedResult(
         `Generated sample data: ${res.salesInvoicesCreated} Sales Invoices, ${res.purchaseInvoicesCreated} Purchase Invoices, ${res.ordersCreated} Orders, ${res.vouchersCreated} Vouchers.`,
       );
+      setSeedProblems(res.problems);
     } catch {
       setSeedResult('Failed to populate some sample transactions.');
     } finally {
@@ -984,6 +987,14 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             <IconCheck className="size-4 shrink-0" />
             <span>{seedResult}</span>
           </div>
+        )}
+
+        {seedProblems.length > 0 && (
+          <ul className="alert-warn list-disc space-y-0.5 ps-6 text-xs">
+            {seedProblems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

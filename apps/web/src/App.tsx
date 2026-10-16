@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect, type ComponentType } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
+import { lazyScreen } from '@/lib/screens';
 import { ReportSkeleton } from '@/components/ReportFrame';
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -19,132 +20,132 @@ import { applyPresentation, useSession } from '@/stores/session';
   either state, and deferring them would only add a spinner before the spinner.
 */
 
-/**
- * Wraps a named export for `lazy`, which understands default exports only.
- *
- * Several of these modules deliberately export more than one screen — the five
- * stock reports share their column definitions, and brands and categories are the
- * same master with a different noun — so requiring a default export per screen
- * would mean splitting files that belong together.
- */
-function named<TProps extends object, TName extends string>(
-  load: () => Promise<Record<TName, ComponentType<TProps>>>,
-  name: TName,
-): React.LazyExoticComponent<ComponentType<TProps>> {
-  return lazy(() => load().then((module) => ({ default: module[name] })));
-}
-
-const TrialBalancePage = named(
+const TrialBalancePage = lazyScreen(
   () => import('@/pages/TrialBalancePage'),
   'TrialBalancePage',
 );
-const VoucherEntryPage = named(
+const VoucherEntryPage = lazyScreen(
   () => import('@/pages/VoucherEntryPage'),
   'VoucherEntryPage',
 );
-const PaymentEntryPage = named(
+const PaymentEntryPage = lazyScreen(
   () => import('@/pages/VoucherEntryPage'),
   'PaymentEntryPage',
 );
-const ReceiptEntryPage = named(
+const ReceiptEntryPage = lazyScreen(
   () => import('@/pages/VoucherEntryPage'),
   'ReceiptEntryPage',
 );
-const ProfitAndLossPage = named(
+const ProfitAndLossPage = lazyScreen(
   () => import('@/pages/ProfitAndLossPage'),
   'ProfitAndLossPage',
 );
-const BalanceSheetPage = named(
+const BalanceSheetPage = lazyScreen(
   () => import('@/pages/BalanceSheetPage'),
   'BalanceSheetPage',
 );
-const DayBookPage = named(() => import('@/pages/DayBookPage'), 'DayBookPage');
-const VoucherReportPage = named(
+const DayBookPage = lazyScreen(() => import('@/pages/DayBookPage'), 'DayBookPage');
+const VoucherReportPage = lazyScreen(
   () => import('@/pages/VoucherReportPage'),
   'VoucherReportPage',
 );
-const TransactionSummaryPage = named(
+const TransactionSummaryPage = lazyScreen(
   () => import('@/pages/TransactionSummaryPage'),
   'TransactionSummaryPage',
 );
-const CashFlowPage = named(() => import('@/pages/CashFlowPage'), 'CashFlowPage');
-const MenuAdministrationPage = named(
+const CashFlowPage = lazyScreen(() => import('@/pages/CashFlowPage'), 'CashFlowPage');
+const MenuAdministrationPage = lazyScreen(
   () => import('@/pages/MenuAdministrationPage'),
   'MenuAdministrationPage',
 );
-const LedgersPage = named(() => import('@/pages/LedgersPage'), 'LedgersPage');
-const DashboardPage = named(() => import('@/pages/DashboardPage'), 'DashboardPage');
-const UnitsPage = named(() => import('@/pages/UnitsPage'), 'UnitsPage');
-const CategoriesPage = named(() => import('@/pages/CategoriesPage'), 'CategoriesPage');
-const BrandsPage = named(() => import('@/pages/CategoriesPage'), 'BrandsPage');
-const WarehousesPage = named(() => import('@/pages/WarehousesPage'), 'WarehousesPage');
-const CustomersPage = named(() => import('@/pages/CustomersPage'), 'CustomersPage');
-const ProductsPage = named(() => import('@/pages/ProductsPage'), 'ProductsPage');
-const SalesPage = named(() => import('@/pages/SalesPage'), 'SalesPage');
-const SalesReturnsPage = named(() => import('@/pages/SalesPage'), 'SalesReturnsPage');
-const PurchasePage = named(() => import('@/pages/PurchasePage'), 'PurchasePage');
-const PurchaseReturnsPage = named(
+const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
+const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
+const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
+const CategoriesPage = lazyScreen(
+  () => import('@/pages/CategoriesPage'),
+  'CategoriesPage',
+);
+const BrandsPage = lazyScreen(() => import('@/pages/CategoriesPage'), 'BrandsPage');
+const WarehousesPage = lazyScreen(
+  () => import('@/pages/WarehousesPage'),
+  'WarehousesPage',
+);
+const CustomersPage = lazyScreen(() => import('@/pages/CustomersPage'), 'CustomersPage');
+const ProductsPage = lazyScreen(() => import('@/pages/ProductsPage'), 'ProductsPage');
+const SalesPage = lazyScreen(() => import('@/pages/SalesPage'), 'SalesPage');
+const SalesReturnsPage = lazyScreen(
+  () => import('@/pages/SalesPage'),
+  'SalesReturnsPage',
+);
+const PurchasePage = lazyScreen(() => import('@/pages/PurchasePage'), 'PurchasePage');
+const PurchaseReturnsPage = lazyScreen(
   () => import('@/pages/PurchasePage'),
   'PurchaseReturnsPage',
 );
-const PurchaseOrdersPage = named(
+const PurchaseOrdersPage = lazyScreen(
   () => import('@/pages/OrdersPage'),
   'PurchaseOrdersPage',
 );
-const SalesOrdersPage = named(() => import('@/pages/OrdersPage'), 'SalesOrdersPage');
-const SettingsPage = named(() => import('@/pages/SettingsPage'), 'SettingsPage');
-const OpeningStockPage = named(
+const SalesOrdersPage = lazyScreen(() => import('@/pages/OrdersPage'), 'SalesOrdersPage');
+const SettingsPage = lazyScreen(() => import('@/pages/SettingsPage'), 'SettingsPage');
+const OpeningStockPage = lazyScreen(
   () => import('@/pages/StockOperationsPage'),
   'OpeningStockPage',
 );
-const SuppliersPage = named(() => import('@/pages/SuppliersPage'), 'SuppliersPage');
-const TaxReturnsPage = named(() => import('@/pages/TaxReturnsPage'), 'TaxReturnsPage');
-const StockOperationsPage = named(
+const SuppliersPage = lazyScreen(() => import('@/pages/SuppliersPage'), 'SuppliersPage');
+const TaxReturnsPage = lazyScreen(
+  () => import('@/pages/TaxReturnsPage'),
+  'TaxReturnsPage',
+);
+const StockOperationsPage = lazyScreen(
   () => import('@/pages/StockOperationsPage'),
   'StockOperationsPage',
 );
-const AccountGroupSummaryPage = named(
+const AccountGroupSummaryPage = lazyScreen(
   () => import('@/pages/AccountGroupSummaryPage'),
   'AccountGroupSummaryPage',
 );
-const PostDatedChequesPage = named(
+const PostDatedChequesPage = lazyScreen(
   () => import('@/pages/PostDatedChequesPage'),
   'PostDatedChequesPage',
 );
-const ChequeCalendarPage = named(
+const ChequeCalendarPage = lazyScreen(
   () => import('@/pages/ChequeCalendarPage'),
   'ChequeCalendarPage',
 );
-const ChequeRegisterPage = named(
+const ChequeRegisterPage = lazyScreen(
   () => import('@/pages/ChequeRegisterPage'),
   'ChequeRegisterPage',
 );
 
-const BatchStockPage = named(() => import('@/pages/StockReportPages'), 'BatchStockPage');
-const ExpiryReportPage = named(
+const BatchStockPage = lazyScreen(
+  () => import('@/pages/StockReportPages'),
+  'BatchStockPage',
+);
+const ExpiryReportPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'ExpiryReportPage',
 );
-const SerialStockPage = named(
+const SerialStockPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'SerialStockPage',
 );
-const ItemMovementPage = named(
+const ItemMovementPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'ItemMovementPage',
 );
-const StockLedgerPage = named(
+const StockLedgerPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'StockLedgerPage',
 );
-const StockValuationPage = named(
+const StockValuationPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'StockValuationPage',
 );
-const ProfilePage = named(() => import('@/pages/ProfilePage'), 'ProfilePage');
+const ProfilePage = lazyScreen(() => import('@/pages/ProfilePage'), 'ProfilePage');
 
 /* The cash and bank books are one component told which of the two it is. */
-const CashBankBookPage = named(
+const CashBankBookPage = lazyScreen(
   () => import('@/pages/CashBankBookPage'),
   'CashBankBookPage',
 );

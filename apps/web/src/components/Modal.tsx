@@ -121,7 +121,16 @@ export function Modal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 min-h-0 flex flex-col gap-4">
+            {/*
+              `[&>*]:shrink-0`: the body is a column that scrolls, so nothing in it may
+              shrink to fit. A flex item with `overflow` set has no automatic minimum
+              height, and the line tables sit in an `overflow-x-auto` wrapper so they can
+              scroll sideways — so the moment a document was taller than the dialog, the
+              flexbox took the missing height out of that wrapper and squeezed it to
+              zero. The product row was still there, under the Add line button, which
+              is why a purchase could not be given an item.
+            */}
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 [&>*]:shrink-0">
               {children}
             </div>
           </Dialog.Content>

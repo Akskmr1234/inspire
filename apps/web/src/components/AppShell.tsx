@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
+import { prefetchScreens } from '@/lib/screens';
+import { ReportSkeleton } from '@/components/ReportFrame';
 import { currentDisplayName, type ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
@@ -41,6 +43,10 @@ const DESKTOP = '(min-width: 1024px)';
 export function AppShell(): React.JSX.Element {
   const { t } = useTranslation();
   const location = useLocation();
+
+  // Once signed in, fetch the rest of the screens behind the one on show. See
+  // `prefetchScreens`.
+  useEffect(() => prefetchScreens(), []);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -337,7 +343,22 @@ export function AppShell(): React.JSX.Element {
                 than leaving the bar naming a page that is no longer there.
               */}
               <HeadingSlotProvider value={slot}>
-                <Outlet />
+                {/*
+                  Its own boundary, inside the shell. The one in `App` sits outside
+                  the shell, so a screen whose code was still downloading took the
+                  menu and the header down with it and put a blank skeleton where
+                  the whole application had been — the delay after a click was the
+                  menu vanishing. Here only the content area waits.
+                */}
+                <Suspense
+                  fallback={
+                    <div className="page">
+                      <ReportSkeleton rows={5} />
+                    </div>
+                  }
+                >
+                  <Outlet />
+                </Suspense>
               </HeadingSlotProvider>
             </ErrorBoundary>
           </div>
