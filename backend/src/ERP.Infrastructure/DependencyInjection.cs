@@ -6,10 +6,10 @@ using ERP.Application.Inventory.Masters;
 using ERP.Application.Inventory.Products;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Platform.Dashboards;
+using ERP.Application.Platform.Data;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
-using ERP.Application.Platform.Data;
 using ERP.Application.Platform.Users;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionChecker, CachedPermissionChecker>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IUserAdministration, UserAdministration>();
+        services.AddScoped<IMyAccount, MyAccount>();
         services.AddScoped<IDataReset, DataReset>();
 
         services.AddOptions<SeedOptions>()

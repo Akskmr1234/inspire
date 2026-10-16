@@ -51,6 +51,11 @@ public interface ITokenService
 /// Whether the client must send the user to a password-change screen before
 /// anything else.
 /// </param>
+/// <param name="SessionId">
+/// The sign-in this token belongs to: the family of refresh tokens it was issued
+/// with, so a user looking at where they are signed in can be told which one is
+/// this device.
+/// </param>
 public sealed record AccessTokenRequest(
     UserId UserId,
     TenantId TenantId,
@@ -60,7 +65,8 @@ public sealed record AccessTokenRequest(
     IReadOnlyCollection<FirmId> FirmIds,
     IReadOnlyCollection<BranchId> BranchIds,
     IReadOnlyCollection<string> Roles,
-    bool MustChangePassword);
+    bool MustChangePassword,
+    Guid? SessionId = null);
 
 /// <summary>A signed access token and its expiry.</summary>
 /// <param name="Value">The encoded JWT.</param>
