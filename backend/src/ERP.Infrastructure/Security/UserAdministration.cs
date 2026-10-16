@@ -404,7 +404,7 @@ public sealed class UserAdministration : IUserAdministration
                 permission.Code,
                 permission.Module,
                 permission.Resource,
-                permission.Verb.ToString().ToLower(),
+                permission.Verb.ToString().ToLowerInvariant(),
                 permission.Description))
             .ToListAsync(cancellationToken);
 
@@ -527,11 +527,15 @@ public sealed class UserAdministration : IUserAdministration
         RoleId? except,
         CancellationToken cancellationToken)
     {
-        string lowered = name.ToLower();
+        // A tenant holds a handful of roles, so they are compared here rather than by
+        // asking the database to fold case, which would depend on its collation.
+        List<string> names = await _context.Roles
+            .Where(role => except == null || role.Id != except)
+            .Select(role => role.Name)
+            .ToListAsync(cancellationToken);
 
-        bool taken = await _context.Roles.AnyAsync(
-            role => role.Name.ToLower() == lowered && (except == null || role.Id != except),
-            cancellationToken);
+        bool taken = names.Any(existing => string.Equals(
+            existing, name, StringComparison.OrdinalIgnoreCase));
 
         return taken
             ? Result.Failure(Error.Conflict("Role.NameTaken", $"A role named '{name}' already exists."))

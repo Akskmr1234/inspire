@@ -303,6 +303,38 @@ public sealed class InventoryMastersController : ApiControllerBase
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 
+    // ------------------------------------------------------------- correction
+
+    /// <summary>Corrects a category, brand or warehouse.</summary>
+    /// <param name="kind">Category, Brand or Warehouse.</param>
+    /// <param name="id">The record.</param>
+    /// <param name="request">Its names, and a warehouse's address.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>No content.</returns>
+    /// <remarks>The code stays as it is. Units are renamed at <c>units/{id}</c>.</remarks>
+    /// <response code="204">Saved.</response>
+    /// <response code="400">The name is missing, or the kind is not corrected here.</response>
+    /// <response code="404">No such record in the selected firm.</response>
+    [HttpPut("{kind}/{id:guid}")]
+    [RequiresPermission("inventory", "category", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAsync(
+        InventoryMasterKind kind,
+        Guid id,
+        [FromBody] UpdateMasterRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new UpdateMasterCommand(kind, id, request.Name, request.NameArabic, request.Address),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
     // ------------------------------------------------------------- withdrawal
 
     /// <summary>Withdraws an inventory master from use, or returns it.</summary>
@@ -385,6 +417,15 @@ public sealed record CreateWarehouseRequest(
     [property: JsonRequired] string Code,
     [property: JsonRequired] string Name,
     Guid? BranchId = null,
+    string? NameArabic = null,
+    string? Address = null);
+
+/// <summary>Correcting a category, brand or warehouse.</summary>
+/// <param name="Name">Its name.</param>
+/// <param name="NameArabic">The same in Arabic.</param>
+/// <param name="Address">Where a warehouse is.</param>
+public sealed record UpdateMasterRequest(
+    [property: JsonRequired] string Name,
     string? NameArabic = null,
     string? Address = null);
 

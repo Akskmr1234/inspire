@@ -278,40 +278,50 @@ export function AppShell(): React.JSX.Element {
             </button>
 
             {/*
-              User profile trigger and menu.
+              User profile trigger and menu. On a phone it is the avatar alone and
+              the menu it opens carries the theme, the language and signing out,
+              because the bar cannot hold those as well as the screen's own title
+              and button: at 360px they pushed the button under themselves and
+              slid the whole page sideways.
             */}
             <UserProfileDropdown
               displayName={displayName}
               tenantCode={tenantCode}
+              theme={theme}
+              language={language}
+              onThemeChange={setTheme}
+              onLanguageChange={(next) => void changeLanguage(next)}
               onSignOut={() => void signOut()}
             />
 
-            <ThemeSwitch theme={theme} onChange={setTheme} />
+            <div className="hidden items-center gap-2 sm:flex">
+              <ThemeSwitch theme={theme} onChange={setTheme} />
 
-            <Switch<Language>
-              value={language}
-              options={[
-                ['en', 'EN'],
-                ['ar', 'ع'],
-              ]}
-              onChange={(next) => void changeLanguage(next)}
-              label={t('common.language')}
-            />
+              <Switch<Language>
+                value={language}
+                options={[
+                  ['en', 'EN'],
+                  ['ar', 'ع'],
+                ]}
+                onChange={(next) => void changeLanguage(next)}
+                label={t('common.language')}
+              />
 
-            {/*
-              Flex rather than the grid `.btn-icon` uses: that class centres a single
-              glyph in a square, and a second child in the same grid cell column
-              stacks under the first instead of sitting beside it.
-            */}
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="btn-icon text-ink-muted hover:bg-surface-3 hover:text-red-600 dark:hover:text-red-400"
-              aria-label={t('nav.signOut')}
-              title={t('nav.signOut')}
-            >
-              <IconLogout />
-            </button>
+              {/*
+                Flex rather than the grid `.btn-icon` uses: that class centres a single
+                glyph in a square, and a second child in the same grid cell column
+                stacks under the first instead of sitting beside it.
+              */}
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="btn-icon text-ink-muted hover:bg-surface-3 hover:text-red-600 dark:hover:text-red-400"
+                aria-label={t('nav.signOut')}
+                title={t('nav.signOut')}
+              >
+                <IconLogout />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -376,23 +386,27 @@ export function AppShell(): React.JSX.Element {
 }
 
 /**
- * The navigation as a drawer, with the backdrop that dismisses it.
+ * The signed-in user's menu: who they are, their profile, and — on a phone, where the
+ * bar has no room for them — the theme, the language and signing out.
  *
- * A component of its own rather than markup inline in the shell, because it is
- * mounted only while open — so its own mount and unmount are the drawer opening and
- * closing, which is what `Dialog.Root open` reads.
- *
- * A sheet is a dialog: it takes the screen, the page behind it should not be
- * reachable while it is there, Escape should shut it and focus should come back to
- * whatever opened it. All of that is Radix's now rather than a hundred lines here.
+ * The trigger is the avatar alone below `md`. A name truncated to three letters says
+ * less than the initials do, and the width it took was the screen's own title's.
  */
 function UserProfileDropdown({
   displayName,
   tenantCode,
+  theme,
+  language,
+  onThemeChange,
+  onLanguageChange,
   onSignOut,
 }: {
   readonly displayName: string | null;
   readonly tenantCode: string | null;
+  readonly theme: Theme;
+  readonly language: Language;
+  readonly onThemeChange: (next: Theme) => void;
+  readonly onLanguageChange: (next: Language) => void;
   readonly onSignOut: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -418,17 +432,16 @@ function UserProfileDropdown({
     };
   }, [open]);
 
-  const effectiveName = displayName || currentDisplayName() || 'System Administrator';
+  const effectiveName = displayName || currentDisplayName() || t('profile.user');
+  const initials = initialsOf(effectiveName);
 
-  const initials =
-    effectiveName
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() ?? '')
-      .join('') ||
-    effectiveName.slice(0, 2).toUpperCase() ||
-    'SA';
+  const go = (path: string): void => {
+    setOpen(false);
+    navigate(path);
+  };
+
+  const item =
+    'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600 sm:text-xs';
 
   return (
     <div ref={containerRef} className="relative">
@@ -438,21 +451,22 @@ function UserProfileDropdown({
         aria-expanded={open}
         aria-haspopup="true"
         aria-label={`${effectiveName} - ${t('profile.title')}`}
+        title={effectiveName}
         className={clsx(
-          'flex items-center gap-2 rounded-lg border border-line/80 bg-surface-2/90 px-2 py-1 text-xs font-medium transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 sm:px-2.5 sm:py-1.5',
+          'flex items-center gap-2 rounded-full border border-line/80 bg-surface-2/90 p-0.5 text-xs font-medium transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 md:rounded-lg md:px-2.5 md:py-1.5',
           open && 'border-brand-500 bg-surface-3 ring-2 ring-brand-500/20 shadow-xs',
         )}
       >
-        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-[10px] font-bold text-white shadow-xs">
+        <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-[11px] font-bold text-white shadow-xs md:size-6 md:text-[10px]">
           {initials}
           <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
         </span>
-        <span className="max-w-28 truncate font-semibold text-ink sm:max-w-36 md:max-w-44">
+        <span className="hidden max-w-44 truncate font-semibold text-ink md:inline">
           {effectiveName}
         </span>
         <IconChevron
           className={clsx(
-            'size-3.5 text-ink-muted transition-transform duration-200',
+            'hidden size-3.5 text-ink-muted transition-transform duration-200 md:block',
             open && 'rotate-180',
           )}
         />
@@ -461,88 +475,64 @@ function UserProfileDropdown({
       {open && (
         <div
           role="menu"
-          className="absolute end-0 top-full z-50 mt-2 w-64 rounded-xl border border-line bg-surface p-2 shadow-float animate-pop outline-none backdrop-blur-sm"
+          className="absolute end-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-line bg-surface p-2 shadow-float animate-pop outline-none"
         >
-          {/* Header Profile Info */}
-          <div className="flex items-center gap-3 border-b border-line px-2 py-2.5">
+          <div className="flex items-center gap-3 border-b border-line px-2 pb-3 pt-1.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-raised">
               {initials}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-ink">{effectiveName}</p>
-              <p className="truncate text-[11px] text-ink-muted">
-                {tenantCode ? `${tenantCode}` : 'Inspire ERP Main'}
-              </p>
-              <span className="inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                {t('profile.active')}
-              </span>
+              <p className="truncate text-sm font-bold text-ink">{effectiveName}</p>
+              {tenantCode && (
+                <p className="truncate text-xs text-ink-muted">{tenantCode}</p>
+              )}
             </div>
           </div>
 
-          {/* Links */}
           <div className="py-1">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                navigate('/profile');
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                className="size-4 text-ink-muted"
-              >
-                <circle cx="12" cy="8" r="5" />
-                <path d="M20 21a8 8 0 0 0-16 0" />
-              </svg>
+            <button type="button" onClick={() => go('/profile')} className={item}>
+              <IconPerson className="size-4 text-ink-muted" />
               <span>{t('profile.myProfile')}</span>
             </button>
-
             <button
               type="button"
-              onClick={() => {
-                setOpen(false);
-                navigate('/change-password');
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
+              onClick={() => go('/profile?tab=security')}
+              className={item}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                className="size-4 text-ink-muted"
-              >
-                <rect x="5" y="11" width="14" height="10" rx="2" />
-                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-              </svg>
+              <IconPadlock className="size-4 text-ink-muted" />
               <span>{t('changePassword.title')}</span>
             </button>
+          </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                navigate('/settings');
-              }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-ink transition hover:bg-surface-2 hover:text-brand-600"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                className="size-4 text-ink-muted"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              <span>{t('settings.title')}</span>
-            </button>
+          {/*
+            The switches the bar shows beside the avatar from `sm` up. Here they are
+            rows with a word each, which a thumb finds more easily than two glyphs.
+          */}
+          <div className="space-y-2 border-t border-line px-2.5 py-2.5 sm:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-ink">{t('common.theme')}</span>
+              <Switch<Theme>
+                value={theme}
+                options={[
+                  ['light', t('profile.light')],
+                  ['dark', t('profile.dark')],
+                ]}
+                onChange={onThemeChange}
+                label={t('common.theme')}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-ink">{t('common.language')}</span>
+              <Switch<Language>
+                value={language}
+                options={[
+                  ['en', 'English'],
+                  ['ar', 'العربية'],
+                ]}
+                onChange={onLanguageChange}
+                label={t('common.language')}
+              />
+            </div>
           </div>
 
           <div className="border-t border-line pt-1">
@@ -552,7 +542,7 @@ function UserProfileDropdown({
                 setOpen(false);
                 onSignOut();
               }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 sm:text-xs dark:hover:bg-red-950/30"
             >
               <IconLogout className="size-4" />
               <span>{t('nav.signOut')}</span>
@@ -561,6 +551,48 @@ function UserProfileDropdown({
         </div>
       )}
     </div>
+  );
+}
+
+/** Up to two initials for an avatar: the first letters of the first two words. */
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters = words
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+  return letters || name.slice(0, 2).toUpperCase() || '?';
+}
+
+function IconPerson(props: { readonly className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      aria-hidden="true"
+      className={props.className}
+    >
+      <circle cx="12" cy="8" r="5" />
+      <path d="M20 21a8 8 0 0 0-16 0" />
+    </svg>
+  );
+}
+
+function IconPadlock(props: { readonly className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      aria-hidden="true"
+      className={props.className}
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
   );
 }
 
@@ -584,14 +616,8 @@ function NavDrawer({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const displayName = useSession((s) => s.displayName);
-  const effectiveName = displayName || currentDisplayName() || 'System Administrator';
-  const drawerInitials =
-    effectiveName
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() ?? '')
-      .join('') || 'SA';
+  const effectiveName = displayName || currentDisplayName() || t('profile.user');
+  const drawerInitials = initialsOf(effectiveName);
 
   return (
     <Dialog.Root open onOpenChange={(next) => !next && onClose()}>

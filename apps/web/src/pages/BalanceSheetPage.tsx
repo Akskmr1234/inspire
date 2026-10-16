@@ -165,7 +165,7 @@ export function BalanceSheetPage(): React.JSX.Element {
         if (viewMode === 'facing') {
           return (
             <div className="space-y-4">
-              <div className="grid items-start gap-4 lg:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
                 <HierarchicalAccountsTable
                   heads={heads.filter((h) => h.headId === 1)}
                   columns={columns}

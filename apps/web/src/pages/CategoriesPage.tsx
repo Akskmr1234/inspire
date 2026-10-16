@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
+import { EditNamedMaster } from '@/components/EditNamedMaster';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { SelectField, TextField } from '@/components/Form';
 import type { GridColumn } from '@/components/DataGrid';
@@ -27,6 +28,7 @@ export function CategoriesPage(): React.JSX.Element {
   const columns = (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
+    edit: (row: CategorySummary) => void,
   ): readonly GridColumn<CategorySummary>[] => [
     { key: 'code', header: t('masters.code'), value: (row) => row.code },
     { key: 'name', header: t('masters.name'), value: (row) => row.name },
@@ -51,16 +53,19 @@ export function CategoriesPage(): React.JSX.Element {
       header: '',
       value: () => '',
       render: (row) => (
-        <RowAction
-          label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
-          tone={row.isActive ? 'danger' : 'neutral'}
-          disabled={busy}
-          onClick={() =>
-            run(async () => {
-              await setMasterActive('Category', row.id, !row.isActive);
-            })
-          }
-        />
+        <span className="inline-flex gap-1.5">
+          <RowAction label={t('common.edit')} disabled={busy} onClick={() => edit(row)} />
+          <RowAction
+            label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
+            tone={row.isActive ? 'danger' : 'neutral'}
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await setMasterActive('Category', row.id, !row.isActive);
+              })
+            }
+          />
+        </span>
       ),
     },
   ];
@@ -69,6 +74,7 @@ export function CategoriesPage(): React.JSX.Element {
     <MasterFrame<CategorySummary>
       title={t('nav.categories')}
       addTitle={t('masters.newCategory')}
+      editTitle={t('masters.editCategory')}
       queryKey="categories"
       fetchRows={(includeInactive) =>
         listMaster<CategorySummary>('categories', includeInactive)
@@ -76,6 +82,9 @@ export function CategoriesPage(): React.JSX.Element {
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy, rows) => <AddCategory run={run} busy={busy} rows={rows} />}
+      editForm={(row, run, busy) => (
+        <EditNamedMaster kind="Category" record={row} run={run} busy={busy} />
+      )}
     />
   );
 }
@@ -190,6 +199,7 @@ export function BrandsPage(): React.JSX.Element {
   const columns = (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
+    edit: (row: BrandSummary) => void,
   ): readonly GridColumn<BrandSummary>[] => [
     { key: 'code', header: t('masters.code'), value: (row) => row.code },
     { key: 'name', header: t('masters.name'), value: (row) => row.name },
@@ -209,16 +219,19 @@ export function BrandsPage(): React.JSX.Element {
       header: '',
       value: () => '',
       render: (row) => (
-        <RowAction
-          label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
-          tone={row.isActive ? 'danger' : 'neutral'}
-          disabled={busy}
-          onClick={() =>
-            run(async () => {
-              await setMasterActive('Brand', row.id, !row.isActive);
-            })
-          }
-        />
+        <span className="inline-flex gap-1.5">
+          <RowAction label={t('common.edit')} disabled={busy} onClick={() => edit(row)} />
+          <RowAction
+            label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
+            tone={row.isActive ? 'danger' : 'neutral'}
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await setMasterActive('Brand', row.id, !row.isActive);
+              })
+            }
+          />
+        </span>
       ),
     },
   ];
@@ -227,11 +240,15 @@ export function BrandsPage(): React.JSX.Element {
     <MasterFrame<BrandSummary>
       title={t('nav.brands')}
       addTitle={t('masters.newBrand')}
+      editTitle={t('masters.editBrand')}
       queryKey="brands"
       fetchRows={(includeInactive) => listMaster<BrandSummary>('brands', includeInactive)}
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy) => <AddBrand run={run} busy={busy} />}
+      editForm={(row, run, busy) => (
+        <EditNamedMaster kind="Brand" record={row} run={run} busy={busy} />
+      )}
     />
   );
 }

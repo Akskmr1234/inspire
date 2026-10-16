@@ -59,7 +59,7 @@ public sealed class UsersController : ApiControllerBase
     /// <param name="id">The user.</param>
     /// <param name="request">The user as they should be. The password is ignored.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The user.</returns>
+    /// <returns>The user as they now stand.</returns>
     [HttpPut("{id:guid}")]
     [RequiresPermission("platform", "user", "edit")]
     [ProducesResponseType(typeof(UserSummary), StatusCodes.Status200OK)]

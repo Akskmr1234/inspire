@@ -253,9 +253,9 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="Post">Post a draft once it is corrected. A posted invoice is always posted again.</param>
 /// <param name="Reason">Why a posted invoice was changed.</param>
 public sealed record UpdateSalesInvoiceRequest(
-    DateOnly Date,
-    Guid CustomerLedgerId,
-    Guid WarehouseId,
+    [property: JsonRequired] DateOnly Date,
+    [property: JsonRequired] Guid CustomerLedgerId,
+    [property: JsonRequired] Guid WarehouseId,
     IReadOnlyList<SalesInvoiceLineInput> Lines,
     IReadOnlyList<SalesInvoiceChargeInput>? Charges = null,
     TaxMode? Mode = null,

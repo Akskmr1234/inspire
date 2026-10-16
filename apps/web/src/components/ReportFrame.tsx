@@ -80,11 +80,14 @@ export function ReportFrame<TData>({
   subtitle,
   controls,
   banner,
+  actions,
   query,
   isEmpty,
   children,
 }: {
   readonly title: string;
+  /** Controls beside the print button, such as "New ledger". */
+  readonly actions?: React.ReactNode;
   /** A line under the heading, for a period or a scope the title cannot carry. */
   readonly subtitle?: string;
   readonly controls: React.ReactNode;
@@ -127,28 +130,31 @@ export function ReportFrame<TData>({
         title={title}
         subtitle={subtitle}
         actions={
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="btn-icon shrink-0"
-            title={t('reports.print')}
-            aria-label={t('reports.print')}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="size-[18px]"
-              aria-hidden="true"
+          <>
+            {actions}
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="btn-icon shrink-0"
+              title={t('reports.print')}
+              aria-label={t('reports.print')}
             >
-              <path d="M6 9V3h12v6" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-              <path d="M6 14h12v7H6z" />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-[18px]"
+                aria-hidden="true"
+              >
+                <path d="M6 9V3h12v6" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+                <path d="M6 14h12v7H6z" />
+              </svg>
+            </button>
+          </>
         }
       />
 

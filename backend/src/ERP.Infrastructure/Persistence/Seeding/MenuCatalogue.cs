@@ -330,6 +330,15 @@ public static class MenuCatalogue
             "accounting",
             Children:
             [
+                // First, because it is the report asked for most: what one customer,
+                // supplier, bank or expense head did over a period, posting by posting.
+                new(
+                    "accounts-reports.ledger-statement",
+                    "Ledger statement",
+                    "كشف حساب",
+                    "accounting",
+                    "/accounting/ledger-statement",
+                    ViewReports),
                 new(
                     "accounts-reports.trial-balance",
                     "Trial balance",
@@ -411,6 +420,23 @@ public static class MenuCatalogue
                     "دفتر البنك",
                     "accounting",
                     "/accounting/bank-book",
+                    ViewReports),
+
+                // What is owed each way, bill by bill or aged. The figures were served
+                // all along; nothing in the menu reached them.
+                new(
+                    "accounts-reports.debtors",
+                    "Debtors outstanding",
+                    "أرصدة العملاء المستحقة",
+                    "accounting",
+                    "/accounting/debtors",
+                    ViewReports),
+                new(
+                    "accounts-reports.creditors",
+                    "Creditors outstanding",
+                    "أرصدة الموردين المستحقة",
+                    "accounting",
+                    "/accounting/creditors",
                     ViewReports),
             ]),
 

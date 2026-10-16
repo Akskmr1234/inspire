@@ -10,6 +10,7 @@ import {
   type PrintTemplate,
   type PrintableDocument,
 } from '@/lib/printing';
+import { FitToWidth } from '@/components/print/FitToWidth';
 import { PAPER, PrintedDocument } from '@/components/print/PrintedDocument';
 
 interface Run {
@@ -155,10 +156,10 @@ export function PrintCenter({
         </div>
       </div>
 
-      <div className="no-print min-h-0 flex-1 overflow-auto rounded-xl bg-slate-200 p-4 dark:bg-slate-900">
-        <div className="mx-auto w-fit shadow-xl">
+      <div className="no-print min-h-0 flex-1 overflow-y-auto rounded-xl bg-slate-200 p-2 sm:p-4 dark:bg-slate-900">
+        <FitToWidth>
           <PrintedDocument document={document} template={firstTemplate} />
-        </div>
+        </FitToWidth>
       </div>
 
       {run &&

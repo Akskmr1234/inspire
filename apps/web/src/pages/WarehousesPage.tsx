@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
+import { EditNamedMaster } from '@/components/EditNamedMaster';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { TextField } from '@/components/Form';
 import type { GridColumn } from '@/components/DataGrid';
@@ -28,6 +29,7 @@ export function WarehousesPage(): React.JSX.Element {
   const columns = (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
+    edit: (row: WarehouseSummary) => void,
   ): readonly GridColumn<WarehouseSummary>[] => [
     { key: 'code', header: t('masters.code'), value: (row) => row.code },
     { key: 'name', header: t('masters.name'), value: (row) => row.name },
@@ -67,6 +69,7 @@ export function WarehousesPage(): React.JSX.Element {
       value: () => '',
       render: (row) => (
         <div className="flex flex-wrap justify-end gap-1">
+          <RowAction label={t('common.edit')} disabled={busy} onClick={() => edit(row)} />
           {/* Offering "make default" on the one that already is, or on a withdrawn
               one the server would refuse, would be offering an action that fails. */}
           {!row.isDefault && row.isActive && (
@@ -99,6 +102,7 @@ export function WarehousesPage(): React.JSX.Element {
     <MasterFrame<WarehouseSummary>
       title={t('nav.warehouses')}
       addTitle={t('masters.newWarehouse')}
+      editTitle={t('masters.editWarehouse')}
       queryKey="warehouses"
       fetchRows={(includeInactive) =>
         listMaster<WarehouseSummary>('warehouses', includeInactive)
@@ -106,6 +110,9 @@ export function WarehousesPage(): React.JSX.Element {
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy) => <AddWarehouse run={run} busy={busy} />}
+      editForm={(row, run, busy) => (
+        <EditNamedMaster kind="Warehouse" record={row} run={run} busy={busy} />
+      )}
     />
   );
 }

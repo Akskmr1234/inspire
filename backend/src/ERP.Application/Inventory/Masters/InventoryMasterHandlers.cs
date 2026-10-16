@@ -687,3 +687,133 @@ public sealed class SetMasterActiveCommandHandler : ICommandHandler<SetMasterAct
         Result.Failure(Error.NotFound(
             "InventoryMaster.NotFound", $"No such {noun} in the selected firm."));
 }
+
+/// <summary>Handles <see cref="UpdateMasterCommand"/>.</summary>
+public sealed class UpdateMasterCommandHandler : ICommandHandler<UpdateMasterCommand>
+{
+    private readonly IInventoryMasterRepository _masters;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="UpdateMasterCommandHandler"/> class.</summary>
+    /// <param name="masters">The master repository.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public UpdateMasterCommandHandler(
+        IInventoryMasterRepository masters,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _masters = masters;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> Handle(
+        UpdateMasterCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<FirmId> firm = MasterContext.ResolveFirm(_tenantContext);
+
+        if (firm.IsFailure)
+        {
+            return Result.Failure(firm.Error);
+        }
+
+        Result applied = request.Kind switch
+        {
+            InventoryMasterKind.Category => await UpdateCategoryAsync(request, firm.Value, cancellationToken),
+            InventoryMasterKind.Brand => await UpdateBrandAsync(request, firm.Value, cancellationToken),
+            InventoryMasterKind.Warehouse => await UpdateWarehouseAsync(request, firm.Value, cancellationToken),
+            _ => Result.Failure(Error.Validation(
+                "InventoryMaster.NotEditableHere",
+                $"A {request.Kind} is not corrected here.")),
+        };
+
+        if (applied.IsFailure)
+        {
+            return applied;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+
+    private static Result NotFound(string what) =>
+        Result.Failure(Error.NotFound(
+            "InventoryMaster.NotFound", $"No such {what} in the selected firm."));
+
+    private async Task<Result> UpdateCategoryAsync(
+        UpdateMasterCommand request,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        Category? category = await _masters.FindCategoryAsync(
+            CategoryId.From(request.Id), cancellationToken);
+
+        if (category is null || category.FirmId != firmId)
+        {
+            return NotFound("category");
+        }
+
+        Result renamed = category.Rename(request.Name);
+
+        if (renamed.IsSuccess)
+        {
+            category.SetArabicName(request.NameArabic);
+        }
+
+        return renamed;
+    }
+
+    private async Task<Result> UpdateBrandAsync(
+        UpdateMasterCommand request,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        Brand? brand = await _masters.FindBrandAsync(BrandId.From(request.Id), cancellationToken);
+
+        if (brand is null || brand.FirmId != firmId)
+        {
+            return NotFound("brand");
+        }
+
+        Result renamed = brand.Rename(request.Name);
+
+        if (renamed.IsSuccess)
+        {
+            brand.SetArabicName(request.NameArabic);
+        }
+
+        return renamed;
+    }
+
+    private async Task<Result> UpdateWarehouseAsync(
+        UpdateMasterCommand request,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        Warehouse? warehouse = await _masters.FindWarehouseAsync(
+            WarehouseId.From(request.Id), cancellationToken);
+
+        if (warehouse is null || warehouse.FirmId != firmId)
+        {
+            return NotFound("warehouse");
+        }
+
+        Result renamed = warehouse.Rename(request.Name);
+
+        if (renamed.IsFailure)
+        {
+            return renamed;
+        }
+
+        warehouse.SetArabicName(request.NameArabic);
+
+        return warehouse.SetAddress(request.Address);
+    }
+}

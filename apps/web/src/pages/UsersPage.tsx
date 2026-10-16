@@ -228,7 +228,7 @@ function UserDialog({
       size="form"
       onClose={onClose}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField
           label={t('users.userName')}
           value={userName}
@@ -276,7 +276,7 @@ function UserDialog({
 
       <fieldset className="space-y-1.5">
         <legend className="field-label">{t('users.roles')}</legend>
-        <div className="grid gap-1.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {roles.map((role) => (
             <label key={role.roleId} className="field-check items-start">
               <input

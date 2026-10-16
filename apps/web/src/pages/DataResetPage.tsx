@@ -89,7 +89,7 @@ export function DataResetPage(): React.JSX.Element {
       )}
 
       {preview.data && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ResetCard
             title={t('dataReset.transactionsTitle')}
             body={t('dataReset.transactionsBody')}

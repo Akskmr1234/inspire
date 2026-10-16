@@ -574,7 +574,7 @@ function StockEntry({
         });
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="field-label">{t('stock.type')}</span>
           {/* Shown as text rather than as a select of one where the screen is for

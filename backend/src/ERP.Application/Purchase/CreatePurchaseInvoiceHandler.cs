@@ -596,22 +596,24 @@ public sealed class CreatePurchaseInvoiceCommandHandler
         {
             decimal remaining = quantity;
 
-            foreach (PurchaseOrderLine line in lines.Where(line => line.ProductId == product))
+            foreach (PurchaseOrderLineId lineId in lines
+                .Where(line => line.ProductId == product)
+                .Select(line => line.Id))
             {
                 if (remaining <= 0m)
                 {
                     break;
                 }
 
-                decimal taken = Math.Min(remaining, left[line.Id]);
+                decimal taken = Math.Min(remaining, left[lineId]);
 
                 if (taken <= 0m)
                 {
                     continue;
                 }
 
-                matched[line.Id] = matched.GetValueOrDefault(line.Id) + taken;
-                left[line.Id] -= taken;
+                matched[lineId] = matched.GetValueOrDefault(lineId) + taken;
+                left[lineId] -= taken;
                 remaining -= taken;
             }
         }

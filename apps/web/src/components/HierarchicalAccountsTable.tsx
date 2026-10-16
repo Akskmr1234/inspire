@@ -83,6 +83,11 @@ export interface HierarchicalAccountsTableProps {
   readonly grandTotals?: Record<string, number | undefined> | undefined;
   /** Callback when user clicks a voucher number. */
   readonly onVoucherClick?: (voucherNumber: string, voucherId?: string) => void;
+  /**
+   * Controls drawn at the end of a ledger's name, such as Edit and Statement. Their
+   * clicks stay theirs: the row's own click, which opens the postings, is not fired.
+   */
+  readonly ledgerActions?: ((ledgerId: string) => React.ReactNode) | undefined;
   /** Default expand level: 1 (Heads), 2 (Groups), 3 (Ledgers), 4 (Transactions). Default: 2. */
   readonly initialExpandLevel?: 1 | 2 | 3 | 4 | undefined;
   /** Extra summary or note above table. */
@@ -148,6 +153,7 @@ export function HierarchicalAccountsTable({
   isBalanced,
   grandTotals: customGrandTotals,
   onVoucherClick,
+  ledgerActions,
   initialExpandLevel = 2,
   extraHeader,
   bottomNote,
@@ -760,6 +766,18 @@ export function HierarchicalAccountsTable({
 
                                           {isLedgerLoading && (
                                             <span className="skeleton size-3 rounded-full ms-1 animate-spin" />
+                                          )}
+
+                                          {ledgerActions && (
+                                            <span
+                                              className="ms-auto flex shrink-0 items-center gap-1"
+                                              onClick={(event) => event.stopPropagation()}
+                                              onKeyDown={(event) =>
+                                                event.stopPropagation()
+                                              }
+                                            >
+                                              {ledgerActions(ledger.id)}
+                                            </span>
                                           )}
                                         </div>
                                       </td>

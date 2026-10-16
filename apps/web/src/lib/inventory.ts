@@ -103,6 +103,23 @@ export function renameUnit(id: string, name: string): Promise<void> {
   });
 }
 
+/**
+ * Corrects a category, brand or warehouse: its names, and a warehouse's address.
+ *
+ * The code stays as it is - imports and a firm's own lists refer to the record by it.
+ */
+export function updateMaster(
+  kind: Exclude<MasterKind, 'UnitOfMeasure'>,
+  id: string,
+  body: {
+    readonly name: string;
+    readonly nameArabic: string | null;
+    readonly address?: string | null;
+  },
+): Promise<void> {
+  return request<void>(`${INVENTORY}/${kind}/${id}`, { method: 'PUT', body });
+}
+
 /** Makes one warehouse the one new documents default to. */
 export function setDefaultWarehouse(id: string): Promise<void> {
   return request<void>(`${INVENTORY}/warehouses/${id}/default`, {

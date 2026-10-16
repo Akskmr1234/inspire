@@ -25,6 +25,9 @@ public sealed class JwtTokenService : ITokenService
     /// <summary>The claim flagging that a password change is outstanding.</summary>
     public const string MustChangePasswordClaim = "must_change_password";
 
+    /// <summary>The claim naming the sign-in, which is the refresh-token family.</summary>
+    public const string SessionClaim = "sid";
+
     private static readonly JsonWebTokenHandler Handler = new();
 
     private readonly JwtOptions _options;
@@ -67,6 +70,11 @@ public sealed class JwtTokenService : ITokenService
             new(TenantClaim, request.TenantId.Value.ToString()),
             new(MustChangePasswordClaim, request.MustChangePassword ? "true" : "false"),
         ];
+
+        if (request.SessionId is { } sessionId)
+        {
+            claims.Add(new Claim(SessionClaim, sessionId.ToString()));
+        }
 
         // Firms and branches are carried as repeated claims. They are small,
         // bounded sets, and having them in the token lets the tenant middleware

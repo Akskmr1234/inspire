@@ -192,7 +192,7 @@ function VoucherForm({
         <p className="alert-warn text-xs">{t('vouchers.editPostedHint')}</p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label className="field">
           <span className="field-label">{t('vouchers.date')}</span>
           <input

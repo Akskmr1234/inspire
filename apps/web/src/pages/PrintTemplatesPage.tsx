@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
+import { FitToWidth } from '@/components/print/FitToWidth';
 import { PrintedDocument } from '@/components/print/PrintedDocument';
 import type { ApiError } from '@/lib/api';
 import {
@@ -230,7 +231,7 @@ export function PrintTemplatesPage(): React.JSX.Element {
         <p className="alert-error">{save.error.detail || save.error.code}</p>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[14rem_24rem_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[14rem_24rem_minmax(0,1fr)]">
         <div className="space-y-2">
           <ul className="panel divide-y divide-line p-0">
             {draft.templates.map((template) => (
@@ -290,7 +291,7 @@ export function PrintTemplatesPage(): React.JSX.Element {
         {selected && <TemplateForm template={selected} onChange={replace} />}
 
         {selected && (
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <label className="field max-w-xs">
               <span className="field-label">{t('printing.previewAs')}</span>
               <select
@@ -307,10 +308,10 @@ export function PrintTemplatesPage(): React.JSX.Element {
                 ))}
               </select>
             </label>
-            <div className="overflow-auto rounded-xl bg-slate-200 p-4 dark:bg-slate-900">
-              <div className="mx-auto w-fit shadow-xl">
+            <div className="rounded-xl bg-slate-200 p-2 sm:p-4 dark:bg-slate-900">
+              <FitToWidth>
                 <PrintedDocument document={sample} template={selected} />
-              </div>
+              </FitToWidth>
             </div>
           </div>
         )}
@@ -374,7 +375,7 @@ function TemplateForm({
 
   return (
     <div className="panel space-y-4">
-      <fieldset className="space-y-2">
+      <fieldset className="min-w-0 space-y-2">
         <legend className="text-sm font-semibold">{t('printing.general')}</legend>
         {text(t('printing.templateName'), template.name, (value) => set('name', value))}
         <label className="field">
@@ -396,7 +397,7 @@ function TemplateForm({
         )}
       </fieldset>
 
-      <fieldset className="space-y-2">
+      <fieldset className="min-w-0 space-y-2">
         <legend className="text-sm font-semibold">{t('printing.company')}</legend>
         {text(t('printing.companyName'), template.company.name, (value) =>
           set('company', { ...template.company, name: value }),
@@ -434,7 +435,7 @@ function TemplateForm({
                   .then((logo) => set('company', { ...template.company, logo }))
                   .catch(() => setLogoError(t('printing.logoUnreadable')));
               }}
-              className="text-xs"
+              className="w-full max-w-full text-xs"
             />
             {template.company.logo && (
               <button
@@ -450,7 +451,7 @@ function TemplateForm({
         </div>
       </fieldset>
 
-      <fieldset className="space-y-1">
+      <fieldset className="min-w-0 space-y-1">
         <legend className="text-sm font-semibold">{t('printing.showSection')}</legend>
         {(Object.keys(template.show) as (keyof PrintTemplate['show'])[]).map((key) => (
           <div key={key}>
@@ -461,7 +462,7 @@ function TemplateForm({
         ))}
       </fieldset>
 
-      <fieldset className="space-y-1">
+      <fieldset className="min-w-0 space-y-1">
         <legend className="text-sm font-semibold">{t('printing.columnsSection')}</legend>
         {(Object.keys(template.columns) as (keyof PrintTemplate['columns'])[]).map(
           (key) => (
@@ -474,7 +475,7 @@ function TemplateForm({
         )}
       </fieldset>
 
-      <fieldset className="space-y-2">
+      <fieldset className="min-w-0 space-y-2">
         <legend className="text-sm font-semibold">{t('printing.footerSection')}</legend>
         {text(
           t('printing.termsLabel'),
@@ -493,7 +494,7 @@ function TemplateForm({
         )}
       </fieldset>
 
-      <fieldset className="space-y-2">
+      <fieldset className="min-w-0 space-y-2">
         <legend className="text-sm font-semibold">{t('printing.styleSection')}</legend>
         <label className="field">
           <span className="field-label">{t('printing.fontSize')}</span>

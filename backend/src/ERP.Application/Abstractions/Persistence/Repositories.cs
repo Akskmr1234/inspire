@@ -156,6 +156,28 @@ public interface ILedgerRepository
     /// <summary>Adds a ledger.</summary>
     /// <param name="ledger">The ledger.</param>
     void Add(Ledger ledger);
+
+    /// <summary>Lists a firm's account groups.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Every group, ordered by code.</returns>
+    Task<IReadOnlyList<AccountGroup>> ListGroupsAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Says whether an account group code is already used in a firm.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="code">The code to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the code is taken.</returns>
+    Task<bool> IsGroupCodeInUseAsync(
+        FirmId firmId,
+        string code,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds an account group.</summary>
+    /// <param name="group">The group.</param>
+    void AddGroup(AccountGroup group);
 }
 
 /// <summary>Reads and writes bills.</summary>

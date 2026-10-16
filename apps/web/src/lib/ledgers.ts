@@ -194,3 +194,117 @@ export function fetchLedgerStatement(
     `/accounting/reports/ledger-statement/${ledgerId}?${params.toString()}`,
   );
 }
+
+/** The kinds the chart of accounts creates and edits; the others have screens of their own. */
+export const PLAIN_KINDS = [
+  LedgerKind.general,
+  LedgerKind.cash,
+  LedgerKind.bank,
+  LedgerKind.employee,
+] as const;
+
+/** Whether the chart of accounts may edit a ledger of this kind. */
+export function isPlainKind(kind: number): boolean {
+  return (PLAIN_KINDS as readonly number[]).includes(kind);
+}
+
+/** Which side an opening balance falls on, matching the API's EntrySide enum. */
+export const EntrySide = { debit: 1, credit: 2 } as const;
+
+/** A ledger with everything its form shows. */
+export interface LedgerDetail {
+  readonly ledgerId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly nameArabic: string | null;
+  readonly accountGroupId: string;
+  readonly groupName: string;
+  readonly nature: number;
+  readonly kind: number;
+  readonly currency: string;
+  readonly openingBalance: number;
+  readonly openingSide: number;
+  readonly phone: string | null;
+  readonly email: string | null;
+  readonly address: string | null;
+  readonly isActive: boolean;
+  readonly isEditable: boolean;
+}
+
+export interface SaveLedger {
+  readonly code?: string | null;
+  readonly name: string;
+  readonly nameArabic: string | null;
+  readonly accountGroupId: string;
+  readonly kind: number;
+  readonly openingBalance: number;
+  readonly openingSide: number;
+  readonly phone: string | null;
+  readonly email: string | null;
+  readonly address: string | null;
+}
+
+/** An account group, a heading ledgers sit under. */
+export interface AccountGroupSummary {
+  readonly accountGroupId: string;
+  readonly code: string;
+  readonly name: string;
+  readonly nameArabic: string | null;
+  readonly nature: number;
+  readonly parentId: string | null;
+  readonly isSystemGroup: boolean;
+}
+
+const LEDGERS = '/accounting/ledgers';
+const GROUPS = '/accounting/account-groups';
+
+export const getLedger = (id: string): Promise<LedgerDetail> =>
+  request<LedgerDetail>(`${LEDGERS}/${id}`);
+
+export const createLedger = (body: SaveLedger): Promise<LedgerDetail> =>
+  request<LedgerDetail>(LEDGERS, { method: 'POST', body });
+
+export const updateLedger = (id: string, body: SaveLedger): Promise<LedgerDetail> =>
+  request<LedgerDetail>(`${LEDGERS}/${id}`, { method: 'PUT', body });
+
+export const setLedgerActive = (id: string, isActive: boolean): Promise<LedgerDetail> =>
+  request<LedgerDetail>(`${LEDGERS}/${id}/active`, {
+    method: 'POST',
+    body: { isActive },
+  });
+
+export const listAccountGroups = (): Promise<readonly AccountGroupSummary[]> =>
+  request<readonly AccountGroupSummary[]>(GROUPS);
+
+export const createAccountGroup = (body: {
+  readonly code?: string | null;
+  readonly name: string;
+  readonly nameArabic: string | null;
+  readonly parentId: string;
+}): Promise<AccountGroupSummary> =>
+  request<AccountGroupSummary>(GROUPS, { method: 'POST', body });
+
+export const renameAccountGroup = (
+  id: string,
+  body: { readonly name: string; readonly nameArabic: string | null },
+): Promise<AccountGroupSummary> =>
+  request<AccountGroupSummary>(`${GROUPS}/${id}`, { method: 'PUT', body });
+
+/** Groups as "Assets › Current Assets › Cash and Bank", for a picker. */
+export function groupPaths(
+  groups: readonly AccountGroupSummary[],
+): ReadonlyMap<string, string> {
+  const byId = new Map(groups.map((group) => [group.accountGroupId, group]));
+  const paths = new Map<string, string>();
+  for (const group of groups) {
+    const names: string[] = [];
+    let current: AccountGroupSummary | undefined = group;
+    let guard = 0;
+    while (current && guard++ < 10) {
+      names.unshift(current.name);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+    paths.set(group.accountGroupId, names.join(' › '));
+  }
+  return paths;
+}

@@ -207,6 +207,23 @@ public sealed record CreateWarehouseCommand(
 /// <param name="WarehouseId">The warehouse.</param>
 public sealed record SetDefaultWarehouseCommand(Guid WarehouseId) : ICommand;
 
+/// <summary>Corrects a category, brand or warehouse: its names, and a warehouse's address.</summary>
+/// <param name="Kind">Which master. Units have their own rename.</param>
+/// <param name="Id">The record.</param>
+/// <param name="Name">Its name.</param>
+/// <param name="NameArabic">The same in Arabic.</param>
+/// <param name="Address">Where a warehouse is. Ignored for the others.</param>
+/// <remarks>
+/// The code is not among these, for the reason a customer's is not: it is what imports
+/// and a firm's own lists refer to the record by.
+/// </remarks>
+public sealed record UpdateMasterCommand(
+    InventoryMasterKind Kind,
+    Guid Id,
+    string Name,
+    string? NameArabic = null,
+    string? Address = null) : ICommand;
+
 /// <summary>Withdraws an inventory master from use, or returns it.</summary>
 /// <param name="Kind">Which master.</param>
 /// <param name="Id">The record.</param>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { Field, NumberField, TextField } from '@/components/Form';
@@ -38,6 +39,7 @@ import { useSettings } from '@/stores/settings';
  */
 export function SuppliersPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const regime = useSettings((state) => state.taxRegime);
 
   const columns = (
@@ -102,6 +104,13 @@ export function SuppliersPage(): React.JSX.Element {
       render: (row) => (
         <span className="inline-flex gap-1.5">
           <RowAction label={t('common.edit')} disabled={busy} onClick={() => edit(row)} />
+          <RowAction
+            label={t('ledgerMaster.statement')}
+            disabled={false}
+            onClick={() =>
+              navigate(`/accounting/ledger-statement?ledger=${row.supplierId}`)
+            }
+          />
           <RowAction
             label={row.isActive ? t('masters.withdraw') : t('masters.restore')}
             tone={row.isActive ? 'danger' : 'neutral'}

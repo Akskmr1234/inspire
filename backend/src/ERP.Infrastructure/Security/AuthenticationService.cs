@@ -417,6 +417,18 @@ public sealed partial class AuthenticationService : IAuthenticationService
             .Select(r => r.Name)
             .ToListAsync(cancellationToken);
 
+        (string rawRefresh, string refreshHash) = _tokenService.CreateRefreshToken();
+        TimeSpan lifetime = _tokenService.RefreshTokenLifetime;
+
+        // The refresh token is issued first so the access token can name the sign-in
+        // it belongs to.
+        RefreshToken refresh = existingToken is not null
+            ? existingToken.Rotate(refreshHash, now, lifetime, userAgent, ipAddress).Value
+            : RefreshToken.Issue(
+                user.TenantId, user.Id, refreshHash, now, lifetime, userAgent, ipAddress).Value;
+
+        _context.RefreshTokens.Add(refresh);
+
         AccessToken accessToken = _tokenService.CreateAccessToken(new AccessTokenRequest(
             user.Id,
             user.TenantId,
@@ -426,25 +438,8 @@ public sealed partial class AuthenticationService : IAuthenticationService
             [.. user.FirmAccess.Select(a => a.FirmId).Distinct()],
             [.. user.FirmAccess.Where(a => a.BranchId.HasValue).Select(a => a.BranchId!.Value).Distinct()],
             roleNames,
-            user.MustChangePassword));
-
-        (string rawRefresh, string refreshHash) = _tokenService.CreateRefreshToken();
-        TimeSpan lifetime = _tokenService.RefreshTokenLifetime;
-
-        if (existingToken is not null)
-        {
-            RefreshToken successor = existingToken
-                .Rotate(refreshHash, now, lifetime, userAgent, ipAddress).Value;
-
-            _context.RefreshTokens.Add(successor);
-        }
-        else
-        {
-            RefreshToken issued = RefreshToken.Issue(
-                user.TenantId, user.Id, refreshHash, now, lifetime, userAgent, ipAddress).Value;
-
-            _context.RefreshTokens.Add(issued);
-        }
+            user.MustChangePassword,
+            refresh.FamilyId));
 
         return new AuthenticationResponse(
             accessToken.Value,
