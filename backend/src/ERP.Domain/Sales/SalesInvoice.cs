@@ -538,8 +538,12 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         // amount can tell the difference. A mismatch means the rate or the discount
         // changed after the tax was computed, which is a printed invoice whose figures
         // do not add up.
-        if (decimal.Round(assessment.TaxableAmount.Amount, 4)
-            != decimal.Round(gross - discount, 4))
+        //
+        // Compared with the line rounded to the currency, because that is what the engine
+        // taxes: 3 at 33.335 is a taxable value of 100.01, not 100.005. Compared unrounded,
+        // every line with more decimals than the currency - a weighed quantity, a price to
+        // three places - was refused as an assessment for some other line.
+        if (assessment.TaxableAmount.Amount != Money.Of(gross - discount, Currency).Amount)
         {
             return Result.Failure<SalesInvoiceLine>(Error.Validation(
                 "SalesInvoice.TaxNotForThisLine",

@@ -264,19 +264,18 @@ public sealed class PurchaseInvoiceTests
     }
 
     [Fact]
-    public void A_line_priced_finer_than_its_currency_is_refused_rather_than_quietly_rounded()
+    public void A_line_priced_finer_than_its_currency_is_stated_at_the_currency()
     {
-        // Why the rounding difference is nil on every purchase today, exactly as it is on
-        // every sale: the engine returns the taxable amount at the currency's scale, and a
-        // line whose price implies more precision than that no longer agrees with it.
-        // Refusing is right - the alternative prints a total its own lines contradict -
-        // but it does mean Round Off is a posting nothing currently produces.
+        // As on a sale: a supplier's price to four places in a three-place currency is
+        // stated, and taxed, at three. It used to be refused outright.
         PurchaseInvoice invoice = Draft(currency: Kwd).Value;
         (Product product, UnitOfMeasure unit) = Plain();
 
         invoice.AddLine(
             product, unit, 1m, 1m, 10.1235m, Assessed(10.1235m, 0m, Kwd))
-            .Error.Code.ShouldBe("PurchaseInvoice.TaxNotForThisLine");
+            .IsSuccess.ShouldBeTrue();
+
+        invoice.Taxable.Amount.ShouldBe(10.124m);
     }
 
     [Fact]

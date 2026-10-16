@@ -165,17 +165,29 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
-    public void A_line_priced_finer_than_its_currency_is_refused_rather_than_quietly_rounded()
+    public void A_line_priced_finer_than_its_currency_is_stated_at_the_currency()
     {
-        // Why the rounding difference is nil on every invoice today: the engine returns
-        // the taxable amount at the currency's scale, and a line whose price implies
-        // more precision than that no longer agrees with it. Refusing is right - the
-        // alternative prints a total its own lines contradict - but it does mean Round
-        // Off is a posting nothing currently produces.
+        // A weighed quantity or a price to three places: 3 at 33.333 is 99.999, which an
+        // invoice in riyals states as 100.00 and taxes on that, as the engine does. It
+        // used to be refused, and with it nearly every price keyed tax-inclusive - whose
+        // exclusive rate never comes out in whole dirhams - with a message about a tax
+        // assessment nobody at a counter could act on.
         SalesInvoice invoice = Draft().Value;
         UnitOfMeasure each = BaseUnit();
 
         invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(99.999m, 5.0004m))
+            .IsSuccess.ShouldBeTrue();
+
+        invoice.Taxable.Amount.ShouldBe(100.00m);
+    }
+
+    [Fact]
+    public void An_assessment_for_a_different_amount_is_still_refused()
+    {
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+
+        invoice.AddLine(Stocked(each), each, 3m, 3m, 33.333m, Assessed(90m, 4.5m))
             .Error.Code.ShouldBe("SalesInvoice.TaxNotForThisLine");
     }
 

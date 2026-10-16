@@ -52,6 +52,7 @@ import {
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
 
 /**
@@ -551,6 +552,9 @@ function OrderEntryDialog({
     ledgers.data ?? [],
     setCharges,
   );
+  const chargeSetup = useChargeSetup(
+    kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
+  );
 
   const valuation = useQuery<StockValuationReport, ApiError>({
     queryKey: ['stock-valuation', 'picker', draft.warehouseId],
@@ -981,6 +985,8 @@ function OrderEntryDialog({
         charges={charges}
         ledgers={ledgers.data ?? []}
         onChange={setCharges}
+        setup={chargeSetup}
+        nonTax={mode === PurchaseTaxMode.nonTax}
       />
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">
@@ -988,7 +994,7 @@ function OrderEntryDialog({
           gross={totals.gross}
           discount={totals.discount}
           tax={totals.tax}
-          charges={chargeTotal(charges, ledgers.data ?? [])}
+          charges={chargeTotal(charges, ledgers.data ?? [], chargeSetup)}
         />
       </div>
 

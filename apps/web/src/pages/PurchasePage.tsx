@@ -32,6 +32,7 @@ import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { useChargeSetup } from '@/lib/charges';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printablePurchase } from '@/lib/printing';
 import {
@@ -526,6 +527,7 @@ function EntryDialog({
     ledgers.data ?? [],
     setCharges,
   );
+  const chargeSetup = useChargeSetup(isReturn ? 'purchaseReturn' : 'purchase');
 
   // What is on the shelf, for the product picker. One call for the whole master
   // rather than one per line, and stale for a minute: a purchase being keyed in is
@@ -635,7 +637,7 @@ function EntryDialog({
     };
   }, [lines]);
 
-  const chargesTotal = chargeTotal(charges, ledgers.data ?? []);
+  const chargesTotal = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -991,6 +993,8 @@ function EntryDialog({
         charges={charges}
         ledgers={ledgers.data ?? []}
         onChange={setCharges}
+        setup={chargeSetup}
+        nonTax={mode === PurchaseTaxMode.nonTax}
       />
 
       <div className="line-totals flex flex-wrap items-end justify-end gap-6">

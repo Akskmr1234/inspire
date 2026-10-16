@@ -21,6 +21,7 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
+import { enterableCharges, useChargeSetup, type ChargeSetup } from '@/lib/charges';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -77,6 +78,11 @@ interface DraftLine {
   expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
+}
+
+/** Rounds to the currency's two places, half away from zero, as the server's Money does. */
+function roundMoney(value: number): number {
+  return (Math.sign(value) * Math.round(Math.abs(value) * 100 + 1e-9)) / 100;
 }
 
 /**
@@ -416,13 +422,31 @@ interface AdditionalLedgerItem {
 function AdditionalLedgersSection({
   rows,
   ledgers,
+  setup,
+  nonTax,
   onChange,
 }: {
   readonly rows: readonly AdditionalLedgerItem[];
   readonly ledgers: readonly LedgerSummary[];
+  /** The firm's charges for a sale; offered and signed from it once it arrives. */
+  readonly setup: readonly ChargeSetup[] | undefined;
+  readonly nonTax: boolean;
   readonly onChange: (rows: readonly AdditionalLedgerItem[]) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+
+  // Only the charges the firm set up for a sale in this mode can be saved on one; the
+  // whole chart used to be offered and the server refused all the rest.
+  const options = setup
+    ? enterableCharges(setup, nonTax).map((charge) => ({
+        value: charge.ledgerId,
+        label: `${charge.code} — ${charge.name}`,
+      }))
+    : ledgers.map((l) => ({ value: l.ledgerId, label: `${l.code} — ${l.name}` }));
+
+  const adds = (row: AdditionalLedgerItem): boolean =>
+    setup?.find((charge) => charge.ledgerId === row.ledgerId)?.isAddition ??
+    row.isAddition;
 
   const removeRow = (id: string): void => {
     onChange(rows.filter((r) => r.id !== id));
@@ -438,6 +462,23 @@ function AdditionalLedgersSection({
         <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
           {t('sales.additionalLedgers')}
         </span>
+        <button
+          type="button"
+          onClick={() =>
+            onChange([
+              ...rows,
+              {
+                id: Math.random().toString(36).slice(2, 9),
+                ledgerId: '',
+                isAddition: true,
+                amount: '',
+              },
+            ])
+          }
+          className="btn-ghost btn-xs"
+        >
+          {t('sales.addCharge')}
+        </button>
       </div>
 
       {rows.length === 0 ? (
@@ -459,27 +500,33 @@ function AdditionalLedgersSection({
                   <td className="pe-2 py-1">
                     <SearchSelect
                       value={row.ledgerId}
-                      onChange={(ledgerId) => updateRow(row.id, { ledgerId })}
-                      options={ledgers.map((l) => ({
-                        value: l.ledgerId,
-                        label: `${l.code} — ${l.name}`,
-                      }))}
+                      onChange={(ledgerId) =>
+                        updateRow(row.id, {
+                          ledgerId,
+                          isAddition:
+                            setup?.find((charge) => charge.ledgerId === ledgerId)
+                              ?.isAddition ?? row.isAddition,
+                        })
+                      }
+                      options={options}
                       size="sm"
                       label={t('sales.chooseLedger')}
                       placeholder={t('sales.chooseLedger')}
                     />
                   </td>
-                  <td className="px-1 py-1 text-center">
-                    <select
-                      value={row.isAddition ? 'add' : 'deduct'}
-                      onChange={(e) =>
-                        updateRow(row.id, { isAddition: e.target.value === 'add' })
-                      }
-                      className="field-input-sm w-full py-0.5 text-xs font-medium"
-                    >
-                      <option value="add">{t('sales.addition')}</option>
-                      <option value="deduct">{t('sales.deduction')}</option>
-                    </select>
+                  {/* Which way it moves the total is the charge's own, set up once for
+                      the firm - the server posts it that way whatever a row says, so
+                      the screen shows it rather than asking. */}
+                  <td className="px-1 py-1 text-center text-xs font-medium whitespace-nowrap">
+                    {row.ledgerId === '' ? (
+                      ''
+                    ) : adds(row) ? (
+                      <span className="text-emerald-700 dark:text-emerald-400">
+                        {t('sales.addition')}
+                      </span>
+                    ) : (
+                      <span className="text-red-600">{t('sales.deduction')}</span>
+                    )}
                   </td>
                   <td className="px-1 py-1 text-end">
                     <input
@@ -708,18 +755,26 @@ function EntryDialog({
     enabled: isReturn(kind) && customerId !== '',
   });
 
+  const chargeSetup = useChargeSetup(isReturn(kind) ? 'salesReturn' : 'sales');
+
   const additionalLedgersTotal = useMemo(() => {
     return additionalLedgers.reduce((acc, row) => {
       const amt = Number(row.amount);
-      if (!Number.isFinite(amt) || amt <= 0) return acc;
-      return row.isAddition ? acc + amt : acc - amt;
+      // A row with no account is not sent, so it is not counted either.
+      if (row.ledgerId === '' || !Number.isFinite(amt) || amt <= 0) return acc;
+      // The direction the server will post it in, from the firm's setup.
+      const adds =
+        chargeSetup?.find((charge) => charge.ledgerId === row.ledgerId)?.isAddition ??
+        row.isAddition;
+      return adds ? acc + amt : acc - amt;
     }, 0);
-  }, [additionalLedgers]);
+  }, [additionalLedgers, chargeSetup]);
 
   const totals = useMemo(() => {
     let gross = 0;
     let discount = 0;
     let tax = 0;
+    let taxed = 0;
 
     for (const line of lines) {
       const lineQty = Number(line.quantity || 0);
@@ -727,18 +782,23 @@ function EntryDialog({
       const lineDisc = enableDiscount ? Number(line.discount || 0) : 0;
       const lineTaxPct = Number(line.taxPercentage || 0);
 
-      const net = lineQty * lineRate - lineDisc;
+      // Each line is taxed on its value rounded to the currency, and its tax rounded
+      // the same way, as the server does; summing unrounded figures put the screen a
+      // cent away from the saved invoice.
+      const net = roundMoney(lineQty * lineRate - lineDisc);
 
       if (Number.isFinite(net) && net > 0) {
         gross += lineQty * lineRate;
         discount += lineDisc;
-        tax += (net * lineTaxPct) / 100;
+        taxed += net;
+        tax += roundMoney((net * lineTaxPct) / 100);
       }
     }
 
     const safeGross = Number.isFinite(gross) ? gross : 0;
     const safeDiscount = Number.isFinite(discount) ? discount : 0;
-    const taxable = safeGross - safeDiscount;
+    // The lines as taxed, each rounded, rather than gross less discount unrounded.
+    const taxable = Number.isFinite(taxed) ? taxed : 0;
 
     return {
       gross: safeGross,
@@ -1359,7 +1419,7 @@ function EntryDialog({
         <div
           className={clsx(
             'flex flex-col gap-2 rounded-xl border border-line bg-surface p-3',
-            additionalLedgers.length > 0 ? 'lg:col-span-4' : 'lg:col-span-7',
+            'lg:col-span-4',
           )}
         >
           <div className="flex items-center gap-2 border-b border-line pb-1.5">
@@ -1447,22 +1507,24 @@ function EntryDialog({
           )}
         </div>
 
-        {/* Panel 2: Additional Ledgers (Only displayed when standing default ledgers exist) */}
-        {additionalLedgers.length > 0 && (
-          <div className="lg:col-span-4">
-            <AdditionalLedgersSection
-              rows={additionalLedgers}
-              ledgers={ledgers.data ?? []}
-              onChange={setAdditionalLedgers}
-            />
-          </div>
-        )}
+        {/* Panel 2: Charges - freight, delivery, a discount off the whole bill. Always
+            here: they used to appear only when Settings had defaults, so there was no
+            way to put a charge on an invoice that did not start with one. */}
+        <div className="lg:col-span-4">
+          <AdditionalLedgersSection
+            rows={additionalLedgers}
+            ledgers={ledgers.data ?? []}
+            setup={chargeSetup}
+            nonTax={taxMode === 'NT'}
+            onChange={setAdditionalLedgers}
+          />
+        </div>
 
         {/* Panel 3: Partial Payment & Grand Totals */}
         <div
           className={clsx(
             'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3',
-            additionalLedgers.length > 0 ? 'lg:col-span-4' : 'lg:col-span-5',
+            'lg:col-span-4',
           )}
         >
           <div className="space-y-1.5 text-xs">
