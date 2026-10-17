@@ -232,6 +232,23 @@ export async function request<TResponse>(
     : ((await response.json()) as TResponse);
 }
 
+/** Issues a request for a text body - a file to download - renewing the token once if needed. */
+export async function requestText(path: string): Promise<string> {
+  let response = await send(path, {});
+
+  if (response.status === 401) {
+    if (await refreshSession()) {
+      response = await send(path, {});
+    }
+  }
+
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+
+  return response.text();
+}
+
 /** Signs in and records the session. */
 export async function login(
   userName: string,

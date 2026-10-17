@@ -70,6 +70,7 @@ const MenuAdministrationPage = lazyScreen(
 const UsersPage = lazyScreen(() => import('@/pages/UsersPage'), 'UsersPage');
 const RolesPage = lazyScreen(() => import('@/pages/RolesPage'), 'RolesPage');
 const DataResetPage = lazyScreen(() => import('@/pages/DataResetPage'), 'DataResetPage');
+const ImportPage = lazyScreen(() => import('@/pages/ImportPage'), 'ImportPage');
 const PrintSettingsPage = lazyScreen(
   () => import('@/pages/PrintSettingsPage'),
   'PrintSettingsPage',
@@ -282,6 +283,7 @@ export function App(): React.JSX.Element {
               <Route path="/settings/users" element={<UsersPage />} />
               <Route path="/settings/roles" element={<RolesPage />} />
               <Route path="/settings/data" element={<DataResetPage />} />
+              <Route path="/settings/import" element={<ImportPage />} />
               <Route path="/settings/printing" element={<PrintSettingsPage />} />
               <Route path="/settings/print-templates" element={<PrintTemplatesPage />} />
               <Route path="/settings" element={<SettingsPage />} />

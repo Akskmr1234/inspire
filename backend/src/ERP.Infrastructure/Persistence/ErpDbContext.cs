@@ -170,6 +170,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets each firm's named blocks of configuration.</summary>
     public DbSet<FirmSetting> FirmSettings => Set<FirmSetting>();
 
+    /// <summary>Gets which records of another system became which records here.</summary>
+    public DbSet<ImportLink> ImportLinks => Set<ImportLink>();
+
     /// <summary>Gets the dashboards, with their panels and role assignments.</summary>
     public DbSet<Dashboard> Dashboards => Set<Dashboard>();
 

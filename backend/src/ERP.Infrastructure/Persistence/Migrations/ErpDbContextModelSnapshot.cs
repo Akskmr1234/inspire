@@ -3381,6 +3381,48 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("grid_layouts", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Platform.ImportLink", b =>
+                {
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LegacyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("legacy_key");
+
+                    b.Property<DateTimeOffset>("LinkedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at_utc");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("FirmId", "Source", "Kind", "LegacyKey")
+                        .HasName("pk_import_links");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_import_links_tenant");
+
+                    b.ToTable("import_links", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Platform.MenuItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5853,6 +5895,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_grid_layouts_users_user_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Platform.ImportLink", b =>
+                {
+                    b.HasOne("ERP.Domain.Tenancy.Firm", null)
+                        .WithMany()
+                        .HasForeignKey("FirmId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_links_firms_firm_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Platform.MenuItem", b =>

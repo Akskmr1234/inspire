@@ -49,11 +49,17 @@ public sealed class DataReset : IDataReset
         "DELETE FROM stock_balances WHERE firm_id = @firm",
         "DELETE FROM batches WHERE firm_id = @firm",
         "DELETE FROM vouchers WHERE firm_id = @firm",
+        // Opening stock brought in from another system is a transaction like any other;
+        // its links go with it, so the next import enters it again.
+        "DELETE FROM import_links WHERE firm_id = @firm AND kind = 'stock'",
         "UPDATE numbering_series SET next_number = starting_number WHERE firm_id = @firm",
     ];
 
     private static readonly string[] Masters =
     [
+        // Every record imported from another system is cleared below, so nothing it was
+        // linked to is left: a fresh import starts from nothing.
+        "DELETE FROM import_links WHERE firm_id = @firm",
         "DELETE FROM products WHERE firm_id = @firm",
         "UPDATE categories SET parent_id = NULL WHERE firm_id = @firm",
         "DELETE FROM categories WHERE firm_id = @firm",

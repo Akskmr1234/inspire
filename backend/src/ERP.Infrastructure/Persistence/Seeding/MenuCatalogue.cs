@@ -537,6 +537,17 @@ public static class MenuCatalogue
                     "/settings/data",
                     "platform:firm:delete"),
 
+                // Bringing a firm across from EasyRetail. Behind the permission to edit
+                // the firm, which the import's own endpoints ask for: it writes the
+                // firm's chart, parties, products, balances and stock wholesale.
+                new(
+                    "settings.import",
+                    "Import data",
+                    "استيراد البيانات",
+                    "platform",
+                    "/settings/import",
+                    "platform:firm:edit"),
+
                 // No permission: everything behind it is a preference about how this
                 // browser behaves - the tax rates a picker offers, whether Arabic
                 // names are translated, how many rows a page holds - and none of it
