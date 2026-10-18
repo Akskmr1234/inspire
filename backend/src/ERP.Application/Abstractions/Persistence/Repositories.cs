@@ -153,6 +153,16 @@ public interface ILedgerRepository
         string code,
         CancellationToken cancellationToken = default);
 
+    /// <summary>The next code in a numbered sequence, such as CUS-0042.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="prefix">The sequence's prefix, for example <c>CUS-</c>.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>One past the highest number issued under the prefix.</returns>
+    Task<string> NextCodeAsync(
+        FirmId firmId,
+        string prefix,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds a ledger.</summary>
     /// <param name="ledger">The ledger.</param>
     void Add(Ledger ledger);
@@ -269,6 +279,18 @@ public interface IChequeRepository
         FirmId firmId,
         LedgerId partyLedgerId,
         IEnumerable<string> chequeNumbers,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds which of some numbers are already on an open cheque written from an account.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="bankLedgerId">The account the cheques are drawn on.</param>
+    /// <param name="chequeNumbers">The numbers to check.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Those of the supplied numbers already on an open issued cheque.</returns>
+    Task<IReadOnlySet<string>> FindLiveIssuedNumbersAsync(
+        FirmId firmId,
+        LedgerId bankLedgerId,
+        IReadOnlyCollection<string> chequeNumbers,
         CancellationToken cancellationToken = default);
 
     /// <summary>Finds the cheques a voucher recorded changing hands.</summary>
@@ -424,6 +446,17 @@ public interface IInventoryMasterRepository
         UnitOfMeasureId id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Says whether anything has been recorded in a unit.</summary>
+    /// <param name="id">The unit.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// Whether a product is measured, bought or sold in it, or a document line - stock,
+    /// sales, purchase or order - was entered in it.
+    /// </returns>
+    Task<bool> IsUnitInUseAsync(
+        UnitOfMeasureId id,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Finds a category.</summary>
     /// <param name="id">The category.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -507,6 +540,9 @@ public enum InventoryMasterKind
 
     /// <summary>A warehouse.</summary>
     Warehouse = 4,
+
+    /// <summary>A tax rate.</summary>
+    TaxSlab = 5,
 }
 
 /// <summary>Reads and writes the product master.</summary>
@@ -875,6 +911,10 @@ public interface IAdditionalLedgerRepository
         FirmId firmId,
         ChargeableDocument document,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a charge mapping.</summary>
+    /// <param name="charge">The mapping.</param>
+    void Add(AdditionalLedger charge);
 }
 
 /// <summary>Reads and writes sales invoices.</summary>

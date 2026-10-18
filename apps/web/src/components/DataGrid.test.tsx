@@ -184,12 +184,20 @@ describe('permissions', () => {
   });
 });
 
+/** Opens the list options menu, where the view controls live. */
+async function openOptions(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'List options' }));
+}
+
+const columnsButton = (): HTMLElement => screen.getByRole('button', { name: 'Columns' });
+
 describe('CSV export', () => {
   it('quotes the delimiters, quotes and newlines that would otherwise split a field', async () => {
     const user = userEvent.setup();
     objectUrls.clear();
     render(grid());
 
+    await openOptions(user);
     await user.click(screen.getByRole('button', { name: /export/i }));
 
     const blob = [...objectUrls.values()].at(-1);
@@ -216,6 +224,7 @@ describe('CSV export', () => {
     await user.type(screen.getByPlaceholderText(/search/i), 'Smith');
 
     await waitFor(() => expect(renderedCodes()).toEqual(['B-002']));
+    await openOptions(user);
     await user.click(screen.getByRole('button', { name: /export/i }));
 
     const text = blobText([...objectUrls.values()].at(-1)!);
@@ -252,8 +261,11 @@ describe('the narrow viewport', () => {
     expect(reversed[0]).toContain('C-003');
   });
 
-  it('withdraws the freeze control, which means nothing without columns', () => {
+  it('withdraws the freeze control, which means nothing without columns', async () => {
+    const user = userEvent.setup();
     render(grid());
+    await openOptions(user);
+    expect(screen.getByRole('button', { name: /export/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /freeze/i })).toBeNull();
   });
 
@@ -506,49 +518,50 @@ describe('a narrow-hidden column', () => {
 });
 
 describe('keeping an arrangement', () => {
+  const VIEW_CONTROLS = ['Columns', 'Save layout', 'Freeze first', 'Export CSV', 'Reset'];
+
+  const shown = (): string[] =>
+    screen
+      .queryAllByRole('button')
+      .map((button) => button.textContent?.trim() ?? '')
+      .filter((text) => VIEW_CONTROLS.includes(text));
+
   /*
-    Arranging the columns and keeping that arrangement are one task in two steps, so
-    the button for the second sits beside the first — and pressing it ends the task
-    rather than leaving a panel of checkboxes standing over the list.
+    The view controls live behind one button, so the list's own action is the only
+    thing standing beside the search. Opened, they come in one order on every list.
   */
-  it('offers Save layout next to Columns, not across the toolbar', () => {
+  it('keeps the view controls behind the list options button', async () => {
+    const user = userEvent.setup();
     render(grid());
 
-    const order = screen
-      .getAllByRole('button')
-      .map((button) => button.textContent?.trim() ?? '')
-      .filter((text) =>
-        ['Columns', 'Save layout', 'Freeze first', 'Export CSV', 'Reset'].includes(text),
-      );
+    expect(shown()).toEqual([]);
 
-    expect(order).toEqual([
-      'Columns',
-      'Save layout',
-      'Freeze first',
-      'Export CSV',
-      'Reset',
-    ]);
+    await openOptions(user);
+
+    expect(shown()).toEqual(VIEW_CONTROLS);
   });
 
+  /*
+    Arranging the columns and keeping that arrangement are one task in two steps, so
+    the picker carries its own Save layout - and pressing it ends the task rather than
+    leaving a panel of checkboxes standing over the list.
+  */
   it('shuts the column picker once the arrangement is kept', async () => {
     const user = userEvent.setup();
     render(grid());
 
-    const toggle = (): HTMLElement => screen.getByRole('button', { name: 'Columns' });
+    await openOptions(user);
+    expect(columnsButton().getAttribute('aria-pressed')).toBe('false');
+    await user.click(columnsButton());
 
-    expect(toggle().getAttribute('aria-pressed')).toBe('false');
-
-    await user.click(toggle());
-    expect(toggle().getAttribute('aria-pressed')).toBe('true');
-
-    await user.click(screen.getByRole('button', { name: 'Save layout' }));
+    // The picker is open, and saving is right there with it.
+    await user.click(await screen.findByRole('button', { name: 'Save layout' }));
 
     await waitFor(() => {
       expect(screen.getByText('Layout saved')).toBeTruthy();
     });
 
-    // The toggle is back up, so the panel is down with it.
-    expect(toggle().getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Save layout' })).toBeNull();
   });
 
   /*
@@ -560,44 +573,41 @@ describe('keeping an arrangement', () => {
     const user = userEvent.setup();
     render(grid());
 
-    const toggle = (): HTMLElement => screen.getByRole('button', { name: 'Columns' });
-
-    expect((toggle() as HTMLButtonElement).disabled).toBe(false);
-
+    await openOptions(user);
     await user.click(screen.getByRole('button', { name: 'Save layout' }));
-
     await waitFor(() => {
-      expect((toggle() as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText('Layout saved')).toBeTruthy();
     });
 
-    // Save layout has become the way back in, rather than a second button beside it.
+    // Kept: the menu offers Edit layout in place of Columns and Save layout.
+    await openOptions(user);
+    expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save layout' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Edit layout' }));
 
-    expect((toggle() as HTMLButtonElement).disabled).toBe(false);
-    expect(toggle().getAttribute('aria-pressed')).toBe('true');
+    // The picker is open again, with its own way to keep the new arrangement.
+    expect(await screen.findByRole('button', { name: 'Save layout' })).toBeTruthy();
   });
 
   it('opens the columns again when the arrangement is thrown away', async () => {
     const user = userEvent.setup();
     render(grid());
 
+    await openOptions(user);
     await user.click(screen.getByRole('button', { name: 'Save layout' }));
-
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Edit layout' })).toBeTruthy();
+      expect(screen.getByText('Layout saved')).toBeTruthy();
     });
 
+    await openOptions(user);
     await user.click(screen.getByRole('button', { name: 'Reset' }));
 
+    await openOptions(user);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Save layout' })).toBeTruthy();
     });
-
-    expect(
-      (screen.getByRole('button', { name: 'Columns' }) as HTMLButtonElement).disabled,
-    ).toBe(false);
+    expect((columnsButton() as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

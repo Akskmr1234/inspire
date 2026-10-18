@@ -107,12 +107,27 @@ export interface PrintProfile {
 
 export type ProfileKey = `${PrintDocumentType}.${PrintMode}`;
 
+/**
+ * How one customer's documents print, where it differs from the firm's settings.
+ *
+ * Empty or null in any part means "as the settings say": a customer who only wants
+ * their own layout keeps the firm's copies and preview.
+ */
+export interface CustomerPrint {
+  /** Their own layout, or empty for the document's. */
+  readonly template: string;
+  /** How many copies, or null for the document's. */
+  readonly copies: number | null;
+  /** Whether to show the document before printing, or null for the document's. */
+  readonly preview: boolean | null;
+}
+
 /** Everything the firm has set about printing, held on the server for every counter. */
 export interface PrintSetup {
   readonly templates: readonly PrintTemplate[];
   readonly profiles: Readonly<Partial<Record<ProfileKey, PrintProfile>>>;
-  /** A customer who always gets their own layout, by customer id. */
-  readonly customerTemplates: Readonly<Record<string, string>>;
+  /** Customers whose documents print their own way, by customer id. */
+  readonly customerPrint: Readonly<Record<string, CustomerPrint>>;
   /** Mark copies Original, Duplicate, Triplicate. */
   readonly copyLabels: boolean;
 }
@@ -213,7 +228,7 @@ const DEFAULT_PROFILE: PrintProfile = {
 export const EMPTY_SETUP: PrintSetup = {
   templates: BUILT_IN_TEMPLATES,
   profiles: {},
-  customerTemplates: {},
+  customerPrint: {},
   copyLabels: true,
 };
 
@@ -240,7 +255,10 @@ export function parseSetup(raw: string | null | undefined): PrintSetup {
   if (!raw) return EMPTY_SETUP;
 
   try {
-    const stored = JSON.parse(raw) as Partial<PrintSetup>;
+    const stored = JSON.parse(raw) as Partial<PrintSetup> & {
+      /** Saved before a customer could change more than the layout. */
+      readonly customerTemplates?: Readonly<Record<string, string>>;
+    };
     const templates =
       Array.isArray(stored.templates) && stored.templates.length > 0
         ? stored.templates.map(withDefaults)
@@ -249,7 +267,15 @@ export function parseSetup(raw: string | null | undefined): PrintSetup {
     return {
       templates,
       profiles: stored.profiles ?? {},
-      customerTemplates: stored.customerTemplates ?? {},
+      customerPrint: {
+        ...Object.fromEntries(
+          Object.entries(stored.customerTemplates ?? {}).map(([id, template]) => [
+            id,
+            { template, copies: null, preview: null },
+          ]),
+        ),
+        ...stored.customerPrint,
+      },
       copyLabels: stored.copyLabels ?? true,
     };
   } catch {

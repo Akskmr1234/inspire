@@ -1,6 +1,7 @@
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
+using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
@@ -475,6 +476,56 @@ public sealed class PurchaseOrderChargeIdConverter
     /// <summary>Initialises a new instance of the <see cref="PurchaseOrderChargeIdConverter"/> class.</summary>
     public PurchaseOrderChargeIdConverter()
         : base(id => id.Value, value => PurchaseOrderChargeId.From(value))
+    {
+    }
+}
+
+/// <summary>Stores a <see cref="TaxSlabId"/> as a GUID.</summary>
+public sealed class TaxSlabIdConverter : ValueConverter<TaxSlabId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="TaxSlabIdConverter"/> class.</summary>
+    public TaxSlabIdConverter()
+        : base(id => id.Value, value => TaxSlabId.From(value))
+    {
+    }
+}
+
+/// <summary>Stores a <see cref="CountryId"/> as a GUID.</summary>
+public sealed class CountryIdConverter : ValueConverter<CountryId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="CountryIdConverter"/> class.</summary>
+    public CountryIdConverter()
+        : base(id => id.Value, value => CountryId.From(value))
+    {
+    }
+}
+
+/// <summary>Stores a <see cref="RegionId"/> as a GUID.</summary>
+public sealed class RegionIdConverter : ValueConverter<RegionId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RegionIdConverter"/> class.</summary>
+    public RegionIdConverter()
+        : base(id => id.Value, value => RegionId.From(value))
+    {
+    }
+}
+
+/// <summary>Stores a <see cref="TerritoryId"/> as a GUID.</summary>
+public sealed class TerritoryIdConverter : ValueConverter<TerritoryId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="TerritoryIdConverter"/> class.</summary>
+    public TerritoryIdConverter()
+        : base(id => id.Value, value => TerritoryId.From(value))
+    {
+    }
+}
+
+/// <summary>Stores a <see cref="PartyPhotoId"/> as a GUID.</summary>
+public sealed class PartyPhotoIdConverter : ValueConverter<PartyPhotoId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PartyPhotoIdConverter"/> class.</summary>
+    public PartyPhotoIdConverter()
+        : base(id => id.Value, value => PartyPhotoId.From(value))
     {
     }
 }

@@ -1,7 +1,9 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Parties;
 using ERP.Domain.Accounting;
+using ERP.Domain.Parties;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -31,22 +33,26 @@ public sealed class CreateCustomerCommandHandler
 
     private readonly ILedgerRepository _ledgers;
     private readonly IFirmRepository _firms;
+    private readonly IPlaceRepository _places;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="CreateCustomerCommandHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="places">The areas and routes a customer may be in.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public CreateCustomerCommandHandler(
         ILedgerRepository ledgers,
         IFirmRepository firms,
+        IPlaceRepository places,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _ledgers = ledgers;
         _firms = firms;
+        _places = places;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
@@ -73,7 +79,10 @@ public sealed class CreateCustomerCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        string code = request.Code.Trim().ToUpperInvariant();
+        // Left blank, the next number in the customer sequence is issued.
+        string code = string.IsNullOrWhiteSpace(request.Code)
+            ? await _ledgers.NextCodeAsync(firmId, "CUS-", cancellationToken)
+            : request.Code.Trim().ToUpperInvariant();
 
         // Checked before the group is resolved, so the commonest mistake - re-entering a
         // customer somebody has already created - is reported as itself rather than as
@@ -108,6 +117,14 @@ public sealed class CreateCustomerCommandHandler
         if (applied.IsFailure)
         {
             return Result.Failure<CustomerResponse>(applied.Error);
+        }
+
+        Result profiled = await CustomerDetails.ApplyProfileAsync(
+            _places, customer, request.Profile, cancellationToken);
+
+        if (profiled.IsFailure)
+        {
+            return Result.Failure<CustomerResponse>(profiled.Error);
         }
 
         // A customer who already owed something when the books were taken on owes it on
@@ -161,19 +178,23 @@ public sealed class UpdateCustomerCommandHandler
     : ICommandHandler<UpdateCustomerCommand, CustomerResponse>
 {
     private readonly ILedgerRepository _ledgers;
+    private readonly IPlaceRepository _places;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="UpdateCustomerCommandHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
+    /// <param name="places">The areas and routes a customer may be in.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public UpdateCustomerCommandHandler(
         ILedgerRepository ledgers,
+        IPlaceRepository places,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _ledgers = ledgers;
+        _places = places;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
@@ -200,6 +221,27 @@ public sealed class UpdateCustomerCommandHandler
         if (applied.IsFailure)
         {
             return Result.Failure<CustomerResponse>(applied.Error);
+        }
+
+        Result profiled = await CustomerDetails.ApplyProfileAsync(
+            _places, found.Value, request.Profile, cancellationToken);
+
+        if (profiled.IsFailure)
+        {
+            return Result.Failure<CustomerResponse>(profiled.Error);
+        }
+
+        // The opening amount, corrected. A balance the books were taken on with is a fact
+        // about that day, but one typed wrongly is still wrong, and the customer's own
+        // screen is where somebody looks for it.
+        if (request.OpeningBalance is { } opening)
+        {
+            Result reopened = found.Value.SetOpeningBalance(opening, EntrySide.Debit);
+
+            if (reopened.IsFailure)
+            {
+                return Result.Failure<CustomerResponse>(reopened.Error);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -410,6 +452,67 @@ internal static class CustomerDetails
         return customer.SetCreditTerms(terms.CreditLimit, terms.CreditDays);
     }
 
+    /// <summary>Applies where a customer is, checking their area and route are the firm's own.</summary>
+    /// <remarks>Left alone when the caller sent no profile, as the other blocks are.</remarks>
+    internal static async Task<Result> ApplyProfileAsync(
+        IPlaceRepository places,
+        Ledger customer,
+        CustomerProfile? profile,
+        CancellationToken cancellationToken)
+    {
+        if (profile is null)
+        {
+            return Result.Success();
+        }
+
+        Result<TerritoryId?> area = await TerritoryAsync(
+            places, customer, profile.AreaId, TerritoryKind.Area, cancellationToken);
+
+        if (area.IsFailure)
+        {
+            return area;
+        }
+
+        Result<TerritoryId?> route = await TerritoryAsync(
+            places, customer, profile.RouteId, TerritoryKind.Route, cancellationToken);
+
+        return route.IsFailure
+            ? route
+            : customer.SetPartyDetails(new PartyDetails(
+                profile.City,
+                profile.PinCode,
+                profile.Website,
+                profile.Fax,
+                profile.ContactPerson,
+                profile.GstNumber,
+                profile.TinNumber,
+                profile.CstNumber,
+                profile.CountryCode,
+                area.Value,
+                route.Value,
+                profile.SendsSms));
+    }
+
+    private static async Task<Result<TerritoryId?>> TerritoryAsync(
+        IPlaceRepository places,
+        Ledger customer,
+        Guid? id,
+        TerritoryKind kind,
+        CancellationToken cancellationToken)
+    {
+        if (id is not { } value)
+        {
+            return Result.Success<TerritoryId?>(null);
+        }
+
+        Territory? territory = await places.FindTerritoryAsync(TerritoryId.From(value), cancellationToken);
+
+        return territory is null || territory.FirmId != customer.FirmId || territory.Kind != kind
+            ? Result.Failure<TerritoryId?>(Error.NotFound(
+                "Customer.TerritoryNotFound", $"That {kind} is not one of the firm's."))
+            : Result.Success<TerritoryId?>(territory.Id);
+    }
+
     /// <summary>Describes a customer as the API reports them.</summary>
     internal static CustomerResponse Describe(Ledger customer) =>
         new(
@@ -427,5 +530,18 @@ internal static class CustomerDetails
             new CustomerTaxDetails(customer.TaxRegistrationNumber, customer.StateCode),
             customer.Currency.Code,
             customer.OpeningBalance,
-            customer.IsActive);
+            customer.IsActive,
+            new CustomerProfile(
+                customer.City,
+                customer.PinCode,
+                customer.Website,
+                customer.Fax,
+                customer.ContactPerson,
+                customer.GstNumber,
+                customer.TinNumber,
+                customer.CstNumber,
+                customer.CountryCode,
+                customer.AreaId?.Value,
+                customer.RouteId?.Value,
+                customer.SendsSms));
 }

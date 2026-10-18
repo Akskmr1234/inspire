@@ -1,3 +1,4 @@
+using ERP.Domain.Parties;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
@@ -44,6 +45,49 @@ public enum LedgerKind
     /// An additional charge such as freight, packing, or a discount allowed.
     /// </summary>
     AdditionalCharge = 8,
+}
+
+/// <summary>Where a party is, and how else it is reached and registered.</summary>
+/// <param name="City">The town or city.</param>
+/// <param name="PinCode">The postal or PIN code.</param>
+/// <param name="Website">The website.</param>
+/// <param name="Fax">The fax number.</param>
+/// <param name="ContactPerson">The person to ask for.</param>
+/// <param name="GstNumber">The GST identification number.</param>
+/// <param name="TinNumber">The taxpayer identification number.</param>
+/// <param name="CstNumber">The CST registration number.</param>
+/// <param name="CountryCode">The ISO code of the country.</param>
+/// <param name="AreaId">The area.</param>
+/// <param name="RouteId">The route.</param>
+/// <param name="SendsSms">Whether the party is sent text messages.</param>
+public sealed record PartyDetails(
+    string? City = null,
+    string? PinCode = null,
+    string? Website = null,
+    string? Fax = null,
+    string? ContactPerson = null,
+    string? GstNumber = null,
+    string? TinNumber = null,
+    string? CstNumber = null,
+    string? CountryCode = null,
+    TerritoryId? AreaId = null,
+    TerritoryId? RouteId = null,
+    bool SendsSms = false)
+{
+    /// <summary>The longest name: a city or a contact person.</summary>
+    public const int MaximumNameLength = 100;
+
+    /// <summary>The longest short code: a PIN code or a fax number.</summary>
+    public const int MaximumCodeLength = 30;
+
+    /// <summary>The longest website.</summary>
+    public const int MaximumWebsiteLength = 200;
+
+    /// <summary>The longest registration number.</summary>
+    public const int MaximumRegistrationLength = 50;
+
+    /// <summary>The longest country code.</summary>
+    public const int MaximumCountryCodeLength = 3;
 }
 
 /// <summary>
@@ -172,6 +216,42 @@ public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, I
 
     /// <summary>Gets the second address line.</summary>
     public string? AddressLine2 { get; private set; }
+
+    /// <summary>Gets the party's town or city.</summary>
+    public string? City { get; private set; }
+
+    /// <summary>Gets the postal or PIN code.</summary>
+    public string? PinCode { get; private set; }
+
+    /// <summary>Gets the party's website.</summary>
+    public string? Website { get; private set; }
+
+    /// <summary>Gets the fax number.</summary>
+    public string? Fax { get; private set; }
+
+    /// <summary>Gets the person to ask for.</summary>
+    public string? ContactPerson { get; private set; }
+
+    /// <summary>Gets the party's GST identification number.</summary>
+    public string? GstNumber { get; private set; }
+
+    /// <summary>Gets the party's taxpayer identification number.</summary>
+    public string? TinNumber { get; private set; }
+
+    /// <summary>Gets the party's CST registration number.</summary>
+    public string? CstNumber { get; private set; }
+
+    /// <summary>Gets the ISO code of the country the party is in.</summary>
+    public string? CountryCode { get; private set; }
+
+    /// <summary>Gets the area the party is in.</summary>
+    public TerritoryId? AreaId { get; private set; }
+
+    /// <summary>Gets the route the party is on.</summary>
+    public TerritoryId? RouteId { get; private set; }
+
+    /// <summary>Gets whether the party is sent text messages.</summary>
+    public bool SendsSms { get; private set; }
 
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -341,6 +421,52 @@ public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, I
         Email = Trimmed(email);
         AddressLine1 = Trimmed(addressLine1);
         AddressLine2 = Trimmed(addressLine2);
+    }
+
+    /// <summary>Records where a party is and how else it is reached and registered.</summary>
+    /// <param name="details">The details.</param>
+    /// <returns>Success, or the first field that is too long.</returns>
+    public Result SetPartyDetails(PartyDetails details)
+    {
+        ArgumentNullException.ThrowIfNull(details);
+
+        (string Field, string? Value, int Limit)[] limits =
+        [
+            ("city", details.City, PartyDetails.MaximumNameLength),
+            ("PIN code", details.PinCode, PartyDetails.MaximumCodeLength),
+            ("website", details.Website, PartyDetails.MaximumWebsiteLength),
+            ("fax", details.Fax, PartyDetails.MaximumCodeLength),
+            ("contact person", details.ContactPerson, PartyDetails.MaximumNameLength),
+            ("GST ID", details.GstNumber, PartyDetails.MaximumRegistrationLength),
+            ("TIN", details.TinNumber, PartyDetails.MaximumRegistrationLength),
+            ("CST registration number", details.CstNumber, PartyDetails.MaximumRegistrationLength),
+            ("country", details.CountryCode, PartyDetails.MaximumCountryCodeLength),
+        ];
+
+        (string Field, string? Value, int Limit) tooLong = limits.FirstOrDefault(
+            limit => limit.Value is not null && limit.Value.Trim().Length > limit.Limit);
+
+        if (tooLong.Field is not null)
+        {
+            return Result.Failure(Error.Validation(
+                "Ledger.DetailTooLong",
+                $"The {tooLong.Field} cannot exceed {tooLong.Limit} characters."));
+        }
+
+        City = Trimmed(details.City);
+        PinCode = Trimmed(details.PinCode);
+        Website = Trimmed(details.Website);
+        Fax = Trimmed(details.Fax);
+        ContactPerson = Trimmed(details.ContactPerson);
+        GstNumber = Trimmed(details.GstNumber);
+        TinNumber = Trimmed(details.TinNumber);
+        CstNumber = Trimmed(details.CstNumber);
+        CountryCode = Trimmed(details.CountryCode)?.ToUpperInvariant();
+        AreaId = details.AreaId;
+        RouteId = details.RouteId;
+        SendsSms = details.SendsSms;
+
+        return Result.Success();
     }
 
     /// <summary>Sets the Arabic name shown in RTL mode.</summary>

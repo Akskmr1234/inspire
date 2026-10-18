@@ -1,4 +1,5 @@
 using ERP.Domain.Accounting;
+using ERP.Domain.Parties;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -74,6 +75,28 @@ public sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
         builder.Property(l => l.Email).HasMaxLength(256);
         builder.Property(l => l.AddressLine1).HasMaxLength(200);
         builder.Property(l => l.AddressLine2).HasMaxLength(200);
+        builder.Property(l => l.City).HasMaxLength(PartyDetails.MaximumNameLength);
+        builder.Property(l => l.PinCode).HasMaxLength(PartyDetails.MaximumCodeLength);
+        builder.Property(l => l.Website).HasMaxLength(PartyDetails.MaximumWebsiteLength);
+        builder.Property(l => l.Fax).HasMaxLength(PartyDetails.MaximumCodeLength);
+        builder.Property(l => l.ContactPerson).HasMaxLength(PartyDetails.MaximumNameLength);
+        builder.Property(l => l.GstNumber).HasMaxLength(PartyDetails.MaximumRegistrationLength);
+        builder.Property(l => l.TinNumber).HasMaxLength(PartyDetails.MaximumRegistrationLength);
+        builder.Property(l => l.CstNumber).HasMaxLength(PartyDetails.MaximumRegistrationLength);
+        builder.Property(l => l.CountryCode).HasMaxLength(PartyDetails.MaximumCountryCodeLength);
+        builder.Property(l => l.SendsSms).IsRequired();
+
+        // The area and route a party is in. Restricted: an area with customers in it is
+        // withdrawn, not deleted.
+        builder.HasOne<Territory>()
+            .WithMany()
+            .HasForeignKey(l => l.AreaId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Territory>()
+            .WithMany()
+            .HasForeignKey(l => l.RouteId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.Property(l => l.IsActive).IsRequired();
         builder.Property(l => l.IsBillWise).IsRequired();
         builder.Property(l => l.IsDeleted).IsRequired();

@@ -89,17 +89,24 @@ export function setMasterActive(
 }
 
 /**
- * Renames a unit of measurement.
+ * Changes a unit of measurement: its name, symbol, decimals and conversion factor.
  *
- * A rename and nothing more, which is what the API offers: the code and the
- * conversion factor are relied on by every document already entered in that unit,
- * and changing either would silently restate quantities recorded months ago. So the
- * edit form offers the one field that can move.
+ * The code never moves, and the server refuses a new factor once a product is measured
+ * in the unit or a document was entered in it - changing it then would silently restate
+ * quantities recorded months ago.
  */
-export function renameUnit(id: string, name: string): Promise<void> {
+export function reviseUnit(
+  id: string,
+  unit: {
+    readonly name: string;
+    readonly symbol: string | null;
+    readonly decimalPlaces: number;
+    readonly conversionFactor: number;
+  },
+): Promise<void> {
   return request<void>(`${INVENTORY}/units/${id}`, {
     method: 'PUT',
-    body: { name },
+    body: unit,
   });
 }
 
@@ -115,6 +122,8 @@ export function updateMaster(
     readonly name: string;
     readonly nameArabic: string | null;
     readonly address?: string | null;
+    /** The category a category sits beneath, or null for the top level. */
+    readonly parentId?: string | null;
   },
 ): Promise<void> {
   return request<void>(`${INVENTORY}/${kind}/${id}`, { method: 'PUT', body });

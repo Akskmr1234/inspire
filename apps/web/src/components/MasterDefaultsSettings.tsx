@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
-import { CheckField, Field, SelectField, TextField } from '@/components/Form';
+import { CheckField, Field, SelectField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import {
   IconCheck,
@@ -25,7 +25,7 @@ import {
   type WarehouseSummary,
 } from '@/lib/inventory';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
-import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
+import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { PAYMENT_MODES } from '@/lib/paymentModes';
 import {
   DECIMAL_CHOICES,
@@ -147,6 +147,13 @@ export function MasterDefaultsSettings(): React.JSX.Element {
     queryFn: () => listLedgers(false),
   });
 
+  const employeeOptions = (ledgers.data ?? [])
+    .filter((ledger) => ledger.kind === LedgerKind.employee)
+    .map((ledger) => ({
+      value: ledger.ledgerId,
+      label: `${ledger.code} — ${ledger.name}`,
+    }));
+
   return (
     <div className="card space-y-6 p-6">
       <div className="border-b border-line pb-4">
@@ -248,19 +255,28 @@ export function MasterDefaultsSettings(): React.JSX.Element {
             ]}
           />
 
-          <TextField
-            label={t('settings.defaultSalesman')}
-            value={settings.defaultSalesman}
-            onChange={(value) => settings.update({ defaultSalesman: value })}
-            placeholder="Primary Salesman"
-          />
+          {/* From the employee master, as the sales screen's own pickers are. */}
+          <Field label={t('settings.defaultSalesman')}>
+            <SearchSelect
+              value={settings.defaultSalesman}
+              onChange={(id) => settings.update({ defaultSalesman: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('settings.defaultSalesman')}
+              options={employeeOptions}
+            />
+          </Field>
 
-          <TextField
-            label={t('settings.defaultBillingman')}
-            value={settings.defaultBillingman}
-            onChange={(value) => settings.update({ defaultBillingman: value })}
-            placeholder="Primary Billingman"
-          />
+          <Field label={t('settings.defaultBillingman')}>
+            <SearchSelect
+              value={settings.defaultBillingman}
+              onChange={(id) => settings.update({ defaultBillingman: id })}
+              clearable
+              placeholder={t('settings.askEachTime')}
+              label={t('settings.defaultBillingman')}
+              options={employeeOptions}
+            />
+          </Field>
 
           <Field label={t('settings.defaultCategory')}>
             <SearchSelect

@@ -90,6 +90,8 @@ public sealed record GetChequeRegisterQuery(
 /// Days until it may be banked, as at the reporting date. Zero once its date has
 /// arrived, so a report can sort by how soon money is expected.
 /// </param>
+/// <param name="AccountNumber">The account number written on the cheque, if noted.</param>
+/// <param name="InFavourOf">Who the cheque is made out to, if noted.</param>
 public sealed record ChequeReportLine(
     Guid ChequeId,
     string ChequeNumber,
@@ -106,7 +108,9 @@ public sealed record ChequeReportLine(
     DateOnly? DepositedOn,
     DateOnly? ClosedOn,
     string? ClosureReason,
-    int DaysUntilDue);
+    int DaysUntilDue,
+    string? AccountNumber = null,
+    string? InFavourOf = null);
 
 /// <summary>The post-dated cheques in hand.</summary>
 /// <param name="AsAt">The date the position is stated as at.</param>
@@ -309,6 +313,8 @@ public interface IChequeReportReader
 /// <param name="DepositedOn">When it entered the banking system.</param>
 /// <param name="ClosedOn">When it reached its terminal state.</param>
 /// <param name="ClosureReason">Why it bounced, was stopped, or was voided.</param>
+/// <param name="AccountNumber">The account number written on the cheque, if noted.</param>
+/// <param name="InFavourOf">Who the cheque is made out to, if noted.</param>
 public sealed record ChequeReportRow(
     Guid ChequeId,
     string ChequeNumber,
@@ -325,7 +331,9 @@ public sealed record ChequeReportRow(
     string? DrawnOnBank,
     DateOnly? DepositedOn,
     DateOnly? ClosedOn,
-    string? ClosureReason);
+    string? ClosureReason,
+    string? AccountNumber = null,
+    string? InFavourOf = null);
 
 /// <summary>Shapes reader rows into report lines.</summary>
 internal static class ChequeReportLines
@@ -356,7 +364,9 @@ internal static class ChequeReportLines
         row.DepositedOn,
         row.ClosedOn,
         row.ClosureReason,
-        DaysUntilDue(row.InstrumentDate, asAt));
+        DaysUntilDue(row.InstrumentDate, asAt),
+        row.AccountNumber,
+        row.InFavourOf);
 
     /// <summary>Counts days until a cheque may be banked, never negative.</summary>
     /// <param name="instrumentDate">The date on the cheque's face.</param>

@@ -327,6 +327,9 @@ public sealed class PostPurchaseInvoiceCommandHandler
             return Result.Failure<StockDocument>(applied.Error);
         }
 
+        // Products costed at their last purchase rate take this one's.
+        PurchaseReceipt.ApplyLastPurchaseRates(invoice, stock.Value.Products);
+
         Result journalled = await _stockJournal.RaiseAsync(
             document, applied.Value, context.Firm, branchId, _currentUser.UserId,
             _clock.UtcNow, cancellationToken);

@@ -87,21 +87,121 @@ public sealed class ListChargesQueryHandler : IQueryHandler<ListChargesQuery, IR
         [
             .. mapped
                 .Where(charge => charge.IsActive && ledgers.ContainsKey(charge.LedgerId))
-                .Select(charge =>
-                {
-                    Ledger ledger = ledgers[charge.LedgerId];
-
-                    return new ChargeSetup(
-                        ledger.Id.Value,
-                        ledger.Code,
-                        ledger.Name,
-                        charge.IsAddition,
-                        charge.IsDefault,
-                        charge.AppliesUnderTax,
-                        charge.AppliesUnderNonTax,
-                        charge.AppliesUnderCst,
-                        string.Equals(ledger.Code, RoundOffCode, StringComparison.OrdinalIgnoreCase));
-                }),
+                .Select(charge => Describe(charge, ledgers[charge.LedgerId])),
         ]);
+    }
+
+    /// <summary>Describes one charge as the entry screens read it.</summary>
+    /// <param name="charge">The mapping.</param>
+    /// <param name="ledger">The account it posts to.</param>
+    /// <returns>The charge.</returns>
+    internal static ChargeSetup Describe(AdditionalLedger charge, Ledger ledger) =>
+        new(
+            ledger.Id.Value,
+            ledger.Code,
+            ledger.Name,
+            charge.IsAddition,
+            charge.IsDefault,
+            charge.AppliesUnderTax,
+            charge.AppliesUnderNonTax,
+            charge.AppliesUnderCst,
+            string.Equals(ledger.Code, RoundOffCode, StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>Sets a ledger up as a charge one kind of document may carry.</summary>
+/// <param name="Document">The kind of document.</param>
+/// <param name="LedgerId">The account the charge posts to.</param>
+/// <param name="IsAddition">Whether it adds to the document's total; otherwise it deducts.</param>
+/// <remarks>
+/// What lets somebody entering an invoice use a ledger nobody set up as a charge yet -
+/// a cleaning charge, a special discount - without leaving the invoice. A ledger already
+/// set up for that document keeps its own direction, so a second person picking it does
+/// not quietly turn every later invoice's freight into a deduction.
+/// </remarks>
+public sealed record MapChargeCommand(ChargeableDocument Document, Guid LedgerId, bool IsAddition)
+    : ICommand<ChargeSetup>, ITransactional;
+
+/// <summary>Handles <see cref="MapChargeCommand"/>.</summary>
+public sealed class MapChargeCommandHandler : ICommandHandler<MapChargeCommand, ChargeSetup>
+{
+    private readonly IAdditionalLedgerRepository _charges;
+    private readonly ILedgerRepository _ledgers;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="MapChargeCommandHandler"/> class.</summary>
+    /// <param name="charges">The charge setup.</param>
+    /// <param name="ledgers">The ledgers the charges post to.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public MapChargeCommandHandler(
+        IAdditionalLedgerRepository charges,
+        ILedgerRepository ledgers,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _charges = charges;
+        _ledgers = ledgers;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<ChargeSetup>> Handle(
+        MapChargeCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<ChargeSetup>(Error.Forbidden(
+                "Charges.NoFirmSelected", "A firm must be selected to set up its charges."));
+        }
+
+        Ledger? ledger = await _ledgers.FindAsync(LedgerId.From(request.LedgerId), cancellationToken);
+
+        if (ledger is null || ledger.FirmId != firmId)
+        {
+            return Result.Failure<ChargeSetup>(Error.NotFound(
+                "Charges.LedgerNotFound", "That ledger is not in the selected firm."));
+        }
+
+        // A party, a cash or bank account or a tax head already has its own place on a
+        // document; as a charge it would post the same money twice over.
+        if (ledger.Kind is not (LedgerKind.General or LedgerKind.AdditionalCharge))
+        {
+            return Result.Failure<ChargeSetup>(Error.Validation(
+                "Charges.LedgerNotChargeable",
+                $"'{ledger.Name}' is a {ledger.Kind} account and cannot be used as an additional ledger."));
+        }
+
+        IReadOnlyList<AdditionalLedger> mapped = await _charges.ListForDocumentAsync(
+            firmId, request.Document, cancellationToken);
+
+        AdditionalLedger? existing = mapped.FirstOrDefault(charge => charge.LedgerId == ledger.Id);
+
+        if (existing is not null)
+        {
+            existing.Restore();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return Result.Success(ListChargesQueryHandler.Describe(existing, ledger));
+        }
+
+        int order = mapped.Count == 0 ? 1 : mapped.Max(charge => charge.DisplayOrder) + 1;
+
+        Result<AdditionalLedger> created = AdditionalLedger.Map(
+            _tenantContext.TenantId, firmId, request.Document, ledger, request.IsAddition, order);
+
+        if (created.IsFailure)
+        {
+            return Result.Failure<ChargeSetup>(created.Error);
+        }
+
+        _charges.Add(created.Value);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(ListChargesQueryHandler.Describe(created.Value, ledger));
     }
 }

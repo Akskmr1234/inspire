@@ -74,6 +74,10 @@ public sealed record SalesInvoiceChargeDetail(Guid LedgerId, decimal Amount, boo
 /// <param name="JournalVoucherId">The journal in the nominal ledger, once posted.</param>
 /// <param name="Kind">Whether it is a sale or a return.</param>
 /// <param name="ReturnsInvoiceId">For a return, the invoice it is against.</param>
+/// <param name="PaymentMode">Paid in cash at the counter, or on credit.</param>
+/// <param name="SalesmanLedgerId">The employee who made the sale.</param>
+/// <param name="BillingManLedgerId">The employee who billed it.</param>
+/// <param name="CreatedAtUtc">When it was entered.</param>
 public sealed record SalesInvoiceDetail(
     SalesInvoiceResponse Header,
     DateOnly Date,
@@ -89,7 +93,11 @@ public sealed record SalesInvoiceDetail(
     Guid? BillId,
     Guid? JournalVoucherId,
     SalesDocumentKind Kind,
-    Guid? ReturnsInvoiceId);
+    Guid? ReturnsInvoiceId,
+    SalesPaymentMode PaymentMode,
+    Guid? SalesmanLedgerId,
+    Guid? BillingManLedgerId,
+    DateTimeOffset CreatedAtUtc);
 
 /// <summary>Handles <see cref="GetSalesInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -191,6 +199,10 @@ public sealed class GetSalesInvoiceQueryHandler
             invoice.BillId?.Value,
             invoice.JournalVoucherId?.Value,
             invoice.Kind,
-            invoice.ReturnsInvoiceId?.Value));
+            invoice.ReturnsInvoiceId?.Value,
+            invoice.PaymentMode,
+            invoice.SalesmanLedgerId?.Value,
+            invoice.BillingManLedgerId?.Value,
+            invoice.CreatedAtUtc));
     }
 }

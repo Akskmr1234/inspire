@@ -12,6 +12,9 @@ export const SalesDocumentKind = { invoice: 1, return: 2 } as const;
 /** Where a sales document stands. */
 export const SalesInvoiceStatus = { draft: 1, posted: 2, cancelled: 3 } as const;
 
+/** How a sale was settled at the counter. */
+export const SalesPaymentMode = { credit: 1, cash: 2 } as const;
+
 /** How a document treats tax. */
 export const TaxMode = { nonTax: 1, tax: 2, cst: 3 } as const;
 
@@ -41,6 +44,16 @@ export interface SalesInvoiceSummary {
   readonly taxable: number;
   readonly tax: number;
   readonly total: number;
+  /** When it was entered, which gives the time of the sale. */
+  readonly createdAtUtc: string;
+  readonly paymentMode: number;
+  readonly salesmanName: string | null;
+  readonly billingManName: string | null;
+  /** What the line discounts took off. */
+  readonly discount: number;
+  /** What the additional ledgers added, net of what they deducted. */
+  readonly chargeTotal: number;
+  readonly narration: string | null;
 }
 
 /** One tax head as it was charged on a line. */
@@ -111,6 +124,10 @@ export interface SalesInvoiceDetail {
   readonly journalVoucherId: string | null;
   readonly kind: number;
   readonly returnsInvoiceId: string | null;
+  readonly paymentMode: number;
+  readonly salesmanLedgerId: string | null;
+  readonly billingManLedgerId: string | null;
+  readonly createdAtUtc: string;
 }
 
 /** What posting produced. */
@@ -186,7 +203,6 @@ export async function getSalesInvoice(id: string): Promise<SalesInvoiceDetail> {
   return request<SalesInvoiceDetail>(`/sales/invoices/${id}`);
 }
 
-/** Enters a document as a draft. Nothing moves until it is posted. */
 /** What the entry screen sends, for a new document or a correction. */
 export interface SalesInvoiceInput {
   readonly date: string;
@@ -201,10 +217,20 @@ export interface SalesInvoiceInput {
   readonly charges?: readonly SalesChargeInput[];
   /** The tax mode. Omitted, the server takes it from the firm's regime. */
   readonly mode?: number | null;
+  /** Cash at the counter or on credit. Credit when omitted. */
+  readonly paymentMode?: number;
+  /** The employee who made the sale. */
+  readonly salesmanLedgerId?: string | null;
+  /** The employee who billed it. */
+  readonly billingManLedgerId?: string | null;
 }
 
+/**
+ * Enters a document. A draft unless `post` is set, in which case it is saved and posted
+ * in one step on the server: a sale the books refuse leaves no draft behind.
+ */
 export async function createSalesInvoice(
-  input: SalesInvoiceInput,
+  input: SalesInvoiceInput & { readonly post?: boolean },
 ): Promise<SalesInvoiceHeader> {
   return request<SalesInvoiceHeader>('/sales/invoices', {
     method: 'POST',

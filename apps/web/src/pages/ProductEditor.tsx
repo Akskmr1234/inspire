@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ReportSkeleton } from '@/components/ReportFrame';
 import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
+import { ArabicNameField } from '@/components/ArabicNameField';
+import { MasterPicker } from '@/components/MasterPicker';
 import clsx from 'clsx';
 import type { ApiError } from '@/lib/api';
 import {
@@ -14,13 +16,8 @@ import {
   setProductFlag,
   type ProductDetail,
 } from '@/lib/products';
-import {
-  listMaster,
-  type BrandSummary,
-  type UnitSummary,
-  type WarehouseSummary,
-} from '@/lib/inventory';
-import { moneyAlways } from '@/lib/money';
+import { listMaster, type UnitSummary, type WarehouseSummary } from '@/lib/inventory';
+import { currentDecimals, moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
 import { useSettings } from '@/stores/settings';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
@@ -31,10 +28,16 @@ import {
   type StockLedgerReport,
 } from '@/lib/stock';
 
+type EditorTab = 'description' | 'details' | 'barcodes' | 'openingStock';
+
 /**
  * The product editor.
  *
- * Four tabs: Description, Details, Barcodes, and Opening Stock.
+ * Four tabs. Description and Details are one form under one Save - what the product is,
+ * how it is filed and priced on the first, the particulars and how it is stocked on the
+ * second - and Save writes the lot and goes back to the list, which is where somebody
+ * entering a catalogue goes next. Barcodes and Opening Stock act as they are used and
+ * stay where they are, because each is a list being added to rather than a form.
  */
 export function ProductEditor({
   productId,
@@ -42,17 +45,10 @@ export function ProductEditor({
   onClose,
 }: {
   readonly productId: string;
-  readonly initialTab?:
-    'description' | 'details' | 'barcodes' | 'openingStock' | undefined;
+  readonly initialTab?: EditorTab | undefined;
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [tab, setTab] = useState<'description' | 'details' | 'barcodes' | 'openingStock'>(
-    initialTab ?? 'description',
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const product = useQuery<ProductDetail, ApiError>({
     queryKey: ['product', productId],
@@ -63,31 +59,6 @@ export function ProductEditor({
     queryKey: ['units', false],
     queryFn: () => listMaster<UnitSummary>('units', false),
   });
-
-  const brands = useQuery<readonly BrandSummary[], ApiError>({
-    queryKey: ['brands', false],
-    queryFn: () => listMaster<BrandSummary>('brands', false),
-  });
-
-  const mutation = useMutation<void, ApiError, () => Promise<void>>({
-    mutationFn: (action) => action(),
-    onSuccess: async () => {
-      setError(null);
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 2000);
-
-      await queryClient.invalidateQueries({ queryKey: ['product', productId] });
-      await queryClient.invalidateQueries({ queryKey: ['products'] });
-    },
-    // The server owns the rules — an MRP a retail rate may not exceed, a unit that
-    // does not convert — so its own message is shown rather than one guessed at here.
-    onError: (failure) => setError(failure.detail || failure.code),
-  });
-
-  const run = (action: () => Promise<void>): void => {
-    setError(null);
-    mutation.mutate(action);
-  };
 
   if (product.isPending) {
     return (
@@ -108,16 +79,12 @@ export function ProductEditor({
 
   /*
     The editor replaces the list rather than sitting beside it, so a product that
-    will not load must still offer the way back. It used to render the alert alone:
-    the list was gone, the record was gone, and the only exits left were the browser
-    button and the menu — on the one screen where the user had just been holding a
-    list of every product.
+    will not load must still offer the way back.
   */
   if (product.isError || !product.data) {
     return (
       <section className="page">
         <PageHeading title={t('nav.products')} />
-
         <Alert>
           {product.error?.detail ?? product.error?.code ?? t('products.notFound')}
         </Alert>
@@ -138,15 +105,231 @@ export function ProductEditor({
     );
   }
 
-  const row = product.data;
+  /*
+    Keyed on the product so opening another one rebuilds the form state. Without it the
+    fields would keep the previous product's values until the query resolved, which is
+    the shape of an edit landing on the wrong record.
+  */
+  return (
+    <EditorBody
+      key={product.data.id}
+      product={product.data}
+      units={units.data ?? []}
+      initialTab={initialTab ?? 'description'}
+      onClose={onClose}
+    />
+  );
+}
+
+/** Every field the Description and Details tabs edit, as the boxes hold them. */
+interface ProductForm {
+  readonly description: string;
+  readonly descriptionArabic: string;
+  readonly shortDescription: string;
+  readonly itemName: string;
+  readonly manufacturer: string;
+  readonly label: string;
+  readonly size: string;
+  readonly origin: string;
+  readonly rack: string;
+  readonly bin: string;
+  readonly categoryId: string;
+  readonly brandId: string;
+  readonly taxSlabId: string;
+  readonly purchaseUnitId: string;
+  readonly salesUnitId: string;
+  readonly costingMethod: string;
+  readonly cost: string;
+  readonly profitPercentage: string;
+  readonly corPercentage: string;
+  readonly retailRate: string;
+  readonly wholesaleRate: string;
+  readonly otherRate: string;
+  readonly maximumRetailPrice: string;
+  readonly minimumLevel: string;
+  readonly reorderLevel: string;
+  readonly maximumLevel: string;
+  readonly movement: string;
+  readonly tracksBatches: boolean;
+  readonly tracksSerialNumbers: boolean;
+  readonly shelfLifeDays: string;
+  readonly isPacking: boolean;
+  readonly device: string;
+  readonly colour: string;
+  readonly battery: string;
+  readonly ram: string;
+  readonly storage: string;
+}
+
+/** The decimal places a percentage is shown to, whatever the currency's are. */
+const PERCENT_PLACES = 2;
+
+function formFrom(product: ProductDetail, places: number): ProductForm {
+  // Shown to the firm's decimal places - 0.00 rather than 0 - so a rate box reads like
+  // every other figure in the application.
+  const fixed = (value: number, digits = places): string => value.toFixed(digits);
+
+  return {
+    description: product.description,
+    descriptionArabic: product.descriptionArabic ?? '',
+    shortDescription: product.shortDescription ?? '',
+    itemName: product.itemName ?? '',
+    manufacturer: product.manufacturer ?? '',
+    label: product.label ?? '',
+    size: product.size ?? '',
+    origin: product.origin ?? '',
+    rack: product.rack ?? '',
+    bin: product.bin ?? '',
+    categoryId: product.categoryId,
+    brandId: product.brandId ?? '',
+    taxSlabId: product.taxSlabId ?? '',
+    purchaseUnitId: product.purchaseUnitId,
+    salesUnitId: product.salesUnitId,
+    costingMethod: String(product.costingMethod),
+    cost: fixed(product.cost),
+    profitPercentage: fixed(product.profitPercentage, PERCENT_PLACES),
+    corPercentage: fixed(product.corPercentage, PERCENT_PLACES),
+    retailRate: fixed(product.retailRate),
+    wholesaleRate: fixed(product.wholesaleRate),
+    otherRate: fixed(product.otherRate),
+    maximumRetailPrice: fixed(product.maximumRetailPrice),
+    minimumLevel: String(product.minimumLevel),
+    reorderLevel: String(product.reorderLevel),
+    maximumLevel: String(product.maximumLevel),
+    movement: String(product.movement),
+    tracksBatches: product.tracksBatches,
+    tracksSerialNumbers: product.tracksSerialNumbers,
+    shelfLifeDays: product.shelfLifeDays === null ? '' : String(product.shelfLifeDays),
+    isPacking: product.isPacking,
+    device: product.device ?? '',
+    colour: product.colour ?? '',
+    battery: product.battery ?? '',
+    ram: product.ram ?? '',
+    storage: product.storage ?? '',
+  };
+}
+
+function EditorBody({
+  product,
+  units,
+  initialTab,
+  onClose,
+}: {
+  readonly product: ProductDetail;
+  readonly units: readonly UnitSummary[];
+  readonly initialTab: EditorTab;
+  readonly onClose: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const enableDeviceAttributes = useSettings((s) => s.enableDeviceAttributes);
+  const places = currentDecimals();
+
+  const [tab, setTab] = useState<EditorTab>(initialTab);
+  const [form, setForm] = useState<ProductForm>(() => formFrom(product, places));
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const set = (patch: Partial<ProductForm>): void =>
+    setForm((previous) => ({ ...previous, ...patch }));
+
+  const refresh = async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: ['product', product.id] });
+    await queryClient.invalidateQueries({ queryKey: ['products'] });
+  };
+
+  /*
+    One Save for both tabs. Sequential rather than parallel, because the API groups the
+    fields five ways: if the rates are refused, what went before has landed and the
+    message names one thing rather than several.
+  */
+  const save = useMutation<void, ApiError>({
+    mutationFn: async () => {
+      await saveProductTab(product.id, 'description', {
+        description: form.description.trim(),
+        descriptionArabic: blank(form.descriptionArabic),
+        shortDescription: blank(form.shortDescription),
+        itemName: blank(form.itemName),
+        manufacturer: blank(form.manufacturer),
+        label: blank(form.label),
+        size: blank(form.size),
+        origin: blank(form.origin),
+        rack: blank(form.rack),
+        bin: blank(form.bin),
+      });
+
+      await saveProductTab(product.id, 'classification', {
+        categoryId: form.categoryId,
+        brandId: form.brandId || null,
+        taxSlabId: form.taxSlabId || null,
+      });
+
+      await saveProductTab(product.id, 'rates', {
+        costingMethod: Number(form.costingMethod),
+        cost: number(form.cost),
+        profitPercentage: number(form.profitPercentage),
+        corPercentage: number(form.corPercentage),
+        retailRate: number(form.retailRate),
+        wholesaleRate: number(form.wholesaleRate),
+        otherRate: number(form.otherRate),
+        maximumRetailPrice: number(form.maximumRetailPrice),
+      });
+
+      await saveProductTab(product.id, 'stocking', {
+        purchaseUnitId: form.purchaseUnitId,
+        salesUnitId: form.salesUnitId,
+        minimumLevel: number(form.minimumLevel),
+        reorderLevel: number(form.reorderLevel),
+        maximumLevel: number(form.maximumLevel),
+        movement: Number(form.movement),
+        tracksBatches: form.tracksBatches,
+        tracksSerialNumbers: form.tracksSerialNumbers,
+        shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
+        isPacking: form.isPacking,
+      });
+
+      if (enableDeviceAttributes) {
+        await saveProductTab(product.id, 'device', {
+          device: blank(form.device),
+          colour: blank(form.colour),
+          battery: blank(form.battery),
+          ram: blank(form.ram),
+          storage: blank(form.storage),
+        });
+      }
+    },
+    onSuccess: async () => {
+      await refresh();
+      onClose();
+    },
+    // The server owns the rules - an MRP a retail rate may not exceed, a unit that
+    // does not convert - so its own message is shown rather than one guessed at here.
+    onError: (failure) => setError(failure.detail || failure.code),
+  });
+
+  // Barcodes, opening stock and the two flags act at once and leave the editor open.
+  const action = useMutation<void, ApiError, () => Promise<void>>({
+    mutationFn: (run) => run(),
+    onSuccess: async () => {
+      setError(null);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+      await refresh();
+    },
+    onError: (failure) => setError(failure.detail || failure.code),
+  });
+
+  const run = (work: () => Promise<void>): void => {
+    setError(null);
+    action.mutate(work);
+  };
 
   /*
     Three states, not two. A discontinued product is still sold and still counted —
     it is simply not to be reordered — so it is amber rather than filed with the
     withdrawn ones in grey, exactly as the list draws it.
   */
-  const status = row.isActive ? (
-    row.isDiscontinued ? (
+  const status = product.isActive ? (
+    product.isDiscontinued ? (
       <StatusBadge tone="warn" label={t('products.discontinued')} />
     ) : (
       <StatusBadge tone="success" label={t('masters.active')} />
@@ -155,17 +338,14 @@ export function ProductEditor({
     <StatusBadge tone="neutral" label={t('masters.withdrawn')} struck />
   );
 
+  const editing = tab === 'description' || tab === 'details';
+  const canSave =
+    form.description.trim() !== '' && form.categoryId !== '' && !save.isPending;
+
   return (
     <section className="page">
-      {/*
-        The one screen in the application that kept its title in the page while every
-        other one puts it in the bar — so the bar read "Aider ERP" over a product
-        called something else, and a row of the content area went on saying what the
-        bar had room for. The status comes with it: it belongs beside the name of the
-        thing it describes, not in a caption under it.
-      */}
       <PageHeading
-        title={`${row.code} — ${row.description}`}
+        title={`${product.code} — ${product.description}`}
         actions={
           <>
             <span className="hidden sm:inline-flex">{status}</span>
@@ -176,10 +356,7 @@ export function ProductEditor({
 
             {/*
               Two spellings of one control. A phone's bar has room for a title or a
-              worded button, not both: at 390px the label pushed the product's name
-              out of the bar entirely and was itself clipped mid-word. Above `sm`
-              there is room, and a worded button is the better one — an arrow alone
-              is ambiguous next to a browser that has its own.
+              worded button, not both.
             */}
             <button
               type="button"
@@ -216,9 +393,8 @@ export function ProductEditor({
       {error && <Alert>{error}</Alert>}
 
       {/*
-        Scrolls rather than wraps below `sm`. Three tabs and a badge do not fit
-        across 390px, and a tab strip that becomes two rows of buttons stops
-        reading as a strip.
+        Scrolls rather than wraps below `sm`. Four tabs and a badge do not fit across
+        390px, and a tab strip that becomes two rows of buttons stops reading as a strip.
       */}
       <nav className="flex items-center gap-1 overflow-x-auto border-b border-line">
         <Tab active={tab === 'description'} onClick={() => setTab('description')}>
@@ -228,404 +404,185 @@ export function ProductEditor({
           {t('products.tabDetails')}
         </Tab>
         <Tab active={tab === 'barcodes'} onClick={() => setTab('barcodes')}>
-          {t('products.tabBarcodes')} ({row.barcodes.length})
+          {t('products.tabBarcodes')} ({product.barcodes.length})
         </Tab>
         <Tab active={tab === 'openingStock'} onClick={() => setTab('openingStock')}>
           {t('products.tabOpeningStock')}
         </Tab>
 
-        {/* Where the status goes on a phone, since the bar could not hold it. On
-            the end of the tab strip rather than a row of its own: it is one badge,
-            and a line to itself would cost more height than it is worth. */}
         <span className="shrink-0 pb-1.5 ps-2 sm:hidden">{status}</span>
       </nav>
 
-      {/*
-        Keyed on the product so switching rows rebuilds the form state. Without it the
-        fields would keep the previous product's values until the query resolved, which
-        is the shape of an edit landing on the wrong record.
-      */}
-      {tab === 'description' && (
-        <DescriptionTab key={row.id} product={row} run={run} busy={mutation.isPending} />
-      )}
+      {editing && (
+        <form
+          className="space-y-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSave) {
+              setError(null);
+              save.mutate();
+            }
+          }}
+        >
+          {tab === 'description' ? (
+            <DescriptionFields product={product} units={units} form={form} set={set} />
+          ) : (
+            <DetailsFields
+              form={form}
+              set={set}
+              deviceAttributes={enableDeviceAttributes}
+            />
+          )}
 
-      {tab === 'details' && (
-        <DetailsTab
-          key={row.id}
-          product={row}
-          units={units.data ?? []}
-          brands={brands.data ?? []}
-          run={run}
-          busy={mutation.isPending}
-        />
+          <div className="page-actions">
+            {/* The two flags mean different things and are routinely confused, so they
+                are two buttons with their own words rather than one toggle. */}
+            {tab === 'details' && (
+              <>
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  className="btn-secondary"
+                  onClick={() =>
+                    run(async () => {
+                      await setProductFlag(
+                        product.id,
+                        'discontinued',
+                        !product.isDiscontinued,
+                      );
+                    })
+                  }
+                >
+                  {product.isDiscontinued
+                    ? t('products.resume')
+                    : t('products.discontinue')}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  className="btn-secondary"
+                  onClick={() =>
+                    run(async () => {
+                      await setProductFlag(product.id, 'active', !product.isActive);
+                    })
+                  }
+                >
+                  {product.isActive ? t('masters.withdraw') : t('masters.restore')}
+                </button>
+              </>
+            )}
+
+            <button type="button" onClick={onClose} className="btn-secondary">
+              {t('common.cancel')}
+            </button>
+            <button type="submit" disabled={!canSave} className="btn-primary">
+              {save.isPending ? t('common.saving') : t('products.save')}
+            </button>
+          </div>
+        </form>
       )}
 
       {tab === 'barcodes' && (
-        <BarcodesTab product={row} run={run} busy={mutation.isPending} />
+        <BarcodesTab product={product} run={run} busy={action.isPending} />
       )}
 
-      {tab === 'openingStock' && (
-        <OpeningStockTab key={row.id} product={row} units={units.data ?? []} />
-      )}
+      {tab === 'openingStock' && <OpeningStockTab product={product} units={units} />}
     </section>
   );
 }
 
 /**
- * Tab 1 — what the product is, what it costs, and what it sells for.
- *
- * Rack and bin sit here rather than on Details, where section 8.1 lists them. They
- * travel with the descriptive fields in the API, and splitting them across tabs would
- * mean saving Details had to resend the whole description — the exact overwrite the
- * per-tab endpoints exist to avoid.
+ * Tab 1 — what the product is, the units it moves in, how it is filed, and what it
+ * costs and sells for.
  */
-function DescriptionTab({
+function DescriptionFields({
   product,
-  run,
-  busy,
+  units,
+  form,
+  set,
 }: {
   readonly product: ProductDetail;
-  readonly run: (action: () => Promise<void>) => void;
-  readonly busy: boolean;
+  readonly units: readonly UnitSummary[];
+  readonly form: ProductForm;
+  readonly set: (patch: Partial<ProductForm>) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const places = currentDecimals();
 
-  const [text, setText] = useState({
-    description: product.description,
-    descriptionArabic: product.descriptionArabic ?? '',
-    shortDescription: product.shortDescription ?? '',
-    itemName: product.itemName ?? '',
-    manufacturer: product.manufacturer ?? '',
-    label: product.label ?? '',
-    size: product.size ?? '',
-    origin: product.origin ?? '',
-    rack: product.rack ?? '',
-    bin: product.bin ?? '',
-  });
+  // The units that convert to this product's stock unit. Offering the rest would let
+  // somebody buy in kilograms what is stocked in litres, and the server would refuse
+  // it after the fact; better not to offer it.
+  const stockUnit = units.find((unit) => unit.id === product.stockUnitId);
+  const group = stockUnit?.baseUnitId ?? stockUnit?.id;
+  const convertible = (row: { readonly id: string }): boolean => {
+    const unit = row as UnitSummary;
+    return group !== undefined && (unit.baseUnitId ?? unit.id) === group;
+  };
 
-  const [device, setDevice] = useState({
-    device: product.device ?? '',
-    colour: product.colour ?? '',
-    battery: product.battery ?? '',
-    ram: product.ram ?? '',
-    storage: product.storage ?? '',
-  });
+  const money = (key: keyof ProductForm): React.JSX.Element => (
+    <FixedField
+      key={key}
+      label={t(`products.${key}`)}
+      value={form[key] as string}
+      places={places}
+      onChange={(value) => set({ [key]: value } as Partial<ProductForm>)}
+    />
+  );
 
-  const [rates, setRates] = useState({
-    costingMethod: String(product.costingMethod),
-    cost: String(product.cost),
-    profitPercentage: String(product.profitPercentage),
-    corPercentage: String(product.corPercentage),
-    retailRate: String(product.retailRate),
-    wholesaleRate: String(product.wholesaleRate),
-    otherRate: String(product.otherRate),
-    maximumRetailPrice: String(product.maximumRetailPrice),
-  });
-
-  const enableDeviceAttributes = useSettings((s) => s.enableDeviceAttributes);
+  const percent = (key: keyof ProductForm): React.JSX.Element => (
+    <FixedField
+      key={key}
+      label={t(`products.${key}`)}
+      value={form[key] as string}
+      places={PERCENT_PLACES}
+      onChange={(value) => set({ [key]: value } as Partial<ProductForm>)}
+    />
+  );
 
   return (
-    <form
-      className="space-y-6"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        run(async () => {
-          // Three calls because the API groups the fields three ways. Sequential
-          // rather than parallel: if the rates are refused, the description has
-          // already landed and the reason names one thing rather than two.
-          await saveProductTab(product.id, 'description', {
-            description: text.description.trim(),
-            descriptionArabic: blank(text.descriptionArabic),
-            shortDescription: blank(text.shortDescription),
-            itemName: blank(text.itemName),
-            manufacturer: blank(text.manufacturer),
-            label: blank(text.label),
-            size: blank(text.size),
-            origin: blank(text.origin),
-            rack: blank(text.rack),
-            bin: blank(text.bin),
-          });
-
-          await saveProductTab(product.id, 'rates', {
-            costingMethod: Number(rates.costingMethod),
-            cost: number(rates.cost),
-            profitPercentage: number(rates.profitPercentage),
-            corPercentage: number(rates.corPercentage),
-            retailRate: number(rates.retailRate),
-            wholesaleRate: number(rates.wholesaleRate),
-            otherRate: number(rates.otherRate),
-            maximumRetailPrice: number(rates.maximumRetailPrice),
-          });
-
-          if (enableDeviceAttributes) {
-            await saveProductTab(product.id, 'device', {
-              device: blank(device.device),
-              colour: blank(device.colour),
-              battery: blank(device.battery),
-              ram: blank(device.ram),
-              storage: blank(device.storage),
-            });
-          }
-        });
-      }}
-    >
+    <>
       <Section title={t('products.identity')} columns={6}>
-        {/* Read-only, and not merely disabled in the UI: nothing on the server
-            changes it either. The code is how this product is named on every
-            document already entered. */}
+        {/* Read-only, and not merely disabled in the UI: nothing on the server changes
+            it either. The code is how this product is named on every document already
+            entered. */}
         <Field label={t('masters.code')} span={2}>
           <input value={product.code} readOnly className="field-input opacity-60" />
         </Field>
 
         <Field label={t('products.description')} span={4}>
           <input
-            value={text.description}
-            onChange={(e) => setText({ ...text, description: e.target.value })}
+            value={form.description}
+            onChange={(e) => set({ description: e.target.value })}
             className="field-input"
             required
           />
         </Field>
 
-        <Field label={t('products.descriptionArabic')} span={2}>
-          <input
-            dir="rtl"
-            value={text.descriptionArabic}
-            onChange={(e) => setText({ ...text, descriptionArabic: e.target.value })}
-            className="field-input"
+        {/* With the translate button where the firm has turned translation on, as on
+            every other master's Arabic name. */}
+        <div className="lg:col-span-3">
+          <ArabicNameField
+            label={t('products.descriptionArabic')}
+            source={form.description}
+            value={form.descriptionArabic}
+            onChange={(value) => set({ descriptionArabic: value })}
           />
-        </Field>
+        </div>
 
-        <Field label={t('products.shortDescription')} span={2}>
+        <Field label={t('products.shortDescription')} span={3}>
           <input
-            value={text.shortDescription}
-            onChange={(e) => setText({ ...text, shortDescription: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.itemName')} span={2}>
-          <input
-            value={text.itemName}
-            onChange={(e) => setText({ ...text, itemName: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.manufacturer')} span={2}>
-          <input
-            value={text.manufacturer}
-            onChange={(e) => setText({ ...text, manufacturer: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.label')} span={2}>
-          <input
-            value={text.label}
-            onChange={(e) => setText({ ...text, label: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.size')} span={2}>
-          <input
-            value={text.size}
-            onChange={(e) => setText({ ...text, size: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.origin')} span={2}>
-          <input
-            value={text.origin}
-            onChange={(e) => setText({ ...text, origin: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.rack')} span={2}>
-          <input
-            value={text.rack}
-            onChange={(e) => setText({ ...text, rack: e.target.value })}
-            className="field-input"
-          />
-        </Field>
-
-        <Field label={t('products.bin')} span={2}>
-          <input
-            value={text.bin}
-            onChange={(e) => setText({ ...text, bin: e.target.value })}
+            value={form.shortDescription}
+            onChange={(e) => set({ shortDescription: e.target.value })}
             className="field-input"
           />
         </Field>
       </Section>
 
-      <Section title={`${t('products.rates')} · ${product.currency}`}>
-        <Field label={t('products.costingMethod')}>
-          <SearchSelect
-            value={rates.costingMethod}
-            onChange={(value) => setRates({ ...rates, costingMethod: value })}
-            label={t('products.costingMethod')}
-            options={[
-              { value: '1', label: t('products.costingLastPurchase') },
-              { value: '2', label: t('products.costingAverage') },
-            ]}
-          />
-        </Field>
-
-        <NumberField
-          label={t('products.cost')}
-          value={rates.cost}
-          onChange={(value) => setRates({ ...rates, cost: value })}
-        />
-        <NumberField
-          label={t('products.profitPercentage')}
-          value={rates.profitPercentage}
-          onChange={(value) => setRates({ ...rates, profitPercentage: value })}
-        />
-        <NumberField
-          label={t('products.corPercentage')}
-          value={rates.corPercentage}
-          onChange={(value) => setRates({ ...rates, corPercentage: value })}
-        />
-        <NumberField
-          label={t('products.retailRate')}
-          value={rates.retailRate}
-          onChange={(value) => setRates({ ...rates, retailRate: value })}
-        />
-        <NumberField
-          label={t('products.wholesaleRate')}
-          value={rates.wholesaleRate}
-          onChange={(value) => setRates({ ...rates, wholesaleRate: value })}
-        />
-        <NumberField
-          label={t('products.otherRate')}
-          value={rates.otherRate}
-          onChange={(value) => setRates({ ...rates, otherRate: value })}
-        />
-        <NumberField
-          label={t('products.maximumRetailPrice')}
-          value={rates.maximumRetailPrice}
-          onChange={(value) => setRates({ ...rates, maximumRetailPrice: value })}
-        />
-      </Section>
-
-      {enableDeviceAttributes && (
-        <Section title={t('products.deviceAttributes')}>
-          <Field label={t('products.device')}>
-            <input
-              value={device.device}
-              onChange={(e) => setDevice({ ...device, device: e.target.value })}
-              className="field-input"
-            />
-          </Field>
-          <Field label={t('products.colour')}>
-            <input
-              value={device.colour}
-              onChange={(e) => setDevice({ ...device, colour: e.target.value })}
-              className="field-input"
-            />
-          </Field>
-          <Field label={t('products.battery')}>
-            <input
-              value={device.battery}
-              onChange={(e) => setDevice({ ...device, battery: e.target.value })}
-              className="field-input"
-            />
-          </Field>
-          <Field label={t('products.ram')}>
-            <input
-              value={device.ram}
-              onChange={(e) => setDevice({ ...device, ram: e.target.value })}
-              className="field-input"
-            />
-          </Field>
-          <Field label={t('products.storage')}>
-            <input
-              value={device.storage}
-              onChange={(e) => setDevice({ ...device, storage: e.target.value })}
-              className="field-input"
-            />
-          </Field>
-        </Section>
-      )}
-
-      <div className="page-actions">
-        <button type="submit" disabled={busy} className="btn-primary">
-          {t('products.save')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/** Tab 2 — how the product is traded, stocked, and tracked. */
-function DetailsTab({
-  product,
-  units,
-  brands,
-  run,
-  busy,
-}: {
-  readonly product: ProductDetail;
-  readonly units: readonly UnitSummary[];
-  readonly brands: readonly BrandSummary[];
-  readonly run: (action: () => Promise<void>) => void;
-  readonly busy: boolean;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-  const serialsOn = useSerialNumbersEnabled();
-
-  const [form, setForm] = useState({
-    purchaseUnitId: product.purchaseUnitId,
-    salesUnitId: product.salesUnitId,
-    minimumLevel: String(product.minimumLevel),
-    reorderLevel: String(product.reorderLevel),
-    maximumLevel: String(product.maximumLevel),
-    movement: String(product.movement),
-    tracksBatches: product.tracksBatches,
-    tracksSerialNumbers: product.tracksSerialNumbers,
-    shelfLifeDays: product.shelfLifeDays === null ? '' : String(product.shelfLifeDays),
-    isPacking: product.isPacking,
-  });
-
-  // The units that convert to this product's stock unit. Offering the rest would
-  // let somebody buy in kilograms what is stocked in litres, and the server would
-  // refuse it after the fact; better not to offer it.
-  const stockUnit = units.find((unit) => unit.id === product.stockUnitId);
-  const group = stockUnit?.baseUnitId ?? stockUnit?.id;
-
-  const convertible = units.filter(
-    (unit) => group !== undefined && (unit.baseUnitId ?? unit.id) === group,
-  );
-
-  return (
-    <form
-      className="space-y-6"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        run(async () => {
-          await saveProductTab(product.id, 'stocking', {
-            purchaseUnitId: form.purchaseUnitId,
-            salesUnitId: form.salesUnitId,
-            minimumLevel: number(form.minimumLevel),
-            reorderLevel: number(form.reorderLevel),
-            maximumLevel: number(form.maximumLevel),
-            movement: Number(form.movement),
-            tracksBatches: form.tracksBatches,
-            tracksSerialNumbers: form.tracksSerialNumbers,
-            shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
-            isPacking: form.isPacking,
-          });
-        });
-      }}
-    >
       <Section title={t('products.units')}>
         <Field label={t('products.stockUnit')}>
-          {/* Fixed once stock has been counted in it: changing it would restate
-              every quantity ever recorded against this product. */}
+          {/* Fixed once the product exists: changing it would restate every quantity
+              ever recorded against this product. */}
           <input
             readOnly
             value={stockUnit ? `${stockUnit.code} — ${stockUnit.name}` : ''}
@@ -633,67 +590,141 @@ function DetailsTab({
           />
         </Field>
 
-        <Field label={t('products.purchaseUnit')}>
-          <SearchSelect
-            value={form.purchaseUnitId}
-            onChange={(value) => setForm({ ...form, purchaseUnitId: value })}
-            label={t('products.purchaseUnit')}
-            options={convertible.map((unit) => ({
-              value: unit.id,
-              label: `${unit.code} — ${unit.name}${
-                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
-              }`,
-            }))}
-          />
-        </Field>
+        <MasterPicker
+          kind="unit"
+          label={t('products.purchaseUnit')}
+          value={form.purchaseUnitId}
+          onChange={(value) => set({ purchaseUnitId: value })}
+          include={convertible}
+          unitGroup={stockUnit}
+        />
 
-        <Field label={t('products.salesUnit')}>
-          <SearchSelect
-            value={form.salesUnitId}
-            onChange={(value) => setForm({ ...form, salesUnitId: value })}
-            label={t('products.salesUnit')}
-            options={convertible.map((unit) => ({
-              value: unit.id,
-              label: `${unit.code} — ${unit.name}${
-                unit.baseUnitId ? ` (×${unit.conversionFactor})` : ''
-              }`,
-            }))}
-          />
-        </Field>
-
-        <Field label={t('products.brand')}>
-          <input
-            readOnly
-            value={
-              brands.find((brand) => brand.id === product.brandId)?.name ??
-              t('products.noBrand')
-            }
-            className="field-input opacity-60"
-          />
-        </Field>
+        <MasterPicker
+          kind="unit"
+          label={t('products.salesUnit')}
+          value={form.salesUnitId}
+          onChange={(value) => set({ salesUnitId: value })}
+          include={convertible}
+          unitGroup={stockUnit}
+        />
       </Section>
+
+      <Section title={t('products.classification')}>
+        <MasterPicker
+          kind="category"
+          label={t('products.category')}
+          required
+          value={form.categoryId}
+          onChange={(value) => set({ categoryId: value })}
+        />
+        <MasterPicker
+          kind="brand"
+          label={t('products.brand')}
+          clearable
+          placeholder={t('products.noBrand')}
+          value={form.brandId}
+          onChange={(value) => set({ brandId: value })}
+        />
+        <MasterPicker
+          kind="taxRate"
+          label={t('products.taxRate')}
+          clearable
+          placeholder={t('taxRates.none')}
+          value={form.taxSlabId}
+          onChange={(value) => set({ taxSlabId: value })}
+        />
+      </Section>
+
+      <Section title={`${t('products.rates')} · ${product.currency}`}>
+        <Field label={t('products.costingMethod')}>
+          <SearchSelect
+            value={form.costingMethod}
+            onChange={(value) => set({ costingMethod: value })}
+            label={t('products.costingMethod')}
+            options={[
+              { value: '1', label: t('products.costingLastPurchase') },
+              { value: '2', label: t('products.costingAverage') },
+            ]}
+          />
+        </Field>
+        {money('cost')}
+        {percent('profitPercentage')}
+        {percent('corPercentage')}
+        {money('retailRate')}
+        {money('wholesaleRate')}
+        {money('otherRate')}
+        {money('maximumRetailPrice')}
+      </Section>
+    </>
+  );
+}
+
+/** Tab 2 — the particulars printed on the box, where it sits, and how it is stocked. */
+function DetailsFields({
+  form,
+  set,
+  deviceAttributes,
+}: {
+  readonly form: ProductForm;
+  readonly set: (patch: Partial<ProductForm>) => void;
+  readonly deviceAttributes: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const serialsOn = useSerialNumbersEnabled();
+
+  const text = (key: keyof ProductForm, label: string): React.JSX.Element => (
+    <Field key={key} label={label}>
+      <input
+        value={form[key] as string}
+        onChange={(e) => set({ [key]: e.target.value } as Partial<ProductForm>)}
+        className="field-input"
+      />
+    </Field>
+  );
+
+  return (
+    <>
+      <Section title={t('products.details')}>
+        {text('itemName', t('products.itemName'))}
+        {text('manufacturer', t('products.manufacturer'))}
+        {text('label', t('products.label'))}
+        {text('size', t('products.size'))}
+        {text('origin', t('products.origin'))}
+        {text('rack', t('products.rack'))}
+        {text('bin', t('products.bin'))}
+      </Section>
+
+      {deviceAttributes && (
+        <Section title={t('products.deviceAttributes')}>
+          {text('device', t('products.device'))}
+          {text('colour', t('products.colour'))}
+          {text('battery', t('products.battery'))}
+          {text('ram', t('products.ram'))}
+          {text('storage', t('products.storage'))}
+        </Section>
+      )}
 
       <Section title={t('products.orderLevels')}>
         <NumberField
           label={t('products.minimumLevel')}
           value={form.minimumLevel}
-          onChange={(value) => setForm({ ...form, minimumLevel: value })}
+          onChange={(value) => set({ minimumLevel: value })}
         />
         <NumberField
           label={t('products.reorderLevel')}
           value={form.reorderLevel}
-          onChange={(value) => setForm({ ...form, reorderLevel: value })}
+          onChange={(value) => set({ reorderLevel: value })}
         />
         <NumberField
           label={t('products.maximumLevel')}
           value={form.maximumLevel}
-          onChange={(value) => setForm({ ...form, maximumLevel: value })}
+          onChange={(value) => set({ maximumLevel: value })}
         />
 
         <Field label={t('products.movement')}>
           <SearchSelect
             value={form.movement}
-            onChange={(value) => setForm({ ...form, movement: value })}
+            onChange={(value) => set({ movement: value })}
             label={t('products.movement')}
             options={[
               { value: '0', label: t('products.movementUnclassified') },
@@ -710,68 +741,66 @@ function DetailsTab({
         <Check
           label={t('products.tracksBatches')}
           checked={form.tracksBatches}
-          onChange={(value) => setForm({ ...form, tracksBatches: value })}
+          onChange={(value) => set({ tracksBatches: value })}
         />
-        {/* Both at once is allowed and normal: a handset arrives in a batch and
-            still carries its own IMEI. */}
-        {/* Offered only where the firm has switched serial numbers on in Settings. */}
+        {/* Both at once is allowed and normal: a handset arrives in a batch and still
+            carries its own IMEI. Offered only where the firm has switched serial
+            numbers on in Settings. */}
         {serialsOn && (
           <Check
             label={t('products.tracksSerialNumbers')}
             checked={form.tracksSerialNumbers}
-            onChange={(value) => setForm({ ...form, tracksSerialNumbers: value })}
+            onChange={(value) => set({ tracksSerialNumbers: value })}
           />
         )}
         <Check
           label={t('products.isPacking')}
           checked={form.isPacking}
-          onChange={(value) => setForm({ ...form, isPacking: value })}
+          onChange={(value) => set({ isPacking: value })}
         />
 
         {form.tracksBatches && (
           <NumberField
             label={t('products.shelfLifeDays')}
             value={form.shelfLifeDays}
-            onChange={(value) => setForm({ ...form, shelfLifeDays: value })}
+            onChange={(value) => set({ shelfLifeDays: value })}
           />
         )}
       </Section>
+    </>
+  );
+}
 
-      <div className="page-actions">
-        {/* The two flags mean different things and are routinely confused, so they
-            are two buttons with their own words rather than one toggle. They come
-            before Save so the commit keeps the corner it has everywhere else. */}
-        <button
-          type="button"
-          disabled={busy}
-          className="btn-secondary"
-          onClick={() =>
-            run(async () => {
-              await setProductFlag(product.id, 'discontinued', !product.isDiscontinued);
-            })
-          }
-        >
-          {product.isDiscontinued ? t('products.resume') : t('products.discontinue')}
-        </button>
-
-        <button
-          type="button"
-          disabled={busy}
-          className="btn-secondary"
-          onClick={() =>
-            run(async () => {
-              await setProductFlag(product.id, 'active', !product.isActive);
-            })
-          }
-        >
-          {product.isActive ? t('masters.withdraw') : t('masters.restore')}
-        </button>
-
-        <button type="submit" disabled={busy} className="btn-primary">
-          {t('products.save')}
-        </button>
-      </div>
-    </form>
+/** A figure shown to a fixed number of places, tidied back to them when left. */
+function FixedField({
+  label,
+  value,
+  places,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly places: number;
+  readonly onChange: (value: string) => void;
+}): React.JSX.Element {
+  return (
+    <label className="block">
+      <span className="field-label">{label}</span>
+      <input
+        type="number"
+        step="any"
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => {
+          const parsed = Number(value);
+          onChange(
+            Number.isFinite(parsed) ? parsed.toFixed(places) : (0).toFixed(places),
+          );
+        }}
+        className="field-input text-end font-mono tabular-nums"
+      />
+    </label>
   );
 }
 

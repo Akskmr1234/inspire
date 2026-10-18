@@ -7,7 +7,7 @@ import { ActiveBadge } from '@/components/StatusBadge';
 import {
   createMaster,
   listMaster,
-  renameUnit,
+  reviseUnit,
   setMasterActive,
   type UnitSummary,
 } from '@/lib/inventory';
@@ -95,12 +95,12 @@ export function UnitsPage(): React.JSX.Element {
 }
 
 /**
- * The edit form: one field, and a plain statement of why the others are not here.
+ * The edit form.
  *
- * The API offers a rename and nothing else, because a code and a conversion factor
- * are what documents already entered are stated in. Rather than show four boxes and
- * refuse three of them on save, the form shows the values that cannot move as text
- * and says so.
+ * Everything but the code and the base can change. The conversion factor can too,
+ * until something has been recorded in the unit - after that the server refuses it,
+ * since documents already entered are stated in it, and its message says to add a new
+ * unit for the new pack size instead.
  */
 function EditUnit({
   unit,
@@ -113,12 +113,25 @@ function EditUnit({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [name, setName] = useState(unit.name);
+  const [symbol, setSymbol] = useState(unit.symbol ?? '');
+  const [factor, setFactor] = useState(String(unit.conversionFactor));
+  const [decimals, setDecimals] = useState(String(unit.decimalPlaces));
 
-  const { errors, submit } = useValidation<{ name: string }>((values) =>
+  const { errors, submit } = useValidation<{
+    name: string;
+    factor: string;
+    decimals: string;
+  }>((values) =>
     collect({
       name:
         required(values.name, t('units.nameRequired')) ??
         maxLength(values.name, 100, t('units.nameTooLong')),
+      factor: numeric(values.factor, t('units.factorInvalid'), { min: 0.000001 }),
+      decimals: numeric(values.decimals, t('units.decimalsInvalid'), {
+        min: 0,
+        max: 6,
+        integer: true,
+      }),
     }),
   );
 
@@ -128,12 +141,17 @@ function EditUnit({
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (!submit({ name })) {
+        if (!submit({ name, factor, decimals })) {
           return;
         }
 
         run(async () => {
-          await renameUnit(unit.id, name.trim());
+          await reviseUnit(unit.id, {
+            name: name.trim(),
+            symbol: symbol.trim() || null,
+            decimalPlaces: Number(decimals),
+            conversionFactor: unit.baseUnitId === null ? 1 : Number(factor),
+          });
         });
       }}
     >
@@ -159,13 +177,33 @@ function EditUnit({
           />
         </Field>
 
-        <Field label={t('units.factor')}>
-          <input
-            value={String(unit.conversionFactor)}
-            disabled
-            className="field-input text-end font-mono tabular-nums"
+        <TextField label={t('units.symbol')} value={symbol} onChange={setSymbol} />
+
+        {/* A base unit is worth one of itself; only a derived unit's factor is offered. */}
+        {unit.baseUnitId === null ? (
+          <Field label={t('units.factor')}>
+            <input value="1" disabled className="field-input text-end font-mono" />
+          </Field>
+        ) : (
+          <NumberField
+            label={t('units.factor')}
+            required
+            value={factor}
+            onChange={setFactor}
+            error={errors['factor']}
+            hint={t('units.factorLockedHint')}
+            min={0}
           />
-        </Field>
+        )}
+
+        <NumberField
+          label={t('units.decimals')}
+          value={decimals}
+          onChange={setDecimals}
+          error={errors['decimals']}
+          min={0}
+          step="1"
+        />
       </div>
 
       <div className="form-actions">
@@ -202,9 +240,7 @@ function AddUnit({
 
   const { errors, submit } = useValidation<typeof draft>((values) =>
     collect({
-      code:
-        required(values.code, t('units.codeRequired')) ??
-        maxLength(values.code, 20, t('units.codeTooLong')),
+      code: maxLength(values.code, 20, t('units.codeTooLong')),
       name:
         required(values.name, t('units.nameRequired')) ??
         maxLength(values.name, 100, t('units.nameTooLong')),
@@ -235,7 +271,7 @@ function AddUnit({
 
         run(async () => {
           await createMaster('units', {
-            code: code.trim(),
+            code: code.trim() || null,
             name: name.trim(),
             symbol: symbol.trim() || null,
             baseUnitId: baseUnitId || null,
@@ -248,12 +284,11 @@ function AddUnit({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          required
           autoFocus
+          placeholder={t('masters.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}
-          placeholder="BOX"
         />
         <TextField
           label={t('masters.name')}

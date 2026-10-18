@@ -100,6 +100,8 @@ public sealed class ChequeReportReader : IChequeReportReader
                     cheque.DepositedOn,
                     cheque.ClosedOn,
                     cheque.ClosureReason,
+                    cheque.AccountNumber,
+                    cheque.InFavourOf,
                 })
             .ToListAsync(cancellationToken);
 
@@ -147,7 +149,9 @@ public sealed class ChequeReportReader : IChequeReportReader
                 candidate.DrawnOnBank,
                 candidate.DepositedOn,
                 candidate.ClosedOn,
-                candidate.ClosureReason));
+                candidate.ClosureReason,
+                candidate.AccountNumber,
+                candidate.InFavourOf));
         }
 
         return rows;

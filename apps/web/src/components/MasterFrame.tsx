@@ -37,6 +37,8 @@ export function MasterFrame<TRow>({
   rowKey,
   addForm,
   editForm,
+  controls = null,
+  queryArgs = [],
 }: {
   readonly title: string;
   /** Names the record being created — "New supplier", not "Add". */
@@ -75,6 +77,10 @@ export function MasterFrame<TRow>({
     busy: boolean,
     rows: readonly TRow[],
   ) => React.ReactNode;
+  /** Filters of the master's own above the list - the country a list of states is for. */
+  readonly controls?: React.ReactNode;
+  /** What those filters are set to, so the list is read again when they change. */
+  readonly queryArgs?: readonly unknown[];
 }): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -84,7 +90,7 @@ export function MasterFrame<TRow>({
   const [error, setError] = useState<string | null>(null);
 
   const query = useQuery<readonly TRow[], ApiError>({
-    queryKey: [queryKey, includeInactive],
+    queryKey: [queryKey, includeInactive, ...queryArgs],
     queryFn: () => fetchRows(includeInactive),
   });
 
@@ -127,7 +133,7 @@ export function MasterFrame<TRow>({
 
   return (
     <>
-      <ReportFrame title={title} controls={null} query={query}>
+      <ReportFrame title={title} controls={controls} query={query}>
         {(rows) => (
           <div className="space-y-3">
             {/*

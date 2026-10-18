@@ -41,10 +41,10 @@ export function PrintCenter({
   const { setup, loading } = usePrintSetup();
   const profile = profileFor(setup, document.type, document.mode);
 
-  // A customer with a layout of their own gets it on the first run.
-  const ownTemplate = document.customerId
-    ? setup.customerTemplates[document.customerId]
-    : undefined;
+  // A customer with print settings of their own gets them on the first run.
+  const own = document.customerId ? setup.customerPrint[document.customerId] : undefined;
+  const ownTemplate = own?.template || undefined;
+  const preview = own?.preview ?? profile.preview;
 
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [copies, setCopies] = useState<number | null>(null);
@@ -56,7 +56,7 @@ export function PrintCenter({
     setup,
     templateId ?? ownTemplate ?? profile.first.template,
   );
-  const firstCopies = copies ?? Math.max(1, profile.first.copies);
+  const firstCopies = copies ?? Math.max(1, own?.copies ?? profile.first.copies);
   const second = withSecond ?? profile.second.enabled;
   const secondTemplate = templateFor(setup, profile.second.template);
 
@@ -78,7 +78,7 @@ export function PrintCenter({
 
   // No preview: print as soon as the settings are known, then hand back.
   useEffect(() => {
-    if (loading || profile.preview || autoPrinted.current) return;
+    if (loading || preview || autoPrinted.current) return;
 
     autoPrinted.current = true;
 
@@ -87,7 +87,7 @@ export function PrintCenter({
       printNow();
       onDone?.();
     }, 0);
-  }, [loading, profile.preview]);
+  }, [loading, preview]);
 
   if (loading) {
     return <Spinner />;

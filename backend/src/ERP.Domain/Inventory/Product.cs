@@ -136,6 +136,9 @@ public sealed class Product : AggregateRoot<ProductId>, IFirmScoped, IAuditable,
     /// <summary>Gets the brand, if it has one.</summary>
     public BrandId? BrandId { get; private set; }
 
+    /// <summary>Gets the tax rate the product is sold and bought at, if it has one.</summary>
+    public TaxSlabId? TaxSlabId { get; private set; }
+
     /// <summary>Gets the supplier it is ordinarily bought from.</summary>
     /// <remarks>
     /// A ledger rather than a separate supplier table: a supplier is a sub-ledger, and
@@ -454,6 +457,35 @@ public sealed class Product : AggregateRoot<ProductId>, IFirmScoped, IAuditable,
 
         BrandId = brand.Id;
 
+        return Result.Success();
+    }
+
+    /// <summary>Gives the product a tax rate, or takes it away.</summary>
+    /// <param name="slab">The rate, or null for none.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result SetTaxSlab(TaxSlab? slab)
+    {
+        if (slab is null)
+        {
+            TaxSlabId = null;
+            return Result.Success();
+        }
+
+        if (slab.FirmId != FirmId)
+        {
+            return Result.Failure(Error.Validation(
+                "Product.TaxSlabFromAnotherFirm",
+                $"The tax rate '{slab.Name}' belongs to a different firm."));
+        }
+
+        if (!slab.IsActive && slab.Id != TaxSlabId)
+        {
+            return Result.Failure(Error.Validation(
+                "Product.TaxSlabWithdrawn",
+                $"The tax rate '{slab.Name}' has been withdrawn."));
+        }
+
+        TaxSlabId = slab.Id;
         return Result.Success();
     }
 

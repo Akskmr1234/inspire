@@ -21,12 +21,16 @@ namespace ERP.Application.Accounting.Vouchers;
 /// when it is banked.
 /// </param>
 /// <param name="DrawnOnBank">The bank named on a received cheque, if known.</param>
+/// <param name="AccountNumber">The account number on the cheque, if noted.</param>
+/// <param name="InFavourOf">Who the cheque is made out to, if noted.</param>
 public sealed record CreateVoucherCheque(
     string ChequeNumber,
     DateOnly InstrumentDate,
     decimal Amount,
     Guid? BankLedgerId = null,
-    string? DrawnOnBank = null);
+    string? DrawnOnBank = null,
+    string? AccountNumber = null,
+    string? InFavourOf = null);
 
 /// <summary>Records the cheques a voucher's lines bring into the register.</summary>
 /// <remarks>
@@ -90,7 +94,11 @@ internal sealed class VoucherChequeRecorder
             {
                 return shape;
             }
+        }
 
+        // Cheques taken in are recorded line by line: each is the party's own.
+        foreach (ChequeLine line in carrying.Where(line => DirectionFor(line.Side) == ChequeDirection.Received))
+        {
             Result unused = await EnsureNumbersAreUnusedAsync(line, cancellationToken);
 
             if (unused.IsFailure)
@@ -99,6 +107,95 @@ internal sealed class VoucherChequeRecorder
             }
 
             Result recorded = Record(voucher, line, ledgers);
+
+            if (recorded.IsFailure)
+            {
+                return recorded;
+            }
+        }
+
+        return await RecordIssuedAsync(
+            voucher,
+            [.. carrying.Where(line => DirectionFor(line.Side) == ChequeDirection.Issued)],
+            ledgers,
+            cancellationToken);
+    }
+
+    /// <summary>Records the cheques the firm writes out on a voucher.</summary>
+    /// <param name="voucher">The voucher being posted.</param>
+    /// <param name="lines">Its lines carrying issued cheques.</param>
+    /// <param name="ledgers">The ledgers those lines post against.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Success, or the first reason a cheque was refused.</returns>
+    /// <remarks>
+    /// <para>
+    /// One cheque however many ledgers it pays. A cheque for rent and cleaning together
+    /// is one leaf of the chequebook, so the lines naming the same account and number
+    /// become one entry in the register, for their total, filed under the first of them -
+    /// its payee line says who it was really made out to.
+    /// </para>
+    /// <para>
+    /// The number is checked against the account it is drawn on rather than the party,
+    /// which is how the chequebook works and how the unique index reads: the same number
+    /// written to two different payees is the same leaf written twice.
+    /// </para>
+    /// </remarks>
+    private async Task<Result> RecordIssuedAsync(
+        Voucher voucher,
+        IReadOnlyList<ChequeLine> lines,
+        IReadOnlyDictionary<LedgerId, Ledger> ledgers,
+        CancellationToken cancellationToken)
+    {
+        List<IssuedCheque> cheques = [];
+
+        foreach (ChequeLine line in lines)
+        {
+            foreach (CreateVoucherCheque details in line.Cheques)
+            {
+                string number = details.ChequeNumber?.Trim() ?? string.Empty;
+                IssuedCheque? same = cheques.Find(cheque =>
+                    cheque.Details.BankLedgerId == details.BankLedgerId
+                    && string.Equals(cheque.Number, number, StringComparison.Ordinal));
+
+                if (same is null)
+                {
+                    cheques.Add(new IssuedCheque(line, details, number, details.Amount));
+                }
+                else
+                {
+                    same.Amount += details.Amount;
+                }
+            }
+        }
+
+        foreach (IGrouping<Guid?, IssuedCheque> account in cheques.GroupBy(cheque => cheque.Details.BankLedgerId))
+        {
+            if (account.Key is not { } bankId)
+            {
+                continue;
+            }
+
+            IReadOnlySet<string> live = await _cheques.FindLiveIssuedNumbersAsync(
+                voucher.FirmId,
+                LedgerId.From(bankId),
+                [.. account.Select(cheque => cheque.Number)],
+                cancellationToken);
+
+            if (live.Count > 0)
+            {
+                return Result.Failure(Error.Conflict(
+                    "Cheque.NumberAlreadyLive",
+                    $"Cheque {string.Join(", ", live.Order(StringComparer.Ordinal).Select(n => $"'{n}'"))} " +
+                    "has already been written from this account and is still open."));
+            }
+        }
+
+        foreach (IssuedCheque issued in cheques)
+        {
+            Result recorded = Record(
+                voucher,
+                issued.Line with { Cheques = [issued.Details with { Amount = issued.Amount }] },
+                ledgers);
 
             if (recorded.IsFailure)
             {
@@ -245,6 +342,13 @@ internal sealed class VoucherChequeRecorder
                 return Result.Failure(cheque.Error);
             }
 
+            Result described = cheque.Value.Describe(details.AccountNumber, details.InFavourOf);
+
+            if (described.IsFailure)
+            {
+                return described;
+            }
+
             _cheques.Add(cheque.Value);
         }
 
@@ -294,6 +398,22 @@ internal sealed class VoucherChequeRecorder
                 "Cheque.NotABankAccount",
                 $"'{bank.Name}' is not a bank account, so a cheque cannot be drawn on it."))
             : Result.Success<LedgerId?>(bankId);
+    }
+
+    /// <summary>One cheque the firm is writing, gathered from the lines it pays.</summary>
+    private sealed class IssuedCheque(ChequeLine line, CreateVoucherCheque details, string number, decimal amount)
+    {
+        /// <summary>Gets the first line it pays, which it is filed under.</summary>
+        internal ChequeLine Line { get; } = line;
+
+        /// <summary>Gets the details as the first line gave them.</summary>
+        internal CreateVoucherCheque Details { get; } = details;
+
+        /// <summary>Gets the number on its face.</summary>
+        internal string Number { get; } = number;
+
+        /// <summary>Gets or sets the total it pays across the lines.</summary>
+        internal decimal Amount { get; set; } = amount;
     }
 
     /// <summary>A command line paired with the ledger and cheques it carries.</summary>

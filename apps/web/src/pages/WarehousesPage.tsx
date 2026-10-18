@@ -132,9 +132,7 @@ function AddWarehouse({
 
   const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
     collect({
-      code:
-        required(values.code, t('categories.codeRequired')) ??
-        maxLength(values.code, 20, t('categories.codeTooLong')),
+      code: maxLength(values.code, 20, t('categories.codeTooLong')),
       name:
         required(values.name, t('categories.nameRequired')) ??
         maxLength(values.name, 100, t('categories.nameTooLong')),
@@ -153,7 +151,7 @@ function AddWarehouse({
 
         run(async () => {
           await createMaster('warehouses', {
-            code: code.trim(),
+            code: code.trim() || null,
             name: name.trim(),
             nameArabic: nameArabic.trim() || null,
             address: address.trim() || null,
@@ -164,8 +162,8 @@ function AddWarehouse({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          required
           autoFocus
+          placeholder={t('masters.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}

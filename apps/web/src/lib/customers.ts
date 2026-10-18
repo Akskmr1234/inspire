@@ -29,6 +29,24 @@ export interface CustomerTaxDetails {
   readonly stateCode: string | null;
 }
 
+/** Where a customer is, and how else they are reached and registered. */
+export interface CustomerProfile {
+  readonly city: string | null;
+  readonly pinCode: string | null;
+  readonly website: string | null;
+  readonly fax: string | null;
+  readonly contactPerson: string | null;
+  readonly gstNumber: string | null;
+  readonly tinNumber: string | null;
+  readonly cstNumber: string | null;
+  /** The ISO code of their country, from the country master. */
+  readonly countryCode: string | null;
+  readonly areaId: string | null;
+  readonly routeId: string | null;
+  /** Whether they are sent text messages. */
+  readonly sendsSms: boolean;
+}
+
 /** A customer as the system holds them. */
 export interface CustomerSummary {
   readonly customerId: string;
@@ -41,6 +59,7 @@ export interface CustomerSummary {
   readonly currency: string;
   readonly openingBalance: number;
   readonly isActive: boolean;
+  readonly profile: CustomerProfile;
 }
 
 /** What is needed to create one. */
@@ -52,6 +71,7 @@ export interface CustomerInput {
   readonly terms?: Partial<CustomerTerms>;
   readonly taxDetails?: Partial<CustomerTaxDetails>;
   readonly openingBalance?: number;
+  readonly profile?: CustomerProfile;
 }
 
 /**
@@ -81,10 +101,13 @@ export async function createCustomer(input: CustomerInput): Promise<CustomerSumm
   });
 }
 
-/** Changes a customer's details. The code is not among them. */
+/**
+ * Changes a customer's details. The code is not among them; the opening amount is, for
+ * one typed wrongly when the customer was created.
+ */
 export async function updateCustomer(
   customerId: string,
-  input: Omit<CustomerInput, 'code' | 'openingBalance'>,
+  input: Omit<CustomerInput, 'code'>,
 ): Promise<CustomerSummary> {
   return request<CustomerSummary>(`/sales/customers/${customerId}`, {
     method: 'PUT',
@@ -105,5 +128,25 @@ export async function setCustomerActive(
   return request<CustomerSummary>(`/sales/customers/${customerId}/active`, {
     method: 'PUT',
     body: { isActive },
+  });
+}
+
+/** A customer's photograph, as a data URL, or null when there is none. */
+export async function getCustomerPhoto(customerId: string): Promise<string | null> {
+  const photo = await request<{ readonly content: string | null }>(
+    `/sales/customers/${customerId}/photo`,
+  );
+
+  return photo.content;
+}
+
+/** Sets a customer's photograph; null removes it. */
+export async function setCustomerPhoto(
+  customerId: string,
+  content: string | null,
+): Promise<void> {
+  await request<void>(`/sales/customers/${customerId}/photo`, {
+    method: 'PUT',
+    body: { content },
   });
 }

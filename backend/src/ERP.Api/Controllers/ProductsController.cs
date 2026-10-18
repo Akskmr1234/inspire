@@ -120,7 +120,8 @@ public sealed class ProductsController : ApiControllerBase
                 request.SalesUnitId,
                 request.DescriptionArabic,
                 request.ShortDescription,
-                request.ItemName),
+                request.ItemName,
+                request.TaxSlabId),
             cancellationToken);
 
         return result.IsSuccess
@@ -289,6 +290,32 @@ public sealed class ProductsController : ApiControllerBase
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 
+    /// <summary>Files a product under a category and brand, and gives it a tax rate.</summary>
+    /// <param name="id">The product.</param>
+    /// <param name="request">The category, brand and tax rate.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>No content.</returns>
+    /// <response code="204">Updated.</response>
+    /// <response code="404">No such product, category, brand or tax rate in the selected firm.</response>
+    [HttpPut("{id:guid}/classification")]
+    [RequiresPermission("inventory", "product", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClassifyAsync(
+        Guid id,
+        [FromBody] ClassifyProductRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new ClassifyProductCommand(id, request.CategoryId, request.BrandId, request.TaxSlabId),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
     /// <summary>Adds a barcode to a product.</summary>
     /// <param name="id">The product.</param>
     /// <param name="request">The barcode and, optionally, its own rates.</param>
@@ -414,6 +441,7 @@ public sealed class ProductsController : ApiControllerBase
 /// <param name="DescriptionArabic">Its description in Arabic.</param>
 /// <param name="ShortDescription">The short form, for receipts.</param>
 /// <param name="ItemName">The manufacturer's own name for it.</param>
+/// <param name="TaxSlabId">The tax rate it carries, if any.</param>
 public sealed record CreateProductRequest(
     [property: JsonRequired] string Description,
     [property: JsonRequired] Guid CategoryId,
@@ -425,7 +453,8 @@ public sealed record CreateProductRequest(
     Guid? SalesUnitId = null,
     string? DescriptionArabic = null,
     string? ShortDescription = null,
-    string? ItemName = null);
+    string? ItemName = null,
+    Guid? TaxSlabId = null);
 
 /// <summary>Changing a product's descriptive fields.</summary>
 /// <param name="Description">What it is called on a document.</param>
@@ -521,3 +550,12 @@ public sealed record AddBarcodeRequest(
 /// <summary>Setting a boolean flag on a product.</summary>
 /// <param name="Value">The new value.</param>
 public sealed record SetFlagRequest([property: JsonRequired] bool Value);
+
+/// <summary>A product's category, brand and tax rate.</summary>
+/// <param name="CategoryId">The category.</param>
+/// <param name="BrandId">The brand, or null for none.</param>
+/// <param name="TaxSlabId">The tax rate, or null for none.</param>
+public sealed record ClassifyProductRequest(
+    [property: JsonRequired] Guid CategoryId,
+    Guid? BrandId = null,
+    Guid? TaxSlabId = null);

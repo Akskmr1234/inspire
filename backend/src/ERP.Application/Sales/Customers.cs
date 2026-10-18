@@ -35,8 +35,35 @@ public sealed record CustomerTaxDetails(
     string? RegistrationNumber = null,
     string? StateCode = null);
 
+/// <summary>Where a customer is, and how else they are reached and registered.</summary>
+/// <param name="City">Their town or city.</param>
+/// <param name="PinCode">Their postal or PIN code.</param>
+/// <param name="Website">Their website.</param>
+/// <param name="Fax">Their fax number.</param>
+/// <param name="ContactPerson">The person to ask for.</param>
+/// <param name="GstNumber">Their GST identification number.</param>
+/// <param name="TinNumber">Their taxpayer identification number.</param>
+/// <param name="CstNumber">Their CST registration number.</param>
+/// <param name="CountryCode">The ISO code of their country, from the country master.</param>
+/// <param name="AreaId">The area they are in.</param>
+/// <param name="RouteId">The route they are on.</param>
+/// <param name="SendsSms">Whether they are sent text messages.</param>
+public sealed record CustomerProfile(
+    string? City = null,
+    string? PinCode = null,
+    string? Website = null,
+    string? Fax = null,
+    string? ContactPerson = null,
+    string? GstNumber = null,
+    string? TinNumber = null,
+    string? CstNumber = null,
+    string? CountryCode = null,
+    Guid? AreaId = null,
+    Guid? RouteId = null,
+    bool SendsSms = false);
+
 /// <summary>Creates a customer.</summary>
-/// <param name="Code">The account code, unique within the firm.</param>
+/// <param name="Code">The account code, unique within the firm; the next CUS- number when left blank.</param>
 /// <param name="Name">Their name.</param>
 /// <param name="NameArabic">The same in Arabic, for a bilingual invoice.</param>
 /// <param name="Contact">How to reach them.</param>
@@ -46,6 +73,7 @@ public sealed record CustomerTaxDetails(
 /// The group they report under. Omit to use the firm's seeded debtors group.
 /// </param>
 /// <param name="OpeningBalance">What they already owed when the system was taken on.</param>
+/// <param name="Profile">Where they are, and their other numbers.</param>
 /// <remarks>
 /// A customer is a sub-ledger, which is what section 7.1 calls it and what the rest of the
 /// system already assumes: an invoice is billed to a ledger, a receipt settles against one,
@@ -53,14 +81,15 @@ public sealed record CustomerTaxDetails(
 /// would mean two things to keep in step and two answers to what a customer owes.
 /// </remarks>
 public sealed record CreateCustomerCommand(
-    string Code,
+    string? Code,
     string Name,
     string? NameArabic = null,
     CustomerContact? Contact = null,
     CustomerTerms? Terms = null,
     CustomerTaxDetails? TaxDetails = null,
     Guid? AccountGroupId = null,
-    decimal OpeningBalance = 0m) : ICommand<CustomerResponse>, ITransactional;
+    decimal OpeningBalance = 0m,
+    CustomerProfile? Profile = null) : ICommand<CustomerResponse>, ITransactional;
 
 /// <summary>Changes a customer's details.</summary>
 /// <param name="CustomerId">The customer.</param>
@@ -69,6 +98,10 @@ public sealed record CreateCustomerCommand(
 /// <param name="Contact">How to reach them.</param>
 /// <param name="Terms">What they owe on.</param>
 /// <param name="TaxDetails">Their registration.</param>
+/// <param name="Profile">Where they are, and their other numbers.</param>
+/// <param name="OpeningBalance">
+/// What they owed when the books were taken on, corrected. Omit to leave it as it is.
+/// </param>
 /// <remarks>
 /// The code is not among these. It is what a firm's own records and any imported history
 /// refer to a customer by, and renaming it silently would leave both pointing at nothing.
@@ -79,7 +112,9 @@ public sealed record UpdateCustomerCommand(
     string? NameArabic = null,
     CustomerContact? Contact = null,
     CustomerTerms? Terms = null,
-    CustomerTaxDetails? TaxDetails = null) : ICommand<CustomerResponse>, ITransactional;
+    CustomerTaxDetails? TaxDetails = null,
+    CustomerProfile? Profile = null,
+    decimal? OpeningBalance = null) : ICommand<CustomerResponse>, ITransactional;
 
 /// <summary>Withdraws a customer from use, or puts them back.</summary>
 /// <param name="CustomerId">The customer.</param>
@@ -113,6 +148,7 @@ public sealed record GetCustomerQuery(Guid CustomerId) : IQuery<CustomerResponse
 /// <param name="Currency">The currency their account is kept in.</param>
 /// <param name="OpeningBalance">What they owed when the system was taken on.</param>
 /// <param name="IsActive">Whether they may be billed.</param>
+/// <param name="Profile">Where they are, and their other numbers.</param>
 public sealed record CustomerResponse(
     Guid CustomerId,
     string Code,
@@ -123,7 +159,8 @@ public sealed record CustomerResponse(
     CustomerTaxDetails TaxDetails,
     string Currency,
     decimal OpeningBalance,
-    bool IsActive);
+    bool IsActive,
+    CustomerProfile Profile);
 
 /// <summary>Validates <see cref="CreateCustomerCommand"/>.</summary>
 public sealed class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCommand>
@@ -131,9 +168,9 @@ public sealed class CreateCustomerCommandValidator : AbstractValidator<CreateCus
     /// <summary>Initialises a new instance of the <see cref="CreateCustomerCommandValidator"/> class.</summary>
     public CreateCustomerCommandValidator()
     {
-        RuleFor(c => c.Code)
-            .NotEmpty().WithMessage("A customer code is required.")
-            .MaximumLength(30);
+        RuleFor(c => c.Code!)
+            .MaximumLength(30)
+            .When(c => c.Code is not null);
 
         RuleFor(c => c.Name)
             .NotEmpty().WithMessage("A customer name is required.")
@@ -164,6 +201,11 @@ public sealed class UpdateCustomerCommandValidator : AbstractValidator<UpdateCus
 
         Include(new CustomerDetailsValidator<UpdateCustomerCommand>(
             c => c.Contact, c => c.Terms, c => c.TaxDetails));
+
+        RuleFor(c => c.OpeningBalance!.Value)
+            .GreaterThanOrEqualTo(0m)
+            .When(c => c.OpeningBalance is not null)
+            .WithMessage("An opening balance is entered as a positive amount.");
     }
 }
 

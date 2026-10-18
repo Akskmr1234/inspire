@@ -178,3 +178,35 @@ public sealed class WarehouseConfiguration : IEntityTypeConfiguration<Warehouse>
         ConfigurationConventions.ApplyAggregateConventions(builder);
     }
 }
+
+/// <summary>Maps <see cref="TaxSlab"/> to the <c>tax_slabs</c> table.</summary>
+public sealed class TaxSlabConfiguration : IEntityTypeConfiguration<TaxSlab>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<TaxSlab> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("tax_slabs");
+        builder.HasKey(slab => slab.Id);
+        builder.Property(slab => slab.Id).ValueGeneratedNever();
+
+        builder.Property(slab => slab.Code)
+            .HasMaxLength(TaxSlab.MaximumCodeLength).IsRequired();
+        builder.Property(slab => slab.Name)
+            .HasMaxLength(TaxSlab.MaximumNameLength).IsRequired();
+        builder.Property(slab => slab.NameArabic).HasMaxLength(TaxSlab.MaximumNameLength);
+        builder.Property(slab => slab.Percentage).HasPrecision(9, 4).IsRequired();
+        builder.Property(slab => slab.IsDefault).IsRequired();
+        builder.Property(slab => slab.IsActive).IsRequired();
+
+        builder
+            .HasIndex(slab => new { slab.FirmId, slab.Code })
+            .IsUnique()
+            .HasDatabaseName("ix_tax_slabs_code");
+
+        builder.HasIndex(slab => slab.TenantId).HasDatabaseName("ix_tax_slabs_tenant");
+
+        ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}

@@ -5,12 +5,15 @@ using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
 using ERP.Application.Inventory.Products;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Parties;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Data;
 using ERP.Application.Platform.Grids;
+using ERP.Application.Platform.Import;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
 using ERP.Application.Platform.Users;
+using ERP.Infrastructure.Import;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
 using ERP.Infrastructure.Persistence.Reporting;
@@ -66,6 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IUserAdministration, UserAdministration>();
         services.AddScoped<IMyAccount, MyAccount>();
+        services.AddScoped<IEasyRetailSource, EasyRetailSource>();
+        services.AddScoped<IEasyRetailImporter, EasyRetailImporter>();
         services.AddScoped<IDataReset, DataReset>();
 
         services.AddOptions<SeedOptions>()
@@ -99,6 +104,8 @@ public static class DependencyInjection
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
+        services.AddScoped<ITaxSlabRepository, TaxSlabRepository>();
+        services.AddScoped<IPlaceRepository, PlaceRepository>();
         services.AddScoped<IInventoryMasterReader, InventoryMasterReader>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IProductReader, ProductReader>();

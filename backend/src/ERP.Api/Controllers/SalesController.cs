@@ -169,7 +169,10 @@ public sealed class SalesController : ApiControllerBase
             request.Mode,
             request.ReferenceNumber,
             request.Narration,
-            ReturnsInvoiceId: request.ReturnsInvoiceId);
+            ReturnsInvoiceId: request.ReturnsInvoiceId,
+            PaymentMode: request.PaymentMode,
+            SalesmanLedgerId: request.SalesmanLedgerId,
+            BillingManLedgerId: request.BillingManLedgerId);
 
         Result<SalesInvoiceResponse> result = await _sender.Send(
             new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason),
@@ -252,6 +255,9 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="ReturnsInvoiceId">For a return, the invoice it is against.</param>
 /// <param name="Post">Post a draft once it is corrected. A posted invoice is always posted again.</param>
 /// <param name="Reason">Why a posted invoice was changed.</param>
+/// <param name="PaymentMode">Paid in cash at the counter, or on credit.</param>
+/// <param name="SalesmanLedgerId">The employee who made the sale.</param>
+/// <param name="BillingManLedgerId">The employee who billed it.</param>
 public sealed record UpdateSalesInvoiceRequest(
     [property: JsonRequired] DateOnly Date,
     [property: JsonRequired] Guid CustomerLedgerId,
@@ -263,7 +269,10 @@ public sealed record UpdateSalesInvoiceRequest(
     string? Narration = null,
     Guid? ReturnsInvoiceId = null,
     bool Post = false,
-    string? Reason = null);
+    string? Reason = null,
+    SalesPaymentMode PaymentMode = SalesPaymentMode.Credit,
+    Guid? SalesmanLedgerId = null,
+    Guid? BillingManLedgerId = null);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

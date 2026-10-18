@@ -151,6 +151,7 @@ public sealed class ProductReader : IProductReader
                 product.ItemType,
                 product.CategoryId,
                 product.BrandId,
+                product.TaxSlabId,
                 product.StockUnitId,
                 Currency = product.Currency,
                 Cost = product.Rates.Cost,
@@ -186,6 +187,10 @@ public sealed class ProductReader : IProductReader
             .Where(row => row.FirmId == firmId)
             .ToDictionaryAsync(row => row.Id, row => row.Code, cancellationToken);
 
+        Dictionary<TaxSlabId, decimal> slabs = await _context.TaxSlabs
+            .Where(row => row.FirmId == firmId)
+            .ToDictionaryAsync(row => row.Id, row => row.Percentage, cancellationToken);
+
         return
         [
             .. rows.Select(row => new ProductSummary(
@@ -208,7 +213,10 @@ public sealed class ProductReader : IProductReader
                 row.IsActive,
                 row.BarcodeCount,
                 row.WholesaleRate,
-                row.MaximumRetailPrice)),
+                row.MaximumRetailPrice,
+                row.TaxSlabId is { } slab && slabs.TryGetValue(slab, out decimal rate)
+                    ? rate
+                    : null)),
         ];
     }
 
@@ -235,6 +243,11 @@ public sealed class ProductReader : IProductReader
                 row.ItemType,
                 row.CategoryId,
                 row.BrandId,
+                row.TaxSlabId,
+                TaxPercentage = _context.TaxSlabs
+                    .Where(slab => slab.Id == row.TaxSlabId)
+                    .Select(slab => (decimal?)slab.Percentage)
+                    .FirstOrDefault(),
                 row.StockUnitId,
                 row.PurchaseUnitId,
                 row.SalesUnitId,
@@ -310,6 +323,8 @@ public sealed class ProductReader : IProductReader
                 product.IsPacking,
                 product.IsDiscontinued,
                 product.IsActive,
-                product.Barcodes);
+                product.Barcodes,
+                product.TaxSlabId?.Value,
+                product.TaxPercentage);
     }
 }

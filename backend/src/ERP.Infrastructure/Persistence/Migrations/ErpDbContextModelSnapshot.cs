@@ -401,6 +401,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AccountNumber")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)")
+                        .HasColumnName("account_number");
+
                     b.Property<Guid?>("BankLedgerId")
                         .HasColumnType("uuid")
                         .HasColumnName("bank_ledger_id");
@@ -448,6 +453,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FirmId")
                         .HasColumnType("uuid")
                         .HasColumnName("firm_id");
+
+                    b.Property<string>("InFavourOf")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("in_favour_of");
 
                     b.Property<DateOnly>("InstrumentDate")
                         .HasColumnType("date")
@@ -572,11 +582,30 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("address_line2");
 
+                    b.Property<Guid?>("AreaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("area_id");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("city");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("code");
+
+                    b.Property<string>("ContactPerson")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("contact_person");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("country_code");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -594,6 +623,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(19, 4)
                         .HasColumnType("numeric(19,4)")
                         .HasColumnName("credit_limit");
+
+                    b.Property<string>("CstNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("cst_number");
 
                     b.Property<string>("Currency")
                         .IsRequired()
@@ -615,9 +649,19 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
+                    b.Property<string>("Fax")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("fax");
+
                     b.Property<Guid>("FirmId")
                         .HasColumnType("uuid")
                         .HasColumnName("firm_id");
+
+                    b.Property<string>("GstNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("gst_number");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -673,6 +717,19 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("phone");
 
+                    b.Property<string>("PinCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("pin_code");
+
+                    b.Property<Guid?>("RouteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("route_id");
+
+                    b.Property<bool>("SendsSms")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sends_sms");
+
                     b.Property<string>("StateCode")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
@@ -687,11 +744,21 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<string>("TinNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("tin_number");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("website");
 
                     b.HasKey("Id")
                         .HasName("pk_ledgers");
@@ -699,8 +766,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("AccountGroupId")
                         .HasDatabaseName("ix_ledgers_account_group_id");
 
+                    b.HasIndex("AreaId")
+                        .HasDatabaseName("ix_ledgers_area_id");
+
                     b.HasIndex("IsDeleted")
                         .HasDatabaseName("ix_ledgers_is_deleted");
+
+                    b.HasIndex("RouteId")
+                        .HasDatabaseName("ix_ledgers_route_id");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_ledgers_tenant");
@@ -2023,6 +2096,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("stock_unit_id");
 
+                    b.Property<Guid?>("TaxSlabId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tax_slab_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -2154,6 +2231,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StockUnitId")
                         .HasDatabaseName("ix_products_stock_unit_id");
+
+                    b.HasIndex("TaxSlabId")
+                        .HasDatabaseName("ix_products_tax_slab_id");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_products_tenant");
@@ -2818,6 +2898,85 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("stock_ledger_entries", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.TaxSlab", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameArabic")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_arabic");
+
+                    b.Property<decimal>("Percentage")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("percentage");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tax_slabs");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_tax_slabs_tenant");
+
+                    b.HasIndex("FirmId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tax_slabs_code");
+
+                    b.ToTable("tax_slabs", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.UnitOfMeasure", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3100,6 +3259,269 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("numbering_series", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Parties.Country", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CurrencyCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<string>("CurrencyName")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("currency_name");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameArabic")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_arabic");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_countries");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_countries_tenant");
+
+                    b.HasIndex("FirmId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_countries_code");
+
+                    b.ToTable("countries", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Parties.PartyPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(700000)
+                        .HasColumnType("character varying(700000)")
+                        .HasColumnName("content");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_party_photos");
+
+                    b.HasIndex("LedgerId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_party_photos_ledger");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_party_photos_tenant");
+
+                    b.ToTable("party_photos", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Parties.Region", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
+                    b.Property<Guid>("CountryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("country_id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameArabic")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_arabic");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_regions");
+
+                    b.HasIndex("CountryId")
+                        .HasDatabaseName("ix_regions_country_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_regions_tenant");
+
+                    b.HasIndex("FirmId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_regions_code");
+
+                    b.ToTable("regions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Parties.Territory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_territories");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_territories_tenant");
+
+                    b.HasIndex("FirmId", "Kind", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_territories_name");
+
+                    b.ToTable("territories", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Platform.Dashboard", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3379,6 +3801,48 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_grid_layouts_user_grid");
 
                     b.ToTable("grid_layouts", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Platform.ImportLink", b =>
+                {
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LegacyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("legacy_key");
+
+                    b.Property<DateTimeOffset>("LinkedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at_utc");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("FirmId", "Source", "Kind", "LegacyKey")
+                        .HasName("pk_import_links");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_import_links_tenant");
+
+                    b.ToTable("import_links", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Platform.MenuItem", b =>
@@ -4251,6 +4715,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("bill_id");
 
+                    b.Property<Guid?>("BillingManLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("billing_man_ledger_id");
+
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid")
                         .HasColumnName("branch_id");
@@ -4334,6 +4802,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("number");
 
+                    b.Property<int>("PaymentMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_mode");
+
                     b.Property<DateTimeOffset?>("PostedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("posted_at_utc");
@@ -4354,6 +4826,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("SalesOrderId")
                         .HasColumnType("uuid")
                         .HasColumnName("sales_order_id");
+
+                    b.Property<Guid?>("SalesmanLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("salesman_ledger_id");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -4383,6 +4859,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("BillId")
                         .HasDatabaseName("ix_sales_invoices_bill_id");
 
+                    b.HasIndex("BillingManLedgerId")
+                        .HasDatabaseName("ix_sales_invoices_billing_man_ledger_id");
+
                     b.HasIndex("CustomerLedgerId")
                         .HasDatabaseName("ix_sales_invoices_customer_ledger_id");
 
@@ -4402,6 +4881,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("SalesOrderId")
                         .HasDatabaseName("ix_sales_invoices_order")
                         .HasFilter("sales_order_id IS NOT NULL");
+
+                    b.HasIndex("SalesmanLedgerId")
+                        .HasDatabaseName("ix_sales_invoices_salesman_ledger_id");
 
                     b.HasIndex("StockDocumentId")
                         .HasDatabaseName("ix_sales_invoices_stock_document_id");
@@ -5420,6 +5902,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_ledgers_account_groups_account_group_id");
+
+                    b.HasOne("ERP.Domain.Parties.Territory", null)
+                        .WithMany()
+                        .HasForeignKey("AreaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_ledgers_territories_area_id");
+
+                    b.HasOne("ERP.Domain.Parties.Territory", null)
+                        .WithMany()
+                        .HasForeignKey("RouteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_ledgers_territories_route_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Accounting.TaxAccountAssignment", b =>
@@ -5621,6 +6115,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_products_units_of_measure_stock_unit_id");
+
+                    b.HasOne("ERP.Domain.Inventory.TaxSlab", null)
+                        .WithMany()
+                        .HasForeignKey("TaxSlabId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_products_tax_slabs_tax_slab_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Inventory.ProductBarcode", b =>
@@ -5808,6 +6308,26 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_warehouses_branches_branch_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Parties.PartyPhoto", b =>
+                {
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("LedgerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_party_photos_ledgers_ledger_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Parties.Region", b =>
+                {
+                    b.HasOne("ERP.Domain.Parties.Country", null)
+                        .WithMany()
+                        .HasForeignKey("CountryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_regions_countries_country_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Platform.DashboardRole", b =>
                 {
                     b.HasOne("ERP.Domain.Platform.Dashboard", null)
@@ -5853,6 +6373,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_grid_layouts_users_user_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Platform.ImportLink", b =>
+                {
+                    b.HasOne("ERP.Domain.Tenancy.Firm", null)
+                        .WithMany()
+                        .HasForeignKey("FirmId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_links_firms_firm_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Platform.MenuItem", b =>
@@ -6058,6 +6588,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
+                        .HasForeignKey("BillingManLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_ledgers_billing_man_ledger_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
                         .HasForeignKey("CustomerLedgerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
@@ -6087,6 +6623,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_sales_invoices_sales_orders_sales_order_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("SalesmanLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_ledgers_salesman_ledger_id");
 
                     b.HasOne("ERP.Domain.Inventory.StockDocument", null)
                         .WithMany()

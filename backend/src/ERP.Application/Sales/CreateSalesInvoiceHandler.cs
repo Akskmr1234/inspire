@@ -171,7 +171,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             return Result.Failure<SalesInvoiceResponse>(charged.Error);
         }
 
-        Result details = invoice.SetDetails(request.ReferenceNumber, request.Narration);
+        Result details = SetDetails(invoice, request, context);
 
         if (details.IsFailure)
         {
@@ -181,6 +181,17 @@ public sealed class CreateSalesInvoiceCommandHandler
         _invoices.Add(invoice);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (request.Post)
+        {
+            Result posted = await SendAsync(
+                new PostSalesInvoiceCommand(invoice.Id.Value), cancellationToken);
+
+            if (posted.IsFailure)
+            {
+                return Result.Failure<SalesInvoiceResponse>(posted.Error);
+            }
+        }
 
         return Result.Success(Describe(invoice));
     }
@@ -277,7 +288,7 @@ public sealed class CreateSalesInvoiceCommandHandler
             return Result.Failure<SalesInvoiceResponse>(charged.Error);
         }
 
-        Result details = invoice.SetDetails(changes.ReferenceNumber, changes.Narration);
+        Result details = SetDetails(invoice, changes, context);
 
         if (details.IsFailure)
         {
@@ -320,6 +331,19 @@ public sealed class CreateSalesInvoiceCommandHandler
             invoice.ChargeTotal.Amount,
             invoice.RoundingDifference.Amount,
             invoice.Total.Amount);
+
+    /// <summary>Sets the header fields that are not part of the goods.</summary>
+    private static Result SetDetails(
+        SalesInvoice invoice,
+        CreateSalesInvoiceCommand request,
+        Context context)
+    {
+        Result details = invoice.SetDetails(request.ReferenceNumber, request.Narration);
+
+        return details.IsFailure
+            ? details
+            : invoice.SetSaleTerms(request.PaymentMode, context.Salesman, context.BillingMan);
+    }
 
     /// <summary>The mode a firm's invoices open in, from its own regime.</summary>
     /// <remarks>
@@ -554,6 +578,22 @@ public sealed class CreateSalesInvoiceCommandHandler
         IReadOnlyList<AdditionalLedger> mapped = await _charges.ListForDocumentAsync(
             firmId, ChargeableDocument.Sales, cancellationToken);
 
+        Result<Ledger?> salesman = await FindEmployeeAsync(
+            request.SalesmanLedgerId, firmId, cancellationToken);
+
+        if (salesman.IsFailure)
+        {
+            return Result.Failure<Context>(salesman.Error);
+        }
+
+        Result<Ledger?> billingMan = await FindEmployeeAsync(
+            request.BillingManLedgerId, firmId, cancellationToken);
+
+        if (billingMan.IsFailure)
+        {
+            return Result.Failure<Context>(billingMan.Error);
+        }
+
         return Result.Success(new Context(
             firm,
             year,
@@ -563,7 +603,29 @@ public sealed class CreateSalesInvoiceCommandHandler
             units,
             batches.Value,
             serials.Value,
-            mapped.ToDictionary(charge => charge.LedgerId)));
+            mapped.ToDictionary(charge => charge.LedgerId),
+            salesman.Value,
+            billingMan.Value));
+    }
+
+    /// <summary>Finds a salesman or billing man, who must be one of the firm's employees.</summary>
+    private async Task<Result<Ledger?>> FindEmployeeAsync(
+        Guid? ledgerId,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        if (ledgerId is not { } id)
+        {
+            return Result.Success<Ledger?>(null);
+        }
+
+        Ledger? employee = await _ledgers.FindAsync(LedgerId.From(id), cancellationToken);
+
+        return employee is null || employee.FirmId != firmId || employee.Kind != LedgerKind.Employee
+            ? Result.Failure<Ledger?>(Error.NotFound(
+                "SalesInvoice.EmployeeNotFound",
+                "That salesman or billing man is not an employee of the selected firm."))
+            : Result.Success<Ledger?>(employee);
     }
 
     /// <summary>Finds the batch each line names, by identifier or by number.</summary>
@@ -845,5 +907,7 @@ public sealed class CreateSalesInvoiceCommandHandler
         IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units,
         IReadOnlyDictionary<int, Batch> Batches,
         IReadOnlyDictionary<int, IReadOnlyCollection<SerialNumber>> Serials,
-        IReadOnlyDictionary<LedgerId, AdditionalLedger> Charges);
+        IReadOnlyDictionary<LedgerId, AdditionalLedger> Charges,
+        Ledger? Salesman,
+        Ledger? BillingMan);
 }

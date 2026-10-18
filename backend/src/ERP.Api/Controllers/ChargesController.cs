@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using ERP.Application.Accounting.Ledgers;
 using ERP.Domain.Accounting;
+using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -38,6 +39,27 @@ public sealed class ChargesController : ApiControllerBase
     {
         Result<IReadOnlyList<ChargeSetup>> result = await _sender.Send(
             new ListChargesQuery(document), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Sets a ledger up as a charge one kind of document may carry.</summary>
+    /// <param name="request">The document, the ledger and which way it moves the total.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The charge as the entry screens read it.</returns>
+    /// <response code="200">The charge, new or as it was already set up.</response>
+    /// <response code="400">The ledger cannot be a charge: a party, cash, bank or tax account.</response>
+    /// <response code="404">No such ledger in the selected firm.</response>
+    [HttpPost]
+    [RequiresPermission("accounting", "additional-ledger", "create")]
+    [ProducesResponseType(typeof(ChargeSetup), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MapAsync(
+        [FromBody] MapChargeCommand request,
+        CancellationToken cancellationToken)
+    {
+        Result<ChargeSetup> result = await _sender.Send(request, cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }

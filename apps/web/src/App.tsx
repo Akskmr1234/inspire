@@ -70,6 +70,7 @@ const MenuAdministrationPage = lazyScreen(
 const UsersPage = lazyScreen(() => import('@/pages/UsersPage'), 'UsersPage');
 const RolesPage = lazyScreen(() => import('@/pages/RolesPage'), 'RolesPage');
 const DataResetPage = lazyScreen(() => import('@/pages/DataResetPage'), 'DataResetPage');
+const ImportPage = lazyScreen(() => import('@/pages/ImportPage'), 'ImportPage');
 const PrintSettingsPage = lazyScreen(
   () => import('@/pages/PrintSettingsPage'),
   'PrintSettingsPage',
@@ -79,6 +80,13 @@ const PrintTemplatesPage = lazyScreen(
   'PrintTemplatesPage',
 );
 const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
+const EmployeesPage = lazyScreen(() => import('@/pages/EmployeesPage'), 'EmployeesPage');
+const CountriesPage = lazyScreen(() => import('@/pages/CountriesPage'), 'CountriesPage');
+const TerritoriesPage = lazyScreen(
+  () => import('@/pages/TerritoriesPage'),
+  'TerritoriesPage',
+);
+const TaxRatesPage = lazyScreen(() => import('@/pages/TaxRatesPage'), 'TaxRatesPage');
 const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
 const CategoriesPage = lazyScreen(
@@ -282,10 +290,14 @@ export function App(): React.JSX.Element {
               <Route path="/settings/users" element={<UsersPage />} />
               <Route path="/settings/roles" element={<RolesPage />} />
               <Route path="/settings/data" element={<DataResetPage />} />
+              <Route path="/settings/import" element={<ImportPage />} />
               <Route path="/settings/printing" element={<PrintSettingsPage />} />
               <Route path="/settings/print-templates" element={<PrintTemplatesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
+              <Route path="/accounting/employees" element={<EmployeesPage />} />
+              <Route path="/sales/countries" element={<CountriesPage />} />
+              <Route path="/sales/territories" element={<TerritoriesPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/sales/invoices" element={<SalesPage />} />
               <Route path="/sales/returns" element={<SalesReturnsPage />} />
@@ -303,6 +315,7 @@ export function App(): React.JSX.Element {
               <Route path="/sales/orders" element={<SalesOrdersPage />} />
               <Route path="/purchase/suppliers" element={<SuppliersPage />} />
               <Route path="/inventory/products" element={<ProductsPage />} />
+              <Route path="/inventory/tax-rates" element={<TaxRatesPage />} />
               <Route path="/inventory/stock" element={<StockOperationsPage />} />
               <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />

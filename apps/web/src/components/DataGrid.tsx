@@ -3,9 +3,12 @@ import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import {
+  IconCheck,
   IconColumns,
   IconDotsVertical,
   IconDownload,
+  IconLayers,
+  IconLock,
   IconPlus,
   IconRefresh,
 } from '@/components/icons';
@@ -551,60 +554,11 @@ export function DataGrid<TRow>({
           {actions && <span aria-hidden="true" className="h-5 w-px bg-line" />}
 
           {/*
-            Columns, then Save layout, then the rest.
-          */}
-          <GridButton
-            onClick={() => setShowPicker((value) => !value)}
-            pressed={showPicker}
-            disabled={saving || locked}
-            title={locked ? t('grid.columnsLockedHint') : t('grid.columnsHint')}
-          >
-            {t('grid.columns')}
-          </GridButton>
-
-          {locked ? (
-            <GridButton
-              onClick={() => {
-                setLocked(false);
-                setShowPicker(true);
-              }}
-              title={t('grid.editLayoutHint')}
-            >
-              {t('grid.editLayout')}
-            </GridButton>
-          ) : (
-            <GridButton
-              onClick={() => void persist()}
-              disabled={saving}
-              title={t('grid.saveLayoutHint')}
-            >
-              {t('grid.saveLayout')}
-            </GridButton>
-          )}
-
-          {/* Freezing a column means nothing once the columns are gone. */}
-          {!narrow && (
-            <GridButton
-              onClick={() => setFrozen((value) => (value === 0 ? 1 : 0))}
-              pressed={frozen > 0}
-              title={t('grid.freezeHint')}
-            >
-              {frozen > 0 ? t('grid.unfreeze') : t('grid.freeze')}
-            </GridButton>
-          )}
-
-          <GridButton onClick={exportCsv} title={t('grid.exportHint')}>
-            {t('grid.exportCsv')}
-          </GridButton>
-          <GridButton
-            onClick={() => void restoreDefaults()}
-            title={t('grid.resetLayoutHint')}
-          >
-            {t('grid.resetLayout')}
-          </GridButton>
-
-          {/*
-            Three-dot Column Options Popover Menu
+            Every view control behind one button. The list's own action - the one
+            that changes the data - is the only thing left standing beside the
+            search; columns, layout, freezing and export are about how the list
+            is looked at, and a row of five outlined buttons on every screen made
+            the one that mattered hard to find.
           */}
           <Popover.Root open={showMenu} onOpenChange={setShowMenu}>
             <Popover.Trigger asChild>
@@ -612,12 +566,12 @@ export function DataGrid<TRow>({
                 type="button"
                 className={clsx(
                   'grid size-8 shrink-0 place-items-center rounded-lg border transition duration-150',
-                  showMenu
+                  showMenu || showPicker
                     ? 'border-brand-500 bg-brand-50 text-brand-700 shadow-xs dark:bg-brand-500/15 dark:text-brand-200'
                     : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:bg-surface-3 hover:text-ink',
                 )}
-                title="Column Options"
-                aria-label="Column Options"
+                title={t('grid.options')}
+                aria-label={t('grid.options')}
               >
                 <IconDotsVertical className="size-4" />
               </button>
@@ -626,80 +580,88 @@ export function DataGrid<TRow>({
               <Popover.Content
                 align="end"
                 sideOffset={4}
-                className="animate-drop z-[70] w-52 rounded-xl border border-line bg-surface p-1.5 shadow-float ring-1 ring-black/5 dark:ring-white/10"
+                className="animate-drop z-[70] w-56 rounded-xl border border-line bg-surface p-1.5 shadow-float ring-1 ring-black/5 dark:ring-white/10"
               >
-                <div className="px-2.5 py-1 text-[11px] font-semibold tracking-wider text-ink-subtle uppercase">
-                  Column Options
-                </div>
-
                 <div className="space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false);
-                      if (locked) setLocked(false);
-                      setShowPicker((v) => !v);
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
-                  >
-                    <IconColumns className="size-4 text-ink-subtle" />
-                    <span>Edit Columns</span>
-                  </button>
+                  {locked ? (
+                    <MenuItem
+                      icon={<IconColumns className="size-4" />}
+                      title={t('grid.editLayoutHint')}
+                      onClick={() => {
+                        setShowMenu(false);
+                        setLocked(false);
+                        setShowPicker(true);
+                      }}
+                    >
+                      {t('grid.editLayout')}
+                    </MenuItem>
+                  ) : (
+                    <>
+                      <MenuItem
+                        icon={<IconColumns className="size-4" />}
+                        title={t('grid.columnsHint')}
+                        disabled={saving}
+                        pressed={showPicker}
+                        onClick={() => {
+                          setShowMenu(false);
+                          setShowPicker((value) => !value);
+                        }}
+                      >
+                        {t('grid.columns')}
+                      </MenuItem>
+                      <MenuItem
+                        icon={<IconLayers className="size-4" />}
+                        title={t('grid.saveLayoutHint')}
+                        disabled={saving}
+                        onClick={() => {
+                          setShowMenu(false);
+                          void persist();
+                        }}
+                      >
+                        {t('grid.saveLayout')}
+                      </MenuItem>
+                    </>
+                  )}
 
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      setShowMenu(false);
-                      void persist();
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3 disabled:opacity-50"
-                  >
-                    <IconPlus className="size-4 text-ink-subtle" />
-                    <span>Save Layout</span>
-                  </button>
-
+                  {/* Freezing a column means nothing once the columns are gone. */}
                   {!narrow && (
-                    <button
-                      type="button"
+                    <MenuItem
+                      icon={<IconLock className="size-4" />}
+                      title={t('grid.freezeHint')}
+                      pressed={frozen > 0}
                       onClick={() => {
                         setShowMenu(false);
                         setFrozen((value) => (value === 0 ? 1 : 0));
                       }}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
                     >
-                      <span className="grid size-4 place-items-center text-xs font-bold text-ink-subtle">
-                        ❄
-                      </span>
-                      <span>{frozen > 0 ? 'Unfreeze Columns' : 'Freeze Columns'}</span>
-                    </button>
+                      {frozen > 0 ? t('grid.unfreeze') : t('grid.freeze')}
+                    </MenuItem>
                   )}
 
-                  <button
-                    type="button"
+                  <MenuItem
+                    icon={<IconDownload className="size-4" />}
+                    title={t('grid.exportHint')}
                     onClick={() => {
                       setShowMenu(false);
                       exportCsv();
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-3"
                   >
-                    <IconDownload className="size-4 text-ink-subtle" />
-                    <span>Export CSV</span>
-                  </button>
+                    {t('grid.exportCsv')}
+                  </MenuItem>
 
                   <div className="my-1 border-t border-line" />
 
-                  <button
-                    type="button"
+                  <MenuItem
+                    icon={<IconRefresh className="size-4" />}
+                    title={t('grid.resetLayoutHint')}
+                    danger
                     onClick={() => {
                       setShowMenu(false);
                       void restoreDefaults();
                     }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
                   >
-                    <IconRefresh className="size-4" />
-                    <span>Reset Layout</span>
-                  </button>
+                    {t('grid.resetLayout')}
+                  </MenuItem>
                 </div>
               </Popover.Content>
             </Popover.Portal>
@@ -756,6 +718,18 @@ export function DataGrid<TRow>({
               </div>
             );
           })}
+          <div className="ms-auto flex items-center gap-1.5">
+            <GridButton onClick={() => setShowPicker(false)}>
+              {t('common.close')}
+            </GridButton>
+            <GridButton
+              onClick={() => void persist()}
+              disabled={saving}
+              title={t('grid.saveLayoutHint')}
+            >
+              {t('grid.saveLayout')}
+            </GridButton>
+          </div>
         </div>
       )}
 
@@ -1311,6 +1285,52 @@ export function GridAction({
     >
       <IconPlus className="size-3.5" />
       {label}
+    </button>
+  );
+}
+
+/** One entry of the view menu. */
+function MenuItem({
+  icon,
+  children,
+  onClick,
+  title,
+  disabled,
+  pressed,
+  danger,
+}: {
+  readonly icon: React.ReactNode;
+  readonly children: React.ReactNode;
+  readonly onClick: () => void;
+  readonly title?: string;
+  readonly disabled?: boolean;
+  /** Ticked, for the toggles - the column picker and the freeze. */
+  readonly pressed?: boolean;
+  /** Drawn in red, for the entry that throws an arrangement away. */
+  readonly danger?: boolean;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      {...(title === undefined ? {} : { title })}
+      {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      className={clsx(
+        'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-sm font-medium transition disabled:opacity-50 max-sm:py-2.5',
+        danger
+          ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10'
+          : 'text-ink hover:bg-surface-3',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={clsx('grid size-4 place-items-center', !danger && 'text-ink-subtle')}
+      >
+        {icon}
+      </span>
+      <span className="flex-1">{children}</span>
+      {pressed && <IconCheck className="size-4 text-brand-600 dark:text-brand-400" />}
     </button>
   );
 }

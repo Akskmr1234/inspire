@@ -131,6 +131,20 @@ const party = {
   currency: 'AED',
   openingBalance: 0,
   isActive: true,
+  profile: {
+    city: null,
+    pinCode: null,
+    website: null,
+    fax: null,
+    contactPerson: null,
+    gstNumber: null,
+    tinNumber: null,
+    cstNumber: null,
+    countryCode: null,
+    areaId: null,
+    routeId: null,
+    sendsSms: false,
+  },
 };
 
 export const fixtures: Readonly<Record<string, unknown>> = {

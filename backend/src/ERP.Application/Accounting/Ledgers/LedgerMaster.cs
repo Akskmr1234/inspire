@@ -635,7 +635,7 @@ public sealed class AccountGroupHandler
 }
 
 /// <summary>Codes made from names, for masters whose code the user left blank.</summary>
-internal static class Codes
+public static class Codes
 {
     /// <summary>"Office rent &amp; rates" becomes "OFFICE-RENT-RATES".</summary>
     /// <param name="name">The name.</param>

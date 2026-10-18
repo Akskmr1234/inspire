@@ -30,6 +30,8 @@ public sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
         builder.Property(c => c.ChequeNumber)
             .HasMaxLength(Cheque.MaximumNumberLength).IsRequired();
         builder.Property(c => c.DrawnOnBank).HasMaxLength(Cheque.MaximumBankNameLength);
+        builder.Property(c => c.AccountNumber).HasMaxLength(Cheque.MaximumAccountNumberLength);
+        builder.Property(c => c.InFavourOf).HasMaxLength(Cheque.MaximumPayeeLength);
         builder.Property(c => c.ClosureReason).HasMaxLength(Cheque.MaximumReasonLength);
 
         builder.Property(c => c.InstrumentDate).IsRequired();

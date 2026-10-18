@@ -67,8 +67,18 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             .Where(invoice => ids.Contains(invoice.Id))
             .ToListAsync(cancellationToken);
 
+        // The customers, and the salesmen and billing men, in one read: all three are
+        // ledgers, and a page names a handful of each.
+        List<LedgerId> named =
+        [
+            .. documents
+                .SelectMany(d => new[] { d.CustomerLedgerId, d.SalesmanLedgerId, d.BillingManLedgerId })
+                .OfType<LedgerId>()
+                .Distinct(),
+        ];
+
         Dictionary<LedgerId, Ledger> customers = await _context.Ledgers
-            .Where(ledger => documents.Select(d => d.CustomerLedgerId).Contains(ledger.Id))
+            .Where(ledger => named.Contains(ledger.Id))
             .ToDictionaryAsync(ledger => ledger.Id, cancellationToken);
 
         // Ordered by the page's own order rather than by whatever the second query
@@ -146,6 +156,16 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             document.Lines.Count,
             document.Taxable.Amount,
             document.Tax.Amount,
-            document.Total.Amount);
+            document.Total.Amount,
+            document.CreatedAtUtc,
+            document.PaymentMode,
+            PersonName(document.SalesmanLedgerId),
+            PersonName(document.BillingManLedgerId),
+            document.Lines.Sum(line => line.Discount),
+            document.ChargeTotal.Amount,
+            document.Narration);
+
+        string? PersonName(LedgerId? id) =>
+            id is { } ledger ? customers.GetValueOrDefault(ledger)?.Name : null;
     }
 }

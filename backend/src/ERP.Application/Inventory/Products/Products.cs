@@ -45,6 +45,7 @@ public sealed record ListProductsQuery(
 /// <param name="BarcodeCount">How many barcodes it carries.</param>
 /// <param name="WholesaleRate">What one stock unit sells at wholesale.</param>
 /// <param name="MaximumRetailPrice">The printed price, where the goods carry one.</param>
+/// <param name="TaxPercentage">The percentage of its tax rate, when it has one.</param>
 public sealed record ProductSummary(
     Guid Id,
     string Code,
@@ -65,7 +66,8 @@ public sealed record ProductSummary(
     bool IsActive,
     int BarcodeCount,
     decimal WholesaleRate,
-    decimal MaximumRetailPrice);
+    decimal MaximumRetailPrice,
+    decimal? TaxPercentage = null);
 
 /// <summary>Reads one product in full, for the edit screen.</summary>
 /// <param name="ProductId">The product.</param>
@@ -130,6 +132,8 @@ public sealed record ProductBarcodeView(
 /// <param name="IsDiscontinued">Whether the firm has stopped buying it.</param>
 /// <param name="IsActive">Whether it may be used on new documents.</param>
 /// <param name="Barcodes">The barcodes it carries.</param>
+/// <param name="TaxSlabId">Its tax rate, if it has one.</param>
+/// <param name="TaxPercentage">That rate's percentage.</param>
 public sealed record ProductDetail(
     Guid Id,
     string Code,
@@ -173,7 +177,9 @@ public sealed record ProductDetail(
     bool IsPacking,
     bool IsDiscontinued,
     bool IsActive,
-    IReadOnlyList<ProductBarcodeView> Barcodes);
+    IReadOnlyList<ProductBarcodeView> Barcodes,
+    Guid? TaxSlabId = null,
+    decimal? TaxPercentage = null);
 
 /// <summary>Reads the product master.</summary>
 public interface IProductReader
@@ -220,6 +226,7 @@ public interface IProductReader
 /// <param name="DescriptionArabic">Its description in Arabic.</param>
 /// <param name="ShortDescription">The short form, for receipts.</param>
 /// <param name="ItemName">The manufacturer's own name for it.</param>
+/// <param name="TaxSlabId">The tax rate it carries, if any.</param>
 public sealed record CreateProductCommand(
     string Description,
     Guid CategoryId,
@@ -231,7 +238,8 @@ public sealed record CreateProductCommand(
     Guid? SalesUnitId = null,
     string? DescriptionArabic = null,
     string? ShortDescription = null,
-    string? ItemName = null) : ICommand<Guid>;
+    string? ItemName = null,
+    Guid? TaxSlabId = null) : ICommand<Guid>;
 
 /// <summary>Changes a product's descriptive fields.</summary>
 /// <param name="ProductId">The product.</param>

@@ -1201,6 +1201,16 @@
   .nav-heading {
     @apply px-3 pt-4 pb-1 text-[0.6875rem] font-semibold tracking-widest text-ink-subtle uppercase;
   }
+
+  /* A group inside a section - Product and Ledger under Masters. Quieter than the
+     section above it and set in from it, so the two levels read as two. */
+  .nav-subheading {
+    @apply flex items-center gap-2 px-3 pt-2.5 pb-0.5 text-xs font-semibold text-ink-muted;
+  }
+
+  .nav-subheading::before {
+    @apply h-px w-2.5 bg-line-strong content-[''];
+  }
 }
 
 /* ========================================================================

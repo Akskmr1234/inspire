@@ -36,6 +36,20 @@ public enum SalesDocumentKind
     Return = 2,
 }
 
+/// <summary>How a sale was settled at the counter.</summary>
+/// <remarks>
+/// Recorded as the counter states it. Posting raises the customer's bill either way; a cash
+/// sale is the one the receipt against it is expected to follow the same day.
+/// </remarks>
+public enum SalesPaymentMode
+{
+    /// <summary>On account: the customer owes it until a receipt settles it.</summary>
+    Credit = 1,
+
+    /// <summary>Paid at the counter.</summary>
+    Cash = 2,
+}
+
 /// <summary>Where a sales invoice stands in its lifecycle.</summary>
 public enum SalesInvoiceStatus
 {
@@ -175,6 +189,15 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>Gets the currency the invoice is stated in.</summary>
     public CurrencyCode Currency { get; private set; }
+
+    /// <summary>Gets whether the sale was paid at the counter or put on account.</summary>
+    public SalesPaymentMode PaymentMode { get; private set; } = SalesPaymentMode.Credit;
+
+    /// <summary>Gets the employee who made the sale, where one is recorded.</summary>
+    public LedgerId? SalesmanLedgerId { get; private set; }
+
+    /// <summary>Gets the employee who billed it, where one is recorded.</summary>
+    public LedgerId? BillingManLedgerId { get; private set; }
 
     /// <summary>Gets the customer's reference: their order number, usually.</summary>
     public string? ReferenceNumber { get; private set; }
@@ -667,6 +690,47 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
         ReferenceNumber = Trimmed(referenceNumber);
         Narration = Trimmed(narration);
+
+        return Result.Success();
+    }
+
+    /// <summary>Records how the sale was paid and who made and billed it.</summary>
+    /// <param name="paymentMode">Cash at the counter, or on account.</param>
+    /// <param name="salesman">The employee who made the sale, if one is recorded.</param>
+    /// <param name="billingMan">The employee who billed it, if one is recorded.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Both people are employee ledgers of this firm. A salesman picked from the customer
+    /// list would put a commission report's sales against somebody the firm sells to.
+    /// </remarks>
+    public Result SetSaleTerms(SalesPaymentMode paymentMode, Ledger? salesman, Ledger? billingMan)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (!Enum.IsDefined(paymentMode))
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.PaymentModeInvalid", "A sale is paid in cash or on credit."));
+        }
+
+        Ledger? stranger = new[] { salesman, billingMan }.FirstOrDefault(person =>
+            person is not null && (person.FirmId != FirmId || person.Kind != LedgerKind.Employee));
+
+        if (stranger is not null)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.NotAnEmployee",
+                $"'{stranger.Name}' is not an employee of this firm."));
+        }
+
+        PaymentMode = paymentMode;
+        SalesmanLedgerId = salesman?.Id;
+        BillingManLedgerId = billingMan?.Id;
 
         return Result.Success();
     }

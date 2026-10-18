@@ -107,26 +107,36 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     /// <summary>How many months of history a trend covers.</summary>
     private const int TrendMonths = 12;
 
+    /// <summary>The group the sales ledgers sit under.</summary>
+    private const string SalesAccounts = "4100";
+
+    /// <summary>The group the purchase and cost-of-goods ledgers sit under.</summary>
+    private const string PurchaseAccounts = "5100";
+
     private readonly ErpDbContext _context;
     private readonly IOutstandingBillsReader _bills;
     private readonly IChequeReportReader _cheques;
     private readonly ITransactionSummaryReader _transactions;
+    private readonly ITrialBalanceReader _balances;
 
     /// <summary>Initialises a new instance of the <see cref="DashboardMetricReader"/> class.</summary>
     /// <param name="context">The database context.</param>
     /// <param name="bills">The outstanding bills reader.</param>
     /// <param name="cheques">The cheque report reader.</param>
     /// <param name="transactions">The transaction summary reader.</param>
+    /// <param name="balances">The ledger movement reader behind the trading figures.</param>
     public DashboardMetricReader(
         ErpDbContext context,
         IOutstandingBillsReader bills,
         IChequeReportReader cheques,
-        ITransactionSummaryReader transactions)
+        ITransactionSummaryReader transactions,
+        ITrialBalanceReader balances)
     {
         _context = context;
         _bills = bills;
         _cheques = cheques;
         _transactions = transactions;
+        _balances = balances;
     }
 
     /// <inheritdoc />
@@ -243,7 +253,125 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
                 await ReadMonthlyPostingsAsync(firmId, asAt, cancellationToken);
         }
 
+        await ReadTradingAsync(firmId, metricCodes, asAt, results, cancellationToken);
+
         return results;
+    }
+
+    /// <summary>Sales, running expenses and profit, for the day and for the month.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="metricCodes">The metrics asked for.</param>
+    /// <param name="asAt">The day the figures are for.</param>
+    /// <param name="results">Where the figures go.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// From the same ledger movements the profit and loss account reads, so a tile and
+    /// the statement for the same days always agree. Stock is perpetual - a sale posts
+    /// its cost of goods as it goes - so income less expense over a period is the
+    /// period's profit without any closing-stock adjustment.
+    /// </para>
+    /// <para>
+    /// Sales are the income ledgers under Sales Accounts, net of returns. Expenses are
+    /// the running costs: every expense ledger except those under Purchase Accounts,
+    /// where the cost of goods sold sits. A shopkeeper asking what was spent today means
+    /// rent, wages and electricity, not the cost of what went out of the door.
+    /// </para>
+    /// </remarks>
+    private async Task ReadTradingAsync(
+        FirmId firmId,
+        IReadOnlyCollection<string> metricCodes,
+        DateOnly asAt,
+        Dictionary<string, DashboardMetric> results,
+        CancellationToken cancellationToken)
+    {
+        (string Code, bool Month, Func<Trading, decimal> Figure)[] wanted =
+        [
+            (DashboardMetrics.SalesToday, false, trading => trading.Sales),
+            (DashboardMetrics.SalesThisMonth, true, trading => trading.Sales),
+            (DashboardMetrics.ExpensesToday, false, trading => trading.Expenses),
+            (DashboardMetrics.ExpensesThisMonth, true, trading => trading.Expenses),
+            (DashboardMetrics.ProfitToday, false, trading => trading.Profit),
+            (DashboardMetrics.ProfitThisMonth, true, trading => trading.Profit),
+        ];
+
+        if (!wanted.Any(metric => metricCodes.Contains(metric.Code)))
+        {
+            return;
+        }
+
+        var groups = await _context.AccountGroups
+            .Where(group => group.FirmId == firmId)
+            .Select(group => new { group.Id, group.Code, group.ParentId })
+            .ToListAsync(cancellationToken);
+
+        Dictionary<AccountGroupId, string> codes = groups.ToDictionary(group => group.Id, group => group.Code);
+        Dictionary<string, AccountGroupId?> parents = groups.ToDictionary(
+            group => group.Code, group => group.ParentId, StringComparer.Ordinal);
+
+        bool Under(string groupCode, string headCode)
+        {
+            string? code = groupCode;
+
+            for (int depth = 0; code is not null && depth < 20; depth++)
+            {
+                if (string.Equals(code, headCode, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                code = parents.TryGetValue(code, out AccountGroupId? parent) && parent is { } id
+                    ? codes.GetValueOrDefault(id)
+                    : null;
+            }
+
+            return false;
+        }
+
+        Trading today = Summarise(await _balances.GetMovementsAsync(firmId, asAt, asAt, cancellationToken));
+        Trading month = Summarise(await _balances.GetMovementsAsync(
+            firmId, new DateOnly(asAt.Year, asAt.Month, 1), asAt, cancellationToken));
+
+        foreach ((string code, bool isMonth, Func<Trading, decimal> figure) in wanted)
+        {
+            if (metricCodes.Contains(code))
+            {
+                results[code] = new DashboardMetric(
+                    Guid.Empty, code, figure(isMonth ? month : today), 0, [], IsPermitted: true);
+            }
+        }
+
+        Trading Summarise(IReadOnlyList<LedgerMovement> movements)
+        {
+            decimal sales = 0m, expenses = 0m, income = 0m, spent = 0m;
+
+            foreach (LedgerMovement movement in movements)
+            {
+                decimal debit = movement.PeriodDebit - movement.PeriodCredit;
+
+                if (movement.Nature == AccountNature.Income)
+                {
+                    income -= debit;
+
+                    if (Under(movement.GroupCode, SalesAccounts))
+                    {
+                        sales -= debit;
+                    }
+                }
+                else if (movement.Nature == AccountNature.Expense)
+                {
+                    spent += debit;
+
+                    if (!Under(movement.GroupCode, PurchaseAccounts))
+                    {
+                        expenses += debit;
+                    }
+                }
+            }
+
+            return new Trading(sales, expenses, income - spent);
+        }
     }
 
     /// <summary>Totals a set of cheques into one metric.</summary>
@@ -360,3 +488,9 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
             IsPermitted: true);
     }
 }
+
+/// <summary>A period's trading in the three figures the dashboard shows.</summary>
+/// <param name="Sales">Net sales.</param>
+/// <param name="Expenses">Running expenses.</param>
+/// <param name="Profit">Net profit.</param>
+internal sealed record Trading(decimal Sales, decimal Expenses, decimal Profit);

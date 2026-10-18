@@ -130,7 +130,7 @@ public sealed class CreateUnitCommandHandler : ICommandHandler<CreateUnitCommand
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.UnitOfMeasure, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, UnitOfMeasure.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -232,6 +232,73 @@ public sealed class RenameUnitCommandHandler : ICommandHandler<RenameUnitCommand
     }
 }
 
+/// <summary>Handles <see cref="ReviseUnitCommand"/>.</summary>
+public sealed class ReviseUnitCommandHandler : ICommandHandler<ReviseUnitCommand>
+{
+    private readonly IInventoryMasterRepository _masters;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="ReviseUnitCommandHandler"/> class.</summary>
+    /// <param name="masters">The master repository.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public ReviseUnitCommandHandler(
+        IInventoryMasterRepository masters,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _masters = masters;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> Handle(
+        ReviseUnitCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<FirmId> firm = MasterContext.ResolveFirm(_tenantContext);
+
+        if (firm.IsFailure)
+        {
+            return Result.Failure(firm.Error);
+        }
+
+        UnitOfMeasure? unit = await _masters.FindUnitAsync(
+            UnitOfMeasureId.From(request.UnitId), cancellationToken);
+
+        if (unit is null || unit.FirmId != firm.Value)
+        {
+            return Result.Failure(Error.NotFound(
+                "UnitOfMeasure.NotFound", "No such unit in the selected firm."));
+        }
+
+        if (request.ConversionFactor != unit.ConversionFactor
+            && await _masters.IsUnitInUseAsync(unit.Id, cancellationToken))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "UnitOfMeasure.InUse",
+                $"'{unit.Name}' is already used on products or documents, so its conversion "
+                + "factor can no longer change. Add a new unit for the new pack size."));
+        }
+
+        Result revised = unit.Revise(
+            request.Name, request.Symbol, request.DecimalPlaces, request.ConversionFactor);
+
+        if (revised.IsFailure)
+        {
+            return revised;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+}
+
 /// <summary>Handles <see cref="CreateCategoryCommand"/>.</summary>
 public sealed class CreateCategoryCommandHandler
     : ICommandHandler<CreateCategoryCommand, Guid>
@@ -270,7 +337,7 @@ public sealed class CreateCategoryCommandHandler
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.Category, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, Category.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -348,7 +415,8 @@ public sealed class CreateBrandCommandHandler : ICommandHandler<CreateBrandComma
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.Brand, firm.Value, request.Code, cancellationToken);
+            _masters, InventoryMasterKind.Brand, firm.Value, request.Code,
+            request.Name, Brand.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -410,7 +478,7 @@ public sealed class CreateWarehouseCommandHandler
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.Warehouse, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, Warehouse.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -762,12 +830,62 @@ public sealed class UpdateMasterCommandHandler : ICommandHandler<UpdateMasterCom
 
         Result renamed = category.Rename(request.Name);
 
-        if (renamed.IsSuccess)
+        if (renamed.IsFailure)
         {
-            category.SetArabicName(request.NameArabic);
+            return renamed;
         }
 
-        return renamed;
+        category.SetArabicName(request.NameArabic);
+
+        return await MoveCategoryAsync(category, request.ParentId, firmId, cancellationToken);
+    }
+
+    /// <summary>Puts a category beneath another, or at the top level.</summary>
+    /// <param name="category">The category.</param>
+    /// <param name="parentId">Its new parent, or null for the top level.</param>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Refuses a parent that sits anywhere beneath the category itself: the two would
+    /// each be the other's ancestor, and every tree drawn from them would never end.
+    /// </remarks>
+    private async Task<Result> MoveCategoryAsync(
+        Category category,
+        Guid? parentId,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        if (parentId is null)
+        {
+            return category.MoveTo(null);
+        }
+
+        Category? parent = await _masters.FindCategoryAsync(
+            CategoryId.From(parentId.Value), cancellationToken);
+
+        if (parent is null || parent.FirmId != firmId)
+        {
+            return NotFound("parent category");
+        }
+
+        Category? ancestor = parent;
+
+        for (int depth = 0; ancestor is not null && depth < 50; depth++)
+        {
+            if (ancestor.Id == category.Id)
+            {
+                return Result.Failure(Error.Validation(
+                    "Category.CircularParent",
+                    $"'{category.Name}' cannot be placed beneath '{parent.Name}', which is inside it."));
+            }
+
+            ancestor = ancestor.ParentId is { } next
+                ? await _masters.FindCategoryAsync(next, cancellationToken)
+                : null;
+        }
+
+        return category.MoveTo(parent);
     }
 
     private async Task<Result> UpdateBrandAsync(

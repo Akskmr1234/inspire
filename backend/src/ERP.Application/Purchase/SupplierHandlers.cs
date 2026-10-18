@@ -71,7 +71,10 @@ public sealed class CreateSupplierCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        string code = request.Code.Trim().ToUpperInvariant();
+        // Left blank, the next number in the supplier sequence is issued.
+        string code = string.IsNullOrWhiteSpace(request.Code)
+            ? await _ledgers.NextCodeAsync(firmId, "SUP-", cancellationToken)
+            : request.Code.Trim().ToUpperInvariant();
 
         // Checked before the group is resolved, so the commonest mistake - re-entering a
         // supplier somebody has already created - is reported as itself rather than as
