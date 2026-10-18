@@ -4389,6 +4389,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("bill_id");
 
+                    b.Property<Guid?>("BillingManLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("billing_man_ledger_id");
+
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid")
                         .HasColumnName("branch_id");
@@ -4472,6 +4476,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("number");
 
+                    b.Property<int>("PaymentMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_mode");
+
                     b.Property<DateTimeOffset?>("PostedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("posted_at_utc");
@@ -4492,6 +4500,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("SalesOrderId")
                         .HasColumnType("uuid")
                         .HasColumnName("sales_order_id");
+
+                    b.Property<Guid?>("SalesmanLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("salesman_ledger_id");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -4521,6 +4533,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("BillId")
                         .HasDatabaseName("ix_sales_invoices_bill_id");
 
+                    b.HasIndex("BillingManLedgerId")
+                        .HasDatabaseName("ix_sales_invoices_billing_man_ledger_id");
+
                     b.HasIndex("CustomerLedgerId")
                         .HasDatabaseName("ix_sales_invoices_customer_ledger_id");
 
@@ -4540,6 +4555,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("SalesOrderId")
                         .HasDatabaseName("ix_sales_invoices_order")
                         .HasFilter("sales_order_id IS NOT NULL");
+
+                    b.HasIndex("SalesmanLedgerId")
+                        .HasDatabaseName("ix_sales_invoices_salesman_ledger_id");
 
                     b.HasIndex("StockDocumentId")
                         .HasDatabaseName("ix_sales_invoices_stock_document_id");
@@ -6212,6 +6230,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
+                        .HasForeignKey("BillingManLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_ledgers_billing_man_ledger_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
                         .HasForeignKey("CustomerLedgerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
@@ -6241,6 +6265,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_sales_invoices_sales_orders_sales_order_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("SalesmanLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_ledgers_salesman_ledger_id");
 
                     b.HasOne("ERP.Domain.Inventory.StockDocument", null)
                         .WithMany()

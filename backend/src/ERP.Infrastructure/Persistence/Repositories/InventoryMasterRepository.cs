@@ -42,6 +42,21 @@ public sealed class InventoryMasterRepository : IInventoryMasterRepository
         _context.UnitsOfMeasure.FirstOrDefaultAsync(unit => unit.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<bool> IsUnitInUseAsync(
+        UnitOfMeasureId id,
+        CancellationToken cancellationToken = default) =>
+        await _context.Products.AnyAsync(
+            product => product.StockUnitId == id
+                || product.PurchaseUnitId == id
+                || product.SalesUnitId == id,
+            cancellationToken)
+        || await _context.StockDocumentLines.AnyAsync(line => line.UnitId == id, cancellationToken)
+        || await _context.SalesInvoiceLines.AnyAsync(line => line.UnitId == id, cancellationToken)
+        || await _context.SalesOrderLines.AnyAsync(line => line.UnitId == id, cancellationToken)
+        || await _context.PurchaseInvoiceLines.AnyAsync(line => line.UnitId == id, cancellationToken)
+        || await _context.PurchaseOrderLines.AnyAsync(line => line.UnitId == id, cancellationToken);
+
+    /// <inheritdoc />
     public Task<Category?> FindCategoryAsync(
         CategoryId id,
         CancellationToken cancellationToken = default) =>

@@ -50,6 +50,13 @@ public sealed record SalesInvoiceChargeInput(Guid LedgerId, decimal Amount);
 /// them would be a counter that turns customers away. Naming it is what lets the credit
 /// find the debt, and what lets the goods come back at the cost they left at.
 /// </param>
+/// <param name="PaymentMode">Paid in cash at the counter, or on credit. Credit unless stated.</param>
+/// <param name="SalesmanLedgerId">The employee who made the sale.</param>
+/// <param name="BillingManLedgerId">The employee who billed it.</param>
+/// <param name="Post">
+/// Post it as soon as it is saved, in the same transaction, so a sale the books refuse
+/// leaves no draft behind. Ignored on a correction, which says so itself.
+/// </param>
 /// <remarks>
 /// A draft, and only a draft. Nothing moves until it is posted, which is a command of its
 /// own - so an invoice can be corrected while it is being typed, and a mistake found at
@@ -65,7 +72,11 @@ public sealed record CreateSalesInvoiceCommand(
     string? ReferenceNumber = null,
     string? Narration = null,
     SalesDocumentKind Kind = SalesDocumentKind.Invoice,
-    Guid? ReturnsInvoiceId = null) : ICommand<SalesInvoiceResponse>, ITransactional;
+    Guid? ReturnsInvoiceId = null,
+    SalesPaymentMode PaymentMode = SalesPaymentMode.Credit,
+    Guid? SalesmanLedgerId = null,
+    Guid? BillingManLedgerId = null,
+    bool Post = false) : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>An invoice as it now stands.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
@@ -111,6 +122,7 @@ public sealed class CreateSalesInvoiceCommandValidator
             .WithMessage("An invoice must name the warehouse its goods leave.");
 
         RuleFor(c => c.Mode!.Value).IsInEnum().When(c => c.Mode is not null);
+        RuleFor(c => c.PaymentMode).IsInEnum();
 
         RuleFor(c => c.Lines)
             .NotEmpty()

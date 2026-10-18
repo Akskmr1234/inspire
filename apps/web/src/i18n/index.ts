@@ -534,6 +534,7 @@ const en = {
     factorRequired: 'A derived unit needs a conversion factor.',
     factorInvalid: 'A conversion factor is greater than zero.',
     decimalsInvalid: 'Decimals run from 0 to 6.',
+    factorLockedHint: 'Fixed once a product or document uses this unit.',
   },
   categories: {
     parent: 'Parent',
@@ -885,6 +886,16 @@ const en = {
     printInvoice: 'Print Invoice',
     printPreview: 'Print Preview & Formats',
     documentDetails: 'Document Details',
+    time: 'Time',
+    noEmployees: 'No employees yet',
+    savedPostedNotice: 'Saved and posted as {{number}}.',
+    save: 'Save',
+    saveAndPrint: 'Save & print',
+    taxAmount: 'Tax',
+    setUpCharge: 'New additional ledger',
+    setUpChargeHint:
+      'Any expense or income ledger can be carried on a sale. Choose it and whether it adds to the bill or comes off it; it is then offered on every sale.',
+    setUp: 'Set up',
   },
   customers: {
     mobile: 'Mobile',
@@ -2430,6 +2441,7 @@ const ar = {
     factorRequired: 'الوحدة المشتقة تحتاج إلى معامل تحويل.',
     factorInvalid: 'معامل التحويل أكبر من صفر.',
     decimalsInvalid: 'الكسور العشرية من 0 إلى 6.',
+    factorLockedHint: 'يُثبَّت بعد استخدام الوحدة في صنف أو مستند.',
   },
   categories: {
     parent: 'الفئة الأم',
@@ -2781,6 +2793,16 @@ const ar = {
     printInvoice: 'طباعة الفاتورة',
     printPreview: 'معاينة الطباعة وتنسيقاتها',
     documentDetails: 'تفاصيل المستند',
+    time: 'الوقت',
+    noEmployees: 'لا يوجد موظفون بعد',
+    savedPostedNotice: 'حُفظ ورُحّل برقم {{number}}.',
+    save: 'حفظ',
+    saveAndPrint: 'حفظ وطباعة',
+    taxAmount: 'الضريبة',
+    setUpCharge: 'حساب إضافي جديد',
+    setUpChargeHint:
+      'يمكن إضافة أي حساب مصروفات أو إيرادات إلى البيع. اختره وحدد إن كان يضاف إلى الفاتورة أو يخصم منها، وسيُعرض بعدها في كل عملية بيع.',
+    setUp: 'إعداد',
   },
   customers: {
     mobile: 'الجوال',

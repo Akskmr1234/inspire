@@ -172,6 +172,23 @@ public sealed record CreateUnitCommand(
 /// <param name="Name">The new name.</param>
 public sealed record RenameUnitCommand(Guid UnitId, string Name) : ICommand;
 
+/// <summary>Changes a unit of measurement.</summary>
+/// <param name="UnitId">The unit.</param>
+/// <param name="Name">The name.</param>
+/// <param name="Symbol">The short form printed on documents.</param>
+/// <param name="DecimalPlaces">How many decimals a quantity may carry.</param>
+/// <param name="ConversionFactor">
+/// How many base units one of this is worth. Fixed once a product is measured in the unit
+/// or a document line was entered in it: changing it then would restate every quantity
+/// already recorded.
+/// </param>
+public sealed record ReviseUnitCommand(
+    Guid UnitId,
+    string Name,
+    string? Symbol,
+    int DecimalPlaces,
+    decimal ConversionFactor) : ICommand;
+
 /// <summary>Adds a category, optionally beneath an existing one.</summary>
 /// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
 /// <param name="Name">The category name.</param>

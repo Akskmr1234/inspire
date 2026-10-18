@@ -49,6 +49,13 @@ public sealed record ListSalesInvoicesQuery(
 /// <param name="Taxable">The goods, before tax.</param>
 /// <param name="Tax">The tax on them.</param>
 /// <param name="Total">What it comes to.</param>
+/// <param name="CreatedAtUtc">When it was entered, which gives the time of the sale.</param>
+/// <param name="PaymentMode">Paid in cash at the counter, or on credit.</param>
+/// <param name="SalesmanName">The employee who made the sale.</param>
+/// <param name="BillingManName">The employee who billed it.</param>
+/// <param name="Discount">What the line discounts took off.</param>
+/// <param name="ChargeTotal">What the additional ledgers added, net of what they deducted.</param>
+/// <param name="Narration">What is printed on it.</param>
 public sealed record SalesInvoiceSummary(
     Guid SalesInvoiceId,
     string Number,
@@ -63,7 +70,14 @@ public sealed record SalesInvoiceSummary(
     int LineCount,
     decimal Taxable,
     decimal Tax,
-    decimal Total);
+    decimal Total,
+    DateTimeOffset CreatedAtUtc,
+    SalesPaymentMode PaymentMode,
+    string? SalesmanName,
+    string? BillingManName,
+    decimal Discount,
+    decimal ChargeTotal,
+    string? Narration);
 
 /// <summary>Validates <see cref="ListSalesInvoicesQuery"/>.</summary>
 public sealed class ListSalesInvoicesQueryValidator : AbstractValidator<ListSalesInvoicesQuery>

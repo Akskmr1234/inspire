@@ -446,6 +446,17 @@ public interface IInventoryMasterRepository
         UnitOfMeasureId id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Says whether anything has been recorded in a unit.</summary>
+    /// <param name="id">The unit.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>
+    /// Whether a product is measured, bought or sold in it, or a document line - stock,
+    /// sales, purchase or order - was entered in it.
+    /// </returns>
+    Task<bool> IsUnitInUseAsync(
+        UnitOfMeasureId id,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Finds a category.</summary>
     /// <param name="id">The category.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -900,6 +911,10 @@ public interface IAdditionalLedgerRepository
         FirmId firmId,
         ChargeableDocument document,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a charge mapping.</summary>
+    /// <param name="charge">The mapping.</param>
+    void Add(AdditionalLedger charge);
 }
 
 /// <summary>Reads and writes sales invoices.</summary>

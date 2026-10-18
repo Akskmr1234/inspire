@@ -85,6 +85,20 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .HasForeignKey(invoice => invoice.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Invoices entered before the column existed were all on account; the migration
+        // fills it in for them as credit.
+        builder.Property(invoice => invoice.PaymentMode).HasConversion<int>().IsRequired();
+
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.SalesmanLedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.BillingManLedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // What the posting produced. Restricted, all three: a sale whose issue, bill or
         // journal could be deleted would be a sale claiming to have been accounted for
         // by something that no longer exists.

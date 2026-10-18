@@ -232,6 +232,73 @@ public sealed class RenameUnitCommandHandler : ICommandHandler<RenameUnitCommand
     }
 }
 
+/// <summary>Handles <see cref="ReviseUnitCommand"/>.</summary>
+public sealed class ReviseUnitCommandHandler : ICommandHandler<ReviseUnitCommand>
+{
+    private readonly IInventoryMasterRepository _masters;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="ReviseUnitCommandHandler"/> class.</summary>
+    /// <param name="masters">The master repository.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public ReviseUnitCommandHandler(
+        IInventoryMasterRepository masters,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _masters = masters;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> Handle(
+        ReviseUnitCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<FirmId> firm = MasterContext.ResolveFirm(_tenantContext);
+
+        if (firm.IsFailure)
+        {
+            return Result.Failure(firm.Error);
+        }
+
+        UnitOfMeasure? unit = await _masters.FindUnitAsync(
+            UnitOfMeasureId.From(request.UnitId), cancellationToken);
+
+        if (unit is null || unit.FirmId != firm.Value)
+        {
+            return Result.Failure(Error.NotFound(
+                "UnitOfMeasure.NotFound", "No such unit in the selected firm."));
+        }
+
+        if (request.ConversionFactor != unit.ConversionFactor
+            && await _masters.IsUnitInUseAsync(unit.Id, cancellationToken))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "UnitOfMeasure.InUse",
+                $"'{unit.Name}' is already used on products or documents, so its conversion "
+                + "factor can no longer change. Add a new unit for the new pack size."));
+        }
+
+        Result revised = unit.Revise(
+            request.Name, request.Symbol, request.DecimalPlaces, request.ConversionFactor);
+
+        if (revised.IsFailure)
+        {
+            return revised;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+}
+
 /// <summary>Handles <see cref="CreateCategoryCommand"/>.</summary>
 public sealed class CreateCategoryCommandHandler
     : ICommandHandler<CreateCategoryCommand, Guid>

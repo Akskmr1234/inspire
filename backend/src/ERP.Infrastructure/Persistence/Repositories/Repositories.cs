@@ -285,6 +285,9 @@ public sealed class AdditionalLedgerRepository : IAdditionalLedgerRepository
             .Where(charge => charge.FirmId == firmId && charge.Document == document)
             .OrderBy(charge => charge.DisplayOrder)
             .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(AdditionalLedger charge) => _context.AdditionalLedgers.Add(charge);
 }
 
 /// <summary>The EF Core sales invoice repository.</summary>

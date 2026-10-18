@@ -99,7 +99,7 @@ export function useChargeSetup(
   document: ChargeDocument,
 ): readonly ChargeSetup[] | undefined {
   const query = useQuery<readonly ChargeSetup[], ApiError>({
-    queryKey: ['charge-setup', SETUP_FOR[document]],
+    queryKey: chargeSetupKey(document),
     queryFn: () =>
       request<readonly ChargeSetup[]>(
         `/accounting/charges?document=${SETUP_FOR[document]}`,
@@ -108,6 +108,35 @@ export function useChargeSetup(
   });
 
   return query.data;
+}
+
+/** The server's numbers for the setups above, which a request body carries. */
+const SETUP_NUMBER: Readonly<Record<string, number>> = {
+  Sales: 1,
+  SalesOrder: 2,
+  Purchase: 5,
+  PurchaseOrder: 6,
+};
+
+/**
+ * Sets a ledger up as a charge this kind of document may carry.
+ *
+ * A ledger already set up for it keeps the direction it has; the reply says which.
+ */
+export function mapCharge(
+  document: ChargeDocument,
+  ledgerId: string,
+  isAddition: boolean,
+): Promise<ChargeSetup> {
+  return request<ChargeSetup>('/accounting/charges', {
+    method: 'POST',
+    body: { document: SETUP_NUMBER[SETUP_FOR[document]], ledgerId, isAddition },
+  });
+}
+
+/** The query key a document's charge setup is cached under. */
+export function chargeSetupKey(document: ChargeDocument): readonly string[] {
+  return ['charge-setup', SETUP_FOR[document]];
 }
 
 /** The charges that may be entered on a document in a tax mode: typed ones only. */

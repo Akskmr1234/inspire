@@ -96,31 +96,45 @@ public sealed class InventoryMastersController : ApiControllerBase
             : Problem(result.Error);
     }
 
-    /// <summary>Renames a unit of measurement.</summary>
+    /// <summary>Changes a unit of measurement.</summary>
     /// <param name="id">The unit.</param>
-    /// <param name="request">The new name.</param>
+    /// <param name="request">The name, and optionally the symbol, decimals and factor.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>No content.</returns>
     /// <remarks>
-    /// The code and the conversion factor are not editable. Both are relied on by
-    /// documents already entered, and changing either would silently restate quantities
-    /// recorded months ago.
+    /// The code is not editable, and the conversion factor only until something has been
+    /// recorded in the unit: documents already entered rely on it, and changing it then
+    /// would silently restate quantities recorded months ago. A request carrying only a
+    /// name renames the unit, as this endpoint always has.
     /// </remarks>
-    /// <response code="204">Renamed.</response>
+    /// <response code="204">Changed.</response>
+    /// <response code="400">The change is invalid.</response>
     /// <response code="404">No such unit in the selected firm.</response>
+    /// <response code="422">The factor was changed on a unit already in use.</response>
     [HttpPut("units/{id:guid}")]
     [RequiresPermission("inventory", "unit", "edit")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> RenameUnitAsync(
         Guid id,
-        [FromBody] RenameRequest request,
+        [FromBody] ReviseUnitRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        Result result = await _sender.Send(
-            new RenameUnitCommand(id, request.Name), cancellationToken);
+        Result result = request.ConversionFactor is null && request.DecimalPlaces is null
+            && request.Symbol is null
+            ? await _sender.Send(new RenameUnitCommand(id, request.Name), cancellationToken)
+            : await _sender.Send(
+                new ReviseUnitCommand(
+                    id,
+                    request.Name,
+                    request.Symbol,
+                    request.DecimalPlaces ?? 0,
+                    request.ConversionFactor ?? 1m),
+                cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
@@ -432,9 +446,16 @@ public sealed record UpdateMasterRequest(
     string? Address = null,
     Guid? ParentId = null);
 
-/// <summary>Renaming a record.</summary>
-/// <param name="Name">The new name.</param>
-public sealed record RenameRequest([property: JsonRequired] string Name);
+/// <summary>Changing a unit of measurement.</summary>
+/// <param name="Name">The name.</param>
+/// <param name="Symbol">The short form printed on documents.</param>
+/// <param name="DecimalPlaces">How many decimals a quantity may carry. Omit to only rename.</param>
+/// <param name="ConversionFactor">How many base units one of this is worth. Omit to only rename.</param>
+public sealed record ReviseUnitRequest(
+    [property: JsonRequired] string Name,
+    string? Symbol = null,
+    int? DecimalPlaces = null,
+    decimal? ConversionFactor = null);
 
 /// <summary>Withdrawing a record from use, or returning it.</summary>
 /// <param name="IsActive">Whether it should be usable.</param>

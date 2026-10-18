@@ -298,6 +298,49 @@ public sealed class UnitOfMeasure : AggregateRoot<UnitOfMeasureId>, IFirmScoped,
         return Result.Success();
     }
 
+    /// <summary>Changes what the unit is called, how it prints, and what it is worth.</summary>
+    /// <param name="name">The name.</param>
+    /// <param name="symbol">The short form printed on documents.</param>
+    /// <param name="decimalPlaces">How many decimals a quantity may carry.</param>
+    /// <param name="conversionFactor">How many base units one of this is worth.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Whether the factor may still change is the caller's question - it depends on
+    /// whether anything has been recorded in the unit, which this aggregate cannot see.
+    /// A base unit is worth one of itself, always.
+    /// </remarks>
+    public Result Revise(string name, string? symbol, int decimalPlaces, decimal conversionFactor)
+    {
+        Result validation = Validate(Code, name, symbol, decimalPlaces);
+
+        if (validation.IsFailure)
+        {
+            return validation;
+        }
+
+        if (IsBaseUnit && conversionFactor != 1m)
+        {
+            return Result.Failure(Error.Validation(
+                "UnitOfMeasure.BaseFactorFixed",
+                $"'{Name}' is a base unit, which is worth exactly one of itself."));
+        }
+
+        if (conversionFactor <= 0m)
+        {
+            return Result.Failure(Error.Validation(
+                "UnitOfMeasure.FactorNotPositive",
+                $"A conversion factor must be greater than zero, but {conversionFactor} "
+                + "was supplied."));
+        }
+
+        Name = name.Trim();
+        Symbol = Clean(symbol);
+        DecimalPlaces = decimalPlaces;
+        ConversionFactor = conversionFactor;
+
+        return Result.Success();
+    }
+
     /// <summary>Stops the unit being used on new documents.</summary>
     /// <remarks>
     /// Deactivated rather than deleted. Documents already entered in it must go on
