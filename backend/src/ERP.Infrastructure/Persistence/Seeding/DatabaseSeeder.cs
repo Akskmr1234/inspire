@@ -3,6 +3,7 @@ using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
+using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -146,6 +147,7 @@ public sealed partial class DatabaseSeeder
         int menuEntriesAdded = await EnsureMenuAsync(firm, cancellationToken);
         await EnsureDashboardsAsync(firm, cancellationToken);
         await EnsureTaxSlabsAsync(firm, cancellationToken);
+        await EnsurePlacesAsync(firm, cancellationToken);
 
         Result<bool> administrator = await EnsureAdministratorAsync(
             tenant, firm, cancellationToken);
@@ -991,6 +993,45 @@ public sealed partial class DatabaseSeeder
         vat.Value.MakeDefault();
 
         _context.TaxSlabs.AddRange(exempt.Value, vat.Value);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Gives a firm the country list and the states its customers need.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <remarks>
+    /// Only when the firm has no countries at all, like the tax rates: a firm that has
+    /// corrected or added to its list keeps exactly what it has.
+    /// </remarks>
+    private async Task EnsurePlacesAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        if (await _context.Countries.AnyAsync(country => country.FirmId == firm.Id, cancellationToken))
+        {
+            return;
+        }
+
+        Dictionary<string, Country> countries = new(StringComparer.Ordinal);
+
+        foreach (PlaceCatalogue.CountrySeed seed in PlaceCatalogue.Countries)
+        {
+            Result<Country> created = Country.Create(
+                firm.TenantId, firm.Id, seed.Code, seed.Name, seed.CurrencyCode, seed.CurrencyName);
+
+            if (created.IsSuccess
+                && created.Value.Change(seed.Name, seed.NameArabic, seed.CurrencyCode, seed.CurrencyName).IsSuccess)
+            {
+                countries[seed.Code] = created.Value;
+            }
+        }
+
+        _context.Countries.AddRange(countries.Values);
+
+        _context.Regions.AddRange(PlaceCatalogue.Regions
+            .Where(seed => countries.ContainsKey(seed.CountryCode))
+            .Select(seed => Region.Create(countries[seed.CountryCode], seed.Code, seed.Name, seed.NameArabic))
+            .Where(created => created.IsSuccess)
+            .Select(created => created.Value));
+
         await _context.SaveChangesAsync(cancellationToken);
     }
 

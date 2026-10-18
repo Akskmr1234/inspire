@@ -63,25 +63,56 @@ internal static class EasyRetailQueries
             """),
         ("customers", false, """
             SELECT
-                ID AS id, LedgerID AS ledgerId, '' AS code, ISNULL(Name, '') AS name,
-                LTRIM(RTRIM(ISNULL(Address1, '') + ' ' + ISNULL(Address2, ''))) AS address1,
-                LTRIM(RTRIM(ISNULL(Address3, '') + ' ' + ISNULL(City, '') + ' ' + ISNULL(State, '') + ' ' + ISNULL(Country, ''))) AS address2,
-                ISNULL(Mobile, '') AS mobile, ISNULL(Phone, '') AS phone, ISNULL(EMail, '') AS email,
-                COALESCE(NULLIF(LTRIM(RTRIM(TIN)), ''), NULLIF(LTRIM(RTRIM(GSTID)), ''), '') AS taxNumber,
-                CAST(ISNULL(CreditLimit, 0) AS decimal(19, 4)) AS creditLimit,
-                ISNULL(CreditPeriod, 0) AS creditDays
-            FROM Customer ORDER BY ID
+                c.ID AS id, c.LedgerID AS ledgerId, '' AS code, ISNULL(c.Name, '') AS name,
+                LTRIM(RTRIM(ISNULL(c.Address1, '') + ' ' + ISNULL(c.Address2, ''))) AS address1,
+                LTRIM(RTRIM(ISNULL(c.Address3, ''))) AS address2,
+                ISNULL(c.Mobile, '') AS mobile, ISNULL(c.Phone, '') AS phone, ISNULL(c.EMail, '') AS email,
+                COALESCE(NULLIF(LTRIM(RTRIM(c.TIN)), ''), NULLIF(LTRIM(RTRIM(c.GSTID)), ''), '') AS taxNumber,
+                CAST(ISNULL(c.CreditLimit, 0) AS decimal(19, 4)) AS creditLimit,
+                ISNULL(c.CreditPeriod, 0) AS creditDays,
+                LTRIM(RTRIM(ISNULL(c.City, ''))) AS city,
+                LTRIM(RTRIM(ISNULL(c.State, ''))) AS state,
+                LTRIM(RTRIM(ISNULL(c.Country, ''))) AS country,
+                LTRIM(RTRIM(ISNULL(c.PINNo, ''))) AS pinCode,
+                LTRIM(RTRIM(ISNULL(c.Website, ''))) AS website,
+                LTRIM(RTRIM(ISNULL(c.Fax, ''))) AS fax,
+                LTRIM(RTRIM(ISNULL(c.ContactPerson, ''))) AS contactPerson,
+                LTRIM(RTRIM(ISNULL(c.TIN, ''))) AS tin,
+                LTRIM(RTRIM(ISNULL(c.GSTID, ''))) AS gstId,
+                LTRIM(RTRIM(ISNULL(c.CSTRegNo, ''))) AS cstNumber,
+                LTRIM(RTRIM(ISNULL(a.Name, ''))) AS area,
+                LTRIM(RTRIM(ISNULL(r.Name, ''))) AS route,
+                CASE WHEN c.IsSMS = 1 THEN 1 ELSE 0 END AS isSms
+            FROM Customer c
+            LEFT JOIN Area a ON a.ID = c.AreaID
+            LEFT JOIN Route r ON r.ID = c.RouteID
+            ORDER BY c.ID
             """),
         ("suppliers", false, """
             SELECT
-                ID AS id, LedgerID AS ledgerId, LTRIM(RTRIM(ISNULL(Code, ''))) AS code, ISNULL(Name, '') AS name,
-                LTRIM(RTRIM(ISNULL(Address1, '') + ' ' + ISNULL(Address2, ''))) AS address1,
-                LTRIM(RTRIM(ISNULL(Address3, '') + ' ' + ISNULL(City, '') + ' ' + ISNULL(State, ''))) AS address2,
-                ISNULL(Mobile, '') AS mobile, ISNULL(Phone, '') AS phone, ISNULL(EMail, '') AS email,
-                ISNULL(LTRIM(RTRIM(TIN)), '') AS taxNumber,
-                CAST(ISNULL(CreditLimit, 0) AS decimal(19, 4)) AS creditLimit,
-                ISNULL(CreditPeriod, 0) AS creditDays
-            FROM Supplier ORDER BY ID
+                s.ID AS id, s.LedgerID AS ledgerId, LTRIM(RTRIM(ISNULL(s.Code, ''))) AS code, ISNULL(s.Name, '') AS name,
+                LTRIM(RTRIM(ISNULL(s.Address1, '') + ' ' + ISNULL(s.Address2, ''))) AS address1,
+                LTRIM(RTRIM(ISNULL(s.Address3, ''))) AS address2,
+                ISNULL(s.Mobile, '') AS mobile, ISNULL(s.Phone, '') AS phone, ISNULL(s.EMail, '') AS email,
+                ISNULL(LTRIM(RTRIM(s.TIN)), '') AS taxNumber,
+                CAST(ISNULL(s.CreditLimit, 0) AS decimal(19, 4)) AS creditLimit,
+                ISNULL(s.CreditPeriod, 0) AS creditDays,
+                LTRIM(RTRIM(ISNULL(s.City, ''))) AS city,
+                LTRIM(RTRIM(ISNULL(s.State, ''))) AS state,
+                LTRIM(RTRIM(ISNULL(n.Name, ''))) AS country,
+                LTRIM(RTRIM(ISNULL(s.PINNo, ''))) AS pinCode,
+                LTRIM(RTRIM(ISNULL(s.Website, ''))) AS website,
+                LTRIM(RTRIM(ISNULL(s.Fax, ''))) AS fax,
+                LTRIM(RTRIM(ISNULL(s.ContactPerson, ''))) AS contactPerson,
+                LTRIM(RTRIM(ISNULL(s.TIN, ''))) AS tin,
+                '' AS gstId,
+                LTRIM(RTRIM(ISNULL(s.CSTRegNo, ''))) AS cstNumber,
+                '' AS area,
+                '' AS route,
+                CASE WHEN s.IsSMS = 1 THEN 1 ELSE 0 END AS isSms
+            FROM Supplier s
+            LEFT JOIN Country n ON n.ID = s.CountryID
+            ORDER BY s.ID
             """),
         ("employees", false, """
             SELECT ID AS id, LedgerID AS ledgerId, ISNULL(Name, '') AS name,

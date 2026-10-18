@@ -59,6 +59,17 @@ public sealed class EasyRetailImportEndpointTests
         customer.Contact.MobileNumber.ShouldBe("55512345");
         customer.Terms.CreditDays.ShouldBe(30);
 
+        // Where they are, matched to the firm's own lists: QATAR is Qatar, DOHA its
+        // state, a new area is added, and EasyRetail's "Primary" route is no route.
+        customer.Profile.CountryCode.ShouldBe("QA");
+        customer.TaxDetails.StateCode.ShouldBe("QA-DA");
+        customer.Profile.City.ShouldBe("AL WAKRA");
+        customer.Profile.ContactPerson.ShouldBe("SALIM");
+        customer.Profile.TinNumber.ShouldBe("T-1");
+        customer.Profile.AreaId.ShouldNotBeNull();
+        customer.Profile.RouteId.ShouldBeNull();
+        customer.Profile.SendsSms.ShouldBeTrue();
+
         ImportStepResult products = await PostAsync<ImportStepResult>(client, "products", package.Products);
         products.Created.ShouldBe(2);
         products.Warnings.ShouldContain(w => w.Contains("barcodes were left out", StringComparison.Ordinal));
@@ -192,7 +203,18 @@ public sealed class EasyRetailImportEndpointTests
                     Ledgers = ledgers,
                     Customers = new[]
                     {
-                        new ErParty(o + 1, o + 20, string.Empty, $"Al Noor {tag}", "Shop 4", "Doha", "55512345", string.Empty, string.Empty, string.Empty, 5000m, 30),
+                        new ErParty(o + 1, o + 20, string.Empty, $"Al Noor {tag}", "Shop 4", "Doha", "55512345", string.Empty, string.Empty, string.Empty, 5000m, 30)
+                        {
+                            City = "AL WAKRA",
+                            State = "DOHA",
+                            Country = "QATAR",
+                            PinCode = "1234",
+                            ContactPerson = "SALIM",
+                            Tin = "T-1",
+                            Area = $"SOUQ {tag}",
+                            Route = "Primary",
+                            IsSms = 1,
+                        },
                     },
                     Suppliers = new[]
                     {

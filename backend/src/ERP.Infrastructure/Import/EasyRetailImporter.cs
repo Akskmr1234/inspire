@@ -6,6 +6,7 @@ using ERP.Application.Inventory.Stock;
 using ERP.Application.Platform.Import;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
+using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence;
@@ -346,6 +347,8 @@ public sealed class EasyRetailImporter : IEasyRetailImporter
         HashSet<string> codes = new(ledgers.Select(l => l.Code), StringComparer.OrdinalIgnoreCase);
         List<Ledger> preexisting = [.. ledgers];
 
+        PartyPlaces places = await PartyPlaces.LoadAsync(_db, firm, cancellationToken);
+
         Dictionary<int, ErParty> customers = ByLedger(request.Customers, party => party.LedgerId);
         Dictionary<int, ErParty> suppliers = ByLedger(request.Suppliers, party => party.LedgerId);
         Dictionary<int, ErEmployee> employees = ByLedger(request.Employees, person => person.LedgerId);
@@ -446,6 +449,7 @@ public sealed class EasyRetailImporter : IEasyRetailImporter
                 ledger.SetCreditTerms(
                     details.CreditLimit > 0m ? details.CreditLimit : null,
                     details.CreditDays > 0 ? details.CreditDays : null);
+                ApplyPartyDetails(ledger, details, places);
             }
             else if (employee is not null)
             {
@@ -1345,6 +1349,136 @@ public sealed class EasyRetailImporter : IEasyRetailImporter
 
         taken.Add(candidate);
         return candidate;
+    }
+
+    /// <summary>
+    /// Where a customer or supplier is and their other numbers: the country and state
+    /// matched by name to the firm's own lists, the area and route found or added.
+    /// </summary>
+    private static void ApplyPartyDetails(Ledger ledger, ErParty details, PartyPlaces places)
+    {
+        Country? country = places.FindCountry(details.Country);
+
+        if (places.FindRegion(country, details.State) is { } region)
+        {
+            ledger.SetTaxDetails(Clean(details.TaxNumber, 50), region.Code);
+        }
+
+        ledger.SetPartyDetails(new PartyDetails(
+            Clean(details.City, PartyDetails.MaximumNameLength),
+            Clean(details.PinCode, PartyDetails.MaximumCodeLength),
+            Clean(details.Website, PartyDetails.MaximumWebsiteLength),
+            Clean(details.Fax, PartyDetails.MaximumCodeLength),
+            Clean(details.ContactPerson, PartyDetails.MaximumNameLength),
+            Clean(details.GstId, PartyDetails.MaximumRegistrationLength),
+            Clean(details.Tin, PartyDetails.MaximumRegistrationLength),
+            Clean(details.CstNumber, PartyDetails.MaximumRegistrationLength),
+            country?.Code,
+            places.TerritoryFor(TerritoryKind.Area, details.Area)?.Id,
+            places.TerritoryFor(TerritoryKind.Route, details.Route)?.Id,
+            details.IsSms == 1));
+    }
+
+    /// <summary>The firm's countries, states, areas and routes, as an import matches parties to them.</summary>
+    private sealed class PartyPlaces
+    {
+        private readonly ErpDbContext _db;
+        private readonly Firm _firm;
+        private readonly Dictionary<string, Country> _countries;
+        private readonly List<Region> _regions;
+        private readonly List<Territory> _territories;
+
+        private PartyPlaces(
+            ErpDbContext db,
+            Firm firm,
+            Dictionary<string, Country> countries,
+            List<Region> regions,
+            List<Territory> territories)
+        {
+            _db = db;
+            _firm = firm;
+            _countries = countries;
+            _regions = regions;
+            _territories = territories;
+        }
+
+        /// <summary>Reads the firm's lists once for the whole import.</summary>
+        public static async Task<PartyPlaces> LoadAsync(
+            ErpDbContext db,
+            Firm firm,
+            CancellationToken cancellationToken)
+        {
+            List<Country> countries = await db.Countries
+                .Where(country => country.FirmId == firm.Id)
+                .ToListAsync(cancellationToken);
+
+            // By name and by code: EasyRetail spells a country out, in capitals.
+            Dictionary<string, Country> byKey = new(StringComparer.Ordinal);
+
+            foreach (Country country in countries)
+            {
+                byKey.TryAdd(Normalise(country.Name), country);
+                byKey.TryAdd(Normalise(country.Code), country);
+            }
+
+            return new PartyPlaces(
+                db,
+                firm,
+                byKey,
+                await db.Regions.Where(region => region.FirmId == firm.Id).ToListAsync(cancellationToken),
+                await db.Territories.Where(territory => territory.FirmId == firm.Id).ToListAsync(cancellationToken));
+        }
+
+        /// <summary>The country of that name, if the firm has one.</summary>
+        public Country? FindCountry(string? name) =>
+            Value(name, Country.MaximumNameLength) is { } cleaned
+                && _countries.TryGetValue(Normalise(cleaned), out Country? country)
+                ? country
+                : null;
+
+        /// <summary>The state of that name in the country, if the firm has one.</summary>
+        public Region? FindRegion(Country? country, string? name)
+        {
+            if (country is null || Value(name, Region.MaximumNameLength) is not { } cleaned)
+            {
+                return null;
+            }
+
+            string normal = Normalise(cleaned);
+
+            return _regions.Find(region => region.CountryId == country.Id
+                && (Normalise(region.Name) == normal || Normalise(region.Code) == normal));
+        }
+
+        /// <summary>The area or route of that name, added to the firm's list when it is new.</summary>
+        public Territory? TerritoryFor(TerritoryKind kind, string? name)
+        {
+            if (Value(name, Territory.MaximumNameLength) is not { } cleaned)
+            {
+                return null;
+            }
+
+            string normal = Normalise(cleaned);
+            Territory? found = _territories.Find(territory =>
+                territory.Kind == kind && Normalise(territory.Name) == normal);
+
+            if (found is not null)
+            {
+                return found;
+            }
+
+            Result<Territory> created = Territory.Create(_firm.TenantId, _firm.Id, kind, cleaned);
+
+            if (created.IsFailure)
+            {
+                return null;
+            }
+
+            _db.Territories.Add(created.Value);
+            _territories.Add(created.Value);
+
+            return created.Value;
+        }
     }
 
     /// <summary>Counts what a step did and collects what it has to say.</summary>

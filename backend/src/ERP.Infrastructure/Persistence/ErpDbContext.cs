@@ -5,6 +5,7 @@ using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
+using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
@@ -188,6 +189,18 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the tax rates.</summary>
     public DbSet<TaxSlab> TaxSlabs => Set<TaxSlab>();
 
+    /// <summary>Gets the countries a firm's parties may be in.</summary>
+    public DbSet<Country> Countries => Set<Country>();
+
+    /// <summary>Gets the states of those countries.</summary>
+    public DbSet<Region> Regions => Set<Region>();
+
+    /// <summary>Gets the areas and routes a firm divides its customers into.</summary>
+    public DbSet<Territory> Territories => Set<Territory>();
+
+    /// <summary>Gets the parties' photographs.</summary>
+    public DbSet<PartyPhoto> PartyPhotos => Set<PartyPhoto>();
+
     /// <summary>Gets the places stock is held.</summary>
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
@@ -362,6 +375,10 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<CategoryId>().HaveConversion<CategoryIdConverter>();
         configurationBuilder.Properties<BrandId>().HaveConversion<BrandIdConverter>();
         configurationBuilder.Properties<TaxSlabId>().HaveConversion<TaxSlabIdConverter>();
+        configurationBuilder.Properties<CountryId>().HaveConversion<CountryIdConverter>();
+        configurationBuilder.Properties<RegionId>().HaveConversion<RegionIdConverter>();
+        configurationBuilder.Properties<TerritoryId>().HaveConversion<TerritoryIdConverter>();
+        configurationBuilder.Properties<PartyPhotoId>().HaveConversion<PartyPhotoIdConverter>();
         configurationBuilder.Properties<WarehouseId>()
             .HaveConversion<WarehouseIdConverter>();
         configurationBuilder.Properties<ProductId>().HaveConversion<ProductIdConverter>();

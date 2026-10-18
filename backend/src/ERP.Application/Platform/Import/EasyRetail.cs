@@ -61,6 +61,23 @@ public sealed record ErLedger(
 /// <param name="TaxNumber">The tax registration.</param>
 /// <param name="CreditLimit">The credit limit, or 0 for none.</param>
 /// <param name="CreditDays">The credit period in days, or 0 for none.</param>
+/// <param name="City">The town or city.</param>
+/// <param name="State">The state, as EasyRetail spells it.</param>
+/// <param name="Country">The country, by name.</param>
+/// <param name="PinCode">The postal or PIN code.</param>
+/// <param name="Website">The website.</param>
+/// <param name="Fax">The fax number.</param>
+/// <param name="ContactPerson">The person to ask for.</param>
+/// <param name="Tin">The taxpayer identification number.</param>
+/// <param name="GstId">The GST identification number.</param>
+/// <param name="CstNumber">The CST registration number.</param>
+/// <param name="Area">The area, by name.</param>
+/// <param name="Route">The route, by name.</param>
+/// <param name="IsSms">1 where the party is sent text messages.</param>
+/// <remarks>
+/// The details after the credit period were added later, and default to nothing, so an
+/// export written before them still reads.
+/// </remarks>
 public sealed record ErParty(
     int Id,
     int LedgerId,
@@ -73,7 +90,20 @@ public sealed record ErParty(
     string Email,
     string TaxNumber,
     decimal CreditLimit,
-    int CreditDays);
+    int CreditDays,
+    string City = "",
+    string State = "",
+    string Country = "",
+    string PinCode = "",
+    string Website = "",
+    string Fax = "",
+    string ContactPerson = "",
+    string Tin = "",
+    string GstId = "",
+    string CstNumber = "",
+    string Area = "",
+    string Route = "",
+    int IsSms = 0);
 
 /// <summary>An employee, the person behind a ledger.</summary>
 /// <param name="Id">EasyRetail's identifier.</param>

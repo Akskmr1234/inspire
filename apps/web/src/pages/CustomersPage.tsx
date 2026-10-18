@@ -1,22 +1,39 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { MasterFrame, RowAction } from '@/components/MasterFrame';
 import { ArabicNameField } from '@/components/ArabicNameField';
-import { Field, NumberField, SelectField, TextField } from '@/components/Form';
+import {
+  CheckField,
+  Field,
+  NumberField,
+  SelectField,
+  TextField,
+} from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import type { GridColumn } from '@/components/DataGrid';
 import {
   createCustomer,
+  getCustomerPhoto,
   listCustomers,
   setCustomerActive,
+  setCustomerPhoto,
   updateCustomer,
+  type CustomerProfile,
   type CustomerSummary,
 } from '@/lib/customers';
-import { stateName, statesFor, TaxRegime } from '@/lib/states';
+import { TaxRegime } from '@/lib/states';
+import {
+  TerritoryKind,
+  useCountries,
+  useStates,
+  useTerritories,
+  type StateSummary,
+} from '@/lib/places';
 import { ActiveBadge } from '@/components/StatusBadge';
+import type { ApiError } from '@/lib/api';
 import {
   collect,
   maxLength,
@@ -26,7 +43,12 @@ import {
   useValidation,
 } from '@/lib/validation';
 import { useSettings } from '@/stores/settings';
-import { savePrintSetup, usePrintSetup } from '@/lib/printing';
+import {
+  savePrintSetup,
+  usePrintSetup,
+  type CustomerPrint,
+  type PrintSetup,
+} from '@/lib/printing';
 
 /**
  * The customer master of section 12.1.
@@ -41,16 +63,30 @@ import { savePrintSetup, usePrintSetup } from '@/lib/printing';
 export function CustomersPage(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const settings = useSettings();
-  const regime = settings.taxRegime;
   const { setup: printSetup } = usePrintSetup();
+  const countries = useCountries();
+  const states = useStates();
+  const areas = useTerritories(TerritoryKind.area);
+  const routes = useTerritories(TerritoryKind.route);
 
   const templateName = (customerId: string): string | null => {
-    const id = printSetup.customerTemplates[customerId];
+    const id = printSetup.customerPrint[customerId]?.template;
     return id
       ? (printSetup.templates.find((template) => template.id === id)?.name ?? null)
       : null;
   };
+
+  const countryName = (code: string | null): string =>
+    code ? (countries.find((country) => country.code === code)?.name ?? code) : '';
+
+  // By the state master, falling back to the code for one it does not hold.
+  const stateName = (code: string | null): string =>
+    code ? (states.find((state) => state.code === code)?.name ?? code) : '';
+
+  const territoryName = (
+    id: string | null,
+    from: readonly { id: string; name: string }[],
+  ) => (id ? (from.find((row) => row.id === id)?.name ?? '') : '');
 
   const columns = (
     run: (action: () => Promise<void>) => void,
@@ -63,6 +99,12 @@ export function CustomersPage(): React.JSX.Element {
       key: 'nameArabic',
       header: t('masters.nameArabic'),
       value: (row) => row.nameArabic ?? '',
+      hiddenByDefault: true,
+    },
+    {
+      key: 'contactPerson',
+      header: t('customers.contactPerson'),
+      value: (row) => row.profile.contactPerson ?? '',
       hiddenByDefault: true,
     },
     {
@@ -83,6 +125,34 @@ export function CustomersPage(): React.JSX.Element {
       hiddenByDefault: true,
     },
     {
+      key: 'city',
+      header: t('customers.city'),
+      value: (row) => row.profile.city ?? '',
+    },
+    {
+      key: 'area',
+      header: t('customers.area'),
+      value: (row) => territoryName(row.profile.areaId, areas),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'route',
+      header: t('customers.route'),
+      value: (row) => territoryName(row.profile.routeId, routes),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'state',
+      header: t('customers.state'),
+      value: (row) => stateName(row.taxDetails.stateCode),
+    },
+    {
+      key: 'country',
+      header: t('places.country'),
+      value: (row) => countryName(row.profile.countryCode),
+      hiddenByDefault: true,
+    },
+    {
       key: 'creditDays',
       header: t('customers.creditDays'),
       value: (row) => row.terms.creditDays ?? '',
@@ -95,17 +165,28 @@ export function CustomersPage(): React.JSX.Element {
       numeric: true,
     },
     {
-      key: 'state',
-      header: t('customers.state'),
-      // The field that decides IGST against CGST plus SGST on a GST firm, so it is
-      // shown rather than buried behind the column picker — and shown by name, not
-      // as the two-digit code somebody would have to look up.
-      value: (row) => stateName(regime, row.taxDetails.stateCode),
+      key: 'openingBalance',
+      header: t('customers.openingBalance'),
+      value: (row) => row.openingBalance,
+      numeric: true,
+      hiddenByDefault: true,
     },
     {
       key: 'registration',
       header: t('customers.registrationNumber'),
       value: (row) => row.taxDetails.registrationNumber ?? '',
+      hiddenByDefault: true,
+    },
+    {
+      key: 'gst',
+      header: t('customers.gstNumber'),
+      value: (row) => row.profile.gstNumber ?? '',
+      hiddenByDefault: true,
+    },
+    {
+      key: 'sms',
+      header: t('customers.sms'),
+      value: (row) => (row.profile.sendsSms ? t('common.yes') : t('common.no')),
       hiddenByDefault: true,
     },
     {
@@ -127,6 +208,7 @@ export function CustomersPage(): React.JSX.Element {
           </span>
         );
       },
+      hiddenByDefault: true,
     },
     {
       key: 'status',
@@ -185,48 +267,127 @@ interface CustomerDraft {
   code: string;
   name: string;
   nameArabic: string;
+  contactPerson: string;
   mobile: string;
   phone: string;
   email: string;
+  website: string;
+  fax: string;
   address1: string;
   address2: string;
+  city: string;
+  pinCode: string;
+  countryCode: string;
+  stateCode: string;
+  areaId: string;
+  routeId: string;
+  registrationNumber: string;
+  gstNumber: string;
+  tinNumber: string;
+  cstNumber: string;
   creditDays: string;
   creditLimit: string;
-  stateCode: string;
-  registrationNumber: string;
   openingBalance: string;
+  sendsSms: boolean;
+  printTemplate: string;
+  printCopies: string;
+  printPreview: '' | 'yes' | 'no';
 }
 
-function draftFrom(existing: CustomerSummary | undefined): CustomerDraft {
+function draftFrom(
+  existing: CustomerSummary | undefined,
+  print: CustomerPrint | undefined,
+  defaultCountry: string,
+): CustomerDraft {
+  const profile = existing?.profile;
+
   return {
     code: existing?.code ?? '',
     name: existing?.name ?? '',
     nameArabic: existing?.nameArabic ?? '',
+    contactPerson: profile?.contactPerson ?? '',
     mobile: existing?.contact.mobileNumber ?? '',
     phone: existing?.contact.phone ?? '',
     email: existing?.contact.email ?? '',
+    website: profile?.website ?? '',
+    fax: profile?.fax ?? '',
     address1: existing?.contact.addressLine1 ?? '',
     address2: existing?.contact.addressLine2 ?? '',
+    city: profile?.city ?? '',
+    pinCode: profile?.pinCode ?? '',
+    countryCode: existing ? (profile?.countryCode ?? '') : defaultCountry,
+    stateCode: existing?.taxDetails.stateCode ?? '',
+    areaId: profile?.areaId ?? '',
+    routeId: profile?.routeId ?? '',
+    registrationNumber: existing?.taxDetails.registrationNumber ?? '',
+    gstNumber: profile?.gstNumber ?? '',
+    tinNumber: profile?.tinNumber ?? '',
+    cstNumber: profile?.cstNumber ?? '',
     creditDays:
       existing?.terms.creditDays === null ? '' : String(existing?.terms.creditDays ?? 30),
     creditLimit:
       existing?.terms.creditLimit === null || existing?.terms.creditLimit === undefined
         ? ''
         : String(existing.terms.creditLimit),
-    stateCode: existing?.taxDetails.stateCode ?? '',
-    registrationNumber: existing?.taxDetails.registrationNumber ?? '',
     openingBalance: existing ? String(existing.openingBalance) : '',
+    sendsSms: profile?.sendsSms ?? false,
+    printTemplate: print?.template ?? '',
+    printCopies: print?.copies ? String(print.copies) : '',
+    printPreview: print?.preview === true ? 'yes' : print?.preview === false ? 'no' : '',
   };
+}
+
+/** The country most of a firm's customers are in, which a new one most likely is too. */
+function usualCountry(rows: readonly CustomerSummary[]): string {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    const code = row.profile.countryCode;
+    if (code) counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+}
+
+/** Scales a picture down to a small JPEG, which is all a customer card needs. */
+function shrinkPhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('unreadable'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('not a picture'));
+      image.onload = () => {
+        const scale = Math.min(1, 320 / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(image.width * scale);
+        canvas.height = Math.round(image.height * scale);
+        canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** A heading between the groups of fields in a long form. */
+function Section({ title }: { readonly title: string }): React.JSX.Element {
+  return (
+    <h3 className="col-span-full border-b border-line pt-2 pb-1 text-xs font-semibold tracking-wider text-ink-muted uppercase">
+      {title}
+    </h3>
+  );
 }
 
 /**
  * The customer form, for both creating one and changing one.
  *
- * One component rather than two, because the two forms differ in exactly two fields:
- * the code and the opening balance are stated once when the record is created and
- * refused afterwards — the code is what a firm's own paperwork and any imported
- * history refer to the customer by, and the opening balance is a fact about the day
- * the books were taken on, which does not change because somebody edits an address.
+ * In sections, because a customer now carries a good deal more than a name and a phone
+ * number: where they are (country, then a state of that country, city, area and route),
+ * their registration numbers, their terms, how their documents print, and a photograph.
+ * The code is stated once, when the record is created; everything else, the opening
+ * amount included, can be corrected later.
  */
 function CustomerForm({
   run,
@@ -244,36 +405,12 @@ function CustomerForm({
   const regime = settings.taxRegime;
   const queryClient = useQueryClient();
   const { setup: printSetup } = usePrintSetup();
-  const [assignedTemplate, setAssignedTemplate] = useState<string>(() =>
-    existing ? (printSetup.customerTemplates[existing.customerId] ?? '') : '',
-  );
+  const countries = useCountries();
+  const allStates = useStates();
+  const areas = useTerritories(TerritoryKind.area);
+  const routes = useTerritories(TerritoryKind.route);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  // The customer's own layout lives with the firm's print setup, so every counter
-  // prints their documents the same way.
-  const assignTemplate = async (customerId: string): Promise<void> => {
-    const current = printSetup.customerTemplates[customerId] ?? '';
-
-    if (current === assignedTemplate) return;
-
-    const customerTemplates = { ...printSetup.customerTemplates };
-    if (assignedTemplate) customerTemplates[customerId] = assignedTemplate;
-    else delete customerTemplates[customerId];
-
-    await savePrintSetup({ ...printSetup, customerTemplates });
-    void queryClient.invalidateQueries({ queryKey: ['print-setup'] });
-  };
-
-  /*
-    The next code in the firm's own sequence, offered rather than demanded.
-
-    The specification's answer to a counter creating a customer while somebody waits:
-    the code is not mandatory, and leaving it blank means "the next one". It is
-    filled in here rather than left empty so the reader can see what they are about
-    to get and change it, and it is recomputed at submission for the case where it
-    was cleared. The product master already works this way — the difference was that
-    a product's code is issued by the server and a customer's was not, so this
-    screen has to do the counting.
-  */
   const suggested = useMemo(
     () =>
       nextCode(
@@ -285,11 +422,30 @@ function CustomerForm({
   );
 
   const [draft, setDraft] = useState<CustomerDraft>(() => ({
-    ...draftFrom(existing),
+    ...draftFrom(
+      existing,
+      existing ? printSetup.customerPrint[existing.customerId] : undefined,
+      usualCountry(rows),
+    ),
     code: existing?.code ?? suggested,
   }));
 
-  const states = statesFor(regime);
+  // The photograph is read on its own, so the list of customers stays light.
+  const savedPhoto = useQuery<string | null, ApiError>({
+    queryKey: ['customer-photo', existing?.customerId],
+    queryFn: () => getCustomerPhoto(existing!.customerId),
+    enabled: existing !== undefined,
+  });
+  // Undefined until somebody picks or removes one.
+  const [photo, setPhoto] = useState<string | null | undefined>(undefined);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const shownPhoto = photo === undefined ? (savedPhoto.data ?? null) : photo;
+
+  // A customer's state is one of their country's.
+  const states: readonly StateSummary[] = useMemo(
+    () => allStates.filter((state) => state.countryCode === draft.countryCode),
+    [allStates, draft.countryCode],
+  );
 
   const { errors, submit } = useValidation<CustomerDraft>((values) =>
     collect({
@@ -311,9 +467,12 @@ function CustomerForm({
       openingBalance: numeric(values.openingBalance, t('customers.openingInvalid'), {
         min: 0,
       }),
-      // Only where the regime makes it decide something. A firm charging no tax at
-      // all has no state table to choose from, and demanding a state it cannot
-      // offer would be a form nobody can submit.
+      printCopies: numeric(values.printCopies, t('customers.copiesInvalid'), {
+        min: 1,
+        integer: true,
+      }),
+      // Only where the regime makes it decide something: under GST it chooses IGST
+      // against CGST plus SGST.
       stateCode:
         regime === TaxRegime.indiaGst && values.stateCode.trim() === ''
           ? t('customers.stateRequired')
@@ -326,17 +485,55 @@ function CustomerForm({
     value: CustomerDraft[TField],
   ): void => setDraft((current) => ({ ...current, [field]: value }));
 
+  // Saved with the firm's print setup, so every counter prints their documents alike.
+  const savePrint = async (customerId: string): Promise<void> => {
+    const wanted: CustomerPrint = {
+      template: draft.printTemplate,
+      copies: draft.printCopies.trim() === '' ? null : Number(draft.printCopies),
+      preview: draft.printPreview === '' ? null : draft.printPreview === 'yes',
+    };
+    const current = printSetup.customerPrint[customerId];
+    const blank = !wanted.template && wanted.copies === null && wanted.preview === null;
+
+    if (
+      (blank && current === undefined) ||
+      (current !== undefined &&
+        current.template === wanted.template &&
+        current.copies === wanted.copies &&
+        current.preview === wanted.preview)
+    ) {
+      return;
+    }
+
+    const customerPrint = { ...printSetup.customerPrint };
+    if (blank) delete customerPrint[customerId];
+    else customerPrint[customerId] = wanted;
+
+    const next: PrintSetup = { ...printSetup, customerPrint };
+    await savePrintSetup(next);
+    void queryClient.invalidateQueries({ queryKey: ['print-setup'] });
+  };
+
+  const savePhoto = async (customerId: string): Promise<void> => {
+    if (photo === undefined) return;
+
+    await setCustomerPhoto(customerId, photo);
+    void queryClient.invalidateQueries({ queryKey: ['customer-photo', customerId] });
+  };
+
   const save = (): void => {
     if (!submit(draft)) {
       return;
     }
 
+    const blank = (value: string): string | null => value.trim() || null;
+
     const contact = {
-      mobileNumber: draft.mobile.trim() || null,
-      phone: draft.phone.trim() || null,
-      email: draft.email.trim() || null,
-      addressLine1: draft.address1.trim() || null,
-      addressLine2: draft.address2.trim() || null,
+      mobileNumber: blank(draft.mobile),
+      phone: blank(draft.phone),
+      email: blank(draft.email),
+      addressLine1: blank(draft.address1),
+      addressLine2: blank(draft.address2),
     };
 
     const terms = {
@@ -346,41 +543,60 @@ function CustomerForm({
     };
 
     const taxDetails = {
-      registrationNumber: draft.registrationNumber.trim() || null,
-      stateCode: draft.stateCode.trim() || null,
+      registrationNumber: blank(draft.registrationNumber),
+      stateCode: blank(draft.stateCode),
     };
+
+    const profile: CustomerProfile = {
+      city: blank(draft.city),
+      pinCode: blank(draft.pinCode),
+      website: blank(draft.website),
+      fax: blank(draft.fax),
+      contactPerson: blank(draft.contactPerson),
+      gstNumber: blank(draft.gstNumber),
+      tinNumber: blank(draft.tinNumber),
+      cstNumber: blank(draft.cstNumber),
+      countryCode: blank(draft.countryCode),
+      areaId: draft.areaId || null,
+      routeId: draft.routeId || null,
+      sendsSms: draft.sendsSms,
+    };
+
+    const openingBalance =
+      draft.openingBalance.trim() === '' ? 0 : Number(draft.openingBalance);
 
     run(async () => {
       if (existing) {
         await updateCustomer(existing.customerId, {
           name: draft.name.trim(),
-          nameArabic: draft.nameArabic.trim() || null,
+          nameArabic: blank(draft.nameArabic),
           contact,
           terms,
           taxDetails,
+          profile,
+          openingBalance,
         });
 
-        await assignTemplate(existing.customerId);
+        await savePrint(existing.customerId);
+        await savePhoto(existing.customerId);
 
         return;
       }
 
       const created = await createCustomer({
-        // Blank means "issue the next one", which is what the suggestion above
-        // already is. Recomputed here rather than trusted from state so a cleared
-        // box still produces a code.
         code: draft.code.trim() || suggested,
         name: draft.name.trim(),
-        nameArabic: draft.nameArabic.trim() || null,
+        nameArabic: blank(draft.nameArabic),
         contact,
         terms,
         taxDetails,
-        openingBalance:
-          draft.openingBalance.trim() === '' ? 0 : Number(draft.openingBalance),
+        profile,
+        openingBalance,
       });
 
       if (created?.customerId) {
-        await assignTemplate(created.customerId);
+        await savePrint(created.customerId);
+        await savePhoto(created.customerId);
       }
     });
   };
@@ -394,6 +610,8 @@ function CustomerForm({
       }}
     >
       <div className="form-grid">
+        <Section title={t('customers.sectionGeneral')} />
+
         {existing ? (
           <Field label={t('masters.code')}>
             <input value={existing.code} disabled className="field-input" />
@@ -425,6 +643,12 @@ function CustomerForm({
         />
 
         <TextField
+          label={t('customers.contactPerson')}
+          value={draft.contactPerson}
+          onChange={(value) => set('contactPerson', value)}
+        />
+
+        <TextField
           label={t('customers.mobile')}
           type="tel"
           value={draft.mobile}
@@ -447,6 +671,27 @@ function CustomerForm({
         />
 
         <TextField
+          label={t('customers.website')}
+          value={draft.website}
+          onChange={(value) => set('website', value)}
+        />
+
+        <TextField
+          label={t('customers.fax')}
+          type="tel"
+          value={draft.fax}
+          onChange={(value) => set('fax', value)}
+        />
+
+        <CheckField
+          label={t('customers.sendSms')}
+          checked={draft.sendsSms}
+          onChange={(checked) => set('sendsSms', checked)}
+        />
+
+        <Section title={t('customers.sectionAddress')} />
+
+        <TextField
           label={t('customers.address')}
           value={draft.address1}
           onChange={(value) => set('address1', value)}
@@ -458,12 +703,46 @@ function CustomerForm({
           onChange={(value) => set('address2', value)}
         />
 
-        {/*
-          A dropdown rather than a text box, and the reason is arithmetic rather
-          than tidiness: under GST this field decides whether an invoice charges
-          IGST or CGST plus SGST, and "TN", "T.N." and "Tamilnadu" typed on three
-          different days are three different answers to that question.
-        */}
+        <TextField
+          label={t('customers.city')}
+          value={draft.city}
+          onChange={(value) => set('city', value)}
+        />
+
+        <TextField
+          label={t('customers.pinCode')}
+          value={draft.pinCode}
+          onChange={(value) => set('pinCode', value)}
+        />
+
+        {/* The country first: it decides which states are offered. */}
+        <Field label={t('places.country')}>
+          <SearchSelect
+            value={draft.countryCode}
+            onChange={(code) =>
+              setDraft((current) => ({
+                ...current,
+                countryCode: code,
+                // A state of the old country is no state of the new one.
+                stateCode: allStates.some(
+                  (state) =>
+                    state.code === current.stateCode && state.countryCode === code,
+                )
+                  ? current.stateCode
+                  : '',
+              }))
+            }
+            options={countries.map((country) => ({
+              value: country.code,
+              label: country.name,
+              meta: country.currencyCode ?? country.code,
+            }))}
+            clearable
+            label={t('places.country')}
+            placeholder={t('common.choose')}
+          />
+        </Field>
+
         <Field
           label={t('customers.state')}
           required={regime === TaxRegime.indiaGst}
@@ -472,23 +751,81 @@ function CustomerForm({
           <SearchSelect
             value={draft.stateCode}
             onChange={(value) => set('stateCode', value)}
-            options={states.map((state) => ({
-              value: state.code,
-              label: `${state.code} — ${state.name}`,
-            }))}
-            disabled={states.length === 0}
+            options={[
+              ...states.map((state) => ({
+                value: state.code,
+                label: state.name,
+                meta: state.code,
+              })),
+              // A code saved before the state list existed is kept rather than lost.
+              ...(draft.stateCode &&
+              !states.some((state) => state.code === draft.stateCode)
+                ? [{ value: draft.stateCode, label: draft.stateCode }]
+                : []),
+            ]}
+            disabled={draft.countryCode === '' && draft.stateCode === ''}
             clearable
             invalid={errors['stateCode'] !== undefined}
             label={t('customers.state')}
-            placeholder={t('customers.noState')}
+            placeholder={
+              draft.countryCode === ''
+                ? t('customers.chooseCountryFirst')
+                : t('customers.noState')
+            }
           />
         </Field>
+
+        <Field label={t('customers.area')}>
+          <SearchSelect
+            value={draft.areaId}
+            onChange={(value) => set('areaId', value)}
+            options={areas.map((area) => ({ value: area.id, label: area.name }))}
+            clearable
+            label={t('customers.area')}
+            placeholder={areas.length === 0 ? t('customers.noAreas') : t('common.choose')}
+          />
+        </Field>
+
+        <Field label={t('customers.route')}>
+          <SearchSelect
+            value={draft.routeId}
+            onChange={(value) => set('routeId', value)}
+            options={routes.map((route) => ({ value: route.id, label: route.name }))}
+            clearable
+            label={t('customers.route')}
+            placeholder={
+              routes.length === 0 ? t('customers.noRoutes') : t('common.choose')
+            }
+          />
+        </Field>
+
+        <Section title={t('customers.sectionTax')} />
 
         <TextField
           label={t('customers.registrationNumber')}
           value={draft.registrationNumber}
           onChange={(value) => set('registrationNumber', value)}
         />
+
+        <TextField
+          label={t('customers.gstNumber')}
+          value={draft.gstNumber}
+          onChange={(value) => set('gstNumber', value)}
+        />
+
+        <TextField
+          label={t('customers.tinNumber')}
+          value={draft.tinNumber}
+          onChange={(value) => set('tinNumber', value)}
+        />
+
+        <TextField
+          label={t('customers.cstNumber')}
+          value={draft.cstNumber}
+          onChange={(value) => set('cstNumber', value)}
+        />
+
+        <Section title={t('customers.sectionTerms')} />
 
         <NumberField
           label={t('customers.creditDays')}
@@ -508,10 +845,21 @@ function CustomerForm({
           placeholder={t('customers.noLimit')}
         />
 
+        <NumberField
+          label={t('customers.openingAmount')}
+          min={0}
+          value={draft.openingBalance}
+          onChange={(value) => set('openingBalance', value)}
+          error={errors['openingBalance']}
+          placeholder="0.00"
+        />
+
+        <Section title={t('customers.sectionPrint')} />
+
         <SelectField
           label={t('settings.customerInvoiceTemplate')}
-          value={assignedTemplate}
-          onChange={setAssignedTemplate}
+          value={draft.printTemplate}
+          onChange={(value) => set('printTemplate', value)}
           options={[
             { value: '', label: t('printing.followSettings') },
             ...printSetup.templates.map((template) => ({
@@ -521,23 +869,86 @@ function CustomerForm({
           ]}
         />
 
-        {!existing && (
-          <NumberField
-            label={t('customers.openingBalance')}
-            min={0}
-            value={draft.openingBalance}
-            onChange={(value) => set('openingBalance', value)}
-            error={errors['openingBalance']}
-            placeholder="0.00"
-          />
-        )}
+        <NumberField
+          label={t('customers.printCopies')}
+          min={1}
+          step="1"
+          value={draft.printCopies}
+          onChange={(value) => set('printCopies', value)}
+          error={errors['printCopies']}
+          placeholder={t('printing.followSettings')}
+        />
+
+        <SelectField<'' | 'yes' | 'no'>
+          label={t('customers.printPreview')}
+          value={draft.printPreview}
+          onChange={(value) => set('printPreview', value)}
+          options={[
+            { value: '', label: t('printing.followSettings') },
+            { value: 'yes', label: t('customers.previewFirst') },
+            { value: 'no', label: t('customers.printStraightAway') },
+          ]}
+        />
+
+        <Section title={t('customers.photo')} />
+
+        <div className="col-span-full flex flex-wrap items-center gap-4">
+          <div className="flex size-24 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-2">
+            {shownPhoto ? (
+              <img
+                src={shownPhoto}
+                alt={t('customers.photo')}
+                className="size-full object-cover"
+              />
+            ) : (
+              <span className="px-2 text-center text-xs text-ink-muted">
+                {t('customers.noPhoto')}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+
+                setPhotoError(null);
+                shrinkPhoto(file)
+                  .then(setPhoto)
+                  .catch(() => setPhotoError(t('customers.photoInvalid')));
+              }}
+            />
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => fileInput.current?.click()}
+            >
+              {shownPhoto ? t('customers.changePhoto') : t('customers.addPhoto')}
+            </button>
+            {shownPhoto && (
+              <button
+                type="button"
+                className="btn-ghost btn-sm text-red-600"
+                onClick={() => setPhoto(null)}
+              >
+                {t('customers.removePhoto')}
+              </button>
+            )}
+            {photoError && <p className="field-message-error">{photoError}</p>}
+          </div>
+        </div>
       </div>
 
       <div className="form-actions">
         {/*
           Live rather than disabled until the form is complete. A dead button says
-          nothing about which of thirteen fields it is waiting for; pressing this one
-          marks them.
+          nothing about which field it is waiting for; pressing this one marks them.
         */}
         <button type="submit" disabled={busy} className="btn-primary">
           {busy ? t('common.saving') : existing ? t('common.save') : t('masters.add')}

@@ -194,6 +194,20 @@ public static class MenuCatalogue
                             "accounting",
                             "/accounting/employees",
                             "accounting:ledger:view"),
+                        new(
+                            "masters.countries",
+                            "Countries & states",
+                            "الدول والمناطق",
+                            "sales",
+                            "/sales/countries",
+                            "sales:customer:view"),
+                        new(
+                            "masters.territories",
+                            "Areas & routes",
+                            "المناطق وخطوط السير",
+                            "sales",
+                            "/sales/territories",
+                            "sales:customer:view"),
                     ]),
             ]),
 

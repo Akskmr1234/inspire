@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
+using ERP.Application.Parties;
 using ERP.Application.Sales;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -153,6 +154,48 @@ public sealed class CustomersController : ApiControllerBase
             new SetCustomerActiveCommand(id, request.IsActive), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads a customer's photograph.</summary>
+    /// <param name="id">The customer.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The picture as a data URL, or null when there is none.</returns>
+    /// <response code="200">The photograph, or none.</response>
+    /// <response code="404">No such customer in the selected firm.</response>
+    [HttpGet("{id:guid}/photo")]
+    [RequiresPermission("sales", "customer", "view")]
+    [ProducesResponseType(typeof(PartyPhotoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPhotoAsync(Guid id, CancellationToken cancellationToken)
+    {
+        Result<PartyPhotoResponse> result = await _sender.Send(new GetPartyPhotoQuery(id), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Sets or removes a customer's photograph.</summary>
+    /// <param name="id">The customer.</param>
+    /// <param name="request">The picture as a data URL; null removes it.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">Saved.</response>
+    /// <response code="400">Not a picture, or too large.</response>
+    /// <response code="404">No such customer in the selected firm.</response>
+    [HttpPut("{id:guid}/photo")]
+    [RequiresPermission("sales", "customer", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetPhotoAsync(
+        Guid id,
+        [FromBody] PartyPhotoResponse request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(new SetPartyPhotoCommand(id, request.Content), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 }
 

@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Parties;
 using ERP.Application.Sales;
 using ERP.Domain.Accounting;
 using ERP.Domain.Taxation;
@@ -255,8 +256,9 @@ public sealed class CustomerTests
             tenant.TenantId.Returns(Tenant);
             tenant.FirmId.Returns(firmSelected ? Firm.Id : null);
 
-            _create = new CreateCustomerCommandHandler(Ledgers, firms, tenant, UnitOfWork);
-            _update = new UpdateCustomerCommandHandler(Ledgers, tenant, UnitOfWork);
+            IPlaceRepository places = Substitute.For<IPlaceRepository>();
+            _create = new CreateCustomerCommandHandler(Ledgers, firms, places, tenant, UnitOfWork);
+            _update = new UpdateCustomerCommandHandler(Ledgers, places, tenant, UnitOfWork);
             _setActive = new SetCustomerActiveCommandHandler(Ledgers, tenant, UnitOfWork);
             _list = new GetCustomersQueryHandler(Ledgers, tenant);
             _get = new GetCustomerQueryHandler(Ledgers, tenant);

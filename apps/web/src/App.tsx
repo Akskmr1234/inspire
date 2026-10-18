@@ -81,6 +81,11 @@ const PrintTemplatesPage = lazyScreen(
 );
 const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
 const EmployeesPage = lazyScreen(() => import('@/pages/EmployeesPage'), 'EmployeesPage');
+const CountriesPage = lazyScreen(() => import('@/pages/CountriesPage'), 'CountriesPage');
+const TerritoriesPage = lazyScreen(
+  () => import('@/pages/TerritoriesPage'),
+  'TerritoriesPage',
+);
 const TaxRatesPage = lazyScreen(() => import('@/pages/TaxRatesPage'), 'TaxRatesPage');
 const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
@@ -291,6 +296,8 @@ export function App(): React.JSX.Element {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
               <Route path="/accounting/employees" element={<EmployeesPage />} />
+              <Route path="/sales/countries" element={<CountriesPage />} />
+              <Route path="/sales/territories" element={<TerritoriesPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/sales/invoices" element={<SalesPage />} />
               <Route path="/sales/returns" element={<SalesReturnsPage />} />

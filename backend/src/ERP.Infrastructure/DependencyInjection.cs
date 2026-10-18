@@ -5,6 +5,7 @@ using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
 using ERP.Application.Inventory.Products;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Parties;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Data;
 using ERP.Application.Platform.Grids;
@@ -104,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
         services.AddScoped<ITaxSlabRepository, TaxSlabRepository>();
+        services.AddScoped<IPlaceRepository, PlaceRepository>();
         services.AddScoped<IInventoryMasterReader, InventoryMasterReader>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IProductReader, ProductReader>();
