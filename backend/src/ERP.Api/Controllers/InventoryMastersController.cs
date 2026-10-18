@@ -329,7 +329,8 @@ public sealed class InventoryMastersController : ApiControllerBase
         ArgumentNullException.ThrowIfNull(request);
 
         Result result = await _sender.Send(
-            new UpdateMasterCommand(kind, id, request.Name, request.NameArabic, request.Address),
+            new UpdateMasterCommand(
+                kind, id, request.Name, request.NameArabic, request.Address, request.ParentId),
             cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
@@ -373,14 +374,14 @@ public sealed class InventoryMastersController : ApiControllerBase
 }
 
 /// <summary>Adding a unit of measurement.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left out.</param>
 /// <param name="Name">The unit's name.</param>
 /// <param name="BaseUnitId">The base it converts to, or null to start a new group.</param>
 /// <param name="ConversionFactor">How many base units one of this is worth.</param>
 /// <param name="Symbol">The short form printed on documents.</param>
 /// <param name="DecimalPlaces">How many decimals a quantity may carry.</param>
 public sealed record CreateUnitRequest(
-    [property: JsonRequired] string Code,
+    string? Code,
     [property: JsonRequired] string Name,
     Guid? BaseUnitId = null,
     decimal ConversionFactor = 1m,
@@ -388,33 +389,33 @@ public sealed record CreateUnitRequest(
     int DecimalPlaces = 0);
 
 /// <summary>Adding a category.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left out.</param>
 /// <param name="Name">The category name.</param>
 /// <param name="ParentId">The category it sits beneath, or null for the top level.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 public sealed record CreateCategoryRequest(
-    [property: JsonRequired] string Code,
+    string? Code,
     [property: JsonRequired] string Name,
     Guid? ParentId = null,
     string? NameArabic = null);
 
 /// <summary>Adding a brand.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left out.</param>
 /// <param name="Name">The brand name.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 public sealed record CreateBrandRequest(
-    [property: JsonRequired] string Code,
+    string? Code,
     [property: JsonRequired] string Name,
     string? NameArabic = null);
 
 /// <summary>Adding a warehouse.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left out.</param>
 /// <param name="Name">The warehouse name.</param>
 /// <param name="BranchId">The branch it belongs to, or null for a central store.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 /// <param name="Address">Where it is.</param>
 public sealed record CreateWarehouseRequest(
-    [property: JsonRequired] string Code,
+    string? Code,
     [property: JsonRequired] string Name,
     Guid? BranchId = null,
     string? NameArabic = null,
@@ -424,10 +425,12 @@ public sealed record CreateWarehouseRequest(
 /// <param name="Name">Its name.</param>
 /// <param name="NameArabic">The same in Arabic.</param>
 /// <param name="Address">Where a warehouse is.</param>
+/// <param name="ParentId">The category a category sits beneath, or null for the top level.</param>
 public sealed record UpdateMasterRequest(
     [property: JsonRequired] string Name,
     string? NameArabic = null,
-    string? Address = null);
+    string? Address = null,
+    Guid? ParentId = null);
 
 /// <summary>Renaming a record.</summary>
 /// <param name="Name">The new name.</param>

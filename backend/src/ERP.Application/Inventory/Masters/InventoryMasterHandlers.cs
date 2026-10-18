@@ -130,7 +130,7 @@ public sealed class CreateUnitCommandHandler : ICommandHandler<CreateUnitCommand
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.UnitOfMeasure, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, UnitOfMeasure.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -270,7 +270,7 @@ public sealed class CreateCategoryCommandHandler
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.Category, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, Category.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -348,7 +348,8 @@ public sealed class CreateBrandCommandHandler : ICommandHandler<CreateBrandComma
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.Brand, firm.Value, request.Code, cancellationToken);
+            _masters, InventoryMasterKind.Brand, firm.Value, request.Code,
+            request.Name, Brand.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -410,7 +411,7 @@ public sealed class CreateWarehouseCommandHandler
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.Warehouse, firm.Value, request.Code,
-            cancellationToken);
+            request.Name, Warehouse.MaximumCodeLength, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -762,12 +763,62 @@ public sealed class UpdateMasterCommandHandler : ICommandHandler<UpdateMasterCom
 
         Result renamed = category.Rename(request.Name);
 
-        if (renamed.IsSuccess)
+        if (renamed.IsFailure)
         {
-            category.SetArabicName(request.NameArabic);
+            return renamed;
         }
 
-        return renamed;
+        category.SetArabicName(request.NameArabic);
+
+        return await MoveCategoryAsync(category, request.ParentId, firmId, cancellationToken);
+    }
+
+    /// <summary>Puts a category beneath another, or at the top level.</summary>
+    /// <param name="category">The category.</param>
+    /// <param name="parentId">Its new parent, or null for the top level.</param>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Refuses a parent that sits anywhere beneath the category itself: the two would
+    /// each be the other's ancestor, and every tree drawn from them would never end.
+    /// </remarks>
+    private async Task<Result> MoveCategoryAsync(
+        Category category,
+        Guid? parentId,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        if (parentId is null)
+        {
+            return category.MoveTo(null);
+        }
+
+        Category? parent = await _masters.FindCategoryAsync(
+            CategoryId.From(parentId.Value), cancellationToken);
+
+        if (parent is null || parent.FirmId != firmId)
+        {
+            return NotFound("parent category");
+        }
+
+        Category? ancestor = parent;
+
+        for (int depth = 0; ancestor is not null && depth < 50; depth++)
+        {
+            if (ancestor.Id == category.Id)
+            {
+                return Result.Failure(Error.Validation(
+                    "Category.CircularParent",
+                    $"'{category.Name}' cannot be placed beneath '{parent.Name}', which is inside it."));
+            }
+
+            ancestor = ancestor.ParentId is { } next
+                ? await _masters.FindCategoryAsync(next, cancellationToken)
+                : null;
+        }
+
+        return category.MoveTo(parent);
     }
 
     private async Task<Result> UpdateBrandAsync(

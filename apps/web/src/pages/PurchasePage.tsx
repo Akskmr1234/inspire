@@ -1102,6 +1102,16 @@ function LineRow({
                 batchNumber: '',
                 expiresOn: '',
                 serialNumbers: '',
+                // The product's own rate from the tax rate master, where it has one.
+                ...(products.find((candidate) => candidate.id === value)?.taxPercentage !=
+                null
+                  ? {
+                      taxPercentage: String(
+                        products.find((candidate) => candidate.id === value)
+                          ?.taxPercentage,
+                      ),
+                    }
+                  : {}),
                 ...(products.find((candidate) => candidate.id === value)?.cost
                   ? {
                       rate: String(

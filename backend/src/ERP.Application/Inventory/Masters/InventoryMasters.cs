@@ -1,6 +1,8 @@
+using System.Globalization;
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Accounting.Ledgers;
 using ERP.Domain.Inventory;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -149,7 +151,7 @@ public interface IInventoryMasterReader
 // -------------------------------------------------------------------------- writing
 
 /// <summary>Adds a unit of measurement.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
 /// <param name="Name">The unit's name.</param>
 /// <param name="BaseUnitId">
 /// The base it converts to, or null to create a base unit of a new group.
@@ -158,7 +160,7 @@ public interface IInventoryMasterReader
 /// <param name="Symbol">The short form printed on documents.</param>
 /// <param name="DecimalPlaces">How many decimals a quantity may carry.</param>
 public sealed record CreateUnitCommand(
-    string Code,
+    string? Code,
     string Name,
     Guid? BaseUnitId = null,
     decimal ConversionFactor = 1m,
@@ -171,33 +173,33 @@ public sealed record CreateUnitCommand(
 public sealed record RenameUnitCommand(Guid UnitId, string Name) : ICommand;
 
 /// <summary>Adds a category, optionally beneath an existing one.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
 /// <param name="Name">The category name.</param>
 /// <param name="ParentId">The category it sits beneath, or null for the top level.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 public sealed record CreateCategoryCommand(
-    string Code,
+    string? Code,
     string Name,
     Guid? ParentId = null,
     string? NameArabic = null) : ICommand<Guid>;
 
 /// <summary>Adds a brand.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
 /// <param name="Name">The brand name.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 public sealed record CreateBrandCommand(
-    string Code,
+    string? Code,
     string Name,
     string? NameArabic = null) : ICommand<Guid>;
 
 /// <summary>Adds a warehouse.</summary>
-/// <param name="Code">The code, unique within the firm.</param>
+/// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
 /// <param name="Name">The warehouse name.</param>
 /// <param name="BranchId">The branch it belongs to, or null for a central store.</param>
 /// <param name="NameArabic">The name in Arabic.</param>
 /// <param name="Address">Where it is.</param>
 public sealed record CreateWarehouseCommand(
-    string Code,
+    string? Code,
     string Name,
     Guid? BranchId = null,
     string? NameArabic = null,
@@ -213,6 +215,9 @@ public sealed record SetDefaultWarehouseCommand(Guid WarehouseId) : ICommand;
 /// <param name="Name">Its name.</param>
 /// <param name="NameArabic">The same in Arabic.</param>
 /// <param name="Address">Where a warehouse is. Ignored for the others.</param>
+/// <param name="ParentId">
+/// The category a category sits beneath, or null for the top level. Ignored for the others.
+/// </param>
 /// <remarks>
 /// The code is not among these, for the reason a customer's is not: it is what imports
 /// and a firm's own lists refer to the record by.
@@ -222,7 +227,8 @@ public sealed record UpdateMasterCommand(
     Guid Id,
     string Name,
     string? NameArabic = null,
-    string? Address = null) : ICommand;
+    string? Address = null,
+    Guid? ParentId = null) : ICommand;
 
 /// <summary>Withdraws an inventory master from use, or returns it.</summary>
 /// <param name="Kind">Which master.</param>
@@ -244,7 +250,7 @@ public sealed class CreateUnitCommandValidator : AbstractValidator<CreateUnitCom
     /// <summary>Initialises a new instance of the <see cref="CreateUnitCommandValidator"/> class.</summary>
     public CreateUnitCommandValidator()
     {
-        RuleFor(c => c.Code).NotEmpty().MaximumLength(UnitOfMeasure.MaximumCodeLength);
+        RuleFor(c => c.Code!).MaximumLength(UnitOfMeasure.MaximumCodeLength).When(c => c.Code is not null);
         RuleFor(c => c.Name).NotEmpty().MaximumLength(UnitOfMeasure.MaximumNameLength);
         RuleFor(c => c.DecimalPlaces)
             .InclusiveBetween(0, UnitOfMeasure.MaximumDecimalPlaces);
@@ -263,7 +269,7 @@ public sealed class CreateCategoryCommandValidator : AbstractValidator<CreateCat
     /// <summary>Initialises a new instance of the <see cref="CreateCategoryCommandValidator"/> class.</summary>
     public CreateCategoryCommandValidator()
     {
-        RuleFor(c => c.Code).NotEmpty().MaximumLength(Category.MaximumCodeLength);
+        RuleFor(c => c.Code!).MaximumLength(Category.MaximumCodeLength).When(c => c.Code is not null);
         RuleFor(c => c.Name).NotEmpty().MaximumLength(Category.MaximumNameLength);
     }
 }
@@ -274,7 +280,7 @@ public sealed class CreateBrandCommandValidator : AbstractValidator<CreateBrandC
     /// <summary>Initialises a new instance of the <see cref="CreateBrandCommandValidator"/> class.</summary>
     public CreateBrandCommandValidator()
     {
-        RuleFor(c => c.Code).NotEmpty().MaximumLength(Brand.MaximumCodeLength);
+        RuleFor(c => c.Code!).MaximumLength(Brand.MaximumCodeLength).When(c => c.Code is not null);
         RuleFor(c => c.Name).NotEmpty().MaximumLength(Brand.MaximumNameLength);
     }
 }
@@ -285,7 +291,7 @@ public sealed class CreateWarehouseCommandValidator : AbstractValidator<CreateWa
     /// <summary>Initialises a new instance of the <see cref="CreateWarehouseCommandValidator"/> class.</summary>
     public CreateWarehouseCommandValidator()
     {
-        RuleFor(c => c.Code).NotEmpty().MaximumLength(Warehouse.MaximumCodeLength);
+        RuleFor(c => c.Code!).MaximumLength(Warehouse.MaximumCodeLength).When(c => c.Code is not null);
         RuleFor(c => c.Name).NotEmpty().MaximumLength(Warehouse.MaximumNameLength);
         RuleFor(c => c.Address!).MaximumLength(Warehouse.MaximumAddressLength)
             .When(c => c.Address is not null);
@@ -305,20 +311,36 @@ internal static class MasterContext
                 "InventoryMaster.NoFirmSelected",
                 "A firm must be selected to work with inventory masters."));
 
-    /// <summary>Refuses a code another record of the same kind already uses.</summary>
+    /// <summary>Refuses a code another record of the same kind already uses, or makes one.</summary>
     /// <param name="masters">The master repository.</param>
     /// <param name="kind">Which master.</param>
     /// <param name="firmId">The firm.</param>
-    /// <param name="code">The code being taken.</param>
+    /// <param name="code">The code being taken, or blank to have one made.</param>
+    /// <param name="name">The record's name, which a made code is drawn from.</param>
+    /// <param name="maxLength">The longest code the master holds.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The normalised code, or the reason it was refused.</returns>
+    /// <remarks>
+    /// A blank code is made from the name - "Mobile phones" becomes MOBILE-PHONES, the
+    /// next one MOBILE-PHONES-2 - so the list reads sensibly and nobody has to invent a
+    /// code to add a brand. A name with no Latin letters, an Arabic one, gets the kind's
+    /// prefix and a number instead.
+    /// </remarks>
     internal static async Task<Result<string>> ReserveCodeAsync(
         IInventoryMasterRepository masters,
         InventoryMasterKind kind,
         FirmId firmId,
-        string code,
+        string? code,
+        string name,
+        int maxLength,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return Result.Success(await MakeCodeAsync(
+                masters, kind, firmId, name, maxLength, cancellationToken));
+        }
+
         string normalised = code.Trim().ToUpperInvariant();
 
         return await masters.CodeExistsAsync(kind, firmId, normalised, cancellationToken)
@@ -326,5 +348,48 @@ internal static class MasterContext
                 "InventoryMaster.CodeTaken",
                 $"'{normalised}' is already used by another record of this kind."))
             : Result.Success(normalised);
+    }
+
+    /// <summary>Makes a code from a name that no record of the kind uses yet.</summary>
+    /// <param name="masters">The master repository.</param>
+    /// <param name="kind">Which master.</param>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="name">The record's name.</param>
+    /// <param name="maxLength">The longest code the master holds.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The code.</returns>
+    internal static async Task<string> MakeCodeAsync(
+        IInventoryMasterRepository masters,
+        InventoryMasterKind kind,
+        FirmId firmId,
+        string name,
+        int maxLength,
+        CancellationToken cancellationToken)
+    {
+        string prefix = kind switch
+        {
+            InventoryMasterKind.Category => "CAT",
+            InventoryMasterKind.Brand => "BRAND",
+            InventoryMasterKind.UnitOfMeasure => "UNIT",
+            InventoryMasterKind.Warehouse => "WH",
+            InventoryMasterKind.TaxSlab => "TAX",
+            _ => "M",
+        };
+
+        // Room for a "-999" on the end, so a numbered code still fits.
+        string stem = Codes.FromName(name, maxLength - 4, prefix);
+        bool numbered = string.Equals(stem, prefix, StringComparison.Ordinal);
+
+        // MOBILE-PHONES, MOBILE-PHONES-2, ...; a prefix alone is always numbered: CAT-1.
+        int number = 1;
+        string candidate = numbered ? $"{stem}-1" : stem;
+
+        while (await masters.CodeExistsAsync(kind, firmId, candidate, cancellationToken))
+        {
+            number++;
+            candidate = string.Create(CultureInfo.InvariantCulture, $"{stem}-{number}");
+        }
+
+        return candidate;
     }
 }

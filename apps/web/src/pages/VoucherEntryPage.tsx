@@ -11,17 +11,15 @@ import { useIsNarrow } from '@/components/DataGrid';
 import { IconClose, IconPlus } from '@/components/icons';
 import { ApiError, request } from '@/lib/api';
 import {
-  isMoneyAccount,
+  isCashOrBank,
   isParty,
   LedgerKind,
   listLedgers,
   type LedgerSummary,
 } from '@/lib/ledgers';
-import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { moneyAlways as money } from '@/lib/money';
-import { isKnownPaymentMode, PAYMENT_MODES } from '@/lib/paymentModes';
+import { PAYMENT_MODES } from '@/lib/paymentModes';
 import { useSettings } from '@/stores/settings';
-import { DocumentType, useNextNumber } from '@/lib/numbering';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -59,24 +57,6 @@ export const VoucherType = {
   openingBalance: 7,
 } as const;
 
-interface DraftLine {
-  readonly key: string;
-  ledgerId: string;
-  side: typeof DEBIT | typeof CREDIT;
-  amount: string;
-  narration: string;
-}
-
-function emptyLine(): DraftLine {
-  return {
-    key: crypto.randomUUID(),
-    ledgerId: '',
-    side: DEBIT,
-    amount: '',
-    narration: '',
-  };
-}
-
 /** Parses a typed amount, treating anything unparseable as zero. */
 function parseAmount(raw: string): number {
   const value = Number.parseFloat(raw);
@@ -104,40 +84,50 @@ function useLedgers(): ReturnType<typeof useQuery<readonly LedgerSummary[], ApiE
   });
 }
 
+/** One line of a journal: a ledger and an amount on one side or the other. */
+interface JournalLine {
+  readonly key: string;
+  ledgerId: string;
+  debit: string;
+  credit: string;
+  narration: string;
+}
+
+function emptyJournalLine(): JournalLine {
+  return { key: crypto.randomUUID(), ledgerId: '', debit: '', credit: '', narration: '' };
+}
+
 /**
- * Voucher entry.
+ * Journal entry.
  *
- * Mirrors the reference application's journal screen: a Debit/Credit selector per
- * line, separate debit and credit amount columns, a running total per column, and
- * the standing rule that every debit needs a corresponding credit.
+ * The same layout as payments and receipts - the date and reference above, a grid of
+ * ledgers below, the total under it and one button - with the one difference a journal
+ * has: every line can be a debit or a credit, so the grid carries a column for each.
+ * Typing an amount in one clears the other, because a line is one or the other and
+ * the books hold a side and a positive amount.
  *
- * The running difference is the important part of the design. It is shown as the
- * user types, so a transposed digit is caught at the keyboard rather than by the
- * server after Save. The server still enforces the rule - this is a courtesy, not
- * the guarantee.
- *
- * The party field above the lines is the other. A voucher is very often against a
- * customer or a supplier — a receipt, a payment, a contra entry correcting one — and
- * naming them here fills the line that would otherwise have to be found in a
- * four-hundred-row picker. It is a shortcut into the lines, not a field of its own:
- * what is saved is still the lines, which is what the books hold.
+ * The running difference is shown as the user types, so a transposed digit is caught
+ * at the keyboard rather than by the server after Save. The server still enforces the
+ * rule - this is a courtesy, not the guarantee. The voucher's number is issued when it
+ * is saved, from the branch's series, and the list it lands on shows it.
  */
 export function VoucherEntryPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const narrow = useIsNarrow();
 
   const [type, setType] = useState<number>(VoucherType.journal);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [narration, setNarration] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
-  const [partyId, setPartyId] = useState('');
-  const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(), emptyLine()]);
+  const [lines, setLines] = useState<readonly JournalLine[]>([
+    emptyJournalLine(),
+    emptyJournalLine(),
+  ]);
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
-
-  const parties = useMemo(() => all.filter(isParty), [all]);
   const ledgerOptions = useMemo(() => all.map(ledgerOption), [all]);
 
   const totals = useMemo(() => {
@@ -145,13 +135,8 @@ export function VoucherEntryPage(): React.JSX.Element {
     let credit = 0;
 
     for (const line of lines) {
-      const amount = parseAmount(line.amount);
-
-      if (line.side === DEBIT) {
-        debit += amount;
-      } else {
-        credit += amount;
-      }
+      debit += parseAmount(line.debit);
+      credit += parseAmount(line.credit);
     }
 
     // Rounded to two places before comparing. Summing typed decimals in binary
@@ -159,15 +144,8 @@ export function VoucherEntryPage(): React.JSX.Element {
     // perfectly balanced voucher as unbalanced.
     const difference = Math.round((debit - credit) * 100) / 100;
 
-    /*
-      Three states, not two.
-
-      A voucher nobody has typed in yet has a difference of zero and is not
-      balanced, and the badge treated that as the unbalanced case — so an empty
-      screen opened by announcing "Difference 0.00 (credit heavy)", which is not
-      true, not actionable, and the first thing anybody sees on the screen. Empty
-      is its own state and says so.
-    */
+    // Three states, not two: an untouched voucher has a difference of zero and is
+    // not balanced, and saying "Difference 0.00" about it is neither true nor useful.
     return {
       debit,
       credit,
@@ -177,43 +155,48 @@ export function VoucherEntryPage(): React.JSX.Element {
     };
   }, [lines]);
 
-  const canSubmit =
-    totals.isBalanced &&
-    lines.filter((l) => l.ledgerId !== '' && parseAmount(l.amount) > 0).length >= 2;
+  const entered = lines.filter(
+    (line) => parseAmount(line.debit) > 0 || parseAmount(line.credit) > 0,
+  );
+  const unnamed = entered.some((line) => line.ledgerId === '');
+  const canSubmit = totals.isBalanced && entered.length >= 2 && !unnamed;
 
-  const update = (key: string, patch: Partial<DraftLine>): void =>
+  const update = (key: string, patch: Partial<JournalLine>): void =>
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
-  // A line's controls, shared by the table and by the cards a phone gets instead.
-  const narrow = useIsNarrow();
+  const post = useMutation<CreateVoucherResponse, ApiError>({
+    mutationFn: () =>
+      request<CreateVoucherResponse>('/accounting/vouchers', {
+        method: 'POST',
+        body: {
+          type,
+          date,
+          referenceNumber: referenceNumber.trim() || null,
+          narration: narration.trim() || null,
+          postImmediately: true,
+          lines: entered.map((line) => {
+            const debit = parseAmount(line.debit);
+            return {
+              ledgerId: line.ledgerId,
+              side: debit > 0 ? DEBIT : CREDIT,
+              amount: debit > 0 ? debit : parseAmount(line.credit),
+              narration: line.narration.trim() || null,
+            };
+          }),
+        },
+      }),
+    onSuccess: (response) => {
+      // The trial balance is now stale by definition.
+      void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
 
-  const sideControl = (line: DraftLine, className?: string): React.JSX.Element => (
-    <SearchSelect
-      label={t('vouchers.side')}
-      {...(className ? { className } : {})}
-      size="sm"
-      value={String(line.side)}
-      onChange={(value) =>
-        update(line.key, {
-          side: Number(value) === CREDIT ? CREDIT : DEBIT,
-        })
-      }
-      options={[
-        { value: String(DEBIT), label: t('reports.debit') },
-        { value: String(CREDIT), label: t('reports.credit') },
-      ]}
-    />
-  );
+      navigate(listedAt(type, response.number));
+    },
+  });
 
-  /*
-    A picker that can be typed into, in place of a native select of the whole chart
-    of accounts. The browser's own type-ahead matches the start of an option, which
-    here is the account code — so looking a ledger up by its name, which is what
-    everybody does, was impossible.
-  */
-  const ledgerControl = (line: DraftLine): React.JSX.Element => (
+  const ledgerControl = (line: JournalLine): React.JSX.Element => (
     <SearchSelect
       value={line.ledgerId}
       onChange={(ledgerId) => update(line.key, { ledgerId })}
@@ -225,111 +208,38 @@ export function VoucherEntryPage(): React.JSX.Element {
     />
   );
 
-  const narrationControl = (line: DraftLine, className = ''): React.JSX.Element => (
+  const amountControl = (
+    line: JournalLine,
+    side: 'debit' | 'credit',
+  ): React.JSX.Element => (
+    <AmountInput
+      label={side === 'debit' ? t('vouchers.debitAmount') : t('vouchers.creditAmount')}
+      value={line[side]}
+      onChange={(value) =>
+        update(
+          line.key,
+          side === 'debit' ? { debit: value, credit: '' } : { credit: value, debit: '' },
+        )
+      }
+    />
+  );
+
+  const narrationControl = (line: JournalLine): React.JSX.Element => (
     <input
       aria-label={t('vouchers.lineNarration')}
-      className={clsx('field-input-sm', className)}
+      className="field-input-sm w-full"
       value={line.narration}
       onChange={(e) => update(line.key, { narration: e.target.value })}
     />
   );
 
-  // End-aligned like the caption above and the total below.
-  const amountControl = (line: DraftLine, className = ''): React.JSX.Element => (
-    <input
-      aria-label={
-        line.side === DEBIT ? t('vouchers.debitAmount') : t('vouchers.creditAmount')
-      }
-      type="number"
-      inputMode="decimal"
-      step="0.01"
-      min="0"
-      className={clsx('field-input-sm text-end font-mono tabular-nums', className)}
-      value={line.amount}
-      onChange={(e) => update(line.key, { amount: e.target.value })}
-    />
-  );
-
-  const removeControl = (line: DraftLine): React.JSX.Element => (
-    <button
-      type="button"
-      aria-label={t('vouchers.removeLine')}
+  const removeControl = (line: JournalLine): React.JSX.Element => (
+    <RemoveButton
+      label={t('vouchers.removeLine')}
       disabled={lines.length <= 2}
       onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
-      className="grid size-7 place-items-center rounded-md text-ink-subtle transition hover:bg-red-50 hover:text-red-600 active:scale-90 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-    >
-      ✕
-    </button>
+    />
   );
-
-  /*
-    Naming a party puts them on the first line that has no ledger yet, or opens one
-    if every line is spoken for. Choosing them a second time moves the line rather
-    than adding another, so correcting a mis-picked customer does not leave the
-    first one behind on a line nobody notices.
-  */
-  const chooseParty = (ledgerId: string): void => {
-    setPartyId(ledgerId);
-
-    if (ledgerId === '') {
-      return;
-    }
-
-    setLines((current) => {
-      const existing = current.findIndex((line) => line.ledgerId === partyId);
-
-      if (existing >= 0) {
-        return current.map((line, index) =>
-          index === existing ? { ...line, ledgerId } : line,
-        );
-      }
-
-      const empty = current.findIndex((line) => line.ledgerId === '');
-
-      if (empty >= 0) {
-        return current.map((line, index) =>
-          index === empty ? { ...line, ledgerId } : line,
-        );
-      }
-
-      return [...current, { ...emptyLine(), ledgerId }];
-    });
-  };
-
-  const post = useMutation<CreateVoucherResponse, ApiError>({
-    mutationFn: () =>
-      request<CreateVoucherResponse>('/accounting/vouchers', {
-        method: 'POST',
-        body: {
-          type,
-          date,
-          referenceNumber: referenceNumber || null,
-          narration: narration || null,
-          postImmediately: true,
-          lines: lines
-            .filter((l) => l.ledgerId !== '' && parseAmount(l.amount) > 0)
-            .map((l) => ({
-              ledgerId: l.ledgerId,
-              side: l.side,
-              amount: parseAmount(l.amount),
-              narration: l.narration || null,
-            })),
-        },
-      }),
-    onSuccess: (response) => {
-      setLines([emptyLine(), emptyLine()]);
-      setNarration('');
-      setReferenceNumber('');
-      setPartyId('');
-
-      // The trial balance is now stale by definition, so it is invalidated rather
-      // than left showing a position that predates this posting.
-      void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
-      void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
-
-      navigate(listedAt(type, response.number));
-    },
-  });
 
   return (
     <section className="page">
@@ -342,220 +252,290 @@ export function VoucherEntryPage(): React.JSX.Element {
         </div>
       )}
 
-      <div className="panel grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
-        <SelectField
-          label={t('vouchers.type')}
-          required
-          value={type}
-          onChange={setType}
-          options={[
-            { value: VoucherType.journal, label: t('voucherTypes.Journal') },
-            { value: VoucherType.contra, label: t('voucherTypes.Contra') },
-            { value: VoucherType.cashReceipt, label: t('voucherTypes.CashReceipt') },
-            { value: VoucherType.bankReceipt, label: t('voucherTypes.BankReceipt') },
-            { value: VoucherType.cashPayment, label: t('voucherTypes.CashPayment') },
-            { value: VoucherType.bankPayment, label: t('voucherTypes.BankPayment') },
-          ]}
-        />
-
-        <DateField label={t('vouchers.date')} required value={date} onChange={setDate} />
-
-        {/*
-          The customer or supplier the voucher is against.
-
-          Section 12 asks for it on this screen and it was not here: every voucher
-          against a party meant finding them among every ledger in the firm, in a
-          native select with no search, twice — once for the party and once for the
-          account. This narrows to the parties, and what it fills in is an ordinary
-          line somebody can still change.
-        */}
-        <Field label={t('vouchers.party')}>
-          <SearchSelect
-            value={partyId}
-            onChange={chooseParty}
-            clearable
-            label={t('vouchers.party')}
-            placeholder={t('vouchers.noParty')}
-            options={parties.map(ledgerOption)}
+      <form
+        className="card card-body space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) post.mutate();
+        }}
+      >
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SelectField
+            label={t('vouchers.type')}
+            required
+            value={type}
+            onChange={setType}
+            options={[
+              { value: VoucherType.journal, label: t('voucherTypes.Journal') },
+              { value: VoucherType.contra, label: t('voucherTypes.Contra') },
+            ]}
+            size="sm"
           />
-        </Field>
-
-        <TextField
-          label={t('vouchers.reference')}
-          value={referenceNumber}
-          onChange={setReferenceNumber}
-        />
-
-        <TextField
-          label={t('vouchers.narration')}
-          value={narration}
-          onChange={setNarration}
-        />
-      </div>
-
-      {narrow ? (
-        /*
-          A card per line on a phone. The table needs 56rem for five usable controls,
-          and scrolled sideways the amount - the one thing being entered - started
-          off the screen.
-        */
-        <div className="space-y-3">
-          {lines.map((line, index) => (
-            <div key={line.key} className="panel space-y-2.5 p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-ink-muted">#{index + 1}</span>
-                <div className="flex-1">{sideControl(line)}</div>
-                {removeControl(line)}
-              </div>
-              {ledgerControl(line)}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="field-label">
-                    {line.side === DEBIT ? t('reports.debit') : t('reports.credit')}
-                  </span>
-                  {amountControl(line, 'w-full')}
-                </div>
-                <div>
-                  <span className="field-label">{t('vouchers.lineNarration')}</span>
-                  {narrationControl(line, 'w-full')}
-                </div>
-              </div>
-            </div>
-          ))}
-          <dl className="panel grid grid-cols-2 gap-2 p-3 text-sm">
-            <div>
-              <dt className="text-xs text-ink-muted">{t('reports.debit')}</dt>
-              <dd className="font-mono font-semibold tabular-nums">
-                {money(totals.debit)}
-              </dd>
-            </div>
-            <div className="text-end">
-              <dt className="text-xs text-ink-muted">{t('reports.credit')}</dt>
-              <dd className="font-mono font-semibold tabular-nums">
-                {money(totals.credit)}
-              </dd>
-            </div>
-          </dl>
+          <DateField
+            label={t('vouchers.date')}
+            required
+            value={date}
+            onChange={setDate}
+            size="sm"
+          />
+          <TextField
+            label={t('vouchers.referenceNo')}
+            value={referenceNumber}
+            onChange={setReferenceNumber}
+            size="sm"
+          />
+          <TextField
+            label={t('vouchers.narration')}
+            value={narration}
+            onChange={setNarration}
+            size="sm"
+          />
         </div>
-      ) : (
-        <div className="table-wrap">
-          {/*
-            A floor width, because five editable controls per row cannot be squeezed
-            into a narrow width without every select becoming unreadable. The table
-            scrolls sideways instead, which keeps each control at a usable size.
-          */}
-          <table className="table min-w-[56rem]">
-            <thead>
-              <tr>
-                <th className="text-start">{t('vouchers.side')}</th>
-                <th className="text-start">{t('vouchers.ledger')}</th>
-                <th className="text-start">{t('vouchers.lineNarration')}</th>
-                <th className="text-end">{t('reports.debit')}</th>
-                <th className="text-end">{t('reports.credit')}</th>
-                <th className="w-10 text-end" />
-              </tr>
-            </thead>
 
-            <tbody>
-              {lines.map((line) => (
-                <tr key={line.key}>
-                  <td className="py-2">{sideControl(line, 'w-28')}</td>
-                  <td className="min-w-56 py-2">{ledgerControl(line)}</td>
-                  <td className="py-2">{narrationControl(line, 'min-w-40')}</td>
-                  {/*
-                    A single amount box appears under whichever column the line's side
-                    selects, and the other shows a dash. The domain stores one positive
-                    amount plus a side, so offering two editable boxes would invite a
-                    row with both filled in - which has no meaning.
-                  */}
-                  <td className="py-2 text-end">
-                    {line.side === DEBIT ? (
-                      amountControl(line)
-                    ) : (
-                      <span className="block text-end text-ink-subtle">—</span>
-                    )}
-                  </td>
-                  <td className="py-2 text-end">
-                    {line.side === CREDIT ? (
-                      amountControl(line)
-                    ) : (
-                      <span className="block text-end text-ink-subtle">—</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-2 text-end">{removeControl(line)}</td>
-                </tr>
-              ))}
-            </tbody>
-
-            <tfoot>
-              <tr>
-                <td colSpan={3}>{t('vouchers.total')}</td>
-                <td className="cell-numeric">{money(totals.debit)}</td>
-                <td className="cell-numeric">{money(totals.credit)}</td>
-                <td />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={() => setLines((current) => [...current, emptyLine()])}
-          className="btn-secondary self-start"
+        <LinesFrame
+          title={t('vouchers.journalDetails')}
+          hint={t('vouchers.journalDetailsHint')}
+          addLabel={t('vouchers.addLedger')}
+          onAdd={() => setLines((current) => [...current, emptyJournalLine()])}
         >
-          {t('vouchers.addRow')}
-        </button>
+          {narrow ? (
+            /*
+              A card per line on a phone. Five controls per row do not fit across a
+              phone, and scrolled sideways the amount - the one thing being entered -
+              started off the screen.
+            */
+            <div className="space-y-3">
+              {lines.map((line, index) => (
+                <div
+                  key={line.key}
+                  className="space-y-2.5 rounded-lg border border-line p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-ink-muted">
+                      #{index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">{ledgerControl(line)}</div>
+                    {removeControl(line)}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="field-label">{t('reports.debit')}</span>
+                      {amountControl(line, 'debit')}
+                    </div>
+                    <div>
+                      <span className="field-label">{t('reports.credit')}</span>
+                      {amountControl(line, 'credit')}
+                    </div>
+                  </div>
+                  {narrationControl(line)}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="table min-w-[48rem]">
+                <thead>
+                  <tr>
+                    <th className="w-10 text-start">#</th>
+                    <th className="text-start">{t('vouchers.ledger')}</th>
+                    <th className="w-36 text-end">{t('reports.debit')}</th>
+                    <th className="w-36 text-end">{t('reports.credit')}</th>
+                    <th className="text-start">{t('vouchers.lineNarration')}</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, index) => (
+                    <tr key={line.key}>
+                      <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
+                      <td className="min-w-56 py-2">{ledgerControl(line)}</td>
+                      <td className="py-2">{amountControl(line, 'debit')}</td>
+                      <td className="py-2">{amountControl(line, 'credit')}</td>
+                      <td className="min-w-40 py-2">{narrationControl(line)}</td>
+                      <td className="px-2 py-2 text-end">{removeControl(line)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={2}>{t('vouchers.total')}</td>
+                    <td className="cell-numeric">{money(totals.debit)}</td>
+                    <td className="cell-numeric">{money(totals.credit)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
 
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-          <span
-            className={clsx(
-              'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium',
-              totals.isEmpty
-                ? 'border-line bg-surface-3 text-ink-muted'
-                : totals.isBalanced
-                  ? 'border-emerald-200/70 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200'
-                  : 'border-amber-200/70 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/12 dark:text-amber-200',
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={clsx(
-                'size-2 shrink-0 rounded-full',
-                totals.isEmpty
-                  ? 'bg-ink-subtle'
-                  : totals.isBalanced
-                    ? 'bg-emerald-500'
-                    : 'animate-breathe bg-amber-500',
-              )}
-            />
-            {totals.isEmpty
-              ? t('vouchers.nothingEntered')
-              : totals.isBalanced
-                ? t('vouchers.balanced')
-                : t(
-                    totals.difference > 0
-                      ? 'vouchers.differenceDebit'
-                      : 'vouchers.differenceCredit',
-                    { amount: money(Math.abs(totals.difference)) },
-                  )}
-          </span>
+          {narrow && (
+            <dl className="grid grid-cols-2 gap-2 border-t border-line pt-2 text-sm">
+              <div>
+                <dt className="text-xs text-ink-muted">{t('reports.debit')}</dt>
+                <dd className="font-mono font-semibold tabular-nums">
+                  {money(totals.debit)}
+                </dd>
+              </div>
+              <div className="text-end">
+                <dt className="text-xs text-ink-muted">{t('reports.credit')}</dt>
+                <dd className="font-mono font-semibold tabular-nums">
+                  {money(totals.credit)}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </LinesFrame>
 
+        {unnamed && <p className="alert-error text-xs">{t('vouchers.ledgerRequired')}</p>}
+
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <BalanceBadge totals={totals} />
           <button
-            type="button"
+            type="submit"
             disabled={!canSubmit || post.isPending}
-            onClick={() => post.mutate()}
             className="btn-primary"
           >
             {post.isPending && <Spinner />}
             {post.isPending ? t('vouchers.posting') : t('vouchers.post')}
           </button>
         </div>
-      </div>
 
-      <p className="text-xs text-ink-muted">{t('vouchers.entryHint')}</p>
+        <p className="text-xs text-ink-muted">{t('vouchers.entryHint')}</p>
+      </form>
     </section>
+  );
+}
+
+/** Says whether a journal balances, and by how much it does not. */
+function BalanceBadge({
+  totals,
+}: {
+  readonly totals: {
+    readonly difference: number;
+    readonly isEmpty: boolean;
+    readonly isBalanced: boolean;
+  };
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium',
+        totals.isEmpty
+          ? 'border-line bg-surface-3 text-ink-muted'
+          : totals.isBalanced
+            ? 'border-emerald-200/70 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200'
+            : 'border-amber-200/70 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/12 dark:text-amber-200',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={clsx(
+          'size-2 shrink-0 rounded-full',
+          totals.isEmpty
+            ? 'bg-ink-subtle'
+            : totals.isBalanced
+              ? 'bg-emerald-500'
+              : 'animate-breathe bg-amber-500',
+        )}
+      />
+      {totals.isEmpty
+        ? t('vouchers.nothingEntered')
+        : totals.isBalanced
+          ? t('vouchers.balanced')
+          : t(
+              totals.difference > 0
+                ? 'vouchers.differenceDebit'
+                : 'vouchers.differenceCredit',
+              { amount: money(Math.abs(totals.difference)) },
+            )}
+    </span>
+  );
+}
+
+/** The bordered block a grid of ledgers sits in, with its heading and Add button. */
+function LinesFrame({
+  title,
+  hint,
+  addLabel,
+  onAdd,
+  children,
+}: {
+  readonly title: string;
+  readonly hint: string;
+  readonly addLabel: string;
+  readonly onAdd: () => void;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+        <div>
+          <span className="text-xs font-bold tracking-wider text-ink uppercase">
+            {title}
+          </span>
+          <p className="text-xs text-ink-muted">{hint}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="btn-secondary btn-sm flex items-center gap-1"
+        >
+          <IconPlus className="size-3.5" />
+          {addLabel}
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** An amount box, end-aligned like the column's heading and its total. */
+function AmountInput({
+  label,
+  value,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}): React.JSX.Element {
+  return (
+    <input
+      aria-label={label}
+      type="number"
+      inputMode="decimal"
+      step="0.01"
+      min="0"
+      placeholder="0.00"
+      className="field-input-sm w-full text-end font-mono tabular-nums"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function RemoveButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  readonly label: string;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="grid size-7 place-items-center rounded-md text-ink-subtle transition hover:bg-red-50 hover:text-red-600 active:scale-90 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+    >
+      <IconClose className="size-3.5" />
+    </button>
   );
 }
 
@@ -569,40 +549,48 @@ export function ReceiptEntryPage(): React.JSX.Element {
   return <MoneyEntry direction="receipt" />;
 }
 
-/** What the payment and receipt form holds while it is being filled in. */
-interface MoneyDraft {
-  date: string;
-  partyId: string;
-  accountId: string;
+/** One ledger being paid or received from. */
+interface MoneyLine {
+  readonly key: string;
+  ledgerId: string;
   amount: string;
-  reference: string;
-  paymentMode: string;
   narration: string;
+}
+
+function emptyMoneyLine(): MoneyLine {
+  return { key: crypto.randomUUID(), ledgerId: '', amount: '', narration: '' };
+}
+
+interface ChequeDetails {
+  number: string;
+  accountNumber: string;
+  date: string;
+  inFavourOf: string;
+}
+
+interface CardDetails {
+  type: string;
+  lastDigits: string;
+  approval: string;
 }
 
 /**
  * Payments and receipts, each on a screen of its own.
  *
- * They were one entry on the menu and one form — the journal screen with its six
- * voucher types in a dropdown — which is how a cashier taking money over a counter
- * ended up building a two-line double entry and choosing a side per line. The two
- * are the commonest documents in the system and the least like a journal: one party,
- * one cash or bank account, one amount, and the sides are decided by which of the
- * two screens somebody opened.
+ * The cash or bank account the money leaves or arrives in is chosen once, at the top,
+ * from the firm's cash and bank ledgers only; the ledgers it is paid to or received
+ * from are a grid below, as many as the one payment covers - a cheque for rent and
+ * cleaning together is one payment of two lines. The sides are decided by which of
+ * the two screens somebody opened, and whether it is a cash or a bank voucher by the
+ * account they chose.
  *
- * One component behind both, because the difference really is only the direction the
- * money moves in. Two screens that shared nothing would be two places for the
- * cheque handling and the bill settlement to arrive, and one of them would not get
- * it.
+ * How the money moved decides what else is asked. A cheque needs its number, the
+ * account it is drawn on, its date and who it is made out to, and each ledger line
+ * carries it into the cheque register; a card may note its last four digits and the
+ * approval code; cash needs nothing more.
+ *
+ * The voucher's number is issued when it is saved, and the list it lands on shows it.
  */
-export interface PaymentEntryLine {
-  readonly id: string;
-  paymentType: string;
-  accountId: string;
-  amount: string;
-  reference: string;
-}
-
 function MoneyEntry({
   direction,
 }: {
@@ -611,255 +599,221 @@ function MoneyEntry({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-
+  const narrow = useIsNarrow();
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
-  const defaultSalesman = useSettings((state) => state.defaultSalesman);
 
-  const [through, setThrough] = useState<'cash' | 'bank'>('bank');
-  const [salesman, setSalesman] = useState<string>(defaultSalesman || 'Primary');
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-
-  const [draft, setDraft] = useState<MoneyDraft>(() => ({
-    date: new Date().toISOString().slice(0, 10),
-    partyId: '',
-    accountId: '',
-    amount: '',
-    reference: '',
-    paymentMode: defaultPaymentMode,
-    narration: '',
-  }));
-
-  // The number this voucher will be given, from the server's own series for the
-  // type it is about to become. It used to be made up from a count of a report that
-  // does not exist at that address, so every receipt read "REC-1001".
-  const { next: nextNumber } = useNextNumber(
-    direction === 'payment'
-      ? through === 'cash'
-        ? DocumentType.cashPayment
-        : DocumentType.bankPayment
-      : through === 'cash'
-        ? DocumentType.cashReceipt
-        : DocumentType.bankReceipt,
-    draft.date,
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [reference, setReference] = useState('');
+  const [narration, setNarration] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [mode, setMode] = useState(
+    defaultPaymentMode && defaultPaymentMode !== 'Credit' ? defaultPaymentMode : 'Cash',
   );
-  const transactionNo = nextNumber ?? t('numbering.issuedOnSave');
-
-  const paymentModeOptions = useMemo((): readonly SelectOption[] => {
-    const known = PAYMENT_MODES.map((mode) => ({
-      value: mode.value,
-      label: t(mode.labelKey),
-    }));
-
-    if (draft.paymentMode === '' || isKnownPaymentMode(draft.paymentMode)) {
-      return known;
-    }
-
-    return [...known, { value: draft.paymentMode, label: draft.paymentMode }];
-  }, [draft.paymentMode, t]);
+  const [cheque, setCheque] = useState<ChequeDetails>({
+    number: '',
+    accountNumber: '',
+    date: '',
+    inFavourOf: '',
+  });
+  const [card, setCard] = useState<CardDetails>({
+    type: '',
+    lastDigits: '',
+    approval: '',
+  });
+  const [lines, setLines] = useState<readonly MoneyLine[]>([emptyMoneyLine()]);
+  const [problem, setProblem] = useState<string | null>(null);
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
 
-  const partyOptions = useMemo(() => {
+  const moneyAccounts = useMemo(() => all.filter(isCashOrBank), [all]);
+  const account = moneyAccounts.find((ledger) => ledger.ledgerId === accountId);
+  const isBank = account?.kind === LedgerKind.bank;
+
+  // Cash for cash, a bank for everything else, until somebody chooses.
+  const [accountTouched, setAccountTouched] = useState(false);
+  useEffect(() => {
+    if (accountTouched || moneyAccounts.length === 0) return;
+    const wantsBank = mode !== 'Cash';
+    const preferred =
+      moneyAccounts.find((ledger) =>
+        wantsBank ? ledger.kind === LedgerKind.bank : ledger.kind === LedgerKind.cash,
+      ) ?? moneyAccounts[0];
+    if (preferred && preferred.ledgerId !== accountId) setAccountId(preferred.ledgerId);
+  }, [moneyAccounts, mode, accountTouched, accountId]);
+
+  const accountOptions = useMemo(
+    () =>
+      moneyAccounts.map((ledger) => ({
+        ...ledgerOption(ledger),
+        detail:
+          ledger.kind === LedgerKind.bank
+            ? t('vouchers.groupBank')
+            : t('vouchers.groupCash'),
+      })),
+    [moneyAccounts, t],
+  );
+
+  // Parties first, then everything else that is not itself cash or bank.
+  const ledgerOptions = useMemo(() => {
     const parties = all.filter(isParty).map(ledgerOption);
     const others = all
-      .filter((ledger) => !isParty(ledger) && !isMoneyAccount(ledger))
+      .filter((ledger) => !isParty(ledger) && !isCashOrBank(ledger))
       .map(ledgerOption);
-
     return [...parties, ...others];
   }, [all]);
 
-  const accounts = useMemo(
-    () =>
-      all.filter((ledger) =>
-        through === 'cash'
-          ? ledger.kind === LedgerKind.cash
-          : ledger.kind === LedgerKind.bank,
-      ),
-    [all, through],
+  const modeOptions = useMemo(
+    (): readonly SelectOption[] =>
+      PAYMENT_MODES.filter((option) => option.value !== 'Credit').map((option) => ({
+        value: option.value,
+        label: t(option.labelKey),
+      })),
+    [t],
   );
 
-  const moneyAccountOptions = useMemo(
-    () => all.filter(isMoneyAccount).map(ledgerOption),
-    [all],
-  );
-
-  const [paymentEntries, setPaymentEntries] = useState<readonly PaymentEntryLine[]>([
-    {
-      id: '1',
-      paymentType: defaultPaymentMode || 'Cash',
-      accountId: '',
-      amount: '',
-      reference: '',
-    },
-  ]);
-
-  useEffect(() => {
-    if (
-      paymentEntries.length === 1 &&
-      !paymentEntries[0]?.accountId &&
-      accounts.length > 0
-    ) {
-      const defaultAcc = accounts[0]?.ledgerId ?? '';
-      setPaymentEntries([{ ...paymentEntries[0]!, accountId: defaultAcc }]);
-      setDraft((curr) => ({ ...curr, accountId: defaultAcc }));
-    }
-  }, [accounts, paymentEntries]);
-
-  const totalPaymentAmount = useMemo(() => {
-    return paymentEntries.reduce((sum, entry) => {
-      const val = Number(entry.amount);
-      return Number.isFinite(val) && val > 0 ? sum + val : sum;
-    }, 0);
-  }, [paymentEntries]);
-
-  const addPaymentEntry = (): void => {
-    const defaultAcc = accounts[0]?.ledgerId ?? moneyAccountOptions[0]?.value ?? '';
-    setPaymentEntries((current) => [
-      ...current,
-      {
-        id: Math.random().toString(36).slice(2, 9),
-        paymentType: draft.paymentMode || 'Cash',
-        accountId: defaultAcc,
-        amount: '',
-        reference: '',
-      },
-    ]);
-  };
-
-  const updatePaymentEntry = (id: string, patch: Partial<PaymentEntryLine>): void => {
-    setPaymentEntries((current) => {
-      const next = current.map((item) => (item.id === id ? { ...item, ...patch } : item));
-      const nextTotal = next.reduce((sum, item) => {
-        const val = Number(item.amount);
-        return Number.isFinite(val) && val > 0 ? sum + val : sum;
-      }, 0);
-      setDraft((curr) => ({
-        ...curr,
-        amount: nextTotal > 0 ? String(nextTotal) : '',
-        ...(next.length === 1 && patch.accountId !== undefined
-          ? { accountId: patch.accountId }
-          : {}),
-      }));
-      return next;
-    });
-  };
-
-  const removePaymentEntry = (id: string): void => {
-    if (paymentEntries.length <= 1) return;
-    setPaymentEntries((current) => {
-      const next = current.filter((item) => item.id !== id);
-      const nextTotal = next.reduce((sum, item) => {
-        const val = Number(item.amount);
-        return Number.isFinite(val) && val > 0 ? sum + val : sum;
-      }, 0);
-      setDraft((curr) => ({
-        ...curr,
-        amount: nextTotal > 0 ? String(nextTotal) : '',
-      }));
-      return next;
-    });
-  };
-
-  const handlePaymentModeChange = (mode: string): void => {
-    set('paymentMode', mode);
-    if (paymentEntries.length > 0 && paymentEntries[0]) {
-      updatePaymentEntry(paymentEntries[0].id, { paymentType: mode });
-    }
-  };
-
-  const { errors, submit, reset } = useValidation<MoneyDraft>((values) =>
-    collect({
-      date: required(values.date, t('vouchers.dateRequired')),
-      partyId: required(values.partyId, t('vouchers.partyRequired')),
-      amount:
-        required(values.amount, t('vouchers.amountRequired')) ??
-        numeric(values.amount, t('vouchers.amountInvalid'), { min: 0.01 }),
-    }),
-  );
+  const entered = lines.filter((line) => parseAmount(line.amount) > 0);
+  const total = entered.reduce((sum, line) => sum + parseAmount(line.amount), 0);
 
   const type =
     direction === 'receipt'
-      ? through === 'cash'
-        ? VoucherType.cashReceipt
-        : VoucherType.bankReceipt
-      : through === 'cash'
-        ? VoucherType.cashPayment
-        : VoucherType.bankPayment;
+      ? isBank
+        ? VoucherType.bankReceipt
+        : VoucherType.cashReceipt
+      : isBank
+        ? VoucherType.bankPayment
+        : VoucherType.cashPayment;
 
-  const post = useMutation<CreateVoucherResponse, ApiError, MoneyDraft>({
-    mutationFn: (values) => {
-      const finalReference = values.reference.trim() || nextNumber || '';
-      const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
+  const update = (key: string, patch: Partial<MoneyLine>): void =>
+    setLines((current) =>
+      current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+    );
+
+  /** What is wrong with the form, or null when it can be saved. */
+  const check = (): string | null => {
+    if (!date) return t('vouchers.dateRequired');
+    if (!accountId) return t('vouchers.moneyAccountRequired');
+    if (entered.length === 0) return t('vouchers.amountRequired');
+    if (entered.some((line) => !line.ledgerId)) return t('vouchers.ledgerRequired');
+    if (mode === 'Cheque') {
+      if (!cheque.number.trim()) return t('vouchers.chequeNumberRequired');
+      if (direction === 'payment' && !isBank) return t('vouchers.chequeNeedsBank');
+    }
+    return null;
+  };
+
+  /** The card details, as the money line's narration, when any were given. */
+  const cardNote = (): string | null => {
+    if (mode !== 'Card') return null;
+    const parts = [
+      card.type.trim(),
+      card.lastDigits.trim() ? `****${card.lastDigits.trim()}` : '',
+      card.approval.trim() ? `${t('vouchers.cardApproval')} ${card.approval.trim()}` : '',
+    ].filter(Boolean);
+    return parts.length > 0 ? `${t('paymentModes.card')}: ${parts.join(' · ')}` : null;
+  };
+
+  const post = useMutation<CreateVoucherResponse, ApiError>({
+    mutationFn: () => {
       const partySide = direction === 'receipt' ? CREDIT : DEBIT;
+      const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
+      const chequeDate = cheque.date || date;
 
-      const activeEntries = paymentEntries.filter(
-        (e) => e.accountId !== '' && Number(e.amount) > 0,
-      );
+      const partyLines = entered.map((line) => {
+        const amount = parseAmount(line.amount);
+        return {
+          ledgerId: line.ledgerId,
+          side: partySide,
+          amount,
+          narration: line.narration.trim() || null,
+          // Each ledger the cheque pays carries its share into the cheque register,
+          // under the cheque's own number.
+          ...(mode === 'Cheque'
+            ? {
+                cheques: [
+                  {
+                    chequeNumber: cheque.number.trim(),
+                    instrumentDate: chequeDate,
+                    amount,
+                    bankLedgerId: direction === 'payment' ? accountId : null,
+                    accountNumber: cheque.accountNumber.trim() || null,
+                    inFavourOf: cheque.inFavourOf.trim() || null,
+                  },
+                ],
+              }
+            : {}),
+        };
+      });
 
-      const effectiveTotal = activeEntries.reduce((sum, e) => sum + Number(e.amount), 0);
-
-      const partyLine = {
-        ledgerId: values.partyId,
-        side: partySide,
-        amount: effectiveTotal,
-        narration: values.narration || null,
-      };
-
-      const moneyLines = activeEntries.map((e) => ({
-        ledgerId: e.accountId,
+      const moneyLine = {
+        ledgerId: accountId,
         side: moneySide,
-        amount: Number(e.amount),
-        narration: e.reference ? `${e.paymentType} - Ref: ${e.reference}` : e.paymentType,
-      }));
-
-      const lines =
-        direction === 'payment' ? [partyLine, ...moneyLines] : [...moneyLines, partyLine];
+        amount: Math.round(total * 100) / 100,
+        narration: cardNote(),
+      };
 
       return request<CreateVoucherResponse>('/accounting/vouchers', {
         method: 'POST',
         body: {
           type,
-          date: values.date,
-          referenceNumber: finalReference,
-          narration: values.narration || null,
-          paymentMode: values.paymentMode || null,
+          date,
+          referenceNumber: reference.trim() || null,
+          narration: narration.trim() || null,
+          paymentMode: mode || null,
           postImmediately: true,
-          lines,
+          lines:
+            direction === 'payment'
+              ? [...partyLines, moneyLine]
+              : [moneyLine, ...partyLines],
         },
       });
     },
     onSuccess: (response) => {
-      reset();
-      setDraft((current) => ({
-        ...current,
-        partyId: '',
-        amount: '',
-        reference: '',
-        narration: '',
-      }));
-      setPaymentEntries([
-        {
-          id: Math.random().toString(36).slice(2, 9),
-          paymentType: defaultPaymentMode || 'Cash',
-          accountId: accounts[0]?.ledgerId ?? '',
-          amount: '',
-          reference: '',
-        },
-      ]);
-      setPaymentError(null);
-
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
       void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+      void queryClient.invalidateQueries({ queryKey: ['cheques'] });
 
       navigate(listedAt(type, response.number));
     },
   });
 
-  const set = <TField extends keyof MoneyDraft>(
-    field: TField,
-    value: MoneyDraft[TField],
-  ): void => setDraft((current) => ({ ...current, [field]: value }));
+  const ledgerControl = (line: MoneyLine): React.JSX.Element => (
+    <SearchSelect
+      value={line.ledgerId}
+      onChange={(ledgerId) => update(line.key, { ledgerId })}
+      options={ledgerOptions}
+      disabled={ledgers.isPending}
+      size="sm"
+      label={t('vouchers.ledger')}
+      placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+    />
+  );
+
+  const amountControl = (line: MoneyLine): React.JSX.Element => (
+    <AmountInput
+      label={t('vouchers.amount')}
+      value={line.amount}
+      onChange={(amount) => update(line.key, { amount })}
+    />
+  );
+
+  const narrationControl = (line: MoneyLine): React.JSX.Element => (
+    <input
+      aria-label={t('vouchers.lineNarration')}
+      className="field-input-sm w-full"
+      value={line.narration}
+      onChange={(e) => update(line.key, { narration: e.target.value })}
+    />
+  );
+
+  const removeControl = (line: MoneyLine): React.JSX.Element => (
+    <RemoveButton
+      label={t('vouchers.removeLine')}
+      disabled={lines.length <= 1}
+      onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+    />
+  );
 
   return (
     <section className="page">
@@ -885,268 +839,201 @@ function MoneyEntry({
         className="card card-body space-y-5"
         onSubmit={(event) => {
           event.preventDefault();
-          setPaymentError(null);
-
-          if (!draft.partyId) {
-            setPaymentError(t('vouchers.partyRequired'));
-            return;
-          }
-
-          const activeEntries = paymentEntries.filter((e) => Number(e.amount) > 0);
-          if (activeEntries.length === 0 || totalPaymentAmount <= 0) {
-            setPaymentError(t('vouchers.amountRequired'));
-            return;
-          }
-
-          const missingAccount = activeEntries.some((e) => !e.accountId);
-          if (missingAccount) {
-            setPaymentError(t('vouchers.missingAccount'));
-            return;
-          }
-
-          if (submit(draft)) {
-            post.mutate(draft);
-          }
+          const wrong = check();
+          setProblem(wrong);
+          if (wrong === null) post.mutate();
         }}
       >
-        {/* Transaction Header Grid (Requirements 9 & 15) */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border border-line bg-surface-2/40 p-4">
-          <TextField
-            label={t('vouchers.transactionNo')}
-            value={transactionNo}
-            onChange={() => {}}
-            disabled
-            hint={t('vouchers.autoGenerated')}
-            className="bg-surface-3/50 font-mono font-semibold"
-            size="sm"
-          />
-
-          <TextField
-            label={t('vouchers.referenceNo')}
-            value={draft.reference}
-            onChange={(value) => set('reference', value)}
-            placeholder={nextNumber ?? ''}
-            hint={t('vouchers.referenceNoHint')}
-            size="sm"
-          />
-
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <DateField
             label={t('vouchers.date')}
             required
-            value={draft.date}
-            onChange={(value) => set('date', value)}
-            error={errors['date']}
+            value={date}
+            onChange={setDate}
             size="sm"
           />
-
           <TextField
-            label={t('vouchers.salesman')}
-            value={salesman}
-            onChange={setSalesman}
-            placeholder={t('vouchers.primarySalesman')}
+            label={t('vouchers.referenceNo')}
+            value={reference}
+            onChange={setReference}
             size="sm"
           />
-        </div>
-
-        {/* Primary Account & Mode Selection (Requirement 10) */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="sm:col-span-2">
-            <Field
+          <Field
+            label={
+              direction === 'payment'
+                ? t('vouchers.paidFrom')
+                : t('vouchers.receivedInto')
+            }
+            required
+          >
+            <SearchSelect
+              value={accountId}
+              onChange={(value) => {
+                setAccountTouched(true);
+                setAccountId(value);
+              }}
+              options={accountOptions}
+              disabled={ledgers.isPending}
+              size="sm"
               label={
                 direction === 'payment'
-                  ? t('vouchers.debitAccount')
-                  : t('vouchers.creditAccount')
+                  ? t('vouchers.paidFrom')
+                  : t('vouchers.receivedInto')
               }
-              required
-              hint={
-                direction === 'payment'
-                  ? t('vouchers.debitAccountHint')
-                  : t('vouchers.creditAccountHint')
-              }
-              error={errors['partyId']}
-            >
-              <SearchSelect
-                value={draft.partyId}
-                onChange={(value) => set('partyId', value)}
-                options={partyOptions}
-                disabled={ledgers.isPending}
-                invalid={errors['partyId'] !== undefined}
-                label={
-                  direction === 'payment'
-                    ? t('vouchers.debitAccount')
-                    : t('vouchers.creditAccount')
-                }
-                placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
-              />
-            </Field>
-          </div>
-
-          <Field label={t('vouchers.paymentMode')}>
-            <SearchSelect
-              value={draft.paymentMode}
-              onChange={handlePaymentModeChange}
-              options={paymentModeOptions}
-              label={t('vouchers.paymentMode')}
-              placeholder={t('vouchers.paymentModeNone')}
-              clearable
+              placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
             />
           </Field>
+          <Field label={t('vouchers.paymentMode')}>
+            <SearchSelect
+              value={mode}
+              onChange={(value) => setMode(value || 'Cash')}
+              options={modeOptions}
+              size="sm"
+              label={t('vouchers.paymentMode')}
+            />
+          </Field>
+        </div>
 
-          <SelectField
-            label={t('vouchers.through')}
-            required
-            value={through}
-            onChange={(value) => {
-              setThrough(value as 'cash' | 'bank');
-              const relevant = all.filter((ledger) =>
-                value === 'cash'
-                  ? ledger.kind === LedgerKind.cash
-                  : ledger.kind === LedgerKind.bank,
-              );
-              if (relevant.length > 0 && paymentEntries.length === 1) {
-                const nextAcc = relevant[0]!.ledgerId;
-                updatePaymentEntry(paymentEntries[0]!.id, { accountId: nextAcc });
+        {mode === 'Cheque' && (
+          <fieldset className="grid grid-cols-1 gap-3 rounded-xl border border-line p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <legend className="px-1 text-xs font-bold tracking-wider text-ink uppercase">
+              {t('vouchers.chequeDetails')}
+            </legend>
+            <TextField
+              label={t('vouchers.chequeNumber')}
+              required
+              value={cheque.number}
+              onChange={(value) => setCheque({ ...cheque, number: value })}
+              size="sm"
+            />
+            <TextField
+              label={t('vouchers.chequeAccountNumber')}
+              value={cheque.accountNumber}
+              onChange={(value) => setCheque({ ...cheque, accountNumber: value })}
+              size="sm"
+            />
+            <DateField
+              label={t('vouchers.chequeDate')}
+              value={cheque.date || date}
+              onChange={(value) => setCheque({ ...cheque, date: value })}
+              size="sm"
+            />
+            <TextField
+              label={t('vouchers.inFavourOf')}
+              value={cheque.inFavourOf}
+              onChange={(value) => setCheque({ ...cheque, inFavourOf: value })}
+              size="sm"
+            />
+          </fieldset>
+        )}
+
+        {mode === 'Card' && (
+          <fieldset className="grid grid-cols-1 gap-3 rounded-xl border border-line p-4 sm:grid-cols-3">
+            <legend className="px-1 text-xs font-bold tracking-wider text-ink uppercase">
+              {t('vouchers.cardDetails')}
+            </legend>
+            <TextField
+              label={t('vouchers.cardType')}
+              value={card.type}
+              onChange={(value) => setCard({ ...card, type: value })}
+              placeholder="Visa, Mastercard…"
+              size="sm"
+            />
+            <TextField
+              label={t('vouchers.cardLastDigits')}
+              value={card.lastDigits}
+              onChange={(value) =>
+                setCard({ ...card, lastDigits: value.replace(/\D/g, '').slice(0, 4) })
               }
-            }}
-            options={[
-              { value: 'bank', label: t('vouchers.throughBank') },
-              { value: 'cash', label: t('vouchers.throughCash') },
-            ]}
-          />
-        </div>
+              size="sm"
+            />
+            <TextField
+              label={t('vouchers.cardApproval')}
+              value={card.approval}
+              onChange={(value) => setCard({ ...card, approval: value })}
+              size="sm"
+            />
+          </fieldset>
+        )}
 
-        {/* Multiple Payments Table (Requirements 11 & 16) */}
-        <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                {t('vouchers.multiplePayments')}
-              </span>
-              <p className="text-xs text-ink-muted">
-                {t('vouchers.multiplePaymentsHint')}
-              </p>
+        <LinesFrame
+          title={
+            direction === 'payment'
+              ? t('vouchers.paymentDetails')
+              : t('vouchers.receiptDetails')
+          }
+          hint={
+            direction === 'payment'
+              ? t('vouchers.paymentDetailsHint')
+              : t('vouchers.receiptDetailsHint')
+          }
+          addLabel={t('vouchers.addLedger')}
+          onAdd={() => setLines((current) => [...current, emptyMoneyLine()])}
+        >
+          {narrow ? (
+            <div className="space-y-3">
+              {lines.map((line, index) => (
+                <div
+                  key={line.key}
+                  className="space-y-2.5 rounded-lg border border-line p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-ink-muted">
+                      #{index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">{ledgerControl(line)}</div>
+                    {removeControl(line)}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {amountControl(line)}
+                    {narrationControl(line)}
+                  </div>
+                </div>
+              ))}
             </div>
-            <button
-              type="button"
-              onClick={addPaymentEntry}
-              className="btn-secondary btn-xs flex items-center gap-1 text-xs"
-            >
-              <IconPlus className="size-3" />
-              {t('vouchers.addPaymentEntry')}
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="border-b border-line bg-surface-2 text-ink-muted">
-                <tr>
-                  <th className="w-32 px-3 py-2 text-start font-semibold">
-                    {t('vouchers.paymentType')}
-                  </th>
-                  <th className="px-3 py-2 text-start font-semibold">
-                    {t('vouchers.account')}
-                  </th>
-                  <th className="w-36 px-3 py-2 text-end font-semibold">
-                    {t('vouchers.amount')}
-                  </th>
-                  <th className="w-48 px-3 py-2 text-start font-semibold">
-                    {t('vouchers.chequeOrRef')}
-                  </th>
-                  <th className="w-10 px-2 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {paymentEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-surface-2/40">
-                    <td className="px-3 py-1.5">
-                      <select
-                        value={entry.paymentType}
-                        onChange={(e) =>
-                          updatePaymentEntry(entry.id, { paymentType: e.target.value })
-                        }
-                        className="field-input-sm w-full py-1 text-xs font-medium"
-                      >
-                        <option value="Cash">{t('vouchers.cash')}</option>
-                        <option value="Credit">{t('vouchers.credit')}</option>
-                        <option value="Bank">{t('vouchers.bank')}</option>
-                        <option value="Cheque">{t('vouchers.cheque')} payment</option>
-                        <option value="Card">{t('vouchers.card')}</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <SearchSelect
-                        value={entry.accountId}
-                        onChange={(accountId) =>
-                          updatePaymentEntry(entry.id, { accountId })
-                        }
-                        options={moneyAccountOptions}
-                        size="sm"
-                        label={t('vouchers.account')}
-                        placeholder={t('common.choose')}
-                      />
-                    </td>
-                    <td className="px-3 py-1.5 text-end">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.01"
-                        min="0"
-                        value={entry.amount}
-                        onChange={(e) =>
-                          updatePaymentEntry(entry.id, { amount: e.target.value })
-                        }
-                        placeholder="0.00"
-                        className="field-input-sm w-32 text-end font-mono tabular-nums"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <input
-                        type="text"
-                        value={entry.reference}
-                        onChange={(e) =>
-                          updatePaymentEntry(entry.id, { reference: e.target.value })
-                        }
-                        placeholder={t('vouchers.chequeOrRef')}
-                        className="field-input-sm w-full"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 text-end">
-                      {paymentEntries.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removePaymentEntry(entry.id)}
-                          className="rounded p-1 text-ink-muted transition hover:text-red-600"
-                          title="Remove entry"
-                        >
-                          <IconClose className="size-3.5" />
-                        </button>
-                      )}
-                    </td>
+          ) : (
+            <div className="table-wrap">
+              <table className="table min-w-[40rem]">
+                <thead>
+                  <tr>
+                    <th className="w-10 text-start">#</th>
+                    <th className="text-start">{t('vouchers.ledger')}</th>
+                    <th className="w-40 text-end">{t('vouchers.amount')}</th>
+                    <th className="text-start">{t('vouchers.lineNarration')}</th>
+                    <th className="w-10" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {lines.map((line, index) => (
+                    <tr key={line.key}>
+                      <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
+                      <td className="min-w-56 py-2">{ledgerControl(line)}</td>
+                      <td className="py-2">{amountControl(line)}</td>
+                      <td className="min-w-40 py-2">{narrationControl(line)}</td>
+                      <td className="px-2 py-2 text-end">{removeControl(line)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {/* Total Payment Amount Bar */}
           <div className="flex items-center justify-between border-t border-line pt-2 text-sm">
-            <span className="font-semibold text-ink-muted">
-              {t('vouchers.totalPaymentAmount')}:
-            </span>
-            <span className="font-mono text-base font-bold text-ink">
-              {money(totalPaymentAmount)}
+            <span className="font-semibold text-ink-muted">{t('vouchers.total')}</span>
+            <span className="font-mono text-base font-bold text-ink tabular-nums">
+              {money(total)}
             </span>
           </div>
-        </div>
+        </LinesFrame>
 
         <TextField
           label={t('vouchers.narration')}
-          value={draft.narration}
-          onChange={(value) => set('narration', value)}
+          value={narration}
+          onChange={setNarration}
           className="w-full"
         />
 
-        {paymentError && <p className="alert-error text-xs">{paymentError}</p>}
+        {problem && <p className="alert-error text-xs">{problem}</p>}
 
         <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
           {t(

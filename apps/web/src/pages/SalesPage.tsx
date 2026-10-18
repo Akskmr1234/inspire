@@ -96,6 +96,20 @@ function modeTaxRate(mode: 'NT' | 'TAX' | 'GST', defaultTaxRate: number): number
   return mode === 'NT' ? 0 : mode === 'TAX' ? defaultTaxRate : 18;
 }
 
+/**
+ * The rate a line starts at: on a tax invoice, the product's own rate from the tax rate
+ * master where it has one, otherwise the mode's.
+ */
+function lineTaxRate(
+  mode: 'NT' | 'TAX' | 'GST',
+  product: ProductSummary | undefined,
+  defaultTaxRate: number,
+): number {
+  return mode === 'TAX' && product?.taxPercentage != null
+    ? product.taxPercentage
+    : modeTaxRate(mode, defaultTaxRate);
+}
+
 const emptyLine: DraftLine = {
   productId: '',
   quantity: '1',
@@ -841,7 +855,7 @@ function EntryDialog({
 
   /** Adds one unit of a product to the invoice, with its serial number if it has one. */
   const addScanned = (found: ProductSummary, serial: string | null): void => {
-    const defaultTax = modeTaxRate(taxMode, settings.defaultTaxRate);
+    const defaultTax = lineTaxRate(taxMode, found, settings.defaultTaxRate);
     const baseRate =
       rateType === 'wholesale'
         ? found.wholesaleRate || found.retailRate
@@ -962,9 +976,13 @@ function EntryDialog({
 
   const handleTaxModeChange = (newMode: 'NT' | 'TAX' | 'GST'): void => {
     setTaxMode(newMode);
-    const newTaxPct = modeTaxRate(newMode, settings.defaultTaxRate);
     setLines((prev) =>
       prev.map((l) => {
+        const newTaxPct = lineTaxRate(
+          newMode,
+          (products.data ?? []).find((product) => product.id === l.productId),
+          settings.defaultTaxRate,
+        );
         const updated = { ...l, taxPercentage: String(newTaxPct) };
         if (reverseCalc && l.inclusiveRate) {
           const inc = Number(l.inclusiveRate);
@@ -1379,6 +1397,7 @@ function EntryDialog({
                 serialDirection={isReturn(kind) ? 'back' : 'out'}
                 rateType={rateType}
                 modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
+                productTax={taxMode === 'TAX'}
                 reverseCalc={reverseCalc}
                 autoBatch={autoBatch}
                 enableFreeQty={enableFreeQty}
@@ -1636,6 +1655,7 @@ function LineRow({
   serialDirection,
   rateType,
   modeRate,
+  productTax,
   reverseCalc,
   autoBatch,
   enableFreeQty,
@@ -1654,6 +1674,8 @@ function LineRow({
   readonly rateType: 'retail' | 'wholesale' | 'mrp';
   /** The rate the tax mode starts a line at. */
   readonly modeRate: number;
+  /** Whether a chosen product brings its own rate from the tax rate master. */
+  readonly productTax: boolean;
   readonly reverseCalc: boolean;
   readonly autoBatch: boolean;
   readonly enableFreeQty: boolean;
@@ -1760,7 +1782,8 @@ function LineRow({
       // A product chosen afresh starts at the mode's rate, like its price starts at
       // the master's: whatever the previous product on this line carried is not a
       // rate anybody chose for this one.
-      const defaultTax = modeRate;
+      const defaultTax =
+        productTax && chosen.taxPercentage != null ? chosen.taxPercentage : modeRate;
       const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
       onChange({
         productId: value,

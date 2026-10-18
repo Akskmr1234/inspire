@@ -478,3 +478,13 @@ public sealed class PurchaseOrderChargeIdConverter
     {
     }
 }
+
+/// <summary>Stores a <see cref="TaxSlabId"/> as a GUID.</summary>
+public sealed class TaxSlabIdConverter : ValueConverter<TaxSlabId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="TaxSlabIdConverter"/> class.</summary>
+    public TaxSlabIdConverter()
+        : base(id => id.Value, value => TaxSlabId.From(value))
+    {
+    }
+}

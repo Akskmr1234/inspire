@@ -46,6 +46,24 @@ public sealed record DashboardBlueprint(
 /// </remarks>
 public static class DashboardCatalogue
 {
+    /// <summary>
+    /// How the day and the month are going: sales, profit and running expenses. First on
+    /// the dashboard, because it is the first thing a shop asks of it.
+    /// </summary>
+    /// <remarks>
+    /// Added to firms seeded before these panels existed, ahead of what they already
+    /// show - once: a firm that has any of them keeps its arrangement.
+    /// </remarks>
+    public static IReadOnlyList<WidgetBlueprint> Trading { get; } =
+    [
+        new(DashboardMetrics.SalesToday, "Sales today", "مبيعات اليوم", WidgetKind.Kpi),
+        new(DashboardMetrics.SalesThisMonth, "Sales this month", "مبيعات الشهر", WidgetKind.Kpi),
+        new(DashboardMetrics.ProfitToday, "Profit today", "ربح اليوم", WidgetKind.Kpi),
+        new(DashboardMetrics.ProfitThisMonth, "Profit this month", "ربح الشهر", WidgetKind.Kpi),
+        new(DashboardMetrics.ExpensesToday, "Expenses today", "مصروفات اليوم", WidgetKind.Kpi),
+        new(DashboardMetrics.ExpensesThisMonth, "Expenses this month", "مصروفات الشهر", WidgetKind.Kpi),
+    ];
+
     /// <summary>The default dashboards, in display order.</summary>
     public static IReadOnlyList<DashboardBlueprint> Default { get; } =
     [
@@ -55,6 +73,7 @@ public static class DashboardCatalogue
             "نظرة عامة على الحسابات",
             ["Super Administrator", "Firm Administrator", "Accountant"],
             [
+                .. Trading,
                 new(
                     DashboardMetrics.Receivables,
                     "Receivables",

@@ -145,6 +145,7 @@ public sealed partial class DatabaseSeeder
         int ledgersAdded = await EnsureChartOfAccountsAsync(firm, cancellationToken);
         int menuEntriesAdded = await EnsureMenuAsync(firm, cancellationToken);
         await EnsureDashboardsAsync(firm, cancellationToken);
+        await EnsureTaxSlabsAsync(firm, cancellationToken);
 
         Result<bool> administrator = await EnsureAdministratorAsync(
             tenant, firm, cancellationToken);
@@ -756,13 +757,69 @@ public sealed partial class DatabaseSeeder
             .ToDictionaryAsync(item => item.Code, StringComparer.Ordinal, cancellationToken);
 
         int added = AddMenuLevel(MenuCatalogue.Default, parent: null, firm, existing);
+        int moved = RelocateMenuEntries(existing);
 
-        if (added > 0)
+        if (added > 0 || moved > 0)
         {
             await _context.SaveChangesAsync(cancellationToken);
         }
 
         return added;
+    }
+
+    /// <summary>Moves entries an earlier catalogue placed elsewhere to where they go now.</summary>
+    /// <param name="existing">The firm's entries, by code, including any just added.</param>
+    /// <returns>How many entries were moved.</returns>
+    /// <remarks>
+    /// Only an entry still under the heading the old catalogue gave it is moved; one an
+    /// administrator has put somewhere else stays there. Run after the new headings are
+    /// added, so there is somewhere to move to.
+    /// </remarks>
+    private static int RelocateMenuEntries(Dictionary<string, MenuItem> existing)
+    {
+        Dictionary<string, int> positions = new(StringComparer.Ordinal);
+        CollectMenuPositions(MenuCatalogue.Default, positions);
+
+        int moved = 0;
+
+        foreach (MenuRelocation relocation in MenuCatalogue.Relocations)
+        {
+            if (!existing.TryGetValue(relocation.Code, out MenuItem? item)
+                || !existing.TryGetValue(relocation.FromParentCode, out MenuItem? from)
+                || !existing.TryGetValue(relocation.ToParentCode, out MenuItem? to)
+                || item.ParentId != from.Id
+                || item.MoveTo(to).IsFailure)
+            {
+                continue;
+            }
+
+            if (positions.TryGetValue(relocation.Code, out int sortOrder))
+            {
+                item.Reorder(sortOrder);
+            }
+
+            moved++;
+        }
+
+        return moved;
+    }
+
+    /// <summary>Records the sort order the catalogue gives every entry.</summary>
+    /// <param name="blueprints">One level of the catalogue.</param>
+    /// <param name="positions">The sort orders, by code.</param>
+    private static void CollectMenuPositions(
+        IReadOnlyList<MenuBlueprint> blueprints,
+        Dictionary<string, int> positions)
+    {
+        for (int index = 0; index < blueprints.Count; index++)
+        {
+            positions[blueprints[index].Code] = (index + 1) * 10;
+
+            if (blueprints[index].Children is { Count: > 0 } children)
+            {
+                CollectMenuPositions(children, positions);
+            }
+        }
     }
 
     /// <summary>Adds one level of the catalogue, and everything beneath it.</summary>
@@ -857,6 +914,7 @@ public sealed partial class DatabaseSeeder
 
             if (existing.Contains(blueprint.Code))
             {
+                added |= await AddTradingPanelsAsync(firm, blueprint, cancellationToken);
                 continue;
             }
 
@@ -902,6 +960,91 @@ public sealed partial class DatabaseSeeder
         {
             await _context.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    /// <summary>Gives a firm with no tax rates the two most firms start with.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the operation.</returns>
+    /// <remarks>
+    /// Exempt at nothing and VAT at five percent, the second the default - the same
+    /// rate a document has always defaulted to. Only when the firm has none at all: a
+    /// firm that has set up its own keeps exactly what it set up.
+    /// </remarks>
+    private async Task EnsureTaxSlabsAsync(Firm firm, CancellationToken cancellationToken)
+    {
+        if (await _context.TaxSlabs.AnyAsync(slab => slab.FirmId == firm.Id, cancellationToken))
+        {
+            return;
+        }
+
+        Result<TaxSlab> exempt = TaxSlab.Create(firm.TenantId, firm.Id, "EXEMPT", "Exempt", 0m);
+        Result<TaxSlab> vat = TaxSlab.Create(firm.TenantId, firm.Id, "VAT-5", "VAT 5%", 5m);
+
+        if (exempt.IsFailure || vat.IsFailure)
+        {
+            return;
+        }
+
+        exempt.Value.SetArabicName("معفى");
+        vat.Value.SetArabicName("ضريبة القيمة المضافة 5%");
+        vat.Value.MakeDefault();
+
+        _context.TaxSlabs.AddRange(exempt.Value, vat.Value);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Puts the trading panels on a dashboard seeded before they existed.</summary>
+    /// <param name="firm">The firm.</param>
+    /// <param name="blueprint">The dashboard as the catalogue describes it.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Whether any panel was added.</returns>
+    /// <remarks>
+    /// Ahead of the panels already there, and only when the dashboard has none of them:
+    /// a firm that has since removed one keeps its arrangement rather than having it
+    /// put back on every start.
+    /// </remarks>
+    private async Task<bool> AddTradingPanelsAsync(
+        Firm firm,
+        DashboardBlueprint blueprint,
+        CancellationToken cancellationToken)
+    {
+        if (!blueprint.Widgets.Any(widget => DashboardCatalogue.Trading.Contains(widget)))
+        {
+            return false;
+        }
+
+        Dashboard? dashboard = await _context.Dashboards
+            .Include(candidate => candidate.Widgets)
+            .FirstOrDefaultAsync(
+                candidate => candidate.FirmId == firm.Id && candidate.Code == blueprint.Code,
+                cancellationToken);
+
+        HashSet<string> trading = [.. DashboardCatalogue.Trading.Select(widget => widget.MetricCode)];
+
+        if (dashboard is null
+            || dashboard.Widgets.Any(widget => widget.MetricCode is { } code && trading.Contains(code)))
+        {
+            return false;
+        }
+
+        for (int position = 0; position < DashboardCatalogue.Trading.Count; position++)
+        {
+            WidgetBlueprint widget = DashboardCatalogue.Trading[position];
+
+            // Numbered below the first seeded panel's 10, so they lead without the
+            // panels already there having to move.
+            Result<DashboardWidget> panel = dashboard.AddWidget(
+                widget.MetricCode, widget.Title, widget.Kind, position + 1, widget.Span);
+
+            if (panel.IsSuccess)
+            {
+                panel.Value.SetArabicTitle(widget.TitleArabic);
+                _context.Add(panel.Value);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Creates the administrator account.</summary>

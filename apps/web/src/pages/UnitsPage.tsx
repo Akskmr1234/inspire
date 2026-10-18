@@ -202,9 +202,7 @@ function AddUnit({
 
   const { errors, submit } = useValidation<typeof draft>((values) =>
     collect({
-      code:
-        required(values.code, t('units.codeRequired')) ??
-        maxLength(values.code, 20, t('units.codeTooLong')),
+      code: maxLength(values.code, 20, t('units.codeTooLong')),
       name:
         required(values.name, t('units.nameRequired')) ??
         maxLength(values.name, 100, t('units.nameTooLong')),
@@ -235,7 +233,7 @@ function AddUnit({
 
         run(async () => {
           await createMaster('units', {
-            code: code.trim(),
+            code: code.trim() || null,
             name: name.trim(),
             symbol: symbol.trim() || null,
             baseUnitId: baseUnitId || null,
@@ -248,12 +246,11 @@ function AddUnit({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          required
           autoFocus
+          placeholder={t('masters.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}
-          placeholder="BOX"
         />
         <TextField
           label={t('masters.name')}

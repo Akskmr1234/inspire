@@ -79,6 +79,12 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
     /// <summary>The longest a drawn-on bank name may be.</summary>
     public const int MaximumBankNameLength = 100;
 
+    /// <summary>The longest account number a cheque may note.</summary>
+    public const int MaximumAccountNumberLength = 34;
+
+    /// <summary>The longest payee a cheque may note.</summary>
+    public const int MaximumPayeeLength = 200;
+
     /// <summary>The longest a closure reason may be.</summary>
     public const int MaximumReasonLength = 500;
 
@@ -187,6 +193,16 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
     /// cheque is chased.
     /// </remarks>
     public string? DrawnOnBank { get; private set; }
+
+    /// <summary>Gets the account number on the face of the cheque, if it was noted.</summary>
+    public string? AccountNumber { get; private set; }
+
+    /// <summary>Gets who the cheque is made out to, if it was noted.</summary>
+    /// <remarks>
+    /// The payee line. On a cheque the firm writes it is not always the ledger being
+    /// paid - a supplier's owner, a landlord's agent - and it is what the bank checks.
+    /// </remarks>
+    public string? InFavourOf { get; private set; }
 
     /// <summary>Gets the lifecycle status.</summary>
     public ChequeStatus Status { get; private set; }
@@ -317,6 +333,31 @@ public sealed class Cheque : AggregateRoot<ChequeId>, IFirmScoped, IAuditable
             amount,
             bankLedgerId,
             string.IsNullOrWhiteSpace(drawnOnBank) ? null : drawnOnBank.Trim()));
+    }
+
+    /// <summary>Notes the account number and payee written on the cheque.</summary>
+    /// <param name="accountNumber">The account number, or null.</param>
+    /// <param name="inFavourOf">The payee, or null.</param>
+    /// <returns>Success, or the reason either was refused.</returns>
+    public Result Describe(string? accountNumber, string? inFavourOf)
+    {
+        if (accountNumber is not null && accountNumber.Trim().Length > MaximumAccountNumberLength)
+        {
+            return Result.Failure(Error.Validation(
+                "Cheque.AccountNumberTooLong",
+                $"An account number cannot exceed {MaximumAccountNumberLength} characters."));
+        }
+
+        if (inFavourOf is not null && inFavourOf.Trim().Length > MaximumPayeeLength)
+        {
+            return Result.Failure(Error.Validation(
+                "Cheque.PayeeTooLong",
+                $"A payee cannot exceed {MaximumPayeeLength} characters."));
+        }
+
+        AccountNumber = string.IsNullOrWhiteSpace(accountNumber) ? null : accountNumber.Trim();
+        InFavourOf = string.IsNullOrWhiteSpace(inFavourOf) ? null : inFavourOf.Trim();
+        return Result.Success();
     }
 
     /// <summary>Determines whether the cheque is post-dated as at a date.</summary>

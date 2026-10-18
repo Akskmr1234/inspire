@@ -23,6 +23,9 @@ namespace ERP.Application.Purchase;
 /// </remarks>
 internal static class PurchaseReceipt
 {
+    /// <summary>The places a product's cost is held to.</summary>
+    private const int ProductCostScale = 4;
+
     /// <summary>Describes the stock movement a posted purchase document makes.</summary>
     /// <param name="invoice">The document being posted.</param>
     /// <returns>The stock command, ready for the ordinary loader to build.</returns>
@@ -68,6 +71,52 @@ internal static class PurchaseReceipt
             ExpiresOn: line.ExpiresOn,
             SerialNumbers: [.. line.Serials.Select(serial => serial.SerialNumber)],
             WarrantyUntil: null);
+
+    /// <summary>
+    /// Sets the cost of every product costed at its last purchase rate to what this
+    /// purchase paid for it.
+    /// </summary>
+    /// <param name="invoice">The purchase just posted.</param>
+    /// <param name="products">Its products, loaded for the receipt.</param>
+    /// <returns>How many products were repriced.</returns>
+    /// <remarks>
+    /// The rate per stock unit, net of the line's discount - the same figure the
+    /// receipt values the shelf at. A product bought on two lines of one invoice takes
+    /// the later line's. A return changes nothing: the supplier's price was not what
+    /// it was bought at, only what it went back at.
+    /// </remarks>
+    internal static int ApplyLastPurchaseRates(
+        PurchaseInvoice invoice,
+        IReadOnlyDictionary<ProductId, Product> products)
+    {
+        ArgumentNullException.ThrowIfNull(invoice);
+        ArgumentNullException.ThrowIfNull(products);
+
+        if (invoice.IsReturn)
+        {
+            return 0;
+        }
+
+        int repriced = 0;
+
+        foreach (PurchaseInvoiceLine line in invoice.Lines.OrderBy(line => line.LineNumber))
+        {
+            if (line.StockQuantity <= 0m
+                || !products.TryGetValue(line.ProductId, out Product? product)
+                || product.CostingMethod != CostingMethod.LastPurchaseRate)
+            {
+                continue;
+            }
+
+            decimal cost = decimal.Round(
+                CostPerStockUnit(line), ProductCostScale, MidpointRounding.AwayFromZero);
+
+            product.SetRates(product.Rates with { Cost = cost });
+            repriced++;
+        }
+
+        return repriced;
+    }
 
     /// <summary>What one stock unit cost, net of the discount taken off the line.</summary>
     /// <remarks>

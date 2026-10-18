@@ -794,7 +794,7 @@ function SidebarEntry({
         {collapsed ? (
           <hr className="mx-3 my-2 border-line" />
         ) : (
-          <p className="nav-heading">{label}</p>
+          <p className={depth > 0 ? 'nav-subheading' : 'nav-heading'}>{label}</p>
         )}
         {children}
       </div>

@@ -401,6 +401,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AccountNumber")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)")
+                        .HasColumnName("account_number");
+
                     b.Property<Guid?>("BankLedgerId")
                         .HasColumnType("uuid")
                         .HasColumnName("bank_ledger_id");
@@ -448,6 +453,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FirmId")
                         .HasColumnType("uuid")
                         .HasColumnName("firm_id");
+
+                    b.Property<string>("InFavourOf")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("in_favour_of");
 
                     b.Property<DateOnly>("InstrumentDate")
                         .HasColumnType("date")
@@ -2023,6 +2033,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("stock_unit_id");
 
+                    b.Property<Guid?>("TaxSlabId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tax_slab_id");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -2154,6 +2168,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StockUnitId")
                         .HasDatabaseName("ix_products_stock_unit_id");
+
+                    b.HasIndex("TaxSlabId")
+                        .HasDatabaseName("ix_products_tax_slab_id");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_products_tenant");
@@ -2816,6 +2833,85 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_stock_ledger_position");
 
                     b.ToTable("stock_ledger_entries", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.TaxSlab", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameArabic")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_arabic");
+
+                    b.Property<decimal>("Percentage")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("percentage");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tax_slabs");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_tax_slabs_tenant");
+
+                    b.HasIndex("FirmId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tax_slabs_code");
+
+                    b.ToTable("tax_slabs", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Inventory.UnitOfMeasure", b =>
@@ -5663,6 +5759,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_products_units_of_measure_stock_unit_id");
+
+                    b.HasOne("ERP.Domain.Inventory.TaxSlab", null)
+                        .WithMany()
+                        .HasForeignKey("TaxSlabId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_products_tax_slabs_tax_slab_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Inventory.ProductBarcode", b =>

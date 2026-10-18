@@ -308,3 +308,19 @@ export function groupPaths(
   }
   return paths;
 }
+
+/**
+ * The groups whose ledgers money can be paid from or received into, beside the cash
+ * and bank kinds: Current Assets and Cash and Bank. EasyRetail offered the same - its
+ * schedule 7 for cash and 19 for banks, which the import files under these two.
+ */
+const MONEY_GROUPS: ReadonlySet<string> = new Set(['1100', '1110']);
+
+/** Whether a ledger is one money can be paid from or received into. */
+export function isCashOrBank(ledger: LedgerSummary): boolean {
+  return (
+    ledger.kind === LedgerKind.cash ||
+    ledger.kind === LedgerKind.bank ||
+    (MONEY_GROUPS.has(ledger.groupCode) && !isParty(ledger))
+  );
+}

@@ -50,6 +50,24 @@ public static class DashboardMetrics
     /// <summary>The customers owing the most.</summary>
     public const string TopDebtors = "accounting.top-debtors";
 
+    /// <summary>Net sales on the day, after returns.</summary>
+    public const string SalesToday = "accounting.sales-today";
+
+    /// <summary>Net sales from the first of the month to the day.</summary>
+    public const string SalesThisMonth = "accounting.sales-month";
+
+    /// <summary>Running expenses on the day - everything but the cost of goods.</summary>
+    public const string ExpensesToday = "accounting.expenses-today";
+
+    /// <summary>Running expenses from the first of the month to the day.</summary>
+    public const string ExpensesThisMonth = "accounting.expenses-month";
+
+    /// <summary>Net profit on the day: all income less all expense.</summary>
+    public const string ProfitToday = "accounting.profit-today";
+
+    /// <summary>Net profit from the first of the month to the day.</summary>
+    public const string ProfitThisMonth = "accounting.profit-month";
+
     /// <summary>Every metric the server knows how to compute, with its permission.</summary>
     public static IReadOnlyDictionary<string, string> Permissions { get; } =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -61,6 +79,12 @@ public static class DashboardMetrics
             [PostDatedPayable] = "accounting:report:view",
             [MonthlyPostings] = "accounting:report:view",
             [TopDebtors] = "accounting:report:view",
+            [SalesToday] = "accounting:report:view",
+            [SalesThisMonth] = "accounting:report:view",
+            [ExpensesToday] = "accounting:report:view",
+            [ExpensesThisMonth] = "accounting:report:view",
+            [ProfitToday] = "accounting:report:view",
+            [ProfitThisMonth] = "accounting:report:view",
         };
 
     /// <summary>Whether the server knows how to compute a metric.</summary>

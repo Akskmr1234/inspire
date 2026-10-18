@@ -74,6 +74,8 @@ const product = {
   isDiscontinued: false,
   isActive: true,
   barcodes: [],
+  taxSlabId: null,
+  taxPercentage: null,
 } satisfies ProductDetail;
 
 describe('when the product loads', () => {

@@ -80,6 +80,8 @@ const PrintTemplatesPage = lazyScreen(
   'PrintTemplatesPage',
 );
 const LedgersPage = lazyScreen(() => import('@/pages/LedgersPage'), 'LedgersPage');
+const EmployeesPage = lazyScreen(() => import('@/pages/EmployeesPage'), 'EmployeesPage');
+const TaxRatesPage = lazyScreen(() => import('@/pages/TaxRatesPage'), 'TaxRatesPage');
 const DashboardPage = lazyScreen(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const UnitsPage = lazyScreen(() => import('@/pages/UnitsPage'), 'UnitsPage');
 const CategoriesPage = lazyScreen(
@@ -288,6 +290,7 @@ export function App(): React.JSX.Element {
               <Route path="/settings/print-templates" element={<PrintTemplatesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/accounting/ledgers" element={<LedgersPage />} />
+              <Route path="/accounting/employees" element={<EmployeesPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/sales/invoices" element={<SalesPage />} />
               <Route path="/sales/returns" element={<SalesReturnsPage />} />
@@ -305,6 +308,7 @@ export function App(): React.JSX.Element {
               <Route path="/sales/orders" element={<SalesOrdersPage />} />
               <Route path="/purchase/suppliers" element={<SuppliersPage />} />
               <Route path="/inventory/products" element={<ProductsPage />} />
+              <Route path="/inventory/tax-rates" element={<TaxRatesPage />} />
               <Route path="/inventory/stock" element={<StockOperationsPage />} />
               <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />

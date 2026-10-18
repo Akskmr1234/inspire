@@ -64,13 +64,27 @@ describe('the balance badge', () => {
 
     await user.type(screen.getAllByLabelText(/debit amount/i)[0]!, '250');
 
-    // Turn the second line over to credit, then enter the matching amount.
-    const sides = screen.getAllByRole('combobox', { name: /dr \/ cr/i });
-    await user.click(sides[1]!);
-    await user.click(screen.getByRole('option', { name: /^credit$/i }));
-    await user.type(screen.getAllByLabelText(/credit amount/i)[0]!, '250');
+    // Each line has a debit and a credit column; the second line takes the credit.
+    await user.type(screen.getAllByLabelText(/credit amount/i)[1]!, '250');
 
     await waitFor(() => expect(screen.getByText(/^balanced$/i)).toBeTruthy());
+  });
+
+  it('keeps a line to one side, clearing the other when an amount is typed', async () => {
+    setMatchingMedia();
+    const user = userEvent.setup();
+    renderPage(<VoucherEntryPage />);
+
+    await waitFor(() => expect(screen.getByText(/nothing entered yet/i)).toBeTruthy());
+
+    const debit = screen.getAllByLabelText(/debit amount/i)[0] as HTMLInputElement;
+    const credit = screen.getAllByLabelText(/credit amount/i)[0] as HTMLInputElement;
+
+    await user.type(debit, '100');
+    await user.type(credit, '40');
+
+    expect(debit.value).toBe('');
+    expect(credit.value).toBe('40');
   });
 });
 

@@ -34,6 +34,7 @@ const product: ProductSummary = {
   barcodeCount: 1,
   wholesaleRate: 13,
   maximumRetailPrice: 0,
+  taxPercentage: null,
 };
 
 function row(shown: readonly string[]): void {

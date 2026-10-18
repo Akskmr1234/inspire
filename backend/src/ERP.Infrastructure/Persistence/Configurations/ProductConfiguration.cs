@@ -100,6 +100,11 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasForeignKey(product => product.BrandId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<TaxSlab>()
+            .WithMany()
+            .HasForeignKey(product => product.TaxSlabId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Three separate references to the same table, and all restricted. Deleting a
         // unit that products are stocked in would leave every quantity recorded
         // against it unreadable - there would be nothing left saying what the number

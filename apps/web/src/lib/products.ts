@@ -45,6 +45,8 @@ export interface ProductSummary {
    */
   readonly wholesaleRate: number;
   readonly maximumRetailPrice: number;
+  /** The percentage of its tax rate, when it has one. */
+  readonly taxPercentage: number | null;
 }
 
 /** One barcode of a product. */
@@ -102,6 +104,8 @@ export interface ProductDetail {
   readonly isDiscontinued: boolean;
   readonly isActive: boolean;
   readonly barcodes: readonly ProductBarcodeView[];
+  readonly taxSlabId: string | null;
+  readonly taxPercentage: number | null;
 }
 
 const PRODUCTS = '/inventory/products';

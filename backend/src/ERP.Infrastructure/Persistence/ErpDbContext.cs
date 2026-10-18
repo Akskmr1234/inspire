@@ -185,6 +185,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the brands products are sold under.</summary>
     public DbSet<Brand> Brands => Set<Brand>();
 
+    /// <summary>Gets the tax rates.</summary>
+    public DbSet<TaxSlab> TaxSlabs => Set<TaxSlab>();
+
     /// <summary>Gets the places stock is held.</summary>
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
@@ -358,6 +361,7 @@ public class ErpDbContext : DbContext
             .HaveConversion<UnitOfMeasureIdConverter>();
         configurationBuilder.Properties<CategoryId>().HaveConversion<CategoryIdConverter>();
         configurationBuilder.Properties<BrandId>().HaveConversion<BrandIdConverter>();
+        configurationBuilder.Properties<TaxSlabId>().HaveConversion<TaxSlabIdConverter>();
         configurationBuilder.Properties<WarehouseId>()
             .HaveConversion<WarehouseIdConverter>();
         configurationBuilder.Properties<ProductId>().HaveConversion<ProductIdConverter>();

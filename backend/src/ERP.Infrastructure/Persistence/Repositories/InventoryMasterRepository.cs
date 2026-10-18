@@ -86,6 +86,8 @@ public sealed class InventoryMasterRepository : IInventoryMasterRepository
             InventoryMasterKind.Warehouse => _context.Warehouses.AnyAsync(
                 warehouse => warehouse.FirmId == firmId && warehouse.Code == code,
                 cancellationToken),
+            InventoryMasterKind.TaxSlab => _context.TaxSlabs.AnyAsync(
+                slab => slab.FirmId == firmId && slab.Code == code, cancellationToken),
             _ => Task.FromResult(false),
         };
 

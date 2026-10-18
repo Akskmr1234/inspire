@@ -881,6 +881,11 @@ function OrderEntryDialog({
                             (kind === 'purchase' ? product?.cost : product?.retailRate) ??
                               '',
                           ),
+                          // The product's own rate from the tax rate master, where it
+                          // has one.
+                          ...(product?.taxPercentage != null
+                            ? { taxPercentage: String(product.taxPercentage) }
+                            : {}),
                         });
                       }}
                       options={productOptions}

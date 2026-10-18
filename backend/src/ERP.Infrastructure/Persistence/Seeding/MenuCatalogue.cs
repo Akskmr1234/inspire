@@ -19,6 +19,12 @@ public sealed record MenuBlueprint(
     string? RequiredPermission = null,
     IReadOnlyList<MenuBlueprint>? Children = null);
 
+/// <summary>An entry moved from one heading to another by a later catalogue.</summary>
+/// <param name="Code">The entry.</param>
+/// <param name="FromParentCode">The heading an earlier catalogue put it under.</param>
+/// <param name="ToParentCode">The heading it belongs under now.</param>
+public sealed record MenuRelocation(string Code, string FromParentCode, string ToParentCode);
+
 /// <summary>The menu every new firm starts with.</summary>
 /// <remarks>
 /// <para>
@@ -44,6 +50,25 @@ public static class MenuCatalogue
     /// <summary>The permission every stock report screen requires.</summary>
     private const string ViewInventoryReports = "inventory:report:view";
 
+    /// <summary>Entries an earlier catalogue placed somewhere else, and where they go now.</summary>
+    /// <remarks>
+    /// Applied to existing firms at start-up, but only to an entry still under the
+    /// heading the old catalogue gave it: one an administrator has moved stays where
+    /// they put it.
+    /// </remarks>
+    public static IReadOnlyList<MenuRelocation> Relocations { get; } =
+    [
+        new("masters.products", "masters", "masters.inventory"),
+        new("masters.categories", "masters", "masters.inventory"),
+        new("masters.brands", "masters", "masters.inventory"),
+        new("masters.units", "masters", "masters.inventory"),
+        new("masters.warehouses", "masters", "masters.inventory"),
+        new("masters.opening-stock", "masters", "masters.inventory"),
+        new("masters.ledgers", "masters", "masters.accounts"),
+        new("sales.customers", "sales", "masters.accounts"),
+        new("purchase.suppliers", "purchase", "masters.accounts"),
+    ];
+
     /// <summary>The default menu tree, in display order.</summary>
     public static IReadOnlyList<MenuBlueprint> Default { get; } =
     [
@@ -56,6 +81,10 @@ public static class MenuCatalogue
             "platform",
             "/dashboard"),
 
+        // Masters in two groups, the way a shop thinks of them: what it sells, and who
+        // and what its money moves between. Customers and suppliers sit with the other
+        // ledgers rather than under Sales and Purchase - they are opened and corrected
+        // as masters, and a heading holding one entry is a click spent for nothing.
         new(
             "masters",
             "Masters",
@@ -64,64 +93,108 @@ public static class MenuCatalogue
             Children:
             [
                 new(
-                    "masters.ledgers",
-                    "Chart of accounts",
-                    "دليل الحسابات",
-                    "accounting",
-                    "/accounting/ledgers",
-                    "accounting:ledger:view"),
-
-                // Inventory masters, surfaced under the shared Masters heading rather
-                // than a module of their own. The specification asks for exactly this -
-                // an entry belonging to one module shown under another - and the
-                // Module field records where each really belongs.
-                new(
-                    "masters.products",
-                    "Products",
+                    "masters.inventory",
+                    "Product",
                     "المنتجات",
                     "inventory",
-                    "/inventory/products",
-                    "inventory:product:view"),
-                new(
-                    "masters.units",
-                    "Units of measure",
-                    "وحدات القياس",
-                    "inventory",
-                    "/inventory/units",
-                    "inventory:unit:view"),
-                new(
-                    "masters.categories",
-                    "Categories",
-                    "الفئات",
-                    "inventory",
-                    "/inventory/categories",
-                    "inventory:category:view"),
-                new(
-                    "masters.brands",
-                    "Brands",
-                    "العلامات التجارية",
-                    "inventory",
-                    "/inventory/brands",
-                    "inventory:category:view"),
-                new(
-                    "masters.warehouses",
-                    "Warehouses",
-                    "المستودعات",
-                    "inventory",
-                    "/inventory/warehouses",
-                    "inventory:warehouse:view"),
+                    Children:
+                    [
+                        // Inventory masters, surfaced under the shared Masters heading
+                        // rather than a module of their own. The Module field records
+                        // where each really belongs.
+                        new(
+                            "masters.products",
+                            "Products",
+                            "المنتجات",
+                            "inventory",
+                            "/inventory/products",
+                            "inventory:product:view"),
+                        new(
+                            "masters.categories",
+                            "Categories",
+                            "الفئات",
+                            "inventory",
+                            "/inventory/categories",
+                            "inventory:category:view"),
+                        new(
+                            "masters.brands",
+                            "Brands",
+                            "العلامات التجارية",
+                            "inventory",
+                            "/inventory/brands",
+                            "inventory:category:view"),
+                        new(
+                            "masters.units",
+                            "Units of measure",
+                            "وحدات القياس",
+                            "inventory",
+                            "/inventory/units",
+                            "inventory:unit:view"),
+                        new(
+                            "masters.warehouses",
+                            "Warehouses",
+                            "المستودعات",
+                            "inventory",
+                            "/inventory/warehouses",
+                            "inventory:warehouse:view"),
 
-                // The stock a firm holds on the day it starts. A job rather than a
-                // document type - stated once and then never again - so it earns an
-                // entry rather than being the seventh option of a dropdown on the
-                // stock register, which is where it was.
+                        // The percentages a product can carry. Part of setting up what
+                        // is sold, so behind the product permission.
+                        new(
+                            "masters.tax-rates",
+                            "Tax rates",
+                            "نسب الضريبة",
+                            "inventory",
+                            "/inventory/tax-rates",
+                            "inventory:product:view"),
+
+                        // The stock a firm holds on the day it starts. A job rather than
+                        // a document type - stated once and then never again.
+                        new(
+                            "masters.opening-stock",
+                            "Opening stock",
+                            "المخزون الافتتاحي",
+                            "inventory",
+                            "/inventory/opening-stock",
+                            "inventory:stock-adjustment:view"),
+                    ]),
+
                 new(
-                    "masters.opening-stock",
-                    "Opening stock",
-                    "المخزون الافتتاحي",
-                    "inventory",
-                    "/inventory/opening-stock",
-                    "inventory:stock-adjustment:view"),
+                    "masters.accounts",
+                    "Ledger",
+                    "الحسابات",
+                    "accounting",
+                    Children:
+                    [
+                        new(
+                            "masters.ledgers",
+                            "Chart of accounts",
+                            "دليل الحسابات",
+                            "accounting",
+                            "/accounting/ledgers",
+                            "accounting:ledger:view"),
+                        new(
+                            "sales.customers",
+                            "Customers",
+                            "العملاء",
+                            "sales",
+                            "/sales/customers",
+                            "sales:customer:view"),
+                        new(
+                            "purchase.suppliers",
+                            "Suppliers",
+                            "الموردون",
+                            "purchase",
+                            "/purchase/suppliers",
+                            "purchase:supplier:view"),
+                        new(
+                            "masters.employees",
+                            "Employees",
+                            "الموظفون",
+                            "accounting",
+                            "/accounting/employees",
+                            "accounting:ledger:view"),
+                    ]),
             ]),
 
         new(
@@ -232,44 +305,6 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/returns",
                     "purchase:invoice:view"),
-            ]),
-
-        new(
-            "sales",
-            "Sales",
-            "المبيعات",
-            "sales",
-            Children:
-            [
-                // The customer master sits under Sales rather than among the accounting
-                // masters, even though a customer is a sub-ledger. It is where somebody
-                // selling looks for it, and the menu follows the work rather than the
-                // storage.
-                new(
-                    "sales.customers",
-                    "Customers",
-                    "العملاء",
-                    "sales",
-                    "/sales/customers",
-                    "sales:customer:view"),
-            ]),
-
-        new(
-            "purchase",
-            "Purchase",
-            "المشتريات",
-            "purchase",
-            Children:
-            [
-                // Beside the customer master and for the same reason: a supplier is a
-                // sub-ledger, but this is where somebody buying looks for it.
-                new(
-                    "purchase.suppliers",
-                    "Suppliers",
-                    "الموردون",
-                    "purchase",
-                    "/purchase/suppliers",
-                    "purchase:supplier:view"),
             ]),
 
         new(

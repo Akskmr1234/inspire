@@ -103,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
+        services.AddScoped<ITaxSlabRepository, TaxSlabRepository>();
         services.AddScoped<IInventoryMasterReader, InventoryMasterReader>();
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IProductReader, ProductReader>();

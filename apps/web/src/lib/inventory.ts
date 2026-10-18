@@ -115,6 +115,8 @@ export function updateMaster(
     readonly name: string;
     readonly nameArabic: string | null;
     readonly address?: string | null;
+    /** The category a category sits beneath, or null for the top level. */
+    readonly parentId?: string | null;
   },
 ): Promise<void> {
   return request<void>(`${INVENTORY}/${kind}/${id}`, { method: 'PUT', body });

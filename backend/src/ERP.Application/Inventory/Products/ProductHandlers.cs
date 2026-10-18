@@ -1,6 +1,7 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Inventory.Masters;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.SharedKernel.Results;
@@ -124,6 +125,7 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IFirmRepository _firms;
+    private readonly ITaxSlabRepository _slabs;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="CreateProductCommandHandler"/> class.</summary>
@@ -131,18 +133,21 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
     /// <param name="masters">The inventory master repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="slabs">The tax rate repository.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public CreateProductCommandHandler(
         IProductRepository products,
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
         IFirmRepository firms,
+        ITaxSlabRepository slabs,
         IUnitOfWork unitOfWork)
     {
         _products = products;
         _masters = masters;
         _tenantContext = tenantContext;
         _firms = firms;
+        _slabs = slabs;
         _unitOfWork = unitOfWork;
     }
 
@@ -241,6 +246,24 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
             if (branded.IsFailure)
             {
                 return Result.Failure<Guid>(branded.Error);
+            }
+        }
+
+        if (request.TaxSlabId is { } slabId)
+        {
+            TaxSlab? slab = await _slabs.FindAsync(TaxSlabId.From(slabId), cancellationToken);
+
+            if (slab is null || slab.FirmId != firmId)
+            {
+                return Result.Failure<Guid>(Error.NotFound(
+                    "Product.TaxSlabNotFound", "No such tax rate in the selected firm."));
+            }
+
+            Result taxed = product.SetTaxSlab(slab);
+
+            if (taxed.IsFailure)
+            {
+                return Result.Failure<Guid>(taxed.Error);
             }
         }
 

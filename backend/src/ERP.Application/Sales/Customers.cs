@@ -36,7 +36,7 @@ public sealed record CustomerTaxDetails(
     string? StateCode = null);
 
 /// <summary>Creates a customer.</summary>
-/// <param name="Code">The account code, unique within the firm.</param>
+/// <param name="Code">The account code, unique within the firm; the next CUS- number when left blank.</param>
 /// <param name="Name">Their name.</param>
 /// <param name="NameArabic">The same in Arabic, for a bilingual invoice.</param>
 /// <param name="Contact">How to reach them.</param>
@@ -53,7 +53,7 @@ public sealed record CustomerTaxDetails(
 /// would mean two things to keep in step and two answers to what a customer owes.
 /// </remarks>
 public sealed record CreateCustomerCommand(
-    string Code,
+    string? Code,
     string Name,
     string? NameArabic = null,
     CustomerContact? Contact = null,
@@ -131,9 +131,9 @@ public sealed class CreateCustomerCommandValidator : AbstractValidator<CreateCus
     /// <summary>Initialises a new instance of the <see cref="CreateCustomerCommandValidator"/> class.</summary>
     public CreateCustomerCommandValidator()
     {
-        RuleFor(c => c.Code)
-            .NotEmpty().WithMessage("A customer code is required.")
-            .MaximumLength(30);
+        RuleFor(c => c.Code!)
+            .MaximumLength(30)
+            .When(c => c.Code is not null);
 
         RuleFor(c => c.Name)
             .NotEmpty().WithMessage("A customer name is required.")

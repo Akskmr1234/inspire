@@ -82,8 +82,14 @@ export function CategoriesPage(): React.JSX.Element {
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy, rows) => <AddCategory run={run} busy={busy} rows={rows} />}
-      editForm={(row, run, busy) => (
-        <EditNamedMaster kind="Category" record={row} run={run} busy={busy} />
+      editForm={(row, run, busy, rows) => (
+        <EditNamedMaster
+          kind="Category"
+          record={row}
+          run={run}
+          busy={busy}
+          categories={rows}
+        />
       )}
     />
   );
@@ -106,9 +112,7 @@ function AddCategory({
 
   const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
     collect({
-      code:
-        required(values.code, t('categories.codeRequired')) ??
-        maxLength(values.code, 20, t('categories.codeTooLong')),
+      code: maxLength(values.code, 20, t('categories.codeTooLong')),
       name:
         required(values.name, t('categories.nameRequired')) ??
         maxLength(values.name, 100, t('categories.nameTooLong')),
@@ -127,7 +131,7 @@ function AddCategory({
 
         run(async () => {
           await createMaster('categories', {
-            code: code.trim(),
+            code: code.trim() || null,
             name: name.trim(),
             nameArabic: nameArabic.trim() || null,
             parentId: parentId || null,
@@ -138,8 +142,8 @@ function AddCategory({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          required
           autoFocus
+          placeholder={t('masters.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}
@@ -267,9 +271,7 @@ function AddBrand({
 
   const { errors, submit } = useValidation<{ code: string; name: string }>((values) =>
     collect({
-      code:
-        required(values.code, t('categories.codeRequired')) ??
-        maxLength(values.code, 20, t('categories.codeTooLong')),
+      code: maxLength(values.code, 20, t('categories.codeTooLong')),
       name:
         required(values.name, t('categories.nameRequired')) ??
         maxLength(values.name, 100, t('categories.nameTooLong')),
@@ -288,7 +290,7 @@ function AddBrand({
 
         run(async () => {
           await createMaster('brands', {
-            code: code.trim(),
+            code: code.trim() || null,
             name: name.trim(),
             nameArabic: nameArabic.trim() || null,
           });
@@ -298,8 +300,8 @@ function AddBrand({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
-          required
           autoFocus
+          placeholder={t('masters.codeAuto')}
           value={code}
           onChange={setCode}
           error={errors['code']}

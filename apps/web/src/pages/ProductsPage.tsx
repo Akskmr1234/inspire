@@ -1,22 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import { ReportFrame } from '@/components/ReportFrame';
-import { Field, SelectField, TextField } from '@/components/Form';
-import { SearchSelect, useDefaultChoice } from '@/components/SearchSelect';
+import { SelectField, TextField } from '@/components/Form';
+import { MasterPicker, useMasterRows } from '@/components/MasterPicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
-import {
-  listMaster,
-  type BrandSummary,
-  type CategorySummary,
-  type UnitSummary,
-} from '@/lib/inventory';
+import type { CategorySummary, UnitSummary } from '@/lib/inventory';
+import type { TaxRate } from '@/lib/taxRates';
 import {
   createProduct,
   listProducts,
@@ -56,11 +52,6 @@ export function ProductsPage(): React.JSX.Element {
 
   // Shared cache keys with the master screens, so opening this page after those does
   // not refetch what they already hold.
-  const categories = useQuery<readonly CategorySummary[], ApiError>({
-    queryKey: ['categories', false],
-    queryFn: () => listMaster<CategorySummary>('categories', false),
-  });
-
   const mutation = useMutation<
     { id: string; mode: 'save' | 'detail' },
     ApiError,
@@ -75,7 +66,7 @@ export function ProductsPage(): React.JSX.Element {
       setAdding(false);
       await queryClient.invalidateQueries({ queryKey: ['products'] });
       if (mode === 'detail') {
-        setInitialEditorTab('openingStock');
+        setInitialEditorTab('description');
         setEditingId(id);
       }
     },
@@ -262,7 +253,6 @@ export function ProductsPage(): React.JSX.Element {
           )}
 
           <AddProduct
-            categories={categories.data ?? []}
             busy={mutation.isPending}
             onCancel={() => setAdding(false)}
             onSubmit={(body, mode, tracksSerialNumbers) => {
@@ -306,16 +296,16 @@ export function ProductsPage(): React.JSX.Element {
  *
  * Deliberately short. A product needs a description, a category and a unit to exist at
  * all; everything else has a sensible default and belongs on the editor, where there
- * is room to explain it. Asking for forty fields before the record exists is how a
- * master ends up with rows somebody abandoned halfway.
+ * is room to explain it. The cursor starts in Code, because a shop with its own codes
+ * types one first and a shop without them presses Tab past an empty box. Every list
+ * here can be added to in place, and each starts at the choice a new product most
+ * likely wants.
  */
 function AddProduct({
-  categories,
   busy,
   onCancel,
   onSubmit,
 }: {
-  readonly categories: readonly CategorySummary[];
   readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (
@@ -326,15 +316,9 @@ function AddProduct({
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  const units = useQuery<readonly UnitSummary[], ApiError>({
-    queryKey: ['units', false],
-    queryFn: () => listMaster<UnitSummary>('units', false),
-  });
-
-  const brands = useQuery<readonly BrandSummary[], ApiError>({
-    queryKey: ['brands', false],
-    queryFn: () => listMaster<BrandSummary>('brands', false),
-  });
+  const categories = useMasterRows<CategorySummary>('category');
+  const units = useMasterRows<UnitSummary>('unit');
+  const taxRates = useMasterRows<TaxRate>('taxRate');
 
   const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } =
     useSettings();
@@ -345,41 +329,45 @@ function AddProduct({
   const [categoryId, setCategoryId] = useState(defaultCategoryId ?? '');
   const [stockUnitId, setStockUnitId] = useState(defaultStockUnitId ?? '');
   const [brandId, setBrandId] = useState(defaultBrandId ?? '');
+  const [taxSlabId, setTaxSlabId] = useState('');
   const [itemType, setItemType] = useState(String(defaultItemType ?? 1));
   const [tracksSerialNumbers, setTracksSerialNumbers] = useState(false);
   const serialsOn = useSerialNumbersEnabled();
 
-  const categoryOptions = useMemo(
-    () =>
-      categories.map((row) => ({
-        value: row.id,
-        label: `${row.code} — ${row.name}`,
-        ...(row.parentName ? { detail: row.parentName } : {}),
-      })),
-    [categories],
-  );
+  /*
+    The starting choices, once the lists have arrived: the firm's own defaults from
+    Settings where they still exist, otherwise what a new product most likely wants -
+    a general category, a counted unit, the default tax rate.
+  */
+  useEffect(() => {
+    if (categoryId === '' || !categories.rows.some((row) => row.id === categoryId)) {
+      const active = categories.rows.filter((row) => row.isActive);
+      const choice =
+        active.find((row) => row.id === defaultCategoryId) ??
+        active.find((row) => /^general$/i.test(row.name)) ??
+        active[0];
+      if (choice && choice.id !== categoryId) setCategoryId(choice.id);
+    }
+  }, [categories.rows, categoryId, defaultCategoryId]);
 
-  const unitOptions = useMemo(
-    () =>
-      (units.data ?? []).map((row) => ({
-        value: row.id,
-        label: `${row.code} — ${row.name}`,
-      })),
-    [units.data],
-  );
+  useEffect(() => {
+    if (stockUnitId === '' || !units.rows.some((row) => row.id === stockUnitId)) {
+      const bases = units.rows.filter((row) => row.isActive && !row.baseUnitId);
+      const choice =
+        bases.find((row) => row.id === defaultStockUnitId) ??
+        bases.find((row) => /^(pcs|pc|nos|no|ea|each|unit)$/i.test(row.code)) ??
+        bases[0];
+      if (choice && choice.id !== stockUnitId) setStockUnitId(choice.id);
+    }
+  }, [units.rows, stockUnitId, defaultStockUnitId]);
 
-  const brandOptions = useMemo(
-    () =>
-      (brands.data ?? []).map((row) => ({
-        value: row.id,
-        label: `${row.code} — ${row.name}`,
-      })),
-    [brands.data],
-  );
-
-  useDefaultChoice(categoryId, categoryOptions, setCategoryId, defaultCategoryId);
-  useDefaultChoice(stockUnitId, unitOptions, setStockUnitId, defaultStockUnitId);
-  useDefaultChoice(brandId, brandOptions, setBrandId, defaultBrandId);
+  const [taxTouched, setTaxTouched] = useState(false);
+  useEffect(() => {
+    if (!taxTouched && taxSlabId === '') {
+      const preferred = taxRates.rows.find((row) => row.isDefault && row.isActive);
+      if (preferred) setTaxSlabId(preferred.id);
+    }
+  }, [taxRates.rows, taxSlabId, taxTouched]);
 
   const draft = { code, description, categoryId, stockUnitId };
 
@@ -407,6 +395,7 @@ function AddProduct({
         categoryId,
         stockUnitId,
         brandId: brandId || null,
+        taxSlabId: taxSlabId || null,
         itemType: Number(itemType),
       },
       mode,
@@ -425,15 +414,16 @@ function AddProduct({
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
+          autoFocus
           value={code}
           onChange={setCode}
           error={errors['code']}
+          placeholder={t('masters.codeAuto')}
         />
 
         <TextField
           label={t('products.description')}
           required
-          autoFocus
           value={description}
           onChange={setDescription}
           error={errors['description']}
@@ -459,52 +449,56 @@ function AddProduct({
           ]}
         />
 
-        <Field label={t('products.category')} required error={errors['categoryId']}>
-          <SearchSelect
-            value={categoryId}
-            onChange={setCategoryId}
-            options={categoryOptions}
-            invalid={errors['categoryId'] !== undefined}
-            label={t('products.category')}
-            placeholder={t('products.choose')}
-          />
-        </Field>
+        <MasterPicker
+          kind="category"
+          label={t('products.category')}
+          required
+          value={categoryId}
+          onChange={setCategoryId}
+          error={errors['categoryId']}
+        />
 
-        <Field label={t('products.stockUnit')} required error={errors['stockUnitId']}>
-          <SearchSelect
-            value={stockUnitId}
-            onChange={setStockUnitId}
-            options={unitOptions}
-            invalid={errors['stockUnitId'] !== undefined}
-            label={t('products.stockUnit')}
-            placeholder={t('products.choose')}
-          />
-        </Field>
+        <MasterPicker
+          kind="unit"
+          label={t('products.stockUnit')}
+          required
+          value={stockUnitId}
+          onChange={setStockUnitId}
+          error={errors['stockUnitId']}
+          include={(row) => !(row as UnitSummary).baseUnitId}
+        />
 
-        <Field label={t('products.brand')}>
-          <SearchSelect
-            value={brandId}
-            onChange={setBrandId}
-            clearable
-            label={t('products.brand')}
-            placeholder={t('products.noBrand')}
-            options={brandOptions}
-          />
-        </Field>
+        <MasterPicker
+          kind="brand"
+          label={t('products.brand')}
+          clearable
+          placeholder={t('products.noBrand')}
+          value={brandId}
+          onChange={setBrandId}
+        />
+
+        <MasterPicker
+          kind="taxRate"
+          label={t('products.taxRate')}
+          clearable
+          placeholder={t('taxRates.none')}
+          value={taxSlabId}
+          onChange={(value) => {
+            setTaxTouched(true);
+            setTaxSlabId(value);
+          }}
+        />
 
         {/* Offered only where the firm has switched serial numbers on in Settings. */}
         {serialsOn && (
-          <div className="sm:col-span-2 pt-1">
-            <label className="flex items-center gap-2 cursor-pointer font-medium text-xs text-ink hover:text-ink-strong select-none">
-              <input
-                type="checkbox"
-                checked={tracksSerialNumbers}
-                onChange={(e) => setTracksSerialNumbers(e.target.checked)}
-                className="rounded border-line text-brand-600 focus:ring-brand-500"
-              />
-              <span>{t('products.tracksSerialNumbers')}</span>
-            </label>
-          </div>
+          <label className="field-check sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={tracksSerialNumbers}
+              onChange={(e) => setTracksSerialNumbers(e.target.checked)}
+            />
+            {t('products.tracksSerialNumbers')}
+          </label>
         )}
       </div>
 

@@ -73,7 +73,10 @@ public sealed class CreateCustomerCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        string code = request.Code.Trim().ToUpperInvariant();
+        // Left blank, the next number in the customer sequence is issued.
+        string code = string.IsNullOrWhiteSpace(request.Code)
+            ? await _ledgers.NextCodeAsync(firmId, "CUS-", cancellationToken)
+            : request.Code.Trim().ToUpperInvariant();
 
         // Checked before the group is resolved, so the commonest mistake - re-entering a
         // customer somebody has already created - is reported as itself rather than as

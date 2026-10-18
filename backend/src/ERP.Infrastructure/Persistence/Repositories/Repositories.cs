@@ -219,6 +219,31 @@ public sealed class LedgerRepository : ILedgerRepository
             l => l.FirmId == firmId && l.Code == code, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<string> NextCodeAsync(
+        FirmId firmId,
+        string prefix,
+        CancellationToken cancellationToken = default)
+    {
+        List<string> issued = await _context.Ledgers
+            .Where(l => l.FirmId == firmId && l.Code.StartsWith(prefix))
+            .Select(l => l.Code)
+            .ToListAsync(cancellationToken);
+
+        // Parsed rather than counted: ledgers are withdrawn, never deleted, so a count
+        // would sooner or later hand out a code that is still taken.
+        int highest = issued
+            .Select(code => int.TryParse(
+                code.AsSpan(prefix.Length),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out int number) ? number : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        return prefix + (highest + 1).ToString("D4", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <inheritdoc />
     public void Add(Ledger ledger) => _context.Ledgers.Add(ledger);
 
     /// <inheritdoc />
@@ -510,6 +535,31 @@ public sealed class ChequeRepository : IChequeRepository
                 && c.PartyLedgerId == partyLedgerId
                 && (c.Status == ChequeStatus.Pending || c.Status == ChequeStatus.Deposited)
                 && requested.Contains(c.ChequeNumber))
+            .Select(c => c.ChequeNumber)
+            .ToListAsync(cancellationToken);
+
+        return live.ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> FindLiveIssuedNumbersAsync(
+        FirmId firmId,
+        LedgerId bankLedgerId,
+        IReadOnlyCollection<string> chequeNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        if (chequeNumbers.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        List<string> live = await _context.Cheques
+            .Where(c =>
+                c.FirmId == firmId
+                && c.Direction == ChequeDirection.Issued
+                && c.BankLedgerId == bankLedgerId
+                && (c.Status == ChequeStatus.Pending || c.Status == ChequeStatus.Deposited)
+                && chequeNumbers.Contains(c.ChequeNumber))
             .Select(c => c.ChequeNumber)
             .ToListAsync(cancellationToken);
 

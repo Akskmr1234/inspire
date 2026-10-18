@@ -59,10 +59,13 @@ export function useAccountGroups(): ReturnType<
 export function LedgerEditor({
   ledgerId,
   onClose,
+  kind,
 }: {
   /** The ledger to correct, or null to open a new one. */
   readonly ledgerId: string | null;
   readonly onClose: () => void;
+  /** A kind the ledger is fixed to, for a screen of one kind - employees. */
+  readonly kind?: number;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const existing = useQuery<LedgerDetail, ApiError>({
@@ -71,7 +74,14 @@ export function LedgerEditor({
     enabled: ledgerId !== null,
   });
 
-  const title = ledgerId ? t('ledgerMaster.editLedger') : t('ledgerMaster.newLedger');
+  const title =
+    kind === LedgerKind.employee
+      ? ledgerId
+        ? t('employees.edit')
+        : t('employees.new')
+      : ledgerId
+        ? t('ledgerMaster.editLedger')
+        : t('ledgerMaster.newLedger');
 
   return (
     <Modal title={title} onClose={onClose} size="form">
@@ -82,18 +92,29 @@ export function LedgerEditor({
       ) : existing.isError ? (
         <p className="alert-error">{existing.error.detail}</p>
       ) : (
-        <LedgerForm existing={existing.data ?? null} onClose={onClose} />
+        <LedgerForm
+          existing={existing.data ?? null}
+          onClose={onClose}
+          {...(kind === undefined ? {} : { fixedKind: kind })}
+        />
       )}
     </Modal>
   );
 }
 
+/** Where a new ledger of each fixed kind goes until somebody chooses otherwise. */
+const DEFAULT_GROUP_FOR_KIND: Readonly<Record<number, string>> = {
+  [LedgerKind.employee]: '2100',
+};
+
 function LedgerForm({
   existing,
   onClose,
+  fixedKind,
 }: {
   readonly existing: LedgerDetail | null;
   readonly onClose: () => void;
+  readonly fixedKind?: number;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const invalidate = useInvalidateLedgers();
@@ -104,7 +125,18 @@ function LedgerForm({
   const [name, setName] = useState(existing?.name ?? '');
   const [nameArabic, setNameArabic] = useState(existing?.nameArabic ?? '');
   const [groupId, setGroupId] = useState(existing?.accountGroupId ?? '');
-  const [kind, setKind] = useState<number>(existing?.kind ?? LedgerKind.general);
+  const [kind, setKind] = useState<number>(
+    existing?.kind ?? fixedKind ?? LedgerKind.general,
+  );
+
+  // A new ledger of a fixed kind starts in the group that kind usually lives in, once
+  // the groups have arrived.
+  const defaultGroup =
+    fixedKind === undefined ? undefined : DEFAULT_GROUP_FOR_KIND[fixedKind];
+  const defaultGroupId = groups.data?.find(
+    (group) => group.code === defaultGroup,
+  )?.accountGroupId;
+  if (!existing && groupId === '' && defaultGroupId) setGroupId(defaultGroupId);
   const [opening, setOpening] = useState(
     existing && existing.openingBalance !== 0 ? String(existing.openingBalance) : '',
   );
@@ -232,15 +264,17 @@ function LedgerForm({
           dir="rtl"
           maxLength={200}
         />
-        <SelectField<number>
-          label={t('ledgerMaster.kind')}
-          value={kind}
-          onChange={chooseKind}
-          options={PLAIN_KINDS.map((value) => ({
-            value,
-            label: t(`ledgerKinds.${KIND_KEY[value]}`),
-          }))}
-        />
+        {fixedKind === undefined && (
+          <SelectField<number>
+            label={t('ledgerMaster.kind')}
+            value={kind}
+            onChange={chooseKind}
+            options={PLAIN_KINDS.map((value) => ({
+              value,
+              label: t(`ledgerKinds.${KIND_KEY[value]}`),
+            }))}
+          />
+        )}
         <Field label={t('ledgerMaster.group')} required>
           <SearchSelect
             value={groupId}
