@@ -454,13 +454,18 @@ export function DataGrid<TRow>({
   return (
     <div className="space-y-3">
       {/*
-        The toolbar scrolls sideways on a phone rather than wrapping. Six buttons
-        wrapping to three rows would push the table itself below the fold on every
-        screen in the application.
+        One row from `sm` up. On a phone the search leads and takes what width is
+        left, the list's own button and the menu stay beside it, and the filters and
+        the sort drop to a row of their own.
+
+        It used to scroll sideways instead, so as not to push the list down — but
+        what scrolled out of sight was the button that adds a record, on every
+        master with a filter beside its search: the screen's one action was a
+        swipe away and nothing said so.
       */}
-      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
+      <div className="flex flex-wrap items-center gap-2">
         {!paging && !hideSearch && (
-          <div className="no-print relative shrink-0">
+          <div className="no-print relative order-1 min-w-[9rem] flex-1 sm:order-none sm:flex-none">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -481,7 +486,7 @@ export function DataGrid<TRow>({
                 setClientPage(1);
               }}
               placeholder={t('grid.search')}
-              className="field-input-sm w-44 ps-8 pe-6 sm:w-56"
+              className="field-input-sm w-full ps-8 pe-6 sm:w-56"
             />
             {search && (
               <button
@@ -499,39 +504,43 @@ export function DataGrid<TRow>({
           </div>
         )}
 
-        {filters}
+        {(filters || (narrow && !paging)) && (
+          <div className="order-3 flex w-full flex-wrap items-center gap-2 sm:order-none sm:w-auto">
+            {filters}
 
-        {/*
-          Sorting lives in the column headers, and the card view has none — so
-          without this a phone can search and export a list but never order it.
-          Offered only where the headers are gone, and only where sorting applies
-          at all: a server-paged grid sorts nothing on the client, for the same
-          reason it hides the search box.
-        */}
-        {narrow && !paging && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <SearchSelect
-              size="sm"
-              className="w-40"
-              label={t('grid.sortBy')}
-              placeholder={t('grid.sortNone')}
-              value={sortKey ?? ''}
-              onChange={(next) => {
-                setSortKey(next === '' ? null : next);
-                setSortDescending(false);
-              }}
-              options={visible
-                .filter((column) => column.header.trim() !== '')
-                .map((column) => ({ value: column.key, label: column.header }))}
-            />
+            {/*
+              Sorting lives in the column headers, and the card view has none — so
+              without this a phone can search and export a list but never order it.
+              Offered only where the headers are gone, and only where sorting applies
+              at all: a server-paged grid sorts nothing on the client, for the same
+              reason it hides the search box.
+            */}
+            {narrow && !paging && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <SearchSelect
+                  size="sm"
+                  className="w-40"
+                  label={t('grid.sortBy')}
+                  placeholder={t('grid.sortNone')}
+                  value={sortKey ?? ''}
+                  onChange={(next) => {
+                    setSortKey(next === '' ? null : next);
+                    setSortDescending(false);
+                  }}
+                  options={visible
+                    .filter((column) => column.header.trim() !== '')
+                    .map((column) => ({ value: column.key, label: column.header }))}
+                />
 
-            {sortKey !== null && (
-              <GridButton
-                onClick={() => setSortDescending((value) => !value)}
-                label={t('grid.sortDirection')}
-              >
-                {sortDescending ? '▾' : '▴'}
-              </GridButton>
+                {sortKey !== null && (
+                  <GridButton
+                    onClick={() => setSortDescending((value) => !value)}
+                    label={t('grid.sortDirection')}
+                  >
+                    {sortDescending ? '▾' : '▴'}
+                  </GridButton>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -546,7 +555,7 @@ export function DataGrid<TRow>({
           screens agreed on where it was. The add button leads, filled; the view
           controls follow as one group, in one order, on every screen.
         */}
-        <div className="ms-auto flex shrink-0 items-center gap-1.5">
+        <div className="order-2 ms-auto flex shrink-0 items-center gap-1.5 sm:order-none">
           {saved && <span className="badge-success animate-pop">{saved}</span>}
 
           {actions}
@@ -941,15 +950,25 @@ export function DataGrid<TRow>({
                       <td
                         key={column.key}
                         className={clsx(
-                          // `overflow-wrap: anywhere` so no single token can set a
-                          // column's width. A table sizes a column to the longest
-                          // thing in it that cannot be broken, and the codes here are
-                          // routinely one unbroken run — a barcode, a serial number,
-                          // an SKU. One of those in a description column stretched it
-                          // by a hundred and eighty pixels and sent the whole table
-                          // into its scrollbar, on a screen where every column had
-                          // fitted a moment earlier.
-                          'py-1.5 [overflow-wrap:anywhere]',
+                          'py-1.5',
+                          // Where a cell may break inside a word. A table sizes a
+                          // column to the longest thing in it that cannot be
+                          // broken, and a barcode in a description stretched it by
+                          // a hundred and eighty pixels — so the prose column, and
+                          // any long unbroken run, breaks anywhere. Nothing else
+                          // does: allowed to, a squeezed table cut its invoice
+                          // numbers into "SL/202 / 6/0002" and its dates into four
+                          // lines, where scrolling sideways would have kept them
+                          // readable.
+                          (column.wide || breaksAnywhere(column.value(row))) &&
+                            '[overflow-wrap:anywhere]',
+                          // A code, a date, a time, a short name: kept on one line,
+                          // or the browser breaks it at its hyphens - "CUS-" over
+                          // "1042", "2026-" over "10-18". Longer prose still wraps
+                          // between its words.
+                          !column.wide &&
+                            keepsWhole(column.value(row)) &&
+                            'whitespace-nowrap',
                           column.numeric &&
                             'text-end font-mono whitespace-nowrap tabular-nums',
                           // An actions column, kept against the end of the row so
@@ -1128,17 +1147,37 @@ function GridFooter({
 /** Tailwind's `sm`. Below it the grid is a list of cards rather than a table. */
 const NARROW = '(max-width: 639px)';
 
-/** Tracks whether the viewport is below the table breakpoint. */
-export function useIsNarrow(): boolean {
-  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW).matches);
+/**
+ * Whether a cell's value reads as one item - a code, a date, a short name.
+ *
+ * Asked of whatever `value` returned, not of what its type promises: a column reading a
+ * field the server left out hands back `undefined`, and that has to be a blank cell,
+ * not a screen that will not render.
+ */
+function keepsWhole(value: string | number | null): boolean {
+  return typeof value !== 'string' || value.length <= 16;
+}
+
+/** One unbroken run too long to set a column's width by: a barcode, a serial number. */
+function breaksAnywhere(value: string | number | null): boolean {
+  return typeof value === 'string' && value.length > 16 && !/\s/.test(value);
+}
+
+/**
+ * Tracks whether the viewport is below the table breakpoint - or below another, for a
+ * screen whose table needs more room than the grid's before it fits.
+ */
+export function useIsNarrow(media: string = NARROW): boolean {
+  const [narrow, setNarrow] = useState(() => window.matchMedia(media).matches);
 
   useEffect(() => {
-    const query = window.matchMedia(NARROW);
+    const query = window.matchMedia(media);
     const onChange = (event: MediaQueryListEvent): void => setNarrow(event.matches);
 
+    setNarrow(query.matches);
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
-  }, []);
+  }, [media]);
 
   return narrow;
 }

@@ -106,59 +106,59 @@ export function PrintSettingsPage(): React.JSX.Element {
         <p className="alert-error">{save.error.detail || save.error.code}</p>
       )}
 
-      <div className="table-wrap">
-        <table className="table min-w-[64rem] text-sm">
-          <thead>
-            <tr>
-              <th className="text-start">{t('printing.document')}</th>
-              <th className="text-center">{t('printing.preview')}</th>
-              <th className="text-start">{t('printing.template')}</th>
-              <th className="text-start">{t('printing.printer')}</th>
-              <th className="text-end">{t('printing.copies')}</th>
-              <th className="text-start border-s border-line">
-                {t('printing.secondPrint')}
-              </th>
-              <th className="text-start">{t('printing.template')}</th>
-              <th className="text-start">{t('printing.printer')}</th>
-              <th className="text-end">{t('printing.copies')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {PRINT_DOCUMENTS.flatMap((type) =>
-              MODES_FOR[type].map((mode) => {
-                const profile = profileFor(draft, type, mode);
+      {/*
+        A card a document rather than one table across the page. The table needed nine
+        columns of controls, two sets of template, printer and copies side by side, and
+        was wider than the screen at every size short of a wide monitor: the second
+        print's printer and copies were off the edge even on a laptop.
+      */}
+      <ul className="grid gap-3 lg:grid-cols-2">
+        {PRINT_DOCUMENTS.flatMap((type) =>
+          MODES_FOR[type].map((mode) => {
+            const profile = profileFor(draft, type, mode);
 
-                return (
-                  <tr key={`${type}.${mode}`}>
-                    <td className="whitespace-nowrap">
-                      <span className="font-medium">
-                        {t(`printing.documents.${type}`)}
+            return (
+              <li key={`${type}.${mode}`} className="card card-body space-y-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <h2 className="text-sm font-semibold text-ink">
+                    {t(`printing.documents.${type}`)}
+                    {MODES_FOR[type].length > 1 && (
+                      <span className="ms-1.5 text-xs font-normal text-ink-muted">
+                        {t(`printing.modes.${mode}`)}
                       </span>
-                      {MODES_FOR[type].length > 1 && (
-                        <span className="ms-1.5 text-xs text-ink-muted">
-                          {t(`printing.modes.${mode}`)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-center">
-                      <input
-                        type="checkbox"
-                        checked={profile.preview}
-                        onChange={(event) =>
-                          setProfile(type, mode, {
-                            ...profile,
-                            preview: event.target.checked,
-                          })
-                        }
-                        aria-label={t('printing.preview')}
-                      />
-                    </td>
-                    <JobCells
-                      job={profile.first}
-                      templates={draft.templates}
-                      onChange={(first) => setProfile(type, mode, { ...profile, first })}
+                    )}
+                  </h2>
+                  <label className="field-check text-sm">
+                    <input
+                      type="checkbox"
+                      checked={profile.preview}
+                      onChange={(event) =>
+                        setProfile(type, mode, {
+                          ...profile,
+                          preview: event.target.checked,
+                        })
+                      }
                     />
-                    <td className="border-s border-line text-center">
+                    <span>{t('printing.preview')}</span>
+                  </label>
+                </div>
+
+                <JobFields
+                  label={t('printing.print')}
+                  caption={
+                    <span className="text-xs font-semibold tracking-wide text-ink-muted uppercase">
+                      {t('printing.print')}
+                    </span>
+                  }
+                  job={profile.first}
+                  templates={draft.templates}
+                  onChange={(first) => setProfile(type, mode, { ...profile, first })}
+                />
+
+                <JobFields
+                  label={t('printing.secondPrint')}
+                  caption={
+                    <label className="field-check text-xs font-semibold tracking-wide text-ink-muted uppercase">
                       <input
                         type="checkbox"
                         checked={profile.second.enabled}
@@ -168,27 +168,25 @@ export function PrintSettingsPage(): React.JSX.Element {
                             second: { ...profile.second, enabled: event.target.checked },
                           })
                         }
-                        aria-label={t('printing.secondPrint')}
                       />
-                    </td>
-                    <JobCells
-                      job={profile.second}
-                      templates={draft.templates}
-                      disabled={!profile.second.enabled}
-                      onChange={(second) =>
-                        setProfile(type, mode, {
-                          ...profile,
-                          second: { ...second, enabled: profile.second.enabled },
-                        })
-                      }
-                    />
-                  </tr>
-                );
-              }),
-            )}
-          </tbody>
-        </table>
-      </div>
+                      <span>{t('printing.secondPrint')}</span>
+                    </label>
+                  }
+                  job={profile.second}
+                  templates={draft.templates}
+                  disabled={!profile.second.enabled}
+                  onChange={(second) =>
+                    setProfile(type, mode, {
+                      ...profile,
+                      second: { ...second, enabled: profile.second.enabled },
+                    })
+                  }
+                />
+              </li>
+            );
+          }),
+        )}
+      </ul>
 
       <label className="field-check text-sm">
         <input
@@ -205,12 +203,22 @@ export function PrintSettingsPage(): React.JSX.Element {
   );
 }
 
-function JobCells({
+/**
+ * One print run of a document: the template, the printer it is meant for and the copies.
+ *
+ * The template takes a line of its own on a phone, where the three side by side left
+ * each too narrow to read; from a small tablet up they share one.
+ */
+function JobFields({
+  label,
+  caption,
   job,
   templates,
   disabled = false,
   onChange,
 }: {
+  readonly label: string;
+  readonly caption: React.ReactNode;
   readonly job: PrintJob;
   readonly templates: readonly PrintTemplate[];
   readonly disabled?: boolean;
@@ -219,49 +227,58 @@ function JobCells({
   const { t } = useTranslation();
 
   return (
-    <>
-      <td>
-        <select
-          value={job.template}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...job, template: event.target.value })}
-          aria-label={t('printing.template')}
-          className="field-input-sm min-w-40"
-        >
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name} ({template.paper})
-            </option>
-          ))}
-        </select>
-      </td>
-      <td>
-        <input
-          value={job.printer}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...job, printer: event.target.value })}
-          placeholder={t('printing.printerPlaceholder')}
-          aria-label={t('printing.printer')}
-          className="field-input-sm w-36"
-        />
-      </td>
-      <td className="text-end">
-        <input
-          type="number"
-          min={1}
-          max={10}
-          value={job.copies}
-          disabled={disabled}
-          onChange={(event) =>
-            onChange({
-              ...job,
-              copies: Math.min(10, Math.max(1, Number(event.target.value) || 1)),
-            })
-          }
-          aria-label={t('printing.copies')}
-          className="field-input-sm w-16 text-end"
-        />
-      </td>
-    </>
+    <div role="group" aria-label={label} className="space-y-2 border-t border-line pt-3">
+      {caption}
+      <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)_4.5rem]">
+        <label className="col-span-2 min-w-0 sm:col-span-1">
+          <span className="mb-1 block text-[11px] text-ink-muted">
+            {t('printing.template')}
+          </span>
+          <select
+            value={job.template}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...job, template: event.target.value })}
+            className="field-input-sm w-full"
+          >
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name} ({template.paper})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className="mb-1 block text-[11px] text-ink-muted">
+            {t('printing.printer')}
+          </span>
+          <input
+            value={job.printer}
+            disabled={disabled}
+            onChange={(event) => onChange({ ...job, printer: event.target.value })}
+            placeholder={t('printing.printerPlaceholder')}
+            className="field-input-sm w-full"
+          />
+        </label>
+        <label className="min-w-0">
+          <span className="mb-1 block text-[11px] text-ink-muted">
+            {t('printing.copies')}
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={job.copies}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange({
+                ...job,
+                copies: Math.min(10, Math.max(1, Number(event.target.value) || 1)),
+              })
+            }
+            className="field-input-sm w-full text-end"
+          />
+        </label>
+      </div>
+    </div>
   );
 }

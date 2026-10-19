@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { EmptyState, ReportFrame } from '@/components/ReportFrame';
+import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
@@ -399,13 +400,13 @@ export function StockLedgerPage(): React.JSX.Element {
 
   if (!productId) {
     return (
+      // The same arrangement as the report once a product is chosen: the title in
+      // the bar, the filters in their strip. It used to put the title and the
+      // filters side by side, which on a phone left the four fields a third of
+      // the screen beside a two-line heading.
       <section className="page">
-        <header className="page-header">
-          <h1 className="page-title">{t('nav.stockLedger')}</h1>
-          <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
-            {controls}
-          </div>
-        </header>
+        <PageHeading title={t('nav.stockLedger')} />
+        <div className="filter-bar">{controls}</div>
         <EmptyState message={t('stock.chooseProduct')} />
       </section>
     );

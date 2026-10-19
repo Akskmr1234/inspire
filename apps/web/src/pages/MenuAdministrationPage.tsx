@@ -150,7 +150,7 @@ export function MenuAdministrationPage(): React.JSX.Element {
 
           {/* User Guide & Search Bar */}
           <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/60 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-xs text-ink-muted">
+            <div className="hidden items-center gap-2 text-xs text-ink-muted sm:flex">
               <span className="flex size-6 items-center justify-center rounded-md bg-accent/15 text-accent font-bold">
                 ⠿
               </span>
@@ -173,23 +173,29 @@ export function MenuAdministrationPage(): React.JSX.Element {
             </div>
           </div>
 
-          <div className="table-wrap rounded-xl border border-line shadow-sm overflow-hidden">
-            <table className="table">
+          {/*
+            Columns give way as the screen narrows: the permission first, then the
+            route, which moves under the entry's name. On a phone the grip goes too —
+            a finger cannot drag a row — and the buttons move under the name, so the
+            whole entry reads down one column instead of off the edge.
+          */}
+          <div className="table-wrap">
+            <table className="table w-full">
               <thead className="bg-surface-3">
                 <tr>
-                  <th className="w-10 px-2 py-2.5 text-center font-semibold text-xs text-ink-muted">
+                  <th className="hidden w-10 px-2 py-2.5 text-center font-semibold text-xs text-ink-muted sm:table-cell">
                     #
                   </th>
                   <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
                     {t('menuAdmin.entry')}
                   </th>
-                  <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
+                  <th className="hidden px-3 py-2.5 text-start font-semibold text-xs text-ink md:table-cell">
                     {t('menuAdmin.route')}
                   </th>
-                  <th className="px-3 py-2.5 text-start font-semibold text-xs text-ink">
+                  <th className="hidden px-3 py-2.5 text-start font-semibold text-xs text-ink lg:table-cell">
                     {t('menuAdmin.permission')}
                   </th>
-                  <th className="px-3 py-2.5 text-end font-semibold text-xs text-ink">
+                  <th className="hidden px-3 py-2.5 text-end font-semibold text-xs text-ink sm:table-cell">
                     {t('menuAdmin.actions')}
                   </th>
                 </tr>
@@ -356,6 +362,79 @@ function EntryRows({
     onDropOnItem(entry, parentId);
   };
 
+  // A path reads left to right whatever the language: in Arabic it came out as
+  // "dashboard/".
+  const destination = entry.route ? (
+    <span
+      dir="ltr"
+      className="font-mono text-xs rounded bg-surface-2 px-1.5 py-0.5 text-ink [overflow-wrap:anywhere]"
+    >
+      {entry.route}
+    </span>
+  ) : (
+    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+      {t('menuAdmin.heading')}
+    </span>
+  );
+
+  const actions = (
+    <div className="flex flex-wrap gap-1 sm:justify-end">
+      <ActionButton
+        label="↑"
+        title={t('menuAdmin.moveUp')}
+        disabled={busy || index === 0}
+        onClick={() => swapWith(siblings[index - 1]!)}
+      />
+      <ActionButton
+        label="↓"
+        title={t('menuAdmin.moveDown')}
+        disabled={busy || index === siblings.length - 1}
+        onClick={() => swapWith(siblings[index + 1]!)}
+      />
+      <ActionButton
+        label={entry.isEnabled ? t('menuAdmin.hide') : t('menuAdmin.show')}
+        title={entry.isEnabled ? t('menuAdmin.hide') : t('menuAdmin.show')}
+        disabled={busy}
+        onClick={() =>
+          run(async () => {
+            await setMenuItemVisibility(entry.id, !entry.isEnabled);
+          })
+        }
+      />
+      <ActionButton
+        label={t('menuAdmin.rename')}
+        title={t('menuAdmin.rename')}
+        disabled={busy}
+        onClick={() => {
+          const label = window.prompt(t('menuAdmin.renamePrompt'), entry.label);
+
+          if (label && label.trim()) {
+            run(async () => {
+              await updateMenuItem(entry.id, {
+                label: label.trim(),
+                route: entry.route,
+                labelArabic: entry.labelArabic,
+                icon: entry.icon,
+                requiredPermission: entry.requiredPermission,
+              });
+            });
+          }
+        }}
+      />
+      <ActionButton
+        label={t('menuAdmin.delete')}
+        title={entry.isSystem ? t('menuAdmin.systemCannotDelete') : t('menuAdmin.delete')}
+        disabled={busy || entry.isSystem}
+        danger
+        onClick={() =>
+          run(async () => {
+            await deleteMenuItem(entry.id);
+          })
+        }
+      />
+    </div>
+  );
+
   const dropClass = isTargetOfDrop
     ? dragTarget?.position === 'before'
       ? 'border-t-2 border-t-accent bg-accent/5'
@@ -380,7 +459,7 @@ function EntryRows({
         )}
       >
         {/* Drag Handle */}
-        <td className="w-10 px-2 py-2 text-center">
+        <td className="hidden w-10 px-2 py-2 text-center sm:table-cell">
           <div
             title="Drag to reorder"
             className="flex items-center justify-center cursor-grab active:cursor-grabbing text-ink-muted hover:text-accent p-1 rounded transition"
@@ -429,23 +508,15 @@ function EntryRows({
               )}
             </span>
           </div>
+          <div className="mt-1.5 md:hidden">{destination}</div>
+          <div className="mt-2 sm:hidden">{actions}</div>
         </td>
 
         {/* Route / Heading Badge */}
-        <td className="px-3 py-2 text-ink-muted">
-          {entry.route ? (
-            <span className="font-mono text-xs rounded bg-surface-2 px-1.5 py-0.5 text-ink">
-              {entry.route}
-            </span>
-          ) : (
-            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
-              {t('menuAdmin.heading')}
-            </span>
-          )}
-        </td>
+        <td className="hidden px-3 py-2 text-ink-muted md:table-cell">{destination}</td>
 
         {/* Required Permission */}
-        <td className="px-3 py-2 text-xs text-ink-muted">
+        <td className="hidden px-3 py-2 text-xs text-ink-muted lg:table-cell">
           {entry.requiredPermission ? (
             <span className="font-mono text-[11px]">{entry.requiredPermission}</span>
           ) : (
@@ -454,65 +525,7 @@ function EntryRows({
         </td>
 
         {/* Actions */}
-        <td className="px-3 py-2 text-end">
-          <div className="flex flex-wrap justify-end gap-1">
-            <ActionButton
-              label="↑"
-              title={t('menuAdmin.moveUp')}
-              disabled={busy || index === 0}
-              onClick={() => swapWith(siblings[index - 1]!)}
-            />
-            <ActionButton
-              label="↓"
-              title={t('menuAdmin.moveDown')}
-              disabled={busy || index === siblings.length - 1}
-              onClick={() => swapWith(siblings[index + 1]!)}
-            />
-            <ActionButton
-              label={entry.isEnabled ? t('menuAdmin.hide') : t('menuAdmin.show')}
-              title={entry.isEnabled ? t('menuAdmin.hide') : t('menuAdmin.show')}
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await setMenuItemVisibility(entry.id, !entry.isEnabled);
-                })
-              }
-            />
-            <ActionButton
-              label={t('menuAdmin.rename')}
-              title={t('menuAdmin.rename')}
-              disabled={busy}
-              onClick={() => {
-                const label = window.prompt(t('menuAdmin.renamePrompt'), entry.label);
-
-                if (label && label.trim()) {
-                  run(async () => {
-                    await updateMenuItem(entry.id, {
-                      label: label.trim(),
-                      route: entry.route,
-                      labelArabic: entry.labelArabic,
-                      icon: entry.icon,
-                      requiredPermission: entry.requiredPermission,
-                    });
-                  });
-                }
-              }}
-            />
-            <ActionButton
-              label={t('menuAdmin.delete')}
-              title={
-                entry.isSystem ? t('menuAdmin.systemCannotDelete') : t('menuAdmin.delete')
-              }
-              disabled={busy || entry.isSystem}
-              danger
-              onClick={() =>
-                run(async () => {
-                  await deleteMenuItem(entry.id);
-                })
-              }
-            />
-          </div>
-        </td>
+        <td className="hidden px-3 py-2 text-end sm:table-cell">{actions}</td>
       </tr>
 
       {!isCollapsed &&

@@ -638,6 +638,35 @@ describe('a value with nowhere to wrap', () => {
     expect(cell?.className).toContain('[overflow-wrap:anywhere]');
   });
 
+  it('keeps a short code or date whole, and lets prose wrap only between words', () => {
+    // Allowed to break anywhere, a squeezed table cut "SL/2026/0002" into "SL/202"
+    // over "6/0002" and a date into four lines; scrolling sideways keeps them whole.
+    const mixed: readonly Row[] = [
+      {
+        id: '1',
+        code: 'SL/2026/0002',
+        name: 'Walk-in customer at the counter',
+        amount: 1,
+      },
+    ];
+
+    render(
+      <DataGrid
+        gridKey="wrap-short"
+        rows={mixed}
+        columns={columns}
+        rowKey={(row) => row.id}
+        emptyMessage="none"
+      />,
+    );
+
+    const [code, name] = screen.getAllByRole('cell');
+    expect(code?.className).toContain('whitespace-nowrap');
+    expect(code?.className).not.toContain('[overflow-wrap:anywhere]');
+    expect(name?.className).not.toContain('whitespace-nowrap');
+    expect(name?.className).not.toContain('[overflow-wrap:anywhere]');
+  });
+
   it('lets a card break it too, where there is least room for it', () => {
     setMatchingMedia('(max-width: 639px)'); // the cards, not the table
     render(

@@ -461,6 +461,7 @@ function StockEntry({
   const showRate = carriesRate(type);
   const transfer = isTransfer(type);
   const counting = isCount(type);
+  const quantityLabel = counting ? t('stock.counted') : t('stock.quantity');
 
   const batched = (productId: string): boolean =>
     (products.data ?? []).some(
@@ -704,14 +705,17 @@ function StockEntry({
         )}
       </div>
 
-      <div className="table-wrap overflow-x-auto max-h-[60vh] overflow-y-auto">
-        <table className="table">
-          <thead className="bg-surface-3">
+      {/*
+        A card a line on a phone, the way the billing screens lay theirs out: the
+        table put the product picker across the whole dialog and the quantity behind
+        a sideways scroll, with the rate, batch and remarks further off still.
+      */}
+      <div className="overflow-x-auto sm:max-h-[60vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
+        <table className="line-table">
+          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
-              <th className="px-3 py-2 text-end font-semibold">
-                {counting ? t('stock.counted') : t('stock.quantity')}
-              </th>
+              <th className="px-3 py-2 text-end font-semibold">{quantityLabel}</th>
               {showRate && (
                 <th className="px-3 py-2 text-end font-semibold">{t('stock.rate')}</th>
               )}
@@ -728,7 +732,7 @@ function StockEntry({
           <tbody>
             {lines.map((line) => (
               <tr key={line.key} className="border-t border-line">
-                <td className="min-w-64 px-2 py-1">
+                <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
                   {/*
                     A picker that can be typed into, showing what each product is
                     and what is on the shelf. It was a native select of the whole
@@ -756,7 +760,7 @@ function StockEntry({
                     placeholder={t('stock.choose')}
                   />
                 </td>
-                <td className="px-2 py-1">
+                <td data-label={quantityLabel} className="px-2 py-1">
                   <input
                     type="number"
                     step="any"
@@ -768,7 +772,7 @@ function StockEntry({
                   />
                 </td>
                 {showRate && (
-                  <td className="px-2 py-1">
+                  <td data-label={t('stock.rate')} className="px-2 py-1">
                     <input
                       type="number"
                       step="any"
@@ -781,7 +785,7 @@ function StockEntry({
                   </td>
                 )}
                 {anyBatched && (
-                  <td className="px-2 py-1">
+                  <td data-label={t('stock.batch')} className="px-2 py-1">
                     {batched(line.productId) ? (
                       <BatchCell
                         line={line}
@@ -797,7 +801,7 @@ function StockEntry({
                   </td>
                 )}
                 {anySerialised && (
-                  <td className="px-2 py-1">
+                  <td data-label={t('stock.units')} className="px-2 py-1">
                     {serialised(line.productId) ? (
                       <SerialCell
                         line={line}
@@ -817,7 +821,7 @@ function StockEntry({
                     )}
                   </td>
                 )}
-                <td className="px-2 py-1">
+                <td data-label={t('stock.remarks')} className="px-2 py-1">
                   <input
                     value={line.remarks}
                     onChange={(event) =>
@@ -1187,9 +1191,9 @@ function StockDocumentView({
         </form>
       )}
 
-      <Panel title={t('stock.lines')}>
-        <table className="table">
-          <thead className="bg-surface-3">
+      <Panel title={t('stock.lines')} stacks>
+        <table className="line-table">
+          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">#</th>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
@@ -1208,19 +1212,27 @@ function StockDocumentView({
           <tbody>
             {document.lines.map((line) => (
               <tr key={line.id} className="border-t border-line">
-                <td className="px-3 py-1.5">{line.lineNumber}</td>
-                <td className="px-3 py-1.5">
+                <td data-label="#" className="px-3 py-1.5">
+                  {line.lineNumber}
+                </td>
+                <td data-label={t('stock.product')} className="px-3 py-1.5">
                   <span className="font-mono">{line.productCode}</span>{' '}
                   {line.productDescription}
                 </td>
-                <td className="cell-numeric">{trim(line.quantity)}</td>
-                <td className="px-3 py-1.5">{line.unitCode}</td>
-                <td className="cell-numeric">
+                <td data-label={t('stock.quantity')} className="cell-numeric">
+                  {trim(line.quantity)}
+                </td>
+                <td data-label={t('stock.unit')} className="px-3 py-1.5">
+                  {line.unitCode}
+                </td>
+                <td data-label={t('stock.inStockUnits')} className="cell-numeric">
                   {trim(line.stockQuantity)} {line.stockUnitCode}
                 </td>
-                <td className="cell-numeric">{line.rate === 0 ? '' : trim(line.rate)}</td>
+                <td data-label={t('stock.rate')} className="cell-numeric">
+                  {line.rate === 0 ? '' : trim(line.rate)}
+                </td>
                 {batchedDocument && (
-                  <td className="px-3 py-1.5">
+                  <td data-label={t('stock.batch')} className="px-3 py-1.5">
                     {/* A row with a gap rather than a margin on an inline span: see
                         `ProfitAndLossPage` — in Arabic the margin lands on the wrong
                         side and the batch number runs into its expiry. */}
@@ -1234,7 +1246,9 @@ function StockDocumentView({
                     </span>
                   </td>
                 )}
-                <td className="px-3 py-1.5">{line.remarks ?? ''}</td>
+                <td data-label={t('stock.remarks')} className="px-3 py-1.5">
+                  {line.remarks ?? ''}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1365,15 +1379,26 @@ function Labelled({
 
 function Panel({
   title,
+  stacks = false,
   children,
 }: {
   readonly title: string;
+  /** Holds a `.line-table`, whose rows are cards of their own on a phone. */
+  readonly stacks?: boolean;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold text-ink-muted uppercase">{title}</h3>
-      <div className="table-wrap max-h-[70vh] overflow-y-auto">{children}</div>
+      <div
+        className={
+          stacks
+            ? 'overflow-x-auto sm:max-h-[70vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card'
+            : 'table-wrap max-h-[70vh] overflow-y-auto'
+        }
+      >
+        {children}
+      </div>
     </div>
   );
 }

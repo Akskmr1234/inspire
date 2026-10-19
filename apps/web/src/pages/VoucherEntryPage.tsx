@@ -98,6 +98,13 @@ function emptyJournalLine(): JournalLine {
 }
 
 /**
+ * Where the lines become cards rather than a table. Higher than the grid's own
+ * breakpoint: the ledger, two amounts and a narration need a portrait tablet's width
+ * before they fit side by side, and on a phone in landscape the table scrolled.
+ */
+const CARDS_BELOW = '(max-width: 767px)';
+
+/**
  * Journal entry.
  *
  * The same layout as payments and receipts - the date and reference above, a grid of
@@ -115,7 +122,7 @@ export function VoucherEntryPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const narrow = useIsNarrow();
+  const narrow = useIsNarrow(CARDS_BELOW);
 
   const [type, setType] = useState<number>(VoucherType.journal);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -332,14 +339,16 @@ export function VoucherEntryPage(): React.JSX.Element {
               ))}
             </div>
           ) : (
+            // Narrower columns below `lg`, so a portrait tablet has the credit and
+            // the narration on screen rather than behind a sideways scroll.
             <div className="table-wrap">
-              <table className="table min-w-[48rem]">
+              <table className="table min-w-[40rem] lg:min-w-[48rem]">
                 <thead>
                   <tr>
                     <th className="w-10 text-start">#</th>
                     <th className="text-start">{t('vouchers.ledger')}</th>
-                    <th className="w-36 text-end">{t('reports.debit')}</th>
-                    <th className="w-36 text-end">{t('reports.credit')}</th>
+                    <th className="w-28 text-end lg:w-36">{t('reports.debit')}</th>
+                    <th className="w-28 text-end lg:w-36">{t('reports.credit')}</th>
                     <th className="text-start">{t('vouchers.lineNarration')}</th>
                     <th className="w-10" />
                   </tr>
@@ -348,10 +357,12 @@ export function VoucherEntryPage(): React.JSX.Element {
                   {lines.map((line, index) => (
                     <tr key={line.key}>
                       <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
-                      <td className="min-w-56 py-2">{ledgerControl(line)}</td>
+                      <td className="min-w-48 py-2 lg:min-w-56">{ledgerControl(line)}</td>
                       <td className="py-2">{amountControl(line, 'debit')}</td>
                       <td className="py-2">{amountControl(line, 'credit')}</td>
-                      <td className="min-w-40 py-2">{narrationControl(line)}</td>
+                      <td className="min-w-32 py-2 lg:min-w-40">
+                        {narrationControl(line)}
+                      </td>
                       <td className="px-2 py-2 text-end">{removeControl(line)}</td>
                     </tr>
                   ))}
@@ -599,7 +610,7 @@ function MoneyEntry({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const narrow = useIsNarrow();
+  const narrow = useIsNarrow(CARDS_BELOW);
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -1007,9 +1018,11 @@ function MoneyEntry({
                   {lines.map((line, index) => (
                     <tr key={line.key}>
                       <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
-                      <td className="min-w-56 py-2">{ledgerControl(line)}</td>
+                      <td className="min-w-48 py-2 lg:min-w-56">{ledgerControl(line)}</td>
                       <td className="py-2">{amountControl(line)}</td>
-                      <td className="min-w-40 py-2">{narrationControl(line)}</td>
+                      <td className="min-w-32 py-2 lg:min-w-40">
+                        {narrationControl(line)}
+                      </td>
                       <td className="px-2 py-2 text-end">{removeControl(line)}</td>
                     </tr>
                   ))}

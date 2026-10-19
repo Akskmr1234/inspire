@@ -896,6 +896,7 @@ const en = {
     setUpChargeHint:
       'Any expense or income ledger can be carried on a sale. Choose it and whether it adds to the bill or comes off it; it is then offered on every sale.',
     setUp: 'Set up',
+    noAdditionalLedgers: 'No additional ledgers on this document.',
   },
   customers: {
     mobile: 'Mobile',
@@ -1609,7 +1610,7 @@ const en = {
     title: 'Roles and menus',
     hint: 'A role decides which menus its users see and what they may do. A user with several roles gets everything any of them gives.',
     new: 'New role',
-    choose: 'Choose a role on the left, or create one.',
+    choose: 'Choose a role from the list, or create one.',
     userCount_one: '{{count}} user',
     userCount_other: '{{count}} users',
     everything: 'everything',
@@ -2862,6 +2863,7 @@ const ar = {
     setUpChargeHint:
       'يمكن إضافة أي حساب مصروفات أو إيرادات إلى البيع. اختره وحدد إن كان يضاف إلى الفاتورة أو يخصم منها، وسيُعرض بعدها في كل عملية بيع.',
     setUp: 'إعداد',
+    noAdditionalLedgers: 'لا توجد حسابات إضافية في هذا المستند.',
   },
   customers: {
     mobile: 'الجوال',

@@ -840,7 +840,7 @@ function OrderEntryDialog({
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[42rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('orders.product')}</th>
@@ -864,7 +864,10 @@ function OrderEntryDialog({
 
               return (
                 <tr key={line.key} className="border-t border-line">
-                  <td data-label={t('orders.product')} className="min-w-64 px-2 py-1">
+                  <td
+                    data-label={t('orders.product')}
+                    className="min-w-40 px-2 py-1 lg:min-w-64"
+                  >
                     <SearchSelect
                       value={line.productId}
                       onChange={(value) => {
@@ -939,7 +942,7 @@ function OrderEntryDialog({
                           change(index, { taxPercentage: event.target.value })
                         }
                         className={clsx(
-                          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+                          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
                           errorsForLine['taxPercentage'] && 'field-invalid',
                         )}
                       />
@@ -1129,7 +1132,7 @@ function OrderDialog({
           </p>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[34rem] text-sm">
+            <table className="line-table sm:min-w-[34rem]">
               <thead className="text-xs text-ink-muted">
                 <tr>
                   <th className="px-2 py-1 text-start">#</th>
@@ -1143,12 +1146,23 @@ function OrderDialog({
               <tbody>
                 {order.lines.map((line) => (
                   <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-1">{line.lineNumber}</td>
-                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td data-label="#" className="px-2 py-1">
+                      {line.lineNumber}
+                    </td>
+                    <td
+                      data-label={t('orders.ordered')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
+                      {line.quantity}
+                    </td>
+                    <td
+                      data-label={t('orders.invoiced')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {line.invoicedQuantity}
                     </td>
                     <td
+                      data-label={t('orders.outstanding')}
                       className={clsx(
                         'px-2 py-1 text-end font-mono',
                         line.outstandingQuantity > 0 && 'font-semibold text-ink',
@@ -1156,10 +1170,16 @@ function OrderDialog({
                     >
                       {line.outstandingQuantity}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('orders.rate')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.rate)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('orders.taxable')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.taxable)}
                     </td>
                   </tr>
@@ -1216,6 +1236,7 @@ function OrderDialog({
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('orders.closeReason')}
+                className="max-sm:min-w-0 max-sm:flex-1"
                 size="sm"
                 value={reason}
                 onChange={setReason}
@@ -1296,7 +1317,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

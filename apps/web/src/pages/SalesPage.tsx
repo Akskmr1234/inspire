@@ -609,7 +609,9 @@ function AdditionalLedgersSection({
       )}
 
       {rows.length === 0 ? (
-        <p className="py-2 text-center text-xs text-ink-muted">{t('sales.none')}</p>
+        <p className="py-2 text-center text-xs text-ink-muted">
+          {t('sales.noAdditionalLedgers')}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -1441,7 +1443,11 @@ function EntryDialog({
           </label>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
+      {/* Four groups of fields: two to a row until there is room for all four,
+          which leaves the paired fields inside each group a usable width - at
+          three or four to a row on a tablet the dates, the warehouse and the
+          salesman were cut to a few characters each. */}
+      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface-2/40 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
         {/* Document Numbers */}
         <div className="space-y-2">
           <TextField
@@ -1653,10 +1659,13 @@ function EntryDialog({
       )}
 
       {/* Line Items Table. The columns are the user's to choose, remembered in this
-          browser, for the same reason the purchase lines' are. */}
+          browser, for the same reason the purchase lines' are. Below `lg` the product
+          and the figures are a little narrower, so a portrait tablet has every
+          column on screen rather than the tax and the net behind a sideways
+          scroll; the purchase and order lines do the same. */}
       <div className="flex justify-end">{lineColumns.picker}</div>
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[46rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
           <thead className="text-start text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('sales.product')}</th>
@@ -2143,7 +2152,7 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td data-label={t('sales.product')} className="min-w-64 px-2 py-1">
+        <td data-label={t('sales.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           <SearchSelect
             value={line.productId}
             onChange={handleProductSelect}
@@ -2486,7 +2495,7 @@ function DocumentDialog({
               </div>
 
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <table className="w-full min-w-[32rem] text-sm">
+                <table className="line-table sm:min-w-[32rem]">
                   <thead className="text-xs text-ink-muted">
                     <tr>
                       <th className="px-2 py-1 text-start">#</th>
@@ -2504,8 +2513,10 @@ function DocumentDialog({
                       const prod = products.data?.find((p) => p.id === line.productId);
                       return (
                         <tr key={line.lineNumber} className="border-t border-line">
-                          <td className="px-2 py-1">{line.lineNumber}</td>
-                          <td className="px-2 py-1">
+                          <td data-label="#" className="px-2 py-1">
+                            {line.lineNumber}
+                          </td>
+                          <td data-label={t('sales.product')} className="px-2 py-1">
                             <span className="font-medium text-ink">
                               {prod?.description || prod?.code || line.productId}
                             </span>
@@ -2517,16 +2528,28 @@ function DocumentDialog({
                               </div>
                             )}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.quantity')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {line.quantity}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.rate')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.rate)}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.taxable')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.taxable)}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.tax')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.tax)}
                           </td>
                         </tr>
@@ -2564,7 +2587,7 @@ function DocumentDialog({
                 <p className="text-xs text-ink-muted">{t('sales.postedProduced')}</p>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-line">
+              <div className="flex flex-wrap items-end justify-between gap-3 pt-4 border-t border-line max-sm:justify-start max-sm:gap-2">
                 <div className="flex items-center gap-2">
                   <ModalButton onClick={() => setActiveTab('print')}>
                     <span className="inline-flex items-center gap-1.5">
@@ -2574,7 +2597,13 @@ function DocumentDialog({
                   </ModalButton>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-2">
+                {/*
+                  On a phone the two groups flow as one row of buttons, and the
+                  reason for a cancellation gets a line of its own under them: wrapped
+                  inside the right-hand group it landed in a corner, half the width of
+                  the screen, below a button it had nothing to do with.
+                */}
+                <div className="flex flex-wrap items-end gap-2 max-sm:contents">
                   {document.header.status !== SalesInvoiceStatus.cancelled && (
                     <ModalButton disabled={busy} onClick={() => onEdit(document)}>
                       {t('sales.edit')}
@@ -2588,14 +2617,16 @@ function DocumentDialog({
                   )}
 
                   {document.header.status !== SalesInvoiceStatus.cancelled && (
-                    <div className="flex flex-wrap items-end justify-end gap-2">
-                      <Field label={t('sales.cancelReason')}>
-                        <input
-                          value={reason}
-                          onChange={(event) => setReason(event.target.value)}
-                          className="field-input-sm"
-                        />
-                      </Field>
+                    <div className="flex flex-wrap items-end justify-end gap-2 max-sm:order-last max-sm:w-full max-sm:flex-nowrap">
+                      <div className="max-sm:min-w-0 max-sm:flex-1">
+                        <Field label={t('sales.cancelReason')}>
+                          <input
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            className="field-input-sm"
+                          />
+                        </Field>
+                      </div>
                       <ModalButton
                         disabled={busy || reason.trim() === ''}
                         onClick={() => onCancel(id, reason.trim())}
@@ -2702,7 +2733,7 @@ function NumberCell({
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

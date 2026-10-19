@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -18,6 +18,9 @@ import {
 } from '@/lib/users';
 
 const VERBS = ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'] as const;
+
+/** Where the list of roles and the editor stand side by side: the `lg` breakpoint. */
+const SIDE_BY_SIDE = '(min-width: 1024px)';
 
 /**
  * Roles: which menus each shows, and what it may do.
@@ -47,6 +50,22 @@ export function RolesPage(): React.JSX.Element {
   });
 
   const [selected, setSelected] = useState<string | 'new' | null>(null);
+  const editor = useRef<HTMLDivElement>(null);
+
+  // Below a laptop the list and the editor are stacked, and a role tapped in the list
+  // opened its editor somewhere under the fold with nothing on screen to show it had.
+  useEffect(() => {
+    const box = editor.current;
+
+    if (
+      selected !== null &&
+      box &&
+      typeof box.scrollIntoView === 'function' &&
+      !window.matchMedia(SIDE_BY_SIDE).matches
+    ) {
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selected]);
   const [notice, setNotice] = useState<string | null>(null);
 
   const current =
@@ -113,24 +132,26 @@ export function RolesPage(): React.JSX.Element {
             ))}
           </ul>
 
-          {selected === null ? (
-            <p className="panel text-sm text-ink-muted">{t('roles.choose')}</p>
-          ) : (
-            <RoleEditor
-              key={selected}
-              role={current}
-              permissions={permissions.data}
-              menu={menu.data.items}
-              onSaved={(message, roleId) => {
-                setNotice(message);
-                setSelected(roleId);
-              }}
-              onDeleted={(message) => {
-                setNotice(message);
-                setSelected(null);
-              }}
-            />
-          )}
+          <div ref={editor} className="min-w-0 scroll-mt-20">
+            {selected === null ? (
+              <p className="panel text-sm text-ink-muted">{t('roles.choose')}</p>
+            ) : (
+              <RoleEditor
+                key={selected}
+                role={current}
+                permissions={permissions.data}
+                menu={menu.data.items}
+                onSaved={(message, roleId) => {
+                  setNotice(message);
+                  setSelected(roleId);
+                }}
+                onDeleted={(message) => {
+                  setNotice(message);
+                  setSelected(null);
+                }}
+              />
+            )}
+          </div>
         </div>
       )}
     </section>

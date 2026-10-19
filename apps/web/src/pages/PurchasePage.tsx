@@ -937,7 +937,7 @@ function EntryDialog({
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[44rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('purchase.product')}</th>
@@ -1085,7 +1085,7 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td data-label={t('purchase.product')} className="min-w-64 px-2 py-1">
+        <td data-label={t('purchase.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           {/*
             The picker shows what each product is and what is on the shelf, and it
             can be typed into. It was a native select listing `code — description`
@@ -1171,7 +1171,7 @@ function LineRow({
               value={line.taxPercentage}
               onChange={(event) => onChange({ taxPercentage: event.target.value })}
               className={clsx(
-                'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+                'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
                 errors['taxPercentage'] && 'field-invalid',
               )}
             />
@@ -1372,7 +1372,7 @@ function DocumentDialog({
           </div>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[32rem] text-sm">
+            <table className="line-table sm:min-w-[32rem]">
               <thead className="text-xs text-ink-muted">
                 <tr>
                   <th className="px-2 py-1 text-start">#</th>
@@ -1386,18 +1386,37 @@ function DocumentDialog({
               <tbody>
                 {document.lines.map((line) => (
                   <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-1">{line.lineNumber}</td>
-                    <td className="px-2 py-1 font-mono text-xs">
+                    <td data-label="#" className="px-2 py-1">
+                      {line.lineNumber}
+                    </td>
+                    <td
+                      data-label={t('purchase.batch')}
+                      className="px-2 py-1 font-mono text-xs"
+                    >
                       {line.batchNumber ?? '—'}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.quantity')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
+                      {line.quantity}
+                    </td>
+                    <td
+                      data-label={t('purchase.rate')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.rate)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.taxable')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.taxable)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.tax')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.tax)}
                     </td>
                   </tr>
@@ -1476,6 +1495,7 @@ function DocumentDialog({
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('purchase.cancelReason')}
+                className="max-sm:min-w-0 max-sm:flex-1"
                 size="sm"
                 value={reason}
                 onChange={setReason}
@@ -1555,7 +1575,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

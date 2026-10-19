@@ -27,6 +27,34 @@ import {
 /** Below this width the sidebar is a drawer rather than a column. */
 const DESKTOP = '(min-width: 1024px)';
 
+/** Wide enough for the full sidebar and the full bar beside a list's own columns. */
+const WIDE = '(min-width: 1280px)';
+
+/** Where this browser remembers whether the sidebar was folded to its icons. */
+const SIDEBAR_KEY = 'erp.sidebar.collapsed';
+
+/**
+ * Whether the sidebar starts as a rail of icons.
+ *
+ * What the user last chose, where they chose; otherwise folded below 1280px. On a
+ * 1024px tablet the full sidebar took a quarter of the screen and left the lists
+ * three-quarters of a width they were already too wide for, so every grid scrolled
+ * sideways and every heading in the bar was cut to a few letters.
+ */
+function initialCollapsed(): boolean {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_KEY);
+
+    if (stored !== null) {
+      return stored === 'true';
+    }
+  } catch {
+    // Storage switched off: fall back to the width.
+  }
+
+  return typeof window.matchMedia === 'function' && !window.matchMedia(WIDE).matches;
+}
+
 /**
  * The application chrome: the navigation, a header carrying the theme and language
  * switches, and an outlet for the active screen.
@@ -54,7 +82,7 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => {
     void useSettings.getState().hydrate();
   }, []);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // The bar carries the active screen's title. See `PageHeading` for the half of
@@ -128,11 +156,24 @@ export function AppShell(): React.JSX.Element {
     await i18next.changeLanguage(next);
   };
 
-  const nav = (
+  const toggleCollapsed = (): void =>
+    setCollapsed((value) => {
+      try {
+        localStorage.setItem(SIDEBAR_KEY, String(!value));
+      } catch {
+        // Remembered for this visit only.
+      }
+
+      return !value;
+    });
+
+  // The drawer is never folded: it is opened to be read, and a rail of icons on a
+  // phone is a menu nobody can tell the entries of apart.
+  const navigation = (folded: boolean): React.JSX.Element => (
     <Navigation
       menu={menu}
       language={language}
-      collapsed={collapsed}
+      collapsed={folded}
       onNavigate={() => setDrawerOpen(false)}
     />
   );
@@ -173,11 +214,11 @@ export function AppShell(): React.JSX.Element {
         )}
       >
         <Brand collapsed={collapsed} />
-        {nav}
+        {navigation(collapsed)}
 
         <button
           type="button"
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={toggleCollapsed}
           className="flex items-center gap-2 border-t border-line px-4 py-3 text-xs font-medium text-ink-muted transition hover:bg-surface-3 hover:text-ink"
           aria-label={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         >
@@ -193,7 +234,9 @@ export function AppShell(): React.JSX.Element {
         </button>
       </aside>
 
-      {drawerOpen && <NavDrawer onClose={() => setDrawerOpen(false)}>{nav}</NavDrawer>}
+      {drawerOpen && (
+        <NavDrawer onClose={() => setDrawerOpen(false)}>{navigation(false)}</NavDrawer>
+      )}
 
       {paletteOpen && (
         <CommandPalette
@@ -240,7 +283,10 @@ export function AppShell(): React.JSX.Element {
             by appending them, so a node holding both would have the two sets
             fighting over the same positions.
           */}
-          <div ref={setElement} className="flex min-w-0 flex-1 items-center gap-2" />
+          <div
+            ref={setElement}
+            className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
+          />
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/*
@@ -253,7 +299,7 @@ export function AppShell(): React.JSX.Element {
               onClick={() => setPaletteOpen(true)}
               aria-label={t('palette.open')}
               title={t('palette.open')}
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-2/80 px-2.5 text-xs text-ink-muted transition duration-150 hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95 sm:w-44 sm:justify-between lg:w-56"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface-2/80 px-2.5 text-xs text-ink-muted transition duration-150 hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95 xl:w-56 xl:justify-between"
             >
               <span className="flex items-center gap-2">
                 <svg
@@ -268,21 +314,22 @@ export function AppShell(): React.JSX.Element {
                   <circle cx="11" cy="11" r="7" />
                   <path d="m20 20-3.6-3.6" />
                 </svg>
-                <span className="hidden sm:inline text-xs text-ink-subtle">
+                <span className="hidden text-xs text-ink-subtle xl:inline">
                   {t('palette.searchModule')}
                 </span>
               </span>
-              <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-sans text-[0.65rem] font-semibold tracking-wide text-ink-muted lg:inline">
+              <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-sans text-[0.65rem] font-semibold tracking-wide text-ink-muted xl:inline">
                 {t('palette.shortcut')}
               </kbd>
             </button>
 
             {/*
-              User profile trigger and menu. On a phone it is the avatar alone and
+              User profile trigger and menu. Below 1280px it is the avatar alone and
               the menu it opens carries the theme, the language and signing out,
               because the bar cannot hold those as well as the screen's own title
-              and button: at 360px they pushed the button under themselves and
-              slid the whole page sideways.
+              and button: at 360px they pushed the button under themselves and slid
+              the whole page sideways, and on a 768px tablet they cut every title to
+              a few letters and sat on top of the screen's own button.
             */}
             <UserProfileDropdown
               displayName={displayName}
@@ -294,7 +341,7 @@ export function AppShell(): React.JSX.Element {
               onSignOut={() => void signOut()}
             />
 
-            <div className="hidden items-center gap-2 sm:flex">
+            <div className="hidden items-center gap-2 xl:flex">
               <ThemeSwitch theme={theme} onChange={setTheme} />
 
               <Switch<Language>
@@ -453,20 +500,20 @@ function UserProfileDropdown({
         aria-label={`${effectiveName} - ${t('profile.title')}`}
         title={effectiveName}
         className={clsx(
-          'flex items-center gap-2 rounded-full border border-line/80 bg-surface-2/90 p-0.5 text-xs font-medium transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 md:rounded-lg md:px-2.5 md:py-1.5',
+          'flex items-center gap-2 rounded-full border border-line/80 bg-surface-2/90 p-0.5 text-xs font-medium transition duration-150 hover:border-line-strong hover:bg-surface-3 active:scale-95 xl:rounded-lg xl:px-2.5 xl:py-1.5',
           open && 'border-brand-500 bg-surface-3 ring-2 ring-brand-500/20 shadow-xs',
         )}
       >
-        <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-[11px] font-bold text-white shadow-xs md:size-6 md:text-[10px]">
+        <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-[11px] font-bold text-white shadow-xs xl:size-6 xl:text-[10px]">
           {initials}
           <span className="absolute -bottom-0.5 -end-0.5 size-2 rounded-full border-2 border-surface bg-emerald-500" />
         </span>
-        <span className="hidden max-w-44 truncate font-semibold text-ink md:inline">
+        <span className="hidden max-w-44 truncate font-semibold text-ink xl:inline">
           {effectiveName}
         </span>
         <IconChevron
           className={clsx(
-            'hidden size-3.5 text-ink-muted transition-transform duration-200 md:block',
+            'hidden size-3.5 text-ink-muted transition-transform duration-200 xl:block',
             open && 'rotate-180',
           )}
         />
@@ -505,10 +552,11 @@ function UserProfileDropdown({
           </div>
 
           {/*
-            The switches the bar shows beside the avatar from `sm` up. Here they are
-            rows with a word each, which a thumb finds more easily than two glyphs.
+            The switches the bar shows beside the avatar from `xl` up. Below that the
+            bar is the screen's title and its button, and these are rows here with a
+            word each, which a thumb finds more easily than two glyphs anyway.
           */}
-          <div className="space-y-2 border-t border-line px-2.5 py-2.5 sm:hidden">
+          <div className="space-y-2 border-t border-line px-2.5 py-2.5 xl:hidden">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium text-ink">{t('common.theme')}</span>
               <Switch<Theme>
