@@ -401,6 +401,15 @@ public static class MenuCatalogue
                     "service",
                     "/service/job-cards",
                     "service:job-card:view"),
+
+                // Goods coming back from customers or going back to suppliers.
+                new(
+                    "service.rmas",
+                    "Returns (RMA)",
+                    "المرتجعات (RMA)",
+                    "service",
+                    "/service/rmas",
+                    "service:rma:view"),
             ]),
 
         new(

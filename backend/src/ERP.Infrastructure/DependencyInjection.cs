@@ -116,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<IStockTransferRequestRepository, StockTransferRequestRepository>();
         services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
         services.AddScoped<IJobCardRepository, JobCardRepository>();
+        services.AddScoped<IRmaRepository, RmaRepository>();
         services.AddScoped<IStockBalanceRepository, StockBalanceRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<IBatchRepository, BatchRepository>();
@@ -137,6 +138,7 @@ public static class DependencyInjection
         services.AddScoped<IStockHistoryReader, StockHistoryReader>();
         services.AddScoped<IBillOfMaterialsReader, BillOfMaterialsReader>();
         services.AddScoped<IJobCardReader, JobCardReader>();
+        services.AddScoped<IRmaReader, RmaReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<ISerialReader, SerialReader>();

@@ -76,6 +76,28 @@ public sealed class JobCardRepository : IJobCardRepository
     public void Add(JobCard card) => _context.JobCards.Add(card);
 }
 
+/// <summary>Reads and writes return merchandise authorisations.</summary>
+public sealed class RmaRepository : IRmaRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="RmaRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public RmaRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<Rma?> FindAsync(RmaId id, CancellationToken cancellationToken = default) =>
+        _context.Rmas
+            .Include(rma => rma.Lines)
+            .Include(rma => rma.Photos)
+            .Include(rma => rma.Events)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(rma => rma.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Rma rma) => _context.Rmas.Add(rma);
+}
+
 /// <summary>Reads and writes stock transfer requests.</summary>
 public sealed class StockTransferRequestRepository : IStockTransferRequestRepository
 {

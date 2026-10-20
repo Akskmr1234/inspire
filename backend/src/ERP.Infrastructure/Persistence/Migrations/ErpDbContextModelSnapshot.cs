@@ -6156,6 +6156,310 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("job_card_lines", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Service.Rma", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("Condition")
+                        .HasColumnType("integer")
+                        .HasColumnName("condition");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CreditNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credit_note_id");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<Guid?>("DebitNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debit_note_id");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("integer")
+                        .HasColumnName("direction");
+
+                    b.Property<Guid>("FinancialYearId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("financial_year_id");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<DateOnly?>("InspectedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("inspected_on");
+
+                    b.Property<string>("InspectionNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("inspection_notes");
+
+                    b.Property<string>("InvoiceReference")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("invoice_reference");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Narration")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("narration");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("PartyLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("party_ledger_id");
+
+                    b.Property<Guid?>("PurchaseInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchase_invoice_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("ReplacementDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replacement_document_id");
+
+                    b.Property<Guid?>("SalesInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sales_invoice_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_rmas");
+
+                    b.HasIndex("CreditNoteId")
+                        .HasDatabaseName("ix_rmas_credit_note_id");
+
+                    b.HasIndex("DebitNoteId")
+                        .HasDatabaseName("ix_rmas_debit_note_id");
+
+                    b.HasIndex("FinancialYearId")
+                        .HasDatabaseName("ix_rmas_financial_year_id");
+
+                    b.HasIndex("PartyLedgerId")
+                        .HasDatabaseName("ix_rmas_party_ledger_id");
+
+                    b.HasIndex("PurchaseInvoiceId")
+                        .HasDatabaseName("ix_rmas_purchase_invoice_id");
+
+                    b.HasIndex("ReplacementDocumentId")
+                        .HasDatabaseName("ix_rmas_replacement_document_id");
+
+                    b.HasIndex("SalesInvoiceId")
+                        .HasDatabaseName("ix_rmas_sales_invoice_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_rmas_tenant");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("ix_rmas_warehouse_id");
+
+                    b.HasIndex("FirmId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_rmas_number");
+
+                    b.HasIndex("FirmId", "PartyLedgerId")
+                        .HasDatabaseName("ix_rmas_party");
+
+                    b.ToTable("rmas", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RmaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rma_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_rma_events");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_rma_events_tenant");
+
+                    b.HasIndex("RmaId", "At")
+                        .HasDatabaseName("ix_rma_events_rma");
+
+                    b.ToTable("rma_events", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_number");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RmaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rma_id");
+
+                    b.Property<string>("SerialNumber")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("serial_number");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_rma_lines");
+
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("ix_rma_lines_batch_id");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_rma_lines_product");
+
+                    b.HasIndex("SerialNumber")
+                        .HasDatabaseName("ix_rma_lines_serial")
+                        .HasFilter("serial_number IS NOT NULL");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_rma_lines_tenant");
+
+                    b.HasIndex("RmaId", "LineNumber")
+                        .HasDatabaseName("ix_rma_lines_rma");
+
+                    b.ToTable("rma_lines", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("caption");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(700000)
+                        .HasColumnType("character varying(700000)")
+                        .HasColumnName("content");
+
+                    b.Property<Guid>("RmaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rma_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_rma_photos");
+
+                    b.HasIndex("RmaId")
+                        .HasDatabaseName("ix_rma_photos_rma");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_rma_photos_tenant");
+
+                    b.ToTable("rma_photos", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Tenancy.Branch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7661,6 +7965,103 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_job_card_lines_products_product_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Service.Rma", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("CreditNoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rmas_sales_invoices_credit_note_id");
+
+                    b.HasOne("ERP.Domain.Purchase.PurchaseInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("DebitNoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rmas_purchase_invoices_debit_note_id");
+
+                    b.HasOne("ERP.Domain.Tenancy.FinancialYear", null)
+                        .WithMany()
+                        .HasForeignKey("FinancialYearId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_rmas_financial_years_financial_year_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("PartyLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_rmas_ledgers_party_ledger_id");
+
+                    b.HasOne("ERP.Domain.Purchase.PurchaseInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("PurchaseInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rmas_purchase_invoices_purchase_invoice_id");
+
+                    b.HasOne("ERP.Domain.Inventory.StockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacementDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rmas_stock_documents_replacement_document_id");
+
+                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rmas_sales_invoices_sales_invoice_id");
+
+                    b.HasOne("ERP.Domain.Inventory.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_rmas_warehouses_warehouse_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaEvent", b =>
+                {
+                    b.HasOne("ERP.Domain.Service.Rma", null)
+                        .WithMany("Events")
+                        .HasForeignKey("RmaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_rma_events_rmas_rma_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.Batch", null)
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_rma_lines_batches_batch_id");
+
+                    b.HasOne("ERP.Domain.Inventory.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_rma_lines_products_product_id");
+
+                    b.HasOne("ERP.Domain.Service.Rma", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("RmaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_rma_lines_rmas_rma_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.RmaPhoto", b =>
+                {
+                    b.HasOne("ERP.Domain.Service.Rma", null)
+                        .WithMany("Photos")
+                        .HasForeignKey("RmaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_rma_photos_rmas_rma_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Tenancy.Branch", b =>
                 {
                     b.HasOne("ERP.Domain.Tenancy.Firm", null)
@@ -7792,6 +8193,15 @@ namespace ERP.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.Service.JobCard", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.Rma", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("Lines");
+
+                    b.Navigation("Photos");
                 });
 
             modelBuilder.Entity("ERP.Domain.Tenancy.Firm", b =>

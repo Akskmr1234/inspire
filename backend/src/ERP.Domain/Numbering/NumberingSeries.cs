@@ -434,6 +434,9 @@ public static class DocumentTypes
     /// <summary>A service job card.</summary>
     public const string JobCard = "service.job-card";
 
+    /// <summary>A return merchandise authorisation.</summary>
+    public const string Rma = "service.rma";
+
     /// <summary>An opening-stock document.</summary>
     public const string OpeningStock = "inventory.opening-stock";
 

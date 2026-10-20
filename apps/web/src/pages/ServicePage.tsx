@@ -7,6 +7,7 @@ import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { BatchPick } from '@/components/BatchPick';
+import { Panel } from '@/components/Panel';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { DateField, SelectField, TextAreaField, TextField } from '@/components/Form';
 import { productOption } from '@/components/DocumentLines';
@@ -1150,21 +1151,6 @@ function JobCardForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Panel({
-  title,
-  children,
-}: {
-  readonly title: string;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {children}
-    </section>
   );
 }
 

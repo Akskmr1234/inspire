@@ -692,6 +692,20 @@ public interface IJobCardRepository
     void Add(JobCard card);
 }
 
+/// <summary>Reads and writes return merchandise authorisations.</summary>
+public interface IRmaRepository
+{
+    /// <summary>Finds a return with its products, photographs and history.</summary>
+    /// <param name="id">The return.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The return, or <see langword="null"/>.</returns>
+    Task<Rma?> FindAsync(RmaId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a return.</summary>
+    /// <param name="rma">The return to add.</param>
+    void Add(Rma rma);
+}
+
 /// <summary>Reads and writes stock transfer requests.</summary>
 public interface IStockTransferRequestRepository
 {

@@ -591,3 +591,43 @@ public sealed class JobCardLineIdConverter : ValueConverter<JobCardLineId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="RmaId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaIdConverter : ValueConverter<RmaId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaIdConverter"/> class.</summary>
+    public RmaIdConverter()
+        : base(id => id.Value, value => RmaId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaLineIdConverter : ValueConverter<RmaLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaLineIdConverter"/> class.</summary>
+    public RmaLineIdConverter()
+        : base(id => id.Value, value => RmaLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaPhotoId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaPhotoIdConverter : ValueConverter<RmaPhotoId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaPhotoIdConverter"/> class.</summary>
+    public RmaPhotoIdConverter()
+        : base(id => id.Value, value => RmaPhotoId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaEventId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaEventIdConverter : ValueConverter<RmaEventId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaEventIdConverter"/> class.</summary>
+    public RmaEventIdConverter()
+        : base(id => id.Value, value => RmaEventId.From(value))
+    {
+    }
+}

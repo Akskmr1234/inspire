@@ -46,6 +46,7 @@ public static class NumberingDefaults
         DocumentTypes.ReceiptNote => "RN",
         DocumentTypes.PurchaseReturn => "PR",
         DocumentTypes.JobCard => "JC",
+        DocumentTypes.Rma => "RMA",
         DocumentTypes.OpeningStock => "OS",
         DocumentTypes.MaterialReceipt => "MR",
         DocumentTypes.MaterialIssue => "MI",
