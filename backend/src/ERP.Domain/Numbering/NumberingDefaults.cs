@@ -49,6 +49,7 @@ public static class NumberingDefaults
         DocumentTypes.MaterialReceipt => "MR",
         DocumentTypes.MaterialIssue => "MI",
         DocumentTypes.StockTransfer => "ST",
+        DocumentTypes.StockTransferRequest => "STR",
         DocumentTypes.StockAdjustment => "ADJ",
         DocumentTypes.DamagedStock => "DMG",
         DocumentTypes.PhysicalVerification => "PV",

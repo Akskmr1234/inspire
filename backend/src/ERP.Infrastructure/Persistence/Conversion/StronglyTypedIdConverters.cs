@@ -529,3 +529,24 @@ public sealed class PartyPhotoIdConverter : ValueConverter<PartyPhotoId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="StockTransferRequestId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockTransferRequestIdConverter : ValueConverter<StockTransferRequestId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestIdConverter"/> class.</summary>
+    public StockTransferRequestIdConverter()
+        : base(id => id.Value, value => StockTransferRequestId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockTransferRequestLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockTransferRequestLineIdConverter
+    : ValueConverter<StockTransferRequestLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestLineIdConverter"/> class.</summary>
+    public StockTransferRequestLineIdConverter()
+        : base(id => id.Value, value => StockTransferRequestLineId.From(value))
+    {
+    }
+}

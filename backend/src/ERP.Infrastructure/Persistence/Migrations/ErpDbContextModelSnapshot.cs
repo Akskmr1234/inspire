@@ -2898,6 +2898,210 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("stock_ledger_entries", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.StockTransferRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTimeOffset?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<Guid?>("DispatchDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dispatch_document_id");
+
+                    b.Property<DateTimeOffset?>("DispatchedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatched_at_utc");
+
+                    b.Property<Guid?>("DispatchedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dispatched_by");
+
+                    b.Property<Guid>("FinancialYearId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("financial_year_id");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<Guid>("FromWarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_warehouse_id");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Narration")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("narration");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("number");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid?>("ReceiptDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_document_id");
+
+                    b.Property<DateTimeOffset?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at_utc");
+
+                    b.Property<Guid?>("ReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("received_by");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("ToWarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_warehouse_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_transfer_requests");
+
+                    b.HasIndex("DispatchDocumentId")
+                        .HasDatabaseName("ix_stock_transfer_requests_dispatch");
+
+                    b.HasIndex("FinancialYearId")
+                        .HasDatabaseName("ix_stock_transfer_requests_financial_year_id");
+
+                    b.HasIndex("FromWarehouseId")
+                        .HasDatabaseName("ix_stock_transfer_requests_from_warehouse_id");
+
+                    b.HasIndex("ReceiptDocumentId")
+                        .HasDatabaseName("ix_stock_transfer_requests_receipt");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_stock_transfer_requests_tenant");
+
+                    b.HasIndex("ToWarehouseId")
+                        .HasDatabaseName("ix_stock_transfer_requests_to_warehouse_id");
+
+                    b.HasIndex("FirmId", "Date")
+                        .HasDatabaseName("ix_stock_transfer_requests_date");
+
+                    b.HasIndex("FirmId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_stock_transfer_requests_number");
+
+                    b.ToTable("stock_transfer_requests", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.StockTransferRequestLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("ApprovedQuantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("approved_quantity");
+
+                    b.Property<decimal>("DispatchedQuantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("dispatched_quantity");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_number");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("remarks");
+
+                    b.Property<decimal>("StockQuantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("stock_quantity");
+
+                    b.Property<Guid>("StockTransferRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_transfer_request_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unit_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_transfer_request_lines");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_stock_transfer_request_lines_product_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_stock_transfer_request_lines_tenant");
+
+                    b.HasIndex("UnitId")
+                        .HasDatabaseName("ix_stock_transfer_request_lines_unit_id");
+
+                    b.HasIndex("StockTransferRequestId", "LineNumber")
+                        .HasDatabaseName("ix_stock_transfer_request_lines_request");
+
+                    b.ToTable("stock_transfer_request_lines", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.TaxSlab", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3106,6 +3310,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
+
+                    b.Property<bool>("IsTransit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_transit");
 
                     b.Property<DateTimeOffset?>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -6316,6 +6526,66 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_stock_ledger_entries_warehouses_warehouse_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.StockTransferRequest", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.StockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DispatchDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_stock_transfer_requests_stock_documents_dispatch_document_id");
+
+                    b.HasOne("ERP.Domain.Tenancy.FinancialYear", null)
+                        .WithMany()
+                        .HasForeignKey("FinancialYearId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_requests_financial_years_financial_year_id");
+
+                    b.HasOne("ERP.Domain.Inventory.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("FromWarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_requests_warehouses_from_warehouse_id");
+
+                    b.HasOne("ERP.Domain.Inventory.StockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_stock_transfer_requests_stock_documents_receipt_document_id");
+
+                    b.HasOne("ERP.Domain.Inventory.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("ToWarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_requests_warehouses_to_warehouse_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.StockTransferRequestLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_request_lines_products_product_id");
+
+                    b.HasOne("ERP.Domain.Inventory.StockTransferRequest", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("StockTransferRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_request_lines_stock_transfer_requests_stock_~");
+
+                    b.HasOne("ERP.Domain.Inventory.UnitOfMeasure", null)
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_transfer_request_lines_units_of_measure_unit_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.UnitOfMeasure", b =>
                 {
                     b.HasOne("ERP.Domain.Inventory.UnitOfMeasure", null)
@@ -6888,6 +7158,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.Inventory.StockDocumentLine", b =>
                 {
                     b.Navigation("Serials");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.StockTransferRequest", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("ERP.Domain.Platform.Dashboard", b =>

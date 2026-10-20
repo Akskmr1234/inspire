@@ -85,6 +85,15 @@ public sealed class Warehouse : AggregateRoot<WarehouseId>, IFirmScoped, IAudita
     /// <summary>Gets whether stock may still be moved into or out of it.</summary>
     public bool IsActive { get; private set; }
 
+    /// <summary>Gets whether this is the firm's goods-in-transit location.</summary>
+    /// <remarks>
+    /// Not a building but the road between two: what one branch has sent and the other
+    /// has not yet received. Kept as a warehouse so the goods stay on the stock reports,
+    /// at their cost, while they travel; only a transfer request moves goods into or out
+    /// of it.
+    /// </remarks>
+    public bool IsTransit { get; private set; }
+
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
@@ -139,6 +148,24 @@ public sealed class Warehouse : AggregateRoot<WarehouseId>, IFirmScoped, IAudita
                 code.Trim().ToUpperInvariant(), name.Trim()));
     }
 
+    /// <summary>Creates the firm's goods-in-transit location.</summary>
+    /// <param name="tenantId">The owning tenant.</param>
+    /// <param name="firmId">The owning firm.</param>
+    /// <param name="code">A code no other warehouse of the firm uses.</param>
+    /// <returns>The location, or a validation failure.</returns>
+    public static Result<Warehouse> CreateTransit(TenantId tenantId, FirmId firmId, string code)
+    {
+        Result<Warehouse> created = Create(tenantId, firmId, code, "Goods in transit");
+
+        if (created.IsSuccess)
+        {
+            created.Value.IsTransit = true;
+            created.Value.NameArabic = "بضائع في الطريق";
+        }
+
+        return created;
+    }
+
     /// <summary>Sets the Arabic name shown in RTL mode.</summary>
     /// <param name="nameArabic">The Arabic name, or null to clear it.</param>
     public void SetArabicName(string? nameArabic) =>
@@ -190,6 +217,13 @@ public sealed class Warehouse : AggregateRoot<WarehouseId>, IFirmScoped, IAudita
     /// </remarks>
     public Result MakeDefault()
     {
+        if (IsTransit)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Warehouse.TransitCannotBeDefault",
+                "Goods in transit cannot be the default warehouse: nothing is sold from the road."));
+        }
+
         if (!IsActive)
         {
             return Result.Failure(Error.BusinessRule(
@@ -214,6 +248,13 @@ public sealed class Warehouse : AggregateRoot<WarehouseId>, IFirmScoped, IAudita
     /// </remarks>
     public Result Deactivate()
     {
+        if (IsTransit)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "Warehouse.TransitCannotBeDeactivated",
+                "Goods in transit is where dispatched transfers wait to be received, and cannot be withdrawn."));
+        }
+
         if (IsDefault)
         {
             return Result.Failure(Error.BusinessRule(

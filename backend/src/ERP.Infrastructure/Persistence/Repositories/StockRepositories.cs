@@ -27,6 +27,38 @@ public sealed class StockDocumentRepository : IStockDocumentRepository
     public void Add(StockDocument document) => _context.StockDocuments.Add(document);
 }
 
+/// <summary>Reads and writes stock transfer requests.</summary>
+public sealed class StockTransferRequestRepository : IStockTransferRequestRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public StockTransferRequestRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<StockTransferRequest?> FindAsync(
+        StockTransferRequestId id,
+        CancellationToken cancellationToken = default) =>
+        _context.StockTransferRequests
+            .Include(request => request.Lines)
+            .FirstOrDefaultAsync(request => request.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StockTransferRequest?> FindByDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default) =>
+        _context.StockTransferRequests
+            .Include(request => request.Lines)
+            .FirstOrDefaultAsync(
+                request => request.DispatchDocumentId == documentId
+                    || request.ReceiptDocumentId == documentId,
+                cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(StockTransferRequest request) => _context.StockTransferRequests.Add(request);
+}
+
 /// <summary>Reads and writes stock positions.</summary>
 public sealed class StockBalanceRepository : IStockBalanceRepository
 {

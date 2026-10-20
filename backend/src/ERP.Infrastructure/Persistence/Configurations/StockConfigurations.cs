@@ -314,3 +314,129 @@ public sealed class StockLedgerEntryConfiguration : IEntityTypeConfiguration<Sto
         ConfigurationConventions.ApplyAggregateConventions(builder);
     }
 }
+
+/// <summary>Maps <see cref="StockTransferRequest"/> to the <c>stock_transfer_requests</c> table.</summary>
+public sealed class StockTransferRequestConfiguration : IEntityTypeConfiguration<StockTransferRequest>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<StockTransferRequest> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("stock_transfer_requests");
+        builder.HasKey(request => request.Id);
+        builder.Property(request => request.Id).ValueGeneratedNever();
+
+        builder.Property(request => request.Number).HasMaxLength(50).IsRequired();
+        builder.Property(request => request.Date).IsRequired();
+        builder.Property(request => request.Status).HasConversion<int>().IsRequired();
+        builder.Property(request => request.Narration)
+            .HasMaxLength(StockTransferRequest.MaximumNarrationLength);
+        builder.Property(request => request.Reason)
+            .HasMaxLength(StockTransferRequest.MaximumNarrationLength);
+
+        builder.Ignore(request => request.IsEditable);
+
+        builder.HasOne<FinancialYear>()
+            .WithMany()
+            .HasForeignKey(request => request.FinancialYearId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Warehouse>()
+            .WithMany()
+            .HasForeignKey(request => request.FromWarehouseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Warehouse>()
+            .WithMany()
+            .HasForeignKey(request => request.ToWarehouseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // The two transfers that moved the goods. Restricted: a request pointing at a
+        // document that no longer exists would claim goods moved that nobody can trace.
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(request => request.DispatchDocumentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(request => request.ReceiptDocumentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder
+            .HasIndex(request => new { request.FirmId, request.Number })
+            .IsUnique()
+            .HasDatabaseName("ix_stock_transfer_requests_number");
+
+        // The list screen's question: this firm's requests over a range of dates.
+        builder
+            .HasIndex(request => new { request.FirmId, request.Date })
+            .HasDatabaseName("ix_stock_transfer_requests_date");
+
+        builder.HasIndex(request => request.DispatchDocumentId)
+            .HasDatabaseName("ix_stock_transfer_requests_dispatch");
+        builder.HasIndex(request => request.ReceiptDocumentId)
+            .HasDatabaseName("ix_stock_transfer_requests_receipt");
+
+        builder.HasIndex(request => request.TenantId)
+            .HasDatabaseName("ix_stock_transfer_requests_tenant");
+
+        builder.HasMany(request => request.Lines)
+            .WithOne()
+            .HasForeignKey(line => line.StockTransferRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(request => request.Lines)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_lines");
+
+        ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}
+
+/// <summary>Maps <see cref="StockTransferRequestLine"/> to the <c>stock_transfer_request_lines</c> table.</summary>
+public sealed class StockTransferRequestLineConfiguration
+    : IEntityTypeConfiguration<StockTransferRequestLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<StockTransferRequestLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("stock_transfer_request_lines");
+        builder.HasKey(line => line.Id);
+        builder.Property(line => line.Id).ValueGeneratedNever();
+
+        builder.Property(line => line.Quantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(line => line.StockQuantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(line => line.ApprovedQuantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(line => line.DispatchedQuantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(line => line.LineNumber).IsRequired();
+        builder.Property(line => line.Remarks)
+            .HasMaxLength(StockTransferRequest.MaximumNarrationLength);
+
+        builder.HasOne<Product>()
+            .WithMany()
+            .HasForeignKey(line => line.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<UnitOfMeasure>()
+            .WithMany()
+            .HasForeignKey(line => line.UnitId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder
+            .HasIndex(line => new { line.StockTransferRequestId, line.LineNumber })
+            .HasDatabaseName("ix_stock_transfer_request_lines_request");
+
+        builder.HasIndex(line => line.TenantId)
+            .HasDatabaseName("ix_stock_transfer_request_lines_tenant");
+
+        ConfigurationConventions.ApplyAuditConventions(builder);
+    }
+}

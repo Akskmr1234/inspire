@@ -223,6 +223,12 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the lines of those documents.</summary>
     public DbSet<StockDocumentLine> StockDocumentLines => Set<StockDocumentLine>();
 
+    /// <summary>Gets the requests one branch has made for another's goods.</summary>
+    public DbSet<StockTransferRequest> StockTransferRequests => Set<StockTransferRequest>();
+
+    /// <summary>Gets the products on those requests.</summary>
+    public DbSet<StockTransferRequestLine> StockTransferRequestLines => Set<StockTransferRequestLine>();
+
     /// <summary>
     /// Gets what is on hand of each product in each warehouse, and what it cost.
     /// </summary>
@@ -388,6 +394,10 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockDocumentIdConverter>();
         configurationBuilder.Properties<StockDocumentLineId>()
             .HaveConversion<StockDocumentLineIdConverter>();
+        configurationBuilder.Properties<StockTransferRequestId>()
+            .HaveConversion<StockTransferRequestIdConverter>();
+        configurationBuilder.Properties<StockTransferRequestLineId>()
+            .HaveConversion<StockTransferRequestLineIdConverter>();
         configurationBuilder.Properties<StockBalanceId>()
             .HaveConversion<StockBalanceIdConverter>();
         configurationBuilder.Properties<StockLedgerEntryId>()

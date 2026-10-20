@@ -443,6 +443,9 @@ public static class DocumentTypes
     /// <summary>A stock transfer between warehouses.</summary>
     public const string StockTransfer = "inventory.stock-transfer";
 
+    /// <summary>One branch's request for another's goods.</summary>
+    public const string StockTransferRequest = "inventory.transfer-request";
+
     /// <summary>A stock adjustment.</summary>
     public const string StockAdjustment = "inventory.stock-adjustment";
 

@@ -522,6 +522,14 @@ public interface IInventoryMasterRepository
         FirmId firmId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the firm's goods-in-transit location.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The location, or <see langword="null"/> before the first dispatch made one.</returns>
+    Task<Warehouse?> FindTransitWarehouseAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Determines whether a code is already used by a master of one kind.</summary>
     /// <param name="kind">Which master to look in.</param>
     /// <param name="firmId">The firm.</param>
@@ -646,6 +654,30 @@ public interface IStockDocumentRepository
     /// <summary>Adds a stock document.</summary>
     /// <param name="document">The document to add.</param>
     void Add(StockDocument document);
+}
+
+/// <summary>Reads and writes stock transfer requests.</summary>
+public interface IStockTransferRequestRepository
+{
+    /// <summary>Finds a request with its lines.</summary>
+    /// <param name="id">The request.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The request, or <see langword="null"/>.</returns>
+    Task<StockTransferRequest?> FindAsync(
+        StockTransferRequestId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the request a dispatch or a receipt was raised for.</summary>
+    /// <param name="documentId">The stock document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The request, or <see langword="null"/> where the document filled none.</returns>
+    Task<StockTransferRequest?> FindByDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a request.</summary>
+    /// <param name="request">The request to add.</param>
+    void Add(StockTransferRequest request);
 }
 
 /// <summary>Reads and writes stock positions.</summary>

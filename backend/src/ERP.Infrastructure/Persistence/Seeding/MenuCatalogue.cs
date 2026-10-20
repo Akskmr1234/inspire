@@ -260,6 +260,17 @@ public static class MenuCatalogue
                     "/inventory/stock",
                     "inventory:stock-adjustment:view"),
 
+                // Its own entry rather than a type on the stock screen: a transfer between
+                // branches is a conversation - asked for, agreed, sent, received - and the
+                // people at each step need to find the requests waiting on them.
+                new(
+                    "transactions.stock-transfers",
+                    "Stock transfers",
+                    "تحويلات المخزون",
+                    "inventory",
+                    "/inventory/stock-transfers",
+                    "inventory:stock-transfer:view"),
+
                 // Invoices and credit notes on one entry, because they are one kind of
                 // document: a screen showing a customer's history wants both, and two
                 // entries would suggest two places to look for the same sale.
