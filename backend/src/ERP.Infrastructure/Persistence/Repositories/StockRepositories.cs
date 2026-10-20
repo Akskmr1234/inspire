@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Domain.Inventory;
+using ERP.Domain.Service;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +55,25 @@ public sealed class BillOfMaterialsRepository : IBillOfMaterialsRepository
 
     /// <inheritdoc />
     public void Add(BillOfMaterials bill) => _context.BillsOfMaterials.Add(bill);
+}
+
+/// <summary>Reads and writes service job cards.</summary>
+public sealed class JobCardRepository : IJobCardRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="JobCardRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public JobCardRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<JobCard?> FindAsync(JobCardId id, CancellationToken cancellationToken = default) =>
+        _context.JobCards
+            .Include(card => card.Lines)
+            .FirstOrDefaultAsync(card => card.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(JobCard card) => _context.JobCards.Add(card);
 }
 
 /// <summary>Reads and writes stock transfer requests.</summary>

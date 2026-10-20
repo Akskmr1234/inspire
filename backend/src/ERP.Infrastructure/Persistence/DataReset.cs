@@ -29,6 +29,9 @@ public sealed class DataReset : IDataReset
     [
         // Links back to other documents first, so the documents can go in any order.
         "UPDATE sales_invoices SET returns_invoice_id = NULL WHERE firm_id = @firm",
+
+        // Before the invoices that billed them; their lines go with them.
+        "DELETE FROM job_cards WHERE firm_id = @firm",
         "UPDATE purchase_invoices SET returns_invoice_id = NULL WHERE firm_id = @firm",
         "DELETE FROM sales_invoices WHERE firm_id = @firm",
         "DELETE FROM purchase_invoices WHERE firm_id = @firm",

@@ -385,6 +385,24 @@ public static class MenuCatalogue
                     "purchase:invoice:view"),
             ]),
 
+        // Devices taken in for repair, worked and handed back; their parts and labour are
+        // billed through an ordinary sales invoice.
+        new(
+            "service",
+            "Service",
+            "الصيانة",
+            "service",
+            Children:
+            [
+                new(
+                    "service.job-cards",
+                    "Job cards",
+                    "بطاقات العمل",
+                    "service",
+                    "/service/job-cards",
+                    "service:job-card:view"),
+            ]),
+
         new(
             "inventory-reports",
             "Stock reports",

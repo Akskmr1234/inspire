@@ -126,6 +126,7 @@ const TaxReturnsPage = lazyScreen(
   'TaxReturnsPage',
 );
 const BomsPage = lazyScreen(() => import('@/pages/ProductionPage'), 'BomsPage');
+const JobCardsPage = lazyScreen(() => import('@/pages/ServicePage'), 'JobCardsPage');
 const ProductionPage = lazyScreen(
   () => import('@/pages/ProductionPage'),
   'ProductionPage',
@@ -351,6 +352,7 @@ export function App(): React.JSX.Element {
               <Route path="/sales/delivery-notes" element={<DeliveryNotesPage />} />
               <Route path="/inventory/boms" element={<BomsPage />} />
               <Route path="/inventory/production" element={<ProductionPage />} />
+              <Route path="/service/job-cards" element={<JobCardsPage />} />
               <Route path="/purchase/receipt-notes" element={<ReceiptNotesPage />} />
               <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />

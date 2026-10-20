@@ -9,6 +9,7 @@ using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -235,6 +236,12 @@ public class ErpDbContext : DbContext
     /// <summary>Gets their components.</summary>
     public DbSet<BillOfMaterialsLine> BillOfMaterialsLines => Set<BillOfMaterialsLine>();
 
+    /// <summary>Gets the devices taken in for service.</summary>
+    public DbSet<JobCard> JobCards => Set<JobCard>();
+
+    /// <summary>Gets the parts and labour on them.</summary>
+    public DbSet<JobCardLine> JobCardLines => Set<JobCardLine>();
+
     /// <summary>
     /// Gets what is on hand of each product in each warehouse, and what it cost.
     /// </summary>
@@ -408,6 +415,10 @@ public class ErpDbContext : DbContext
             .HaveConversion<BillOfMaterialsIdConverter>();
         configurationBuilder.Properties<BillOfMaterialsLineId>()
             .HaveConversion<BillOfMaterialsLineIdConverter>();
+        configurationBuilder.Properties<JobCardId>()
+            .HaveConversion<JobCardIdConverter>();
+        configurationBuilder.Properties<JobCardLineId>()
+            .HaveConversion<JobCardLineIdConverter>();
         configurationBuilder.Properties<StockBalanceId>()
             .HaveConversion<StockBalanceIdConverter>();
         configurationBuilder.Properties<StockLedgerEntryId>()

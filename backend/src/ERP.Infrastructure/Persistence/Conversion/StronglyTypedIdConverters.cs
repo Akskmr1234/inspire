@@ -5,6 +5,7 @@ using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -567,6 +568,26 @@ public sealed class BillOfMaterialsLineIdConverter : ValueConverter<BillOfMateri
     /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsLineIdConverter"/> class.</summary>
     public BillOfMaterialsLineIdConverter()
         : base(id => id.Value, value => BillOfMaterialsLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="JobCardId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class JobCardIdConverter : ValueConverter<JobCardId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="JobCardIdConverter"/> class.</summary>
+    public JobCardIdConverter()
+        : base(id => id.Value, value => JobCardId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="JobCardLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class JobCardLineIdConverter : ValueConverter<JobCardLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="JobCardLineIdConverter"/> class.</summary>
+    public JobCardLineIdConverter()
+        : base(id => id.Value, value => JobCardLineId.From(value))
     {
     }
 }

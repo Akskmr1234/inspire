@@ -6,6 +6,7 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
+import { BatchPick } from '@/components/BatchPick';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
 import {
@@ -21,10 +22,8 @@ import {
 import { moneyAlways } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
-  fetchProductBatches,
   fetchStockValuation,
   StockDocumentType,
-  type BatchStockRow,
   type StockLineInput,
   type StockValuationReport,
 } from '@/lib/stock';
@@ -814,41 +813,5 @@ function RunLines({
         {t('stock.addLine')}
       </button>
     </section>
-  );
-}
-
-/** The lots of a material on the shelf, for the run to use one of. */
-function BatchPick({
-  productId,
-  warehouseId,
-  value,
-  onChange,
-}: {
-  readonly productId: string;
-  readonly warehouseId: string;
-  readonly value: string;
-  readonly onChange: (batchId: string) => void;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-
-  const batches = useQuery<readonly BatchStockRow[], ApiError>({
-    queryKey: ['product-batches', productId, warehouseId],
-    queryFn: () => fetchProductBatches(productId, warehouseId),
-    enabled: productId !== '' && warehouseId !== '',
-  });
-
-  return (
-    <SearchSelect
-      value={value}
-      onChange={onChange}
-      size="sm"
-      label={t('stock.batch')}
-      placeholder={t('stock.choose')}
-      options={(batches.data ?? []).map((batch) => ({
-        value: batch.batchId,
-        label: batch.batchNumber,
-        detail: `${trim(batch.quantity)}${batch.expiresOn ? ` · ${batch.expiresOn}` : ''}`,
-      }))}
-    />
   );
 }

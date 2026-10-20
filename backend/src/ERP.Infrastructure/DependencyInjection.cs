@@ -14,6 +14,7 @@ using ERP.Application.Platform.Import;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
 using ERP.Application.Platform.Users;
+using ERP.Application.Service;
 using ERP.Infrastructure.Import;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
@@ -114,6 +115,7 @@ public static class DependencyInjection
         services.AddScoped<IStockDocumentRepository, StockDocumentRepository>();
         services.AddScoped<IStockTransferRequestRepository, StockTransferRequestRepository>();
         services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
+        services.AddScoped<IJobCardRepository, JobCardRepository>();
         services.AddScoped<IStockBalanceRepository, StockBalanceRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<IBatchRepository, BatchRepository>();
@@ -134,6 +136,7 @@ public static class DependencyInjection
         services.AddScoped<IStockTransferReader, StockTransferReader>();
         services.AddScoped<IStockHistoryReader, StockHistoryReader>();
         services.AddScoped<IBillOfMaterialsReader, BillOfMaterialsReader>();
+        services.AddScoped<IJobCardReader, JobCardReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<ISerialReader, SerialReader>();

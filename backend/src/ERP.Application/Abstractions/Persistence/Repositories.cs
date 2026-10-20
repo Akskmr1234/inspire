@@ -7,6 +7,7 @@ using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 
@@ -675,6 +676,20 @@ public interface IBillOfMaterialsRepository
     /// <summary>Adds a bill.</summary>
     /// <param name="bill">The bill to add.</param>
     void Add(BillOfMaterials bill);
+}
+
+/// <summary>Reads and writes service job cards.</summary>
+public interface IJobCardRepository
+{
+    /// <summary>Finds a card with its parts and labour.</summary>
+    /// <param name="id">The card.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The card, or <see langword="null"/>.</returns>
+    Task<JobCard?> FindAsync(JobCardId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a card.</summary>
+    /// <param name="card">The card to add.</param>
+    void Add(JobCard card);
 }
 
 /// <summary>Reads and writes stock transfer requests.</summary>
