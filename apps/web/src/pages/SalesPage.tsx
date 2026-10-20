@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -1203,10 +1204,19 @@ function EntryDialog({
   const balanceAfter =
     prevBalance + (isReturn(kind) ? -grandTotal : grandTotal) - effectivePaid;
 
+  // The firm's credit-limit rule: ignored, a warning, or a refusal when the sale posts.
+  const policies = useQuery<FirmPolicies, ApiError>({
+    queryKey: ['firm-policies'],
+    queryFn: getPolicies,
+    staleTime: 60 * 1000,
+  });
+  const creditRule = policies.data?.creditLimit ?? CreditLimitPolicy.warn;
+
   // How far past their credit limit the unpaid part of this bill takes them, if it does.
   const overLimitBy = useMemo(() => {
     const limit = account.data?.creditLimit;
     if (limit === null || limit === undefined || isReturn(kind)) return 0;
+    if (creditRule === CreditLimitPolicy.ignore) return 0;
     const unpaid = Math.max(0, grandTotal - effectivePaid);
     const ownOutstanding =
       editing && editing.header.status === SalesInvoiceStatus.posted
@@ -1214,7 +1224,7 @@ function EntryDialog({
         : 0;
     const after = (account.data?.outstanding ?? 0) - ownOutstanding + unpaid;
     return after > limit + 0.004 ? after - limit : 0;
-  }, [account.data, kind, grandTotal, effectivePaid, editing]);
+  }, [account.data, kind, grandTotal, effectivePaid, editing, creditRule]);
 
   // Cash handed over beyond what is being paid comes back as change - whether it was
   // typed as cash tendered or as more than the bill in the amount received.
@@ -2188,6 +2198,8 @@ function EntryDialog({
                   limit: moneyAlways(account.data?.creditLimit ?? 0),
                   by: moneyAlways(overLimitBy),
                 })}
+                {creditRule === CreditLimitPolicy.block &&
+                  ` ${t('sales.creditLimitBlocks')}`}
               </p>
             )}
           </section>

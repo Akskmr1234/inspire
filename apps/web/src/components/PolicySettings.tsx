@@ -20,7 +20,12 @@ import { useSession } from '@/stores/session';
  * document is allowed to do, so they are saved to the server, which reads them when a
  * document posts. Each change is saved as it is made, like the rest of the screen.
  */
-export function PolicySettings(): React.JSX.Element {
+export function PolicySettings({
+  only,
+}: {
+  /** The rules this card shows, where a tab of the settings screen shows some of them. */
+  readonly only?: readonly (keyof FirmPolicies)[];
+} = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editable = useSession((state) => state.can)('platform:setting:edit');
@@ -45,6 +50,8 @@ export function PolicySettings(): React.JSX.Element {
 
   const change = (patch: Partial<FirmPolicies>): void =>
     mutation.mutate({ ...policies, ...patch });
+  const shows = (rule: keyof FirmPolicies): boolean =>
+    only === undefined || only.includes(rule);
 
   return (
     <div className="space-y-3">
@@ -55,53 +62,65 @@ export function PolicySettings(): React.JSX.Element {
         </p>
       )}
 
-      <SelectField
-        label={t('policies.negativeStock')}
-        hint={t('policies.negativeStockHint')}
-        value={policies.negativeStock}
-        disabled={disabled}
-        onChange={(negativeStock) => change({ negativeStock })}
-        options={[
-          { value: NegativeStockPolicy.block, label: t('policies.block') },
-          { value: NegativeStockPolicy.warn, label: t('policies.warn') },
-          { value: NegativeStockPolicy.allow, label: t('policies.ignore') },
-        ]}
-      />
+      {shows('negativeStock') && (
+        <SelectField
+          label={t('policies.negativeStock')}
+          hint={t('policies.negativeStockHint')}
+          value={policies.negativeStock}
+          disabled={disabled}
+          onChange={(negativeStock) => change({ negativeStock })}
+          options={[
+            { value: NegativeStockPolicy.block, label: t('policies.block') },
+            { value: NegativeStockPolicy.warn, label: t('policies.warn') },
+            { value: NegativeStockPolicy.allow, label: t('policies.ignore') },
+          ]}
+        />
+      )}
 
-      <SelectField
-        label={t('policies.creditLimit')}
-        hint={t('policies.creditLimitHint')}
-        value={policies.creditLimit}
-        disabled={disabled}
-        onChange={(creditLimit) => change({ creditLimit })}
-        options={[
-          { value: CreditLimitPolicy.ignore, label: t('policies.ignore') },
-          { value: CreditLimitPolicy.warn, label: t('policies.warn') },
-          { value: CreditLimitPolicy.block, label: t('policies.block') },
-        ]}
-      />
+      {shows('creditLimit') && (
+        <SelectField
+          label={t('policies.creditLimit')}
+          hint={t('policies.creditLimitHint')}
+          value={policies.creditLimit}
+          disabled={disabled}
+          onChange={(creditLimit) => change({ creditLimit })}
+          options={[
+            { value: CreditLimitPolicy.ignore, label: t('policies.ignore') },
+            { value: CreditLimitPolicy.warn, label: t('policies.warn') },
+            { value: CreditLimitPolicy.block, label: t('policies.block') },
+          ]}
+        />
+      )}
 
-      <CheckField
-        label={t('policies.transfersRequireApproval')}
-        checked={policies.transfersRequireApproval}
-        disabled={disabled}
-        onChange={(transfersRequireApproval) => change({ transfersRequireApproval })}
-      />
-      <p className="-mt-2 text-xs text-ink-muted">
-        {t('policies.transfersRequireApprovalHint')}
-      </p>
+      {shows('transfersRequireApproval') && (
+        <>
+          <CheckField
+            label={t('policies.transfersRequireApproval')}
+            checked={policies.transfersRequireApproval}
+            disabled={disabled}
+            onChange={(transfersRequireApproval) => change({ transfersRequireApproval })}
+          />
+          <p className="-mt-2 text-xs text-ink-muted">
+            {t('policies.transfersRequireApprovalHint')}
+          </p>
+        </>
+      )}
 
-      <CheckField
-        label={t('policies.purchasesUpdateProductRates')}
-        checked={policies.purchasesUpdateProductRates}
-        disabled={disabled}
-        onChange={(purchasesUpdateProductRates) =>
-          change({ purchasesUpdateProductRates })
-        }
-      />
-      <p className="-mt-2 text-xs text-ink-muted">
-        {t('policies.purchasesUpdateProductRatesHint')}
-      </p>
+      {shows('purchasesUpdateProductRates') && (
+        <>
+          <CheckField
+            label={t('policies.purchasesUpdateProductRates')}
+            checked={policies.purchasesUpdateProductRates}
+            disabled={disabled}
+            onChange={(purchasesUpdateProductRates) =>
+              change({ purchasesUpdateProductRates })
+            }
+          />
+          <p className="-mt-2 text-xs text-ink-muted">
+            {t('policies.purchasesUpdateProductRatesHint')}
+          </p>
+        </>
+      )}
     </div>
   );
 }

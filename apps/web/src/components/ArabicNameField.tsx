@@ -35,9 +35,9 @@ export function ArabicNameField({
   readonly onChange: (value: string) => void;
   readonly error?: string | undefined;
   readonly required?: boolean;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { t } = useTranslation();
-  const { autoTranslateArabic, translationApiKey } = useSettings();
+  const { autoTranslateArabic, translationApiKey, gulfMode } = useSettings();
 
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -86,6 +86,12 @@ export function ArabicNameField({
     // `run` is recreated every render and depends only on values read at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, autoTranslateArabic, translationApiKey]);
+
+  // A firm outside the Gulf is not asked for Arabic names. One already held is still
+  // shown, so turning the mode off never hides something a document prints.
+  if (!gulfMode && !value && !required) {
+    return null;
+  }
 
   return (
     <Field
