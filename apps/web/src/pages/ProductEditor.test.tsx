@@ -84,7 +84,7 @@ describe('when the product loads', () => {
     renderPage(<ProductEditor productId="p1" onClose={() => undefined} />);
 
     await waitFor(() => expect(screen.getByText(/A4 copier paper/)).toBeTruthy());
-    expect(screen.getByRole('button', { name: /barcodes/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /barcodes/i })).toBeTruthy();
   });
 });
 

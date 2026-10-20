@@ -210,7 +210,22 @@ public sealed class CancelSalesInvoiceCommandHandler
             return Result.Failure(bill.Error);
         }
 
-        if (bill.Value is { } outstanding && !outstanding.SettledAmount.IsZero)
+        // The receipt the sale raised for what was paid with it goes with the sale: it is
+        // the same event, and refusing to cancel a cash sale because its own cash had been
+        // received would make every cash sale impossible to correct. Money received any
+        // other way - a receipt entered later, a return credited against it - still blocks.
+        Voucher? ownReceipt = invoice.ReceiptVoucherId is { } receiptId
+            ? await _vouchers.FindAsync(receiptId, cancellationToken)
+            : null;
+
+        decimal ownSettlement = bill.Value is { } paid && ownReceipt is not null
+            ? paid.Allocations
+                .Where(allocation => allocation.VoucherId == ownReceipt.Id)
+                .Sum(allocation => allocation.Amount.Amount)
+            : 0m;
+
+        if (bill.Value is { } outstanding
+            && outstanding.SettledAmount.Amount - ownSettlement != 0m)
         {
             return Result.Failure(Error.BusinessRule(
                 "Bill.PartlySettled",
@@ -235,6 +250,22 @@ public sealed class CancelSalesInvoiceCommandHandler
         if (cancelled.IsFailure)
         {
             return cancelled;
+        }
+
+        if (ownReceipt is not null)
+        {
+            bill.Value?.ReleaseAllocationsFrom(ownReceipt.Id);
+
+            string undone = reopen ? "edited" : "cancelled";
+
+            Result unreceived = ownReceipt.Status == VoucherStatus.Cancelled
+                ? Result.Success()
+                : ownReceipt.Cancel($"Sales invoice {invoice.Number} {undone}: {reason}");
+
+            if (unreceived.IsFailure)
+            {
+                return unreceived;
+            }
         }
 
         Result withdrawn = bill.Value?.Cancel() ?? Result.Success();

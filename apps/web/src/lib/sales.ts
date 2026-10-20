@@ -12,8 +12,11 @@ export const SalesDocumentKind = { invoice: 1, return: 2 } as const;
 /** Where a sales document stands. */
 export const SalesInvoiceStatus = { draft: 1, posted: 2, cancelled: 3 } as const;
 
-/** How a sale was settled at the counter. */
-export const SalesPaymentMode = { credit: 1, cash: 2 } as const;
+/**
+ * How a sale was settled at the counter. Online is a UPI or card transfer - Google Pay
+ * and the like - into one of the firm's bank accounts, with its transaction ID kept.
+ */
+export const SalesPaymentMode = { credit: 1, cash: 2, online: 3 } as const;
 
 /** How a document treats tax. */
 export const TaxMode = { nonTax: 1, tax: 2, cst: 3 } as const;
@@ -54,6 +57,10 @@ export interface SalesInvoiceSummary {
   /** What the additional ledgers added, net of what they deducted. */
   readonly chargeTotal: number;
   readonly narration: string | null;
+  /** What was paid with the sale. */
+  readonly amountReceived: number;
+  /** An online payment's transaction ID. */
+  readonly paymentReference: string | null;
 }
 
 /** One tax head as it was charged on a line. */
@@ -128,6 +135,14 @@ export interface SalesInvoiceDetail {
   readonly salesmanLedgerId: string | null;
   readonly billingManLedgerId: string | null;
   readonly createdAtUtc: string;
+  /** What the customer paid with the sale. */
+  readonly amountReceived: number;
+  /** The cash or bank account it went into. */
+  readonly receivedIntoLedgerId: string | null;
+  /** An online payment's transaction ID. */
+  readonly paymentReference: string | null;
+  /** The receipt posting raised for the payment. */
+  readonly receiptVoucherId: string | null;
 }
 
 /** What posting produced. */
@@ -223,6 +238,40 @@ export interface SalesInvoiceInput {
   readonly salesmanLedgerId?: string | null;
   /** The employee who billed it. */
   readonly billingManLedgerId?: string | null;
+  /**
+   * What the customer paid with the sale. Posting raises the receipt for it against the
+   * sale's own bill; zero leaves the whole of it on account.
+   */
+  readonly amountReceived?: number;
+  /** The cash or bank account the payment went into. Required when anything was paid. */
+  readonly receivedIntoLedgerId?: string | null;
+  /** An online payment's transaction ID. */
+  readonly paymentReference?: string | null;
+  /**
+   * The whole bill was paid, whatever it rounds to: the server takes the amount from its
+   * own total, so a payment in full is never refused for a fraction.
+   */
+  readonly paidInFull?: boolean;
+}
+
+/** Where a customer stands, for the counter selling to them. */
+export interface CustomerAccount {
+  readonly customerId: string;
+  readonly currency: string;
+  /** What they owe across everything posted to them. Negative after an advance. */
+  readonly balance: number;
+  /** What their unpaid invoices come to. */
+  readonly outstanding: number;
+  readonly creditLimit: number | null;
+  readonly creditDays: number | null;
+  /** What is left of the limit; negative once passed, null with no limit. */
+  readonly available: number | null;
+  readonly isOverLimit: boolean;
+}
+
+/** Reads a customer's balance and unpaid invoices. */
+export async function getCustomerAccount(customerId: string): Promise<CustomerAccount> {
+  return request<CustomerAccount>(`/sales/customers/${customerId}/account`);
 }
 
 /**

@@ -56,6 +56,8 @@ public sealed record ListSalesInvoicesQuery(
 /// <param name="Discount">What the line discounts took off.</param>
 /// <param name="ChargeTotal">What the additional ledgers added, net of what they deducted.</param>
 /// <param name="Narration">What is printed on it.</param>
+/// <param name="AmountReceived">What was paid with the sale.</param>
+/// <param name="PaymentReference">An online payment's transaction ID.</param>
 public sealed record SalesInvoiceSummary(
     Guid SalesInvoiceId,
     string Number,
@@ -77,7 +79,9 @@ public sealed record SalesInvoiceSummary(
     string? BillingManName,
     decimal Discount,
     decimal ChargeTotal,
-    string? Narration);
+    string? Narration,
+    decimal AmountReceived = 0m,
+    string? PaymentReference = null);
 
 /// <summary>Validates <see cref="ListSalesInvoicesQuery"/>.</summary>
 public sealed class ListSalesInvoicesQueryValidator : AbstractValidator<ListSalesInvoicesQuery>

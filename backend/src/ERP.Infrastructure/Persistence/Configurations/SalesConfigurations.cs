@@ -89,6 +89,26 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         // fills it in for them as credit.
         builder.Property(invoice => invoice.PaymentMode).HasConversion<int>().IsRequired();
 
+        // What was paid with the sale, and where it went. Zero and empty for every sale
+        // entered before the columns existed, which were all left on account.
+        builder.Property(invoice => invoice.AmountReceived)
+            .HasPrecision(19, 4)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
+        builder.Property(invoice => invoice.PaymentReference)
+            .HasMaxLength(SalesInvoice.MaximumPaymentReferenceLength);
+
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReceivedIntoLedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Voucher>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReceiptVoucherId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne<Ledger>()
             .WithMany()
             .HasForeignKey(invoice => invoice.SalesmanLedgerId)

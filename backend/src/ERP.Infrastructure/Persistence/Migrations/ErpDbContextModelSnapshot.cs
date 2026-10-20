@@ -4711,6 +4711,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<decimal>("AmountReceived")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("amount_received");
+
                     b.Property<Guid?>("BillId")
                         .HasColumnType("uuid")
                         .HasColumnName("bill_id");
@@ -4806,6 +4813,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("payment_mode");
 
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("payment_reference");
+
                     b.Property<DateTimeOffset?>("PostedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("posted_at_utc");
@@ -4813,6 +4825,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PostedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("posted_by");
+
+                    b.Property<Guid?>("ReceiptVoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_voucher_id");
+
+                    b.Property<Guid?>("ReceivedIntoLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("received_into_ledger_id");
 
                     b.Property<string>("ReferenceNumber")
                         .HasMaxLength(500)
@@ -4873,6 +4893,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("JournalVoucherId")
                         .HasDatabaseName("ix_sales_invoices_journal_voucher_id");
+
+                    b.HasIndex("ReceiptVoucherId")
+                        .HasDatabaseName("ix_sales_invoices_receipt_voucher_id");
+
+                    b.HasIndex("ReceivedIntoLedgerId")
+                        .HasDatabaseName("ix_sales_invoices_received_into_ledger_id");
 
                     b.HasIndex("ReturnsInvoiceId")
                         .HasDatabaseName("ix_sales_invoices_returns_invoice")
@@ -6611,6 +6637,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasForeignKey("JournalVoucherId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_sales_invoices_vouchers_journal_voucher_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Voucher", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptVoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_vouchers_receipt_voucher_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("ReceivedIntoLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_ledgers_received_into_ledger_id");
 
                     b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
                         .WithMany()

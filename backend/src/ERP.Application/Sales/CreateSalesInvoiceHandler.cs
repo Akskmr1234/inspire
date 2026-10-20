@@ -340,9 +340,22 @@ public sealed class CreateSalesInvoiceCommandHandler
     {
         Result details = invoice.SetDetails(request.ReferenceNumber, request.Narration);
 
-        return details.IsFailure
-            ? details
-            : invoice.SetSaleTerms(request.PaymentMode, context.Salesman, context.BillingMan);
+        if (details.IsFailure)
+        {
+            return details;
+        }
+
+        Result terms = invoice.SetSaleTerms(
+            request.PaymentMode, context.Salesman, context.BillingMan);
+
+        // Lines and charges are on by now, so the total is the one posting will see.
+        decimal received = request.PaidInFull && !invoice.IsReturn
+            ? Math.Max(invoice.Total.Amount, 0m)
+            : request.AmountReceived;
+
+        return terms.IsFailure
+            ? terms
+            : invoice.SetCounterPayment(received, context.ReceivedInto, request.PaymentReference);
     }
 
     /// <summary>The mode a firm's invoices open in, from its own regime.</summary>
@@ -594,6 +607,22 @@ public sealed class CreateSalesInvoiceCommandHandler
             return Result.Failure<Context>(billingMan.Error);
         }
 
+        // Read here and judged by the invoice, which knows whether it is a return and
+        // whether anything was paid at all.
+        bool paying = request.AmountReceived > 0m || request.PaidInFull;
+
+        Ledger? receivedInto = paying && request.ReceivedIntoLedgerId is { } intoId
+            ? await _ledgers.FindAsync(LedgerId.From(intoId), cancellationToken)
+            : null;
+
+        if (paying && request.ReceivedIntoLedgerId is not null
+            && (receivedInto is null || receivedInto.FirmId != firmId))
+        {
+            return Result.Failure<Context>(Error.NotFound(
+                "SalesInvoice.ReceivedIntoNotFound",
+                "That cash or bank account does not exist in the selected firm."));
+        }
+
         return Result.Success(new Context(
             firm,
             year,
@@ -605,7 +634,8 @@ public sealed class CreateSalesInvoiceCommandHandler
             serials.Value,
             mapped.ToDictionary(charge => charge.LedgerId),
             salesman.Value,
-            billingMan.Value));
+            billingMan.Value,
+            receivedInto));
     }
 
     /// <summary>Finds a salesman or billing man, who must be one of the firm's employees.</summary>
@@ -909,5 +939,6 @@ public sealed class CreateSalesInvoiceCommandHandler
         IReadOnlyDictionary<int, IReadOnlyCollection<SerialNumber>> Serials,
         IReadOnlyDictionary<LedgerId, AdditionalLedger> Charges,
         Ledger? Salesman,
-        Ledger? BillingMan);
+        Ledger? BillingMan,
+        Ledger? ReceivedInto);
 }

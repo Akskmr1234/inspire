@@ -61,6 +61,7 @@ import {
 import {
   cancelSalesInvoice,
   createSalesInvoice,
+  getCustomerAccount,
   getSalesInvoice,
   isReturn,
   listSalesInvoices,
@@ -70,6 +71,7 @@ import {
   SalesPaymentMode,
   TaxMode,
   updateSalesInvoice,
+  type CustomerAccount,
   type PagedResult,
   type SalesInvoiceDetail,
   type SalesInvoiceLineDetail,
@@ -260,10 +262,30 @@ export function SalesPage({
       value: (row) => paymentModeLabel(row.paymentMode, t),
       render: (row) => (
         <StatusBadge
-          tone={row.paymentMode === SalesPaymentMode.cash ? 'success' : 'neutral'}
+          tone={
+            row.paymentMode === SalesPaymentMode.cash
+              ? 'success'
+              : row.paymentMode === SalesPaymentMode.online
+                ? 'info'
+                : 'neutral'
+          }
           label={paymentModeLabel(row.paymentMode, t)}
         />
       ),
+    },
+    {
+      key: 'amountReceived',
+      header: t('sales.amountReceived'),
+      value: (row) => row.amountReceived,
+      numeric: true,
+      render: (row) => (row.amountReceived > 0 ? moneyAlways(row.amountReceived) : ''),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'paymentReference',
+      header: t('sales.paymentReference'),
+      value: (row) => row.paymentReference ?? '',
+      hiddenByDefault: true,
     },
     {
       key: 'salesman',
@@ -864,8 +886,19 @@ function EntryDialog({
   const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
 
   const [narration, setNarration] = useState(editing?.narration ?? '');
-  const [paidAmount, setPaidAmount] = useState<string>('');
+  // Blank means the whole bill for a cash or online sale and nothing for one on account;
+  // a figure typed here is a part payment. A posted sale being corrected shows what it
+  // took, unless that was the whole of it.
+  const [paidAmount, setPaidAmount] = useState<string>(() =>
+    editing && editing.amountReceived > 0 && editing.amountReceived < editing.header.total
+      ? String(editing.amountReceived)
+      : '',
+  );
   const [cashGiven, setCashGiven] = useState<string>('');
+  const [receivedInto, setReceivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
+  const [paymentReference, setPaymentReference] = useState(
+    editing?.paymentReference ?? '',
+  );
   const [additionalLedgers, setAdditionalLedgers] = useState<
     readonly AdditionalLedgerItem[]
   >(() => {
@@ -921,7 +954,23 @@ function EntryDialog({
     [customers.data, customerId],
   );
 
-  const prevBalance = selectedCustomer?.openingBalance ?? 0;
+  // What the customer owes before this sale: their balance across everything posted to
+  // them. It used to be their opening balance, which is what they owed the day the firm
+  // started using the system and nothing since.
+  const account = useQuery<CustomerAccount, ApiError>({
+    queryKey: ['customer-account', customerId],
+    queryFn: () => getCustomerAccount(customerId),
+    enabled: customerId !== '',
+    staleTime: 30 * 1000,
+  });
+
+  // A posted sale being corrected is already in that balance - its bill, and the receipt
+  // for whatever was paid with it - so it is taken back out to show what came before it.
+  const ownEffect =
+    editing && editing.header.status === SalesInvoiceStatus.posted
+      ? (isReturn(editing.kind) ? -1 : 1) * editing.header.total - editing.amountReceived
+      : 0;
+  const prevBalance = (account.data?.balance ?? 0) - ownEffect;
 
   useEffect(() => {
     if (!customerId && settings.defaultCustomerId) {
@@ -944,6 +993,36 @@ function EntryDialog({
     queryFn: () => listLedgers(true),
     staleTime: 5 * 60 * 1000,
   });
+
+  // Where a payment goes: the cash in the drawer, or the bank an online payment lands in.
+  const cashAccounts = useMemo(
+    () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.cash),
+    [ledgers.data],
+  );
+  const bankAccounts = useMemo(
+    () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.bank),
+    [ledgers.data],
+  );
+  const receivingAccounts =
+    paymentMode === SalesPaymentMode.online
+      ? bankAccounts
+      : paymentMode === SalesPaymentMode.cash
+        ? cashAccounts
+        : [...cashAccounts, ...bankAccounts];
+  // The account chosen, or the firm's default for the mode, or the first there is.
+  const receivingAccountId = receivingAccounts.some(
+    (ledger) => ledger.ledgerId === receivedInto,
+  )
+    ? receivedInto
+    : (receivingAccounts.find(
+        (ledger) =>
+          ledger.ledgerId ===
+          (paymentMode === SalesPaymentMode.online
+            ? settings.defaultBankLedgerId
+            : settings.defaultCashLedgerId),
+      )?.ledgerId ??
+      receivingAccounts[0]?.ledgerId ??
+      '');
 
   // The salesman and the billing man come from the employee master, so a sale is
   // credited to somebody a commission report can find.
@@ -1091,23 +1170,52 @@ function EntryDialog({
     return Number.isFinite(raw) ? Math.max(0, raw) : 0;
   }, [totals.total, additionalLedgersTotal]);
 
+  // What the customer is paying now. Blank is the whole bill for cash or online and
+  // nothing on account; more than the bill is cash tendered, and only the bill is
+  // received - the rest is change.
+  const typedPaid = paidAmount.trim() === '' ? null : Number(paidAmount);
+  const paidInFull =
+    !isReturn(kind) &&
+    grandTotal > 0 &&
+    (typedPaid === null
+      ? paymentMode !== SalesPaymentMode.credit
+      : Number.isFinite(typedPaid) && typedPaid >= grandTotal);
   const effectivePaid = useMemo(() => {
-    if (paidAmount !== '') {
-      const parsed = Number(paidAmount);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return paymentMode === SalesPaymentMode.credit ? 0 : grandTotal;
-  }, [paidAmount, paymentMode, grandTotal]);
+    if (isReturn(kind)) return 0;
+    if (paidInFull) return grandTotal;
+    return typedPaid !== null && Number.isFinite(typedPaid) ? Math.max(0, typedPaid) : 0;
+  }, [kind, paidInFull, grandTotal, typedPaid]);
 
-  const balanceDue = useMemo(() => {
-    return Math.max(0, grandTotal - effectivePaid);
-  }, [grandTotal, effectivePaid]);
+  // Where the customer stands once this document is posted: what they owed, plus this
+  // bill (or less this return), less what they are paying now.
+  const balanceAfter =
+    prevBalance + (isReturn(kind) ? -grandTotal : grandTotal) - effectivePaid;
 
+  // How far past their credit limit the unpaid part of this bill takes them, if it does.
+  const overLimitBy = useMemo(() => {
+    const limit = account.data?.creditLimit;
+    if (limit === null || limit === undefined || isReturn(kind)) return 0;
+    const unpaid = Math.max(0, grandTotal - effectivePaid);
+    const ownOutstanding =
+      editing && editing.header.status === SalesInvoiceStatus.posted
+        ? Math.max(0, editing.header.total - editing.amountReceived)
+        : 0;
+    const after = (account.data?.outstanding ?? 0) - ownOutstanding + unpaid;
+    return after > limit + 0.004 ? after - limit : 0;
+  }, [account.data, kind, grandTotal, effectivePaid, editing]);
+
+  // Cash handed over beyond what is being paid comes back as change - whether it was
+  // typed as cash tendered or as more than the bill in the amount received.
   const changeBack = useMemo(() => {
-    const cash = Number(cashGiven);
-    if (!Number.isFinite(cash) || cash <= 0) return 0;
-    return Math.max(0, cash - effectivePaid);
-  }, [cashGiven, effectivePaid]);
+    const tendered =
+      cashGiven.trim() !== ''
+        ? Number(cashGiven)
+        : typedPaid !== null && typedPaid > grandTotal
+          ? typedPaid
+          : 0;
+    if (!Number.isFinite(tendered) || tendered <= 0) return 0;
+    return Math.max(0, tendered - effectivePaid);
+  }, [cashGiven, typedPaid, grandTotal, effectivePaid]);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -1332,6 +1440,23 @@ function EntryDialog({
       return;
     }
 
+    // What was paid with the sale. In full is sent as such, so the server takes the
+    // figure from its own rounded total rather than this screen's arithmetic.
+    const payment = isReturn(kind)
+      ? { amountReceived: 0, paidInFull: false, receivedIntoLedgerId: null }
+      : {
+          amountReceived: paidInFull ? 0 : roundMoney(effectivePaid),
+          paidInFull,
+          receivedIntoLedgerId:
+            paidInFull || effectivePaid > 0 ? receivingAccountId || null : null,
+          paymentReference: paymentReference.trim() || null,
+        };
+
+    if (payment.receivedIntoLedgerId === null && (paidInFull || effectivePaid > 0)) {
+      onError(t('sales.noReceivingAccount'));
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -1385,6 +1510,7 @@ function EntryDialog({
         paymentMode,
         salesmanLedgerId: employeeId(salesman),
         billingManLedgerId: employeeId(billingman),
+        ...payment,
       };
 
       if (editing) {
@@ -1495,6 +1621,7 @@ function EntryDialog({
             onChange={(val) => setPaymentMode(Number(val))}
             options={[
               { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
+              { value: SalesPaymentMode.online, label: t('paymentModes.online') },
               { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
             ]}
             size="sm"
@@ -1856,18 +1983,25 @@ function EntryDialog({
           />
         </div>
 
-        {/* Panel 3: Partial Payment & Grand Totals */}
+        {/*
+          Panel 3: the bill, what is paid against it, and where that leaves the customer.
+
+          Three blocks because they answer three different questions, and one list of
+          figures had been answering all three at once: a "Balance" that was the bill
+          minus the cash, beside a "Prev. Balance" that was the customer's opening
+          balance from the day the firm started, beside a grand total nobody could tell
+          the paid amount was taken from.
+        */}
         <div
           className={clsx(
-            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3',
+            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col gap-3 text-xs',
             'lg:col-span-4',
           )}
         >
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between text-ink-muted">
-              <span>{t('sales.prevBalance')}</span>
-              <span className="font-mono tabular-nums">{moneyAlways(prevBalance)}</span>
-            </div>
+          <section aria-label={t('sales.billSection')} className="space-y-1.5">
+            <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {t('sales.billSection')}
+            </h3>
             <div className="flex justify-between text-ink-muted">
               <span>{t('sales.taxable')}</span>
               <span className="font-mono tabular-nums">
@@ -1891,63 +2025,160 @@ function EntryDialog({
                 </span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-line">
-              <span>{t('sales.grandTotal')}</span>
-              <span className="font-mono text-base text-brand-700 dark:text-brand-300 tabular-nums">
+            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+              <span>
+                {isReturn(kind) ? t('sales.returnTotal') : t('sales.billTotal')}
+              </span>
+              <span className="font-mono text-base text-brand-700 tabular-nums dark:text-brand-300">
                 {moneyAlways(grandTotal)}
               </span>
             </div>
-          </div>
+          </section>
 
-          {/* Partial Payment inputs */}
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line/70">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                {t('sales.paidAmount')}
-              </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={paidAmount}
-                placeholder={moneyAlways(effectivePaid)}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                className="field-input-sm w-full text-end font-mono tabular-nums font-semibold"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                {t('sales.balanceDue')}
-              </label>
-              <div className="h-8 flex items-center justify-end font-mono text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
-                {moneyAlways(balanceDue)}
-              </div>
-            </div>
-            {paymentMode === SalesPaymentMode.cash && (
-              <>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                    {t('sales.cashGiven')}
-                  </label>
+          {!isReturn(kind) && (
+            <section
+              aria-label={t('sales.paymentSection')}
+              className="space-y-2 border-t border-line/70 pt-2"
+            >
+              <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+                {t('sales.paymentSection')}
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                    {t('sales.receivedNow')}
+                  </span>
                   <input
                     type="number"
                     inputMode="decimal"
-                    value={cashGiven}
-                    placeholder="0.00"
-                    onChange={(e) => setCashGiven(e.target.value)}
-                    className="field-input-sm w-full text-end font-mono tabular-nums"
+                    min="0"
+                    value={paidAmount}
+                    placeholder={
+                      paymentMode === SalesPaymentMode.credit
+                        ? '0.00'
+                        : moneyAlways(grandTotal)
+                    }
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="field-input-sm w-full text-end font-mono font-semibold tabular-nums"
                   />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                    {t('sales.changeBack')}
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                    {t('sales.receivedInto')}
+                  </span>
+                  <select
+                    value={receivingAccountId}
+                    onChange={(e) => setReceivedInto(e.target.value)}
+                    disabled={effectivePaid <= 0}
+                    className="field-input-sm w-full"
+                  >
+                    {receivingAccounts.length === 0 && (
+                      <option value="">{t('sales.noReceivingAccount')}</option>
+                    )}
+                    {receivingAccounts.map((ledger) => (
+                      <option key={ledger.ledgerId} value={ledger.ledgerId}>
+                        {ledger.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {paymentMode === SalesPaymentMode.online && (
+                  <label className="col-span-2 block">
+                    <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                      {t('sales.transactionId')}
+                    </span>
+                    <input
+                      value={paymentReference}
+                      maxLength={60}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      placeholder={t('sales.transactionIdPlaceholder')}
+                      className="field-input-sm w-full font-mono"
+                    />
                   </label>
-                  <div className="h-8 flex items-center justify-end font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                    {moneyAlways(changeBack)}
-                  </div>
-                </div>
-              </>
+                )}
+
+                {paymentMode === SalesPaymentMode.cash && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                        {t('sales.cashGiven')}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={cashGiven}
+                        placeholder="0.00"
+                        onChange={(e) => setCashGiven(e.target.value)}
+                        className="field-input-sm w-full text-end font-mono tabular-nums"
+                      />
+                    </label>
+                    <div>
+                      <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                        {t('sales.changeBack')}
+                      </span>
+                      <div className="flex h-8 items-center justify-end font-mono text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
+                        {moneyAlways(changeBack)}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section
+            aria-label={t('sales.accountSection')}
+            className="space-y-1.5 border-t border-line/70 pt-2"
+          >
+            <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {t('sales.accountSection')}
+            </h3>
+            <div className="flex justify-between text-ink-muted">
+              <span>{t('sales.prevBalance')}</span>
+              <span className="font-mono tabular-nums">
+                {customerId === '' || account.isPending ? '—' : moneyAlways(prevBalance)}
+              </span>
+            </div>
+            <div className="flex justify-between text-ink-muted">
+              <span>{isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}</span>
+              <span className="font-mono tabular-nums">
+                {isReturn(kind) ? '−' : '+'}
+                {moneyAlways(grandTotal)}
+              </span>
+            </div>
+            {effectivePaid > 0 && (
+              <div className="flex justify-between text-ink-muted">
+                <span>{t('sales.receivedNow')}</span>
+                <span className="font-mono tabular-nums">
+                  −{moneyAlways(effectivePaid)}
+                </span>
+              </div>
             )}
-          </div>
+            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+              <span>{t('sales.balanceAfter')}</span>
+              <span
+                className={clsx(
+                  'font-mono tabular-nums',
+                  balanceAfter > 0.004 && 'text-red-600 dark:text-red-400',
+                )}
+              >
+                {moneyAlways(balanceAfter)}
+              </span>
+            </div>
+            {overLimitBy > 0 && (
+              <p
+                role="alert"
+                className="text-[11px] font-medium text-amber-700 dark:text-amber-400"
+              >
+                {t('sales.overCreditLimit', {
+                  limit: moneyAlways(account.data?.creditLimit ?? 0),
+                  by: moneyAlways(overLimitBy),
+                })}
+              </p>
+            )}
+          </section>
         </div>
       </div>
 
@@ -2492,6 +2723,22 @@ function DocumentDialog({
                   </div>
                 </div>
                 <Detail label={t('sales.currency')} value={document.currency} />
+                <Detail
+                  label={t('sales.paymentMode')}
+                  value={paymentModeLabel(document.paymentMode, t)}
+                />
+                {document.amountReceived > 0 && (
+                  <Detail
+                    label={t('sales.amountReceived')}
+                    value={moneyAlways(document.amountReceived)}
+                  />
+                )}
+                {document.paymentReference && (
+                  <Detail
+                    label={t('sales.paymentReference')}
+                    value={document.paymentReference}
+                  />
+                )}
               </div>
 
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -2659,7 +2906,9 @@ function timeOfSale(createdAtUtc: string): string {
 function paymentModeLabel(mode: number, t: (key: string) => string): string {
   return mode === SalesPaymentMode.cash
     ? t('paymentModes.cash')
-    : t('paymentModes.credit');
+    : mode === SalesPaymentMode.online
+      ? t('paymentModes.online')
+      : t('paymentModes.credit');
 }
 
 function statusLabel(status: number, t: (key: string) => string): string {

@@ -191,12 +191,30 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(billed.Error);
         }
 
+        Result<Voucher?> received = await ReceiveAsync(
+            invoice, loaded.Value, billed.Value, branchId, cancellationToken);
+
+        if (received.IsFailure)
+        {
+            return Result.Failure<PostSalesInvoiceResponse>(received.Error);
+        }
+
         Result recorded = invoice.RecordPosting(
             issued.Value.Id, billed.Value?.Id, journalled.Value.Id);
 
         if (recorded.IsFailure)
         {
             return Result.Failure<PostSalesInvoiceResponse>(recorded.Error);
+        }
+
+        if (received.Value is { } receipt)
+        {
+            Result noted = invoice.RecordReceipt(receipt.Id);
+
+            if (noted.IsFailure)
+            {
+                return Result.Failure<PostSalesInvoiceResponse>(noted.Error);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -427,6 +445,128 @@ public sealed class PostSalesInvoiceCommandHandler
         _vouchers.Add(raised.Value);
 
         return raised;
+    }
+
+    /// <summary>Raises the receipt for what was paid with the sale, settling its own bill.</summary>
+    /// <remarks>
+    /// <para>
+    /// A cash sale used to post its bill and stop there, leaving it outstanding until
+    /// somebody entered the same money again as a receipt - so every counter sale sat in
+    /// the debtors report for a day, and the ones nobody got round to sat there for good.
+    /// What the counter took is now received in the same transaction as the sale.
+    /// </para>
+    /// <para>
+    /// An ordinary receipt, numbered from the firm's own receipt series and posted like one
+    /// entered by hand, so the cash book and the bank book show it where they would show
+    /// any other: in cash for a cash sale, in the bank for an online payment, with the
+    /// transaction ID as its reference.
+    /// </para>
+    /// </remarks>
+    private async Task<Result<Voucher?>> ReceiveAsync(
+        SalesInvoice invoice,
+        Context context,
+        Bill? bill,
+        BranchId branchId,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.AmountReceived <= 0m || invoice.ReceivedIntoLedgerId is not { } intoId)
+        {
+            return Result.Success<Voucher?>(null);
+        }
+
+        Ledger? into = await _ledgers.FindAsync(intoId, cancellationToken);
+
+        if (into is null || into.FirmId != invoice.FirmId || !into.IsCashOrBank)
+        {
+            return Result.Failure<Voucher?>(Error.NotFound(
+                "SalesInvoice.ReceivedIntoNotFound",
+                "The cash or bank account the payment went into no longer exists."));
+        }
+
+        VoucherType type = into.Kind == LedgerKind.Bank
+            ? VoucherType.BankReceipt
+            : VoucherType.CashReceipt;
+
+        Result<string> number = await VoucherNumbering.ReserveAsync(
+            _numbering, invoice.TenantId, invoice.FirmId, branchId, context.Year, type,
+            cancellationToken);
+
+        if (number.IsFailure)
+        {
+            return Result.Failure<Voucher?>(number.Error);
+        }
+
+        Result<Voucher> draft = Voucher.CreateDraft(
+            invoice.TenantId,
+            invoice.FirmId,
+            invoice.BranchId,
+            context.Year,
+            type,
+            number.Value,
+            invoice.Date,
+            invoice.Currency,
+            context.Firm.BaseCurrency);
+
+        if (draft.IsFailure)
+        {
+            return Result.Failure<Voucher?>(draft.Error);
+        }
+
+        Voucher receipt = draft.Value;
+        decimal amount = invoice.AmountReceived;
+        string narration = $"Received with sales invoice {invoice.Number}";
+
+        Result<VoucherLine> debit = receipt.AddLine(into.Id, EntrySide.Debit, amount, narration);
+
+        if (debit.IsFailure)
+        {
+            return Result.Failure<Voucher?>(debit.Error);
+        }
+
+        Result<VoucherLine> credit = receipt.AddLine(
+            invoice.CustomerLedgerId, EntrySide.Credit, amount, narration);
+
+        if (credit.IsFailure)
+        {
+            return Result.Failure<Voucher?>(credit.Error);
+        }
+
+        string mode = invoice.PaymentMode switch
+        {
+            SalesPaymentMode.Online => "Online",
+            _ when into.Kind == LedgerKind.Bank => "Bank transfer",
+            _ => "Cash",
+        };
+
+        Result details = receipt.SetDetails(
+            invoice.PaymentReference ?? invoice.Number, narration, mode);
+
+        if (details.IsFailure)
+        {
+            return Result.Failure<Voucher?>(details.Error);
+        }
+
+        Result posted = receipt.Post(_currentUser.UserId, _clock.UtcNow);
+
+        if (posted.IsFailure)
+        {
+            return Result.Failure<Voucher?>(posted.Error);
+        }
+
+        if (bill is not null)
+        {
+            Result allocated = bill.Allocate(
+                receipt.Id, Money.Of(amount, invoice.Currency), invoice.Date);
+
+            if (allocated.IsFailure)
+            {
+                return Result.Failure<Voucher?>(allocated.Error);
+            }
+        }
+
+        _vouchers.Add(receipt);
+
+        return Result.Success<Voucher?>(receipt);
     }
 
     /// <summary>Works out what returned goods come back onto the shelf at.</summary>

@@ -172,7 +172,11 @@ public sealed class SalesController : ApiControllerBase
             ReturnsInvoiceId: request.ReturnsInvoiceId,
             PaymentMode: request.PaymentMode,
             SalesmanLedgerId: request.SalesmanLedgerId,
-            BillingManLedgerId: request.BillingManLedgerId);
+            BillingManLedgerId: request.BillingManLedgerId,
+            AmountReceived: request.AmountReceived,
+            ReceivedIntoLedgerId: request.ReceivedIntoLedgerId,
+            PaymentReference: request.PaymentReference,
+            PaidInFull: request.PaidInFull);
 
         Result<SalesInvoiceResponse> result = await _sender.Send(
             new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason),
@@ -258,6 +262,10 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="PaymentMode">Paid in cash at the counter, or on credit.</param>
 /// <param name="SalesmanLedgerId">The employee who made the sale.</param>
 /// <param name="BillingManLedgerId">The employee who billed it.</param>
+/// <param name="AmountReceived">What the customer paid with the sale.</param>
+/// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
+/// <param name="PaymentReference">An online payment's transaction ID.</param>
+/// <param name="PaidInFull">The customer paid the whole bill, whatever it rounds to.</param>
 public sealed record UpdateSalesInvoiceRequest(
     [property: JsonRequired] DateOnly Date,
     [property: JsonRequired] Guid CustomerLedgerId,
@@ -272,7 +280,11 @@ public sealed record UpdateSalesInvoiceRequest(
     string? Reason = null,
     SalesPaymentMode PaymentMode = SalesPaymentMode.Credit,
     Guid? SalesmanLedgerId = null,
-    Guid? BillingManLedgerId = null);
+    Guid? BillingManLedgerId = null,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null,
+    bool PaidInFull = false);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

@@ -38,8 +38,9 @@ public enum SalesDocumentKind
 
 /// <summary>How a sale was settled at the counter.</summary>
 /// <remarks>
-/// Recorded as the counter states it. Posting raises the customer's bill either way; a cash
-/// sale is the one the receipt against it is expected to follow the same day.
+/// Recorded as the counter states it. Posting raises the customer's bill either way; what
+/// was actually handed over is <see cref="SalesInvoice.AmountReceived"/>, and posting
+/// raises the receipt for it, so a sale paid in full leaves nothing outstanding.
 /// </remarks>
 public enum SalesPaymentMode
 {
@@ -48,6 +49,12 @@ public enum SalesPaymentMode
 
     /// <summary>Paid at the counter.</summary>
     Cash = 2,
+
+    /// <summary>
+    /// Paid online - a UPI or card transfer such as Google Pay - into one of the firm's bank
+    /// accounts, with the transaction's own reference kept as the proof of it.
+    /// </summary>
+    Online = 3,
 }
 
 /// <summary>Where a sales invoice stands in its lifecycle.</summary>
@@ -91,6 +98,9 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 {
     /// <summary>The longest a narration or a reference may be.</summary>
     public const int MaximumNarrationLength = 500;
+
+    /// <summary>The longest a payment reference may be: room for any UPI or card reference.</summary>
+    public const int MaximumPaymentReferenceLength = 60;
 
     private readonly List<SalesInvoiceLine> _lines = [];
     private readonly List<SalesInvoiceCharge> _charges = [];
@@ -192,6 +202,23 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>Gets whether the sale was paid at the counter or put on account.</summary>
     public SalesPaymentMode PaymentMode { get; private set; } = SalesPaymentMode.Credit;
+
+    /// <summary>Gets what the customer paid when the sale was made, in its currency.</summary>
+    /// <remarks>
+    /// Zero for a sale on account. Less than the total is a part payment, with the rest
+    /// left outstanding on the bill; never more, because change handed back is not money
+    /// the firm received.
+    /// </remarks>
+    public decimal AmountReceived { get; private set; }
+
+    /// <summary>Gets the cash or bank account the payment went into.</summary>
+    public LedgerId? ReceivedIntoLedgerId { get; private set; }
+
+    /// <summary>Gets the payment's own reference: an online payment's transaction ID.</summary>
+    public string? PaymentReference { get; private set; }
+
+    /// <summary>Gets the receipt posting raised for the payment, if there was one.</summary>
+    public VoucherId? ReceiptVoucherId { get; private set; }
 
     /// <summary>Gets the employee who made the sale, where one is recorded.</summary>
     public LedgerId? SalesmanLedgerId { get; private set; }
@@ -471,6 +498,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         StockDocumentId = null;
         BillId = null;
         JournalVoucherId = null;
+        ReceiptVoucherId = null;
 
         return Result.Success();
     }
@@ -715,7 +743,8 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         if (!Enum.IsDefined(paymentMode))
         {
             return Result.Failure(Error.Validation(
-                "SalesInvoice.PaymentModeInvalid", "A sale is paid in cash or on credit."));
+                "SalesInvoice.PaymentModeInvalid",
+                "A sale is paid in cash, online or on credit."));
         }
 
         Ledger? stranger = new[] { salesman, billingMan }.FirstOrDefault(person =>
@@ -731,6 +760,111 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         PaymentMode = paymentMode;
         SalesmanLedgerId = salesman?.Id;
         BillingManLedgerId = billingMan?.Id;
+
+        return Result.Success();
+    }
+
+    /// <summary>Records what the customer paid when the sale was made, and where it went.</summary>
+    /// <param name="amountReceived">What was paid. Zero for a sale on account.</param>
+    /// <param name="receivedInto">
+    /// The cash or bank account it went into. Required when anything was paid.
+    /// </param>
+    /// <param name="paymentReference">
+    /// The payment's own reference: the transaction ID of an online payment.
+    /// </param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Posting raises the receipt for it against the sale's own bill, so a sale paid in
+    /// full is settled the moment it is posted - the counter does not have to enter the
+    /// same money a second time as a receipt. Whether the amount fits the total is
+    /// checked at posting, once the total can no longer move.
+    /// </remarks>
+    public Result SetCounterPayment(
+        decimal amountReceived,
+        Ledger? receivedInto,
+        string? paymentReference)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (amountReceived < 0m)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.AmountReceivedNegative", "An amount received cannot be negative."));
+        }
+
+        string? reference = Trimmed(paymentReference);
+
+        if (reference is { Length: > MaximumPaymentReferenceLength })
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.PaymentReferenceTooLong",
+                $"A payment reference is at most {MaximumPaymentReferenceLength} characters."));
+        }
+
+        if (amountReceived == 0m)
+        {
+            AmountReceived = 0m;
+            ReceivedIntoLedgerId = null;
+            PaymentReference = reference;
+
+            return Result.Success();
+        }
+
+        // A refund is a payment voucher of its own, made out to the customer; taking money
+        // in against a return would be the wrong way round.
+        if (IsReturn)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.ReturnCannotReceive",
+                "A sales return does not take payment. Refund the customer with a payment."));
+        }
+
+        if (receivedInto is null)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.ReceivedIntoRequired",
+                "Say which cash or bank account the payment went into."));
+        }
+
+        if (receivedInto.FirmId != FirmId || !receivedInto.IsCashOrBank)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.ReceivedIntoNotCashOrBank",
+                $"'{receivedInto.Name}' is not a cash or bank account of this firm."));
+        }
+
+        AmountReceived = decimal.Round(amountReceived, 4, MidpointRounding.AwayFromZero);
+        ReceivedIntoLedgerId = receivedInto.Id;
+        PaymentReference = reference;
+
+        return Result.Success();
+    }
+
+    /// <summary>Names the receipt posting raised for the payment made with the sale.</summary>
+    /// <param name="receiptVoucherId">The receipt.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result RecordReceipt(VoucherId receiptVoucherId)
+    {
+        if (Status != SalesInvoiceStatus.Posted)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotPosted",
+                $"Invoice '{Number}' is {Status}, so it has taken no payment to record."));
+        }
+
+        if (ReceiptVoucherId is not null)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.ReceiptAlreadyRecorded",
+                $"Invoice '{Number}' already names the receipt for its payment."));
+        }
+
+        ReceiptVoucherId = receiptVoucherId;
 
         return Result.Success();
     }
@@ -767,6 +901,15 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 "SalesInvoice.NothingToBill",
                 $"Invoice '{Number}' comes to nothing once its discounts and charges are "
                 + "applied."));
+        }
+
+        if (AmountReceived > Total.Amount)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.ReceivedMoreThanTotal",
+                $"Invoice '{Number}' comes to {Total.Amount:0.00##}, so "
+                + $"{AmountReceived:0.00##} cannot have been received against it. Change "
+                + "handed back is not money received."));
         }
 
         Status = SalesInvoiceStatus.Posted;

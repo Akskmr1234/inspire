@@ -135,6 +135,16 @@ export interface AppSettings {
   readonly defaultDebitAccountId: string;
   /** Default credit account for receipt vouchers. */
   readonly defaultCreditAccountId: string;
+  /**
+   * The cash account a sale paid in cash is received into. Blank takes the firm's first
+   * cash account, which is the only one most shops have.
+   */
+  readonly defaultCashLedgerId: string;
+  /**
+   * The bank account an online payment - Google Pay, a card - is received into, and the
+   * bank a bank receipt or payment starts at. Blank takes the firm's first bank account.
+   */
+  readonly defaultBankLedgerId: string;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
   /** Application-wide default theme ('light' or 'dark') applied for all users. */
@@ -191,6 +201,8 @@ const DEFAULTS: AppSettings = {
   defaultBrandId: '',
   defaultDebitAccountId: '',
   defaultCreditAccountId: '',
+  defaultCashLedgerId: '',
+  defaultBankLedgerId: '',
   defaultAdditionalLedgers: [],
   defaultTheme: 'light',
 };
