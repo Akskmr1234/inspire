@@ -55,6 +55,7 @@ import { moneyAlways } from '@/lib/money';
 export function StockOperationsPage({
   lockedType,
   title,
+  reasonRequired = false,
 }: {
   /**
    * One kind of document, when this screen is standing in for a menu entry of its
@@ -63,6 +64,8 @@ export function StockOperationsPage({
    */
   readonly lockedType?: number;
   readonly title?: string;
+  /** Whether the narration is a reason the document cannot be saved without. */
+  readonly reasonRequired?: boolean;
 } = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -331,6 +334,7 @@ export function StockOperationsPage({
               (warehouse) => !warehouse.isTransit,
             )}
             {...(lockedType === undefined ? {} : { lockedType })}
+            reasonRequired={reasonRequired}
             busy={mutation.isPending}
             onCancel={() => setEntering(false)}
             onSubmit={(body) =>
@@ -403,6 +407,7 @@ export function StockEntry({
   initialLines,
   fixedWarehouseId,
   dispatching = false,
+  reasonRequired = false,
   busy,
   onCancel,
   onSubmit,
@@ -423,6 +428,8 @@ export function StockEntry({
    * chooses, and the goods leave the moment it is saved.
    */
   readonly dispatching?: boolean;
+  /** Whether the narration is a reason the document cannot be saved without. */
+  readonly reasonRequired?: boolean;
   readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (body: {
@@ -703,10 +710,14 @@ export function StockEntry({
         )}
 
         <label className="block lg:col-span-2">
-          <span className="field-label">{t('stock.narration')}</span>
+          <span className="field-label">
+            {reasonRequired ? t('stock.reason') : t('stock.narration')}
+          </span>
           <input
             value={narration}
             onChange={(event) => setNarration(event.target.value)}
+            required={reasonRequired}
+            placeholder={reasonRequired ? t('stock.reasonPlaceholder') : undefined}
             className="field-input"
           />
         </label>

@@ -503,3 +503,42 @@ export function fetchExpiring(
 
   return request<readonly BatchStockRow[]>(`${STOCK}/expiry?${query.toString()}`);
 }
+
+/** Which corrections a history lists: counts and adjustments, or write-offs. */
+export const StockHistoryKind = { adjustments: 1, damaged: 2 } as const;
+
+/** One product on one correction, with the stock either side of it. */
+export interface StockHistoryRow {
+  readonly documentId: string;
+  readonly number: string;
+  readonly date: string;
+  readonly type: number;
+  readonly status: number;
+  readonly warehouseName: string;
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productName: string;
+  readonly stockUnitCode: string;
+  readonly batchNumber: string | null;
+  readonly previousQuantity: number;
+  readonly actualQuantity: number;
+  readonly adjustedQuantity: number;
+  readonly value: number;
+  readonly reason: string | null;
+}
+
+/** Lists the corrections made to stock, line by line. */
+export function fetchStockHistory(
+  kind: number,
+  from: string,
+  to: string,
+  warehouseId: string,
+): Promise<readonly StockHistoryRow[]> {
+  const query = new URLSearchParams({ kind: String(kind), from, to });
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  return request<readonly StockHistoryRow[]>(`${STOCK}/history?${query.toString()}`);
+}

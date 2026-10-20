@@ -200,6 +200,29 @@ public sealed class StockController : ApiControllerBase
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 
+    /// <summary>Lists the corrections made to stock, line by line, with the stock either side.</summary>
+    /// <param name="kind">Counts and adjustments, or damaged stock.</param>
+    /// <param name="from">The earliest document date.</param>
+    /// <param name="to">The latest document date.</param>
+    /// <param name="warehouseId">One warehouse. Omit for every one.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The lines, newest document first.</returns>
+    [HttpGet("history")]
+    [RequiresPermission("inventory", "stock-adjustment", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<StockHistoryRow>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHistoryAsync(
+        [FromQuery] StockHistoryKind kind,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? warehouseId,
+        CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<StockHistoryRow>> result = await _sender.Send(
+            new ListStockHistoryQuery(kind, from, to, warehouseId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Reads what is on hand and what it is worth.</summary>
     /// <param name="warehouseId">One warehouse. Omit for every one.</param>
     /// <param name="categoryId">One category. Omit for every one.</param>

@@ -130,6 +130,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseOrderReader, PurchaseOrderReader>();
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
         services.AddScoped<IStockTransferReader, StockTransferReader>();
+        services.AddScoped<IStockHistoryReader, StockHistoryReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<ISerialReader, SerialReader>();

@@ -271,6 +271,24 @@ public static class MenuCatalogue
                     "/inventory/stock-transfers",
                     "inventory:stock-transfer:view"),
 
+                // A count against the shelf, entered by hand or from a spreadsheet,
+                // reviewed as differences before anything moves.
+                new(
+                    "transactions.stock-adjustment",
+                    "Stock adjustment",
+                    "تسوية المخزون",
+                    "inventory",
+                    "/inventory/stock-adjustment",
+                    "inventory:stock-adjustment:view"),
+
+                new(
+                    "transactions.damaged-stock",
+                    "Damaged stock",
+                    "المخزون التالف",
+                    "inventory",
+                    "/inventory/damaged-stock",
+                    "inventory:stock-adjustment:view"),
+
                 // Invoices and credit notes on one entry, because they are one kind of
                 // document: a screen showing a customer's history wants both, and two
                 // entries would suggest two places to look for the same sale.
