@@ -27,6 +27,35 @@ public sealed class StockDocumentRepository : IStockDocumentRepository
     public void Add(StockDocument document) => _context.StockDocuments.Add(document);
 }
 
+/// <summary>Reads and writes bills of materials.</summary>
+public sealed class BillOfMaterialsRepository : IBillOfMaterialsRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public BillOfMaterialsRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<BillOfMaterials?> FindAsync(
+        BillOfMaterialsId id,
+        CancellationToken cancellationToken = default) =>
+        _context.BillsOfMaterials
+            .Include(bill => bill.Lines)
+            .FirstOrDefaultAsync(bill => bill.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> ExistsForAsync(
+        FirmId firmId,
+        ProductId productId,
+        CancellationToken cancellationToken = default) =>
+        _context.BillsOfMaterials.AnyAsync(
+            bill => bill.FirmId == firmId && bill.ProductId == productId, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(BillOfMaterials bill) => _context.BillsOfMaterials.Add(bill);
+}
+
 /// <summary>Reads and writes stock transfer requests.</summary>
 public sealed class StockTransferRequestRepository : IStockTransferRequestRepository
 {

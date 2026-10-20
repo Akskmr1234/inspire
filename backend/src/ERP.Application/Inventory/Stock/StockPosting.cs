@@ -88,10 +88,23 @@ internal sealed class StockPoster
 
         List<StockLedgerEntry> written = [];
 
-        foreach (StockDocumentLine line in document.Lines.OrderBy(line => line.LineNumber))
+        // A production run uses its materials before it makes anything: what the finished
+        // goods cost is what the materials did, and that is only known once they are out.
+        ProductionCost? production = document.Type == StockDocumentType.Production
+            ? new ProductionCost(document)
+            : null;
+
+        IEnumerable<StockDocumentLine> ordered = production is null
+            ? document.Lines.OrderBy(line => line.LineNumber)
+            : document.Lines.OrderBy(line => line.StockQuantity > 0m).ThenBy(line => line.LineNumber);
+
+        foreach (StockDocumentLine line in ordered)
         {
             Result applied = document.Type switch
             {
+                StockDocumentType.Production =>
+                    Produce(written, source, document, line, postedAtUtc, allowNegative, production!),
+
                 StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
                     or StockDocumentType.SalesReturn or StockDocumentType.PurchaseReceipt
                     or StockDocumentType.ReceiptNote =>
@@ -535,6 +548,36 @@ internal sealed class StockPoster
                     destination, document, line, line.StockQuantity, unitCost, postedAtUtc));
     }
 
+    /// <summary>Uses up a material, or makes a finished good at what the materials cost.</summary>
+    private static Result Produce(
+        List<StockLedgerEntry> written,
+        PositionSet positions,
+        StockDocument document,
+        StockDocumentLine line,
+        DateTimeOffset postedAtUtc,
+        bool allowNegative,
+        ProductionCost cost)
+    {
+        if (line.StockQuantity < 0m)
+        {
+            Result used = Take(
+                written,
+                IssueFrom(positions, document, line, -line.StockQuantity, postedAtUtc, allowNegative));
+
+            if (used.IsSuccess)
+            {
+                cost.Consume(-written[^1].Value.Amount);
+            }
+
+            return used;
+        }
+
+        return Take(
+            written,
+            ReceiveInto(
+                positions, document, line, line.StockQuantity, cost.UnitCostOf(line), postedAtUtc));
+    }
+
     /// <summary>Corrects a position up or down.</summary>
     /// <remarks>
     /// An increase with no rate is valued at what the position already says the goods
@@ -747,5 +790,43 @@ internal sealed class StockPoster
             BatchOf(line) is { } batch
                 ? ForBatch(batch).Quantity
                 : For(line.ProductId).Quantity;
+    }
+}
+
+/// <summary>What a production run's materials cost, shared out over what it made.</summary>
+/// <remarks>
+/// By quantity, and the last finished good takes whatever rounding is left, so the goods
+/// made are worth to the cent what was used to make them.
+/// </remarks>
+internal sealed class ProductionCost
+{
+    private readonly decimal _made;
+    private decimal _consumed;
+    private decimal _allocated;
+    private decimal _unallocated;
+
+    internal ProductionCost(StockDocument document)
+    {
+        _made = document.Lines.Where(line => line.StockQuantity > 0m).Sum(line => line.StockQuantity);
+        _unallocated = _made;
+    }
+
+    /// <summary>Adds what a material that has just been used up cost.</summary>
+    /// <param name="value">Its value, positive.</param>
+    internal void Consume(decimal value) => _consumed += value;
+
+    /// <summary>The cost of one unit of a finished good, taking its share of the materials.</summary>
+    /// <param name="line">A line making something.</param>
+    /// <returns>The unit cost.</returns>
+    internal decimal UnitCostOf(StockDocumentLine line)
+    {
+        decimal share = line.StockQuantity >= _unallocated
+            ? _consumed - _allocated
+            : decimal.Round(_consumed * line.StockQuantity / _made, 4, MidpointRounding.AwayFromZero);
+
+        _allocated += share;
+        _unallocated -= line.StockQuantity;
+
+        return decimal.Round(share / line.StockQuantity, StockBalance.CostScale, MidpointRounding.AwayFromZero);
     }
 }

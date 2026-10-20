@@ -63,6 +63,7 @@ public sealed class DataReset : IDataReset
         // Every record imported from another system is cleared below, so nothing it was
         // linked to is left: a fresh import starts from nothing.
         "DELETE FROM import_links WHERE firm_id = @firm",
+        "DELETE FROM bills_of_materials WHERE firm_id = @firm",
         "DELETE FROM products WHERE firm_id = @firm",
         "UPDATE categories SET parent_id = NULL WHERE firm_id = @firm",
         "DELETE FROM categories WHERE firm_id = @firm",

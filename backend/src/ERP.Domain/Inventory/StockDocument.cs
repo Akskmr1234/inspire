@@ -89,6 +89,15 @@ public enum StockDocumentType
     /// invoice raised against the note will settle.
     /// </remarks>
     ReceiptNote = 13,
+
+    /// <summary>Materials consumed and finished goods made from them, in one document.</summary>
+    /// <remarks>
+    /// Signed like an adjustment: a negative line is a material used up, a positive line
+    /// is a finished good produced. The finished goods are costed at exactly what the
+    /// materials cost, so making something moves value from one shelf to another and
+    /// changes nothing in the books.
+    /// </remarks>
+    Production = 14,
 }
 
 /// <summary>Where a stock document stands in its lifecycle.</summary>
@@ -286,7 +295,8 @@ public sealed class StockDocument
     public bool OpensBatches =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
             or StockDocumentType.StockAdjustment or StockDocumentType.PhysicalVerification
-            or StockDocumentType.PurchaseReceipt or StockDocumentType.ReceiptNote;
+            or StockDocumentType.PurchaseReceipt or StockDocumentType.ReceiptNote
+            or StockDocumentType.Production;
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may invent the batch
@@ -317,7 +327,8 @@ public sealed class StockDocument
     /// stock are the same correction pointed two ways, and forcing them into separate
     /// documents would mean entering one stocktake twice.
     /// </remarks>
-    public bool AllowsSignedQuantity => Type == StockDocumentType.StockAdjustment;
+    public bool AllowsSignedQuantity =>
+        Type is StockDocumentType.StockAdjustment or StockDocumentType.Production;
 
     /// <summary>Starts a draft stock document.</summary>
     /// <param name="tenantId">The owning tenant.</param>
@@ -657,6 +668,16 @@ public sealed class StockDocument
             or StockDocumentType.SalesReturn
             or StockDocumentType.PurchaseReceipt
             or StockDocumentType.PurchaseReturn;
+
+        // A production run uses something up and makes something. Either half alone is a
+        // write-off or a receipt from nowhere, which other documents already are.
+        if (Type == StockDocumentType.Production
+            && (!_lines.Any(line => line.StockQuantity < 0m) || !_lines.Any(line => line.StockQuantity > 0m)))
+        {
+            return Result.Failure(Error.BusinessRule(
+                "StockDocument.ProductionIncomplete",
+                $"Production '{Number}' needs both the materials it used and the goods it made."));
+        }
 
         bool duplicated = !raisedByInvoice && _lines
             .GroupBy(line => (line.ProductId, line.BatchId))

@@ -1713,6 +1713,123 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("batch_balances", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.BillOfMaterials", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<string>("Narration")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("narration");
+
+                    b.Property<decimal>("OutputQuantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("output_quantity");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bills_of_materials");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_bills_of_materials_product_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_bills_of_materials_tenant");
+
+                    b.HasIndex("FirmId", "ProductId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bills_of_materials_product");
+
+                    b.ToTable("bills_of_materials", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.BillOfMaterialsLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BillOfMaterialsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bill_of_materials_id");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_number");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("remarks");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bill_of_materials_lines");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_bill_of_materials_lines_product");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_bill_of_materials_lines_tenant");
+
+                    b.HasIndex("BillOfMaterialsId", "LineNumber")
+                        .HasDatabaseName("ix_bill_of_materials_lines_bill");
+
+                    b.ToTable("bill_of_materials_lines", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.Brand", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6311,6 +6428,33 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_batch_balances_warehouses_warehouse_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.BillOfMaterials", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bills_of_materials_products_product_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.BillOfMaterialsLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.BillOfMaterials", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("BillOfMaterialsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_bill_of_materials_lines_bills_of_materials_bill_of_material~");
+
+                    b.HasOne("ERP.Domain.Inventory.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bill_of_materials_lines_products_product_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.Category", b =>
                 {
                     b.HasOne("ERP.Domain.Inventory.Category", null)
@@ -7183,6 +7327,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Navigation("FirmAccess");
 
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.BillOfMaterials", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("ERP.Domain.Inventory.InventoryAccountMap", b =>

@@ -52,6 +52,7 @@ public static class NumberingDefaults
         DocumentTypes.StockTransfer => "ST",
         DocumentTypes.StockTransferRequest => "STR",
         DocumentTypes.StockAdjustment => "ADJ",
+        DocumentTypes.Production => "PRD",
         DocumentTypes.DamagedStock => "DMG",
         DocumentTypes.PhysicalVerification => "PV",
         DocumentTypes.SalesIssue => "SI",

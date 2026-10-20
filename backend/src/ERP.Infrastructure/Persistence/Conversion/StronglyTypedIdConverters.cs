@@ -550,3 +550,23 @@ public sealed class StockTransferRequestLineIdConverter
     {
     }
 }
+
+/// <summary>Converts <see cref="BillOfMaterialsId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillOfMaterialsIdConverter : ValueConverter<BillOfMaterialsId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsIdConverter"/> class.</summary>
+    public BillOfMaterialsIdConverter()
+        : base(id => id.Value, value => BillOfMaterialsId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BillOfMaterialsLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillOfMaterialsLineIdConverter : ValueConverter<BillOfMaterialsLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsLineIdConverter"/> class.</summary>
+    public BillOfMaterialsLineIdConverter()
+        : base(id => id.Value, value => BillOfMaterialsLineId.From(value))
+    {
+    }
+}

@@ -453,3 +453,80 @@ public sealed class StockTransferRequestLineConfiguration
         ConfigurationConventions.ApplyAuditConventions(builder);
     }
 }
+
+/// <summary>Maps <see cref="BillOfMaterials"/> to the <c>bills_of_materials</c> table.</summary>
+public sealed class BillOfMaterialsConfiguration : IEntityTypeConfiguration<BillOfMaterials>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<BillOfMaterials> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("bills_of_materials");
+        builder.HasKey(bill => bill.Id);
+        builder.Property(bill => bill.Id).ValueGeneratedNever();
+
+        builder.Property(bill => bill.OutputQuantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(bill => bill.Narration).HasMaxLength(BillOfMaterials.MaximumNarrationLength);
+        builder.Property(bill => bill.IsActive).IsRequired();
+
+        builder.HasOne<Product>()
+            .WithMany()
+            .HasForeignKey(bill => bill.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // One bill per finished good: a product made two ways would cost two amounts,
+        // which is two products to the stock ledger.
+        builder.HasIndex(bill => new { bill.FirmId, bill.ProductId })
+            .IsUnique()
+            .HasDatabaseName("ix_bills_of_materials_product");
+
+        builder.HasIndex(bill => bill.TenantId).HasDatabaseName("ix_bills_of_materials_tenant");
+
+        builder.HasMany(bill => bill.Lines)
+            .WithOne()
+            .HasForeignKey(line => line.BillOfMaterialsId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(bill => bill.Lines)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_lines");
+
+        ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}
+
+/// <summary>Maps <see cref="BillOfMaterialsLine"/> to the <c>bill_of_materials_lines</c> table.</summary>
+public sealed class BillOfMaterialsLineConfiguration : IEntityTypeConfiguration<BillOfMaterialsLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<BillOfMaterialsLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("bill_of_materials_lines");
+        builder.HasKey(line => line.Id);
+        builder.Property(line => line.Id).ValueGeneratedNever();
+
+        builder.Property(line => line.Quantity)
+            .HasPrecision(18, StockBalance.QuantityScale).IsRequired();
+        builder.Property(line => line.LineNumber).IsRequired();
+        builder.Property(line => line.Remarks).HasMaxLength(BillOfMaterials.MaximumNarrationLength);
+
+        builder.HasOne<Product>()
+            .WithMany()
+            .HasForeignKey(line => line.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(line => new { line.BillOfMaterialsId, line.LineNumber })
+            .HasDatabaseName("ix_bill_of_materials_lines_bill");
+
+        // Where a material is used: the question asked before a product is withdrawn.
+        builder.HasIndex(line => line.ProductId).HasDatabaseName("ix_bill_of_materials_lines_product");
+
+        builder.HasIndex(line => line.TenantId).HasDatabaseName("ix_bill_of_materials_lines_tenant");
+
+        ConfigurationConventions.ApplyAuditConventions(builder);
+    }
+}

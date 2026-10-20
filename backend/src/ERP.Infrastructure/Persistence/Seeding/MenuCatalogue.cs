@@ -130,6 +130,14 @@ public static class MenuCatalogue
                             "inventory",
                             "/inventory/units",
                             "inventory:unit:view"),
+                        // What goes into each finished good, read by a production run.
+                        new(
+                            "masters.boms",
+                            "Bills of materials",
+                            "قوائم المواد",
+                            "inventory",
+                            "/inventory/boms",
+                            "inventory:product:view"),
                         new(
                             "masters.warehouses",
                             "Warehouses",
@@ -279,6 +287,15 @@ public static class MenuCatalogue
                     "تسوية المخزون",
                     "inventory",
                     "/inventory/stock-adjustment",
+                    "inventory:stock-adjustment:view"),
+
+                // Materials used up and finished goods made, by hand or from a bill.
+                new(
+                    "transactions.production",
+                    "Production",
+                    "الإنتاج",
+                    "inventory",
+                    "/inventory/production",
                     "inventory:stock-adjustment:view"),
 
                 new(

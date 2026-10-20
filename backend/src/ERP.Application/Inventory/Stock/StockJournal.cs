@@ -47,6 +47,10 @@ internal static class StockJournal
             // to say about it.
             StockDocumentType.StockTransfer => null,
 
+            // Making something moves value from the materials to the finished goods at
+            // exactly what the materials cost, so the books have nothing to record.
+            StockDocumentType.Production => null,
+
             StockDocumentType.OpeningStock => StockAccount.OpeningEquity,
             StockDocumentType.MaterialReceipt or StockDocumentType.MaterialIssue =>
                 StockAccount.Consumption,

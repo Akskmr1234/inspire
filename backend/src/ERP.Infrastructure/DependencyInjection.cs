@@ -3,6 +3,7 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
+using ERP.Application.Inventory.Production;
 using ERP.Application.Inventory.Products;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Parties;
@@ -112,6 +113,7 @@ public static class DependencyInjection
         services.AddScoped<IProductReader, ProductReader>();
         services.AddScoped<IStockDocumentRepository, StockDocumentRepository>();
         services.AddScoped<IStockTransferRequestRepository, StockTransferRequestRepository>();
+        services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
         services.AddScoped<IStockBalanceRepository, StockBalanceRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<IBatchRepository, BatchRepository>();
@@ -131,6 +133,7 @@ public static class DependencyInjection
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
         services.AddScoped<IStockTransferReader, StockTransferReader>();
         services.AddScoped<IStockHistoryReader, StockHistoryReader>();
+        services.AddScoped<IBillOfMaterialsReader, BillOfMaterialsReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<ISerialReader, SerialReader>();

@@ -656,6 +656,27 @@ public interface IStockDocumentRepository
     void Add(StockDocument document);
 }
 
+/// <summary>Reads and writes bills of materials.</summary>
+public interface IBillOfMaterialsRepository
+{
+    /// <summary>Finds a bill with its components.</summary>
+    /// <param name="id">The bill.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The bill, or <see langword="null"/>.</returns>
+    Task<BillOfMaterials?> FindAsync(BillOfMaterialsId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Says whether a finished good already has a bill.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="productId">The finished good.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when it has one.</returns>
+    Task<bool> ExistsForAsync(FirmId firmId, ProductId productId, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a bill.</summary>
+    /// <param name="bill">The bill to add.</param>
+    void Add(BillOfMaterials bill);
+}
+
 /// <summary>Reads and writes stock transfer requests.</summary>
 public interface IStockTransferRequestRepository
 {

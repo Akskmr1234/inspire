@@ -452,6 +452,9 @@ public static class DocumentTypes
     /// <summary>A stock adjustment.</summary>
     public const string StockAdjustment = "inventory.stock-adjustment";
 
+    /// <summary>A production run: materials consumed and finished goods made.</summary>
+    public const string Production = "inventory.production";
+
     /// <summary>A damaged-stock write-off.</summary>
     public const string DamagedStock = "inventory.damaged-stock";
 
@@ -521,6 +524,7 @@ public static class DocumentTypes
         Inventory.StockDocumentType.PurchaseReturn => PurchaseReturnIssue,
         Inventory.StockDocumentType.DeliveryNote => DeliveryNote,
         Inventory.StockDocumentType.ReceiptNote => ReceiptNote,
+        Inventory.StockDocumentType.Production => Production,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };
