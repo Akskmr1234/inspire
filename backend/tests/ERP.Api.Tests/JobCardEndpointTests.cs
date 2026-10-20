@@ -44,7 +44,7 @@ public sealed class JobCardEndpointTests
 
         HttpResponseMessage created = await client.PostAsJsonAsync(Cards, Card(masters, mobile, technician));
         created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
-        Guid id = (await created.Content.ReadFromJsonAsync<Guid>())!;
+        Guid id = await created.Content.ReadFromJsonAsync<Guid>();
 
         JobCardDetail card = (await client.GetFromJsonAsync<JobCardDetail>($"{Cards}/{id}"))!;
         card.Summary.Number.ShouldStartWith("JC");
@@ -127,7 +127,7 @@ public sealed class JobCardEndpointTests
         HttpResponseMessage created = await client.PostAsJsonAsync(
             Cards, Card(masters, mobile, technician: null, account: false));
         created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
-        Guid id = (await created.Content.ReadFromJsonAsync<Guid>())!;
+        Guid id = await created.Content.ReadFromJsonAsync<Guid>();
 
         // No account on the card and none given: refused.
         (await client.PostAsJsonAsync($"{Cards}/{id}/sales-invoice", new { }))
