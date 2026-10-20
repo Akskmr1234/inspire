@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -172,6 +173,17 @@ export function PurchasePage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+
+  // Opened on a particular purchase by another screen - a receipt note raising the
+  // purchase that pays for it - and the parameter dropped so a refresh lands on the list.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setViewing(open);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
   // The document being corrected, read back in full so the entry screen starts from it.
   const [editing, setEditing] = useState<PurchaseInvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);

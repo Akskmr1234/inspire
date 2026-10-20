@@ -24,9 +24,12 @@ import {
   createStockDocument,
   fetchProductBatches,
   getStockDocument,
+  invoiceDeliveryNote,
+  invoiceReceiptNote,
   isCount,
   isTransfer,
   listStockDocuments,
+  namesParty,
   opensBatches,
   postStockDocument,
   STOCK_TYPES,
@@ -39,6 +42,10 @@ import {
   type StockValuationReport,
 } from '@/lib/stock';
 import { moneyAlways } from '@/lib/money';
+import { listCustomers } from '@/lib/customers';
+import { listSuppliers } from '@/lib/suppliers';
+import { useNavigate } from 'react-router-dom';
+import { useSession } from '@/stores/session';
 
 /**
  * Stock operations.
@@ -69,6 +76,7 @@ export function StockOperationsPage({
 } = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 7)}-01`;
@@ -137,6 +145,27 @@ export function StockOperationsPage({
         row.destinationWarehouseName
           ? `${row.warehouseName} → ${row.destinationWarehouseName}`
           : row.warehouseName,
+    },
+    {
+      key: 'party',
+      header:
+        lockedType === StockDocumentType.receiptNote
+          ? t('notes.supplier')
+          : t('notes.customer'),
+      value: (row) => row.partyName ?? '',
+      // Only notes name a party; on every other register the column would be empty.
+      hiddenByDefault: lockedType === undefined || !namesParty(lockedType),
+    },
+    {
+      key: 'invoice',
+      header: t('notes.invoice'),
+      value: (row) => row.invoiceNumber ?? '',
+      render: (row) =>
+        row.invoiceNumber ??
+        (namesParty(row.type) && row.status === StockDocumentStatus.posted
+          ? t('notes.notBilled')
+          : ''),
+      hiddenByDefault: lockedType === undefined || !namesParty(lockedType),
     },
     {
       key: 'reference',
@@ -266,6 +295,27 @@ export function StockOperationsPage({
             await cancelStockDocument(id, reason);
             return t('stock.cancelledNotice');
           })
+        }
+        // A note's invoice is raised as a draft and opened on its own screen, where it
+        // is priced, checked and posted like any other.
+        onInvoice={(document) =>
+          run(async () => {
+            if (document.type === StockDocumentType.deliveryNote) {
+              const raised = await invoiceDeliveryNote(document.id);
+              navigate(`/sales/invoices?open=${raised.salesInvoiceId}`);
+            } else {
+              const raised = await invoiceReceiptNote(document.id, null);
+              navigate(`/purchase/invoices?open=${raised.purchaseInvoiceId}`);
+            }
+            return null;
+          })
+        }
+        onOpenInvoice={(document) =>
+          navigate(
+            document.type === StockDocumentType.deliveryNote
+              ? `/sales/invoices?open=${document.invoiceId}`
+              : `/purchase/invoices?open=${document.invoiceId}`,
+          )
         }
       />
     );
@@ -441,6 +491,7 @@ export function StockEntry({
     readonly referenceNumber?: string | null;
     readonly narration?: string | null;
     readonly postImmediately: boolean;
+    readonly partyLedgerId?: string | null;
   }) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -448,6 +499,32 @@ export function StockEntry({
   const [type, setType] = useState<number>(
     lockedType ?? StockDocumentType.materialReceipt,
   );
+  const [partyId, setPartyId] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+
+  // The customer a delivery note goes to, or the supplier a receipt note comes from.
+  // Fetched only on those two; every other document names nobody.
+  const party = namesParty(type);
+  const parties = useQuery<
+    readonly { id: string; code: string; name: string }[],
+    ApiError
+  >({
+    queryKey: ['note-parties', type],
+    queryFn: async () =>
+      type === StockDocumentType.deliveryNote
+        ? (await listCustomers('', true)).map((customer) => ({
+            id: customer.customerId,
+            code: customer.code,
+            name: customer.name,
+          }))
+        : (await listSuppliers('', true)).map((supplier) => ({
+            id: supplier.supplierId,
+            code: supplier.code,
+            name: supplier.name,
+          })),
+    enabled: party,
+    staleTime: 60 * 1000,
+  });
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [warehouseId, setWarehouseId] = useState(
     fixedWarehouseId ??
@@ -604,6 +681,17 @@ export function StockEntry({
           return;
         }
 
+        if (party && !partyId) {
+          setProblem(
+            type === StockDocumentType.deliveryNote
+              ? t('notes.chooseCustomer')
+              : t('notes.chooseSupplier'),
+          );
+          return;
+        }
+
+        setProblem(null);
+
         onSubmit({
           type,
           date,
@@ -613,6 +701,7 @@ export function StockEntry({
           referenceNumber: reference.trim() || null,
           narration: narration.trim() || null,
           postImmediately: dispatching || post,
+          partyLedgerId: party ? partyId : null,
         });
       }}
     >
@@ -698,6 +787,30 @@ export function StockEntry({
           </label>
         )}
 
+        {party && (
+          <label className="block">
+            <span className="field-label">
+              {type === StockDocumentType.deliveryNote
+                ? t('notes.customer')
+                : t('notes.supplier')}
+            </span>
+            <SearchSelect
+              value={partyId}
+              onChange={setPartyId}
+              label={
+                type === StockDocumentType.deliveryNote
+                  ? t('notes.customer')
+                  : t('notes.supplier')
+              }
+              placeholder={t('stock.choose')}
+              options={(parties.data ?? []).map((candidate) => ({
+                value: candidate.id,
+                label: `${candidate.code} — ${candidate.name}`,
+              }))}
+            />
+          </label>
+        )}
+
         {!dispatching && (
           <label className="block">
             <span className="field-label">{t('stock.reference')}</span>
@@ -732,6 +845,16 @@ export function StockEntry({
       {anyBatched && <p className="text-xs text-ink-muted">{t('stock.batchHint')}</p>}
 
       {anySerialised && <p className="text-xs text-ink-muted">{t('stock.serialHint')}</p>}
+
+      {party && (
+        <p className="text-xs text-ink-muted">
+          {type === StockDocumentType.deliveryNote
+            ? t('notes.deliveryHint')
+            : t('notes.receiptHint')}
+        </p>
+      )}
+
+      {problem && <Alert tone="error">{problem}</Alert>}
 
       {/* Barcode Scanner (Requirement 14) */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2/60 p-2.5">
@@ -1134,6 +1257,8 @@ function StockDocumentView({
   onClose,
   onPost,
   onCancel,
+  onInvoice,
+  onOpenInvoice,
 }: {
   readonly documentId: string;
   readonly busy: boolean;
@@ -1141,8 +1266,13 @@ function StockDocumentView({
   readonly onClose: () => void;
   readonly onPost: (id: string) => void;
   readonly onCancel: (id: string, reason: string) => void;
+  /** Raises the invoice that bills a delivery or receipt note. */
+  readonly onInvoice: (document: StockDocumentDetail) => void;
+  /** Opens the invoice that already bills one. */
+  readonly onOpenInvoice: (document: StockDocumentDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const can = useSession((state) => state.can);
   const [reason, setReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
@@ -1182,11 +1312,50 @@ function StockDocumentView({
             {document.destinationWarehouseName
               ? ` → ${document.destinationWarehouseName}`
               : ''}{' '}
-            · {t(statusKey(document.status))}
+            {document.partyName ? `· ${document.partyName} ` : ''}·{' '}
+            {t(statusKey(document.status))}
           </p>
+          {namesParty(document.type) &&
+            document.status === StockDocumentStatus.posted && (
+              <p className="text-xs">
+                {document.invoiceNumber ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenInvoice(document)}
+                    className="cell-link"
+                  >
+                    {t('notes.billedBy', { number: document.invoiceNumber })}
+                  </button>
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-300">
+                    {t('notes.notBilled')}
+                  </span>
+                )}
+              </p>
+            )}
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {namesParty(document.type) &&
+            document.status === StockDocumentStatus.posted &&
+            !document.invoiceNumber &&
+            can(
+              document.type === StockDocumentType.deliveryNote
+                ? 'sales:invoice:create'
+                : 'purchase:invoice:create',
+            ) && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onInvoice(document)}
+                className="btn-primary"
+              >
+                {document.type === StockDocumentType.deliveryNote
+                  ? t('notes.raiseInvoice')
+                  : t('notes.raisePurchase')}
+              </button>
+            )}
+
           {document.status === StockDocumentStatus.draft && (
             <button
               type="button"
@@ -1396,6 +1565,18 @@ export function typeKey(type: number): string {
       return 'stock.typeAdjustment';
     case StockDocumentType.damagedStock:
       return 'stock.typeDamaged';
+    case StockDocumentType.deliveryNote:
+      return 'stock.typeDeliveryNote';
+    case StockDocumentType.receiptNote:
+      return 'stock.typeReceiptNote';
+    case 8:
+      return 'stock.typeSalesIssue';
+    case 9:
+      return 'stock.typeSalesReturn';
+    case 10:
+      return 'stock.typePurchaseReceipt';
+    case 11:
+      return 'stock.typePurchaseReturn';
     default:
       return 'stock.typeVerification';
   }
@@ -1509,6 +1690,35 @@ export function OpeningStockPage(): React.JSX.Element {
     <StockOperationsPage
       lockedType={StockDocumentType.openingStock}
       title={t('nav.openingStock')}
+    />
+  );
+}
+
+/**
+ * Delivery notes: goods out to a customer ahead of the invoice.
+ *
+ * The register of notes, with the customer and whether each has been invoiced yet, and
+ * the invoice raised from a note on the note itself.
+ */
+export function DeliveryNotesPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <StockOperationsPage
+      lockedType={StockDocumentType.deliveryNote}
+      title={t('nav.deliveryNotes')}
+    />
+  );
+}
+
+/** Receipt notes: goods in from a supplier ahead of the supplier's invoice. */
+export function ReceiptNotesPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <StockOperationsPage
+      lockedType={StockDocumentType.receiptNote}
+      title={t('nav.receiptNotes')}
     />
   );
 }

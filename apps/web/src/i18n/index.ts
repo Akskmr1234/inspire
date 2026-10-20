@@ -43,6 +43,8 @@ const en = {
     stockTransfers: 'Stock transfers',
     stockAdjustment: 'Stock adjustment',
     damagedStock: 'Damaged stock',
+    deliveryNotes: 'Delivery notes',
+    receiptNotes: 'Receipt notes',
     stockValuation: 'Stock valuation',
     stockLedger: 'Stock ledger',
     itemMovement: 'Item movement',
@@ -698,6 +700,12 @@ const en = {
     typeAdjustment: 'Stock adjustment',
     typeDamaged: 'Damaged stock',
     typeVerification: 'Physical verification',
+    typeDeliveryNote: 'Delivery note',
+    typeReceiptNote: 'Receipt note',
+    typeSalesIssue: 'Sales issue',
+    typeSalesReturn: 'Sales return receipt',
+    typePurchaseReceipt: 'Purchase receipt',
+    typePurchaseReturn: 'Purchase return issue',
     countHint:
       'Enter what was found on the shelf. Only the difference against the system figure is posted.',
     adjustmentHint:
@@ -801,6 +809,21 @@ const en = {
     noDifferences: 'Everything counted agrees with the system.',
     back: 'Back to the count',
     confirm: 'Confirm adjustment',
+  },
+  notes: {
+    customer: 'Customer',
+    supplier: 'Supplier',
+    invoice: 'Invoice',
+    notBilled: 'Not yet invoiced',
+    billedBy: 'Invoiced by {{number}}',
+    raiseInvoice: 'Raise sales invoice',
+    raisePurchase: 'Raise purchase invoice',
+    chooseCustomer: 'Choose the customer the goods went to.',
+    chooseSupplier: 'Choose the supplier the goods came from.',
+    deliveryHint:
+      'The goods leave stock when the note is saved. Raise the invoice from the note later; it bills the goods without taking them out again.',
+    receiptHint:
+      'The goods come into stock at the rate entered when the note is saved. Raise the purchase from the note when the supplier invoices; it pays for the goods without receiving them again.',
   },
   history: {
     code: 'Code',
@@ -2140,6 +2163,8 @@ const ar = {
     stockTransfers: 'تحويلات المخزون',
     stockAdjustment: 'تسوية المخزون',
     damagedStock: 'المخزون التالف',
+    deliveryNotes: 'إشعارات التسليم',
+    receiptNotes: 'إشعارات الاستلام',
     stockValuation: 'تقييم المخزون',
     stockLedger: 'دفتر المخزون',
     itemMovement: 'حركة الأصناف',
@@ -2811,6 +2836,12 @@ const ar = {
     typeAdjustment: 'تسوية مخزون',
     typeDamaged: 'بضاعة تالفة',
     typeVerification: 'جرد فعلي',
+    typeDeliveryNote: 'إشعار تسليم',
+    typeReceiptNote: 'إشعار استلام',
+    typeSalesIssue: 'صرف مبيعات',
+    typeSalesReturn: 'استلام مرتجع مبيعات',
+    typePurchaseReceipt: 'استلام مشتريات',
+    typePurchaseReturn: 'صرف مرتجع مشتريات',
     countHint: 'أدخل ما وُجد على الرف فعلياً. يُرحَّل الفرق عن رصيد النظام فقط.',
     adjustmentHint:
       'الكمية الموجبة بضاعة وُجدت، والسالبة بضاعة مفقودة. اترك السعر فارغاً لتقييمها بتكلفة الرصيد الحالية.',
@@ -2923,6 +2954,21 @@ const ar = {
     noDifferences: 'كل ما جُرد يطابق النظام.',
     back: 'العودة إلى الجرد',
     confirm: 'تأكيد التسوية',
+  },
+  notes: {
+    customer: 'العميل',
+    supplier: 'المورد',
+    invoice: 'الفاتورة',
+    notBilled: 'لم تُفوتر بعد',
+    billedBy: 'فوترت بالفاتورة {{number}}',
+    raiseInvoice: 'إنشاء فاتورة مبيعات',
+    raisePurchase: 'إنشاء فاتورة مشتريات',
+    chooseCustomer: 'اختر العميل الذي سُلمت إليه البضاعة.',
+    chooseSupplier: 'اختر المورد الذي وردت منه البضاعة.',
+    deliveryHint:
+      'تخرج البضاعة من المخزون عند حفظ الإشعار. أنشئ الفاتورة من الإشعار لاحقاً؛ فهي تفوتر البضاعة دون إخراجها مرة أخرى.',
+    receiptHint:
+      'تدخل البضاعة المخزون بالسعر المُدخل عند حفظ الإشعار. أنشئ فاتورة الشراء من الإشعار عند وصول فاتورة المورد؛ فهي تدفع ثمن البضاعة دون استلامها مرة أخرى.',
   },
   history: {
     code: 'الرمز',

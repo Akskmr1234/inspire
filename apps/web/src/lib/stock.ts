@@ -13,6 +13,8 @@ export const StockDocumentType = {
   stockAdjustment: 5,
   damagedStock: 6,
   physicalVerification: 7,
+  deliveryNote: 12,
+  receiptNote: 13,
 } as const;
 
 /** Where a stock document stands. */
@@ -41,7 +43,15 @@ export function carriesRate(type: number): boolean {
   return (
     type === StockDocumentType.openingStock ||
     type === StockDocumentType.materialReceipt ||
-    type === StockDocumentType.stockAdjustment
+    type === StockDocumentType.stockAdjustment ||
+    type === StockDocumentType.receiptNote
+  );
+}
+
+/** Whether a kind of document names the customer or supplier on the other end. */
+export function namesParty(type: number): boolean {
+  return (
+    type === StockDocumentType.deliveryNote || type === StockDocumentType.receiptNote
   );
 }
 
@@ -74,6 +84,11 @@ export interface StockDocumentSummary {
   readonly lineCount: number;
   readonly totalQuantity: number;
   readonly totalValue: number;
+  /** The customer or supplier a delivery or receipt note names. */
+  readonly partyName?: string | null;
+  /** The invoice that billed a delivery or receipt note, while it stands. */
+  readonly invoiceId?: string | null;
+  readonly invoiceNumber?: string | null;
 }
 
 /** One line of a stock document. */
@@ -124,6 +139,10 @@ export interface StockDocumentDetail {
   readonly cancellationReason: string | null;
   readonly lines: readonly StockDocumentLineView[];
   readonly movements: readonly StockMovementView[];
+  readonly partyLedgerId?: string | null;
+  readonly partyName?: string | null;
+  readonly invoiceId?: string | null;
+  readonly invoiceNumber?: string | null;
 }
 
 /** What a posting did. */
@@ -320,6 +339,7 @@ export function createStockDocument(body: {
   readonly referenceNumber?: string | null;
   readonly narration?: string | null;
   readonly postImmediately: boolean;
+  readonly partyLedgerId?: string | null;
 }): Promise<CreateStockDocumentResponse> {
   return request<CreateStockDocumentResponse>(`${STOCK}/documents`, {
     method: 'POST',
@@ -541,4 +561,22 @@ export function fetchStockHistory(
   }
 
   return request<readonly StockHistoryRow[]>(`${STOCK}/history?${query.toString()}`);
+}
+
+/** Raises a draft sales invoice billing the goods of a delivery note. */
+export function invoiceDeliveryNote(
+  id: string,
+): Promise<{ readonly salesInvoiceId: string; readonly number: string }> {
+  return request(`${STOCK}/documents/${id}/sales-invoice`, { method: 'POST', body: {} });
+}
+
+/** Raises a draft purchase paying for the goods of a receipt note. */
+export function invoiceReceiptNote(
+  id: string,
+  supplierInvoiceNumber: string | null,
+): Promise<{ readonly purchaseInvoiceId: string; readonly number: string }> {
+  return request(`${STOCK}/documents/${id}/purchase-invoice`, {
+    method: 'POST',
+    body: { supplierInvoiceNumber },
+  });
 }

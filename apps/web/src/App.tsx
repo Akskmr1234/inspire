@@ -125,6 +125,14 @@ const TaxReturnsPage = lazyScreen(
   () => import('@/pages/TaxReturnsPage'),
   'TaxReturnsPage',
 );
+const DeliveryNotesPage = lazyScreen(
+  () => import('@/pages/StockOperationsPage'),
+  'DeliveryNotesPage',
+);
+const ReceiptNotesPage = lazyScreen(
+  () => import('@/pages/StockOperationsPage'),
+  'ReceiptNotesPage',
+);
 const StockAdjustmentPage = lazyScreen(
   () => import('@/pages/StockAdjustmentPage'),
   'StockAdjustmentPage',
@@ -335,6 +343,8 @@ export function App(): React.JSX.Element {
                 element={<StockAdjustmentPage />}
               />
               <Route path="/inventory/damaged-stock" element={<DamagedStockPage />} />
+              <Route path="/sales/delivery-notes" element={<DeliveryNotesPage />} />
+              <Route path="/purchase/receipt-notes" element={<ReceiptNotesPage />} />
               <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />
               <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />

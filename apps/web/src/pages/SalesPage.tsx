@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -203,6 +204,17 @@ export function SalesPage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
+
+  // Opened on a particular invoice by another screen - a delivery note raising the
+  // invoice that bills it - and the parameter dropped so a refresh lands on the list.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setViewing({ id: open });
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
   // The document being corrected, read back in full so the entry screen can start
   // from what it says.
   const [editing, setEditing] = useState<SalesInvoiceDetail | null>(null);
