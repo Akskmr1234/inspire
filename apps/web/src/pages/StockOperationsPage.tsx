@@ -325,7 +325,11 @@ export function StockOperationsPage({
           {error && <Alert tone="error">{error}</Alert>}
 
           <StockEntry
-            warehouses={warehouses.data ?? []}
+            // Goods in transit move only through a transfer request, so the screen
+            // that enters documents by hand does not offer it.
+            warehouses={(warehouses.data ?? []).filter(
+              (warehouse) => !warehouse.isTransit,
+            )}
             {...(lockedType === undefined ? {} : { lockedType })}
             busy={mutation.isPending}
             onCancel={() => setEntering(false)}
@@ -393,9 +397,12 @@ function parseSerials(entered: string): readonly string[] {
 }
 
 /** The entry form: a header, a grid of products, and one Save. */
-function StockEntry({
+export function StockEntry({
   warehouses,
   lockedType,
+  initialLines,
+  fixedWarehouseId,
+  dispatching = false,
   busy,
   onCancel,
   onSubmit,
@@ -403,6 +410,19 @@ function StockEntry({
   readonly warehouses: readonly WarehouseSummary[];
   /** The one kind this form enters, where the screen is for one kind. */
   readonly lockedType?: number;
+  /** Lines to start from, such as the products a transfer request asked for. */
+  readonly initialLines?: readonly {
+    readonly productId: string;
+    readonly quantity: number;
+    readonly remarks?: string | null;
+  }[];
+  /** The warehouse the goods must come out of, where somebody else has decided it. */
+  readonly fixedWarehouseId?: string;
+  /**
+   * A transfer request's dispatch: the destination is the road, which the server
+   * chooses, and the goods leave the moment it is saved.
+   */
+  readonly dispatching?: boolean;
   readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onSubmit: (body: {
@@ -423,13 +443,25 @@ function StockEntry({
   );
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [warehouseId, setWarehouseId] = useState(
-    warehouses.find((warehouse) => warehouse.isDefault)?.id ?? warehouses[0]?.id ?? '',
+    fixedWarehouseId ??
+      warehouses.find((warehouse) => warehouse.isDefault)?.id ??
+      warehouses[0]?.id ??
+      '',
   );
   const [destinationId, setDestinationId] = useState('');
   const [reference, setReference] = useState('');
   const [narration, setNarration] = useState('');
   const [post, setPost] = useState(true);
-  const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine()]);
+  const [lines, setLines] = useState<readonly DraftLine[]>(() =>
+    initialLines && initialLines.length > 0
+      ? initialLines.map((line) => ({
+          ...emptyLine(),
+          productId: line.productId,
+          quantity: String(line.quantity),
+          remarks: line.remarks ?? '',
+        }))
+      : [emptyLine()],
+  );
 
   // Every stocked product of the firm, fetched once. A transaction screen that
   // searched per keystroke would be a round trip per character on a master this size;
@@ -459,7 +491,9 @@ function StockEntry({
   );
 
   const showRate = carriesRate(type);
-  const transfer = isTransfer(type);
+  // A dispatch is a transfer whose far end the server fills in, so nothing here asks
+  // for one.
+  const transfer = isTransfer(type) && !dispatching;
   const counting = isCount(type);
   const quantityLabel = counting ? t('stock.counted') : t('stock.quantity');
 
@@ -571,7 +605,7 @@ function StockEntry({
           lines: entered,
           referenceNumber: reference.trim() || null,
           narration: narration.trim() || null,
-          postImmediately: post,
+          postImmediately: dispatching || post,
         });
       }}
     >
@@ -619,16 +653,27 @@ function StockEntry({
           <span className="field-label">
             {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
           </span>
-          <SearchSelect
-            value={warehouseId}
-            onChange={setWarehouseId}
-            label={t('stock.warehouse')}
-            placeholder={t('stock.choose')}
-            options={warehouses.map((warehouse) => ({
-              value: warehouse.id,
-              label: warehouse.name,
-            }))}
-          />
+          {fixedWarehouseId ? (
+            <input
+              value={
+                warehouses.find((warehouse) => warehouse.id === fixedWarehouseId)?.name ??
+                ''
+              }
+              disabled
+              className="field-input"
+            />
+          ) : (
+            <SearchSelect
+              value={warehouseId}
+              onChange={setWarehouseId}
+              label={t('stock.warehouse')}
+              placeholder={t('stock.choose')}
+              options={warehouses.map((warehouse) => ({
+                value: warehouse.id,
+                label: warehouse.name,
+              }))}
+            />
+          )}
         </label>
 
         {transfer && (
@@ -646,14 +691,16 @@ function StockEntry({
           </label>
         )}
 
-        <label className="block">
-          <span className="field-label">{t('stock.reference')}</span>
-          <input
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-            className="field-input"
-          />
-        </label>
+        {!dispatching && (
+          <label className="block">
+            <span className="field-label">{t('stock.reference')}</span>
+            <input
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              className="field-input"
+            />
+          </label>
+        )}
 
         <label className="block lg:col-span-2">
           <span className="field-label">{t('stock.narration')}</span>
@@ -859,14 +906,16 @@ function StockEntry({
           {t('stock.addLine')}
         </button>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={post}
-            onChange={(event) => setPost(event.target.checked)}
-          />
-          {t('stock.postNow')}
-        </label>
+        {!dispatching && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={post}
+              onChange={(event) => setPost(event.target.checked)}
+            />
+            {t('stock.postNow')}
+          </label>
+        )}
 
         <button type="submit" disabled={busy} className="btn-primary ms-auto">
           {t('stock.save')}
@@ -1362,7 +1411,7 @@ export function trim(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-function Labelled({
+export function Labelled({
   label,
   children,
 }: {
@@ -1403,7 +1452,7 @@ function Panel({
   );
 }
 
-function Alert({
+export function Alert({
   tone,
   children,
 }: {

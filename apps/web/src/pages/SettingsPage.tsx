@@ -29,6 +29,7 @@ import { PAYMENT_MODES } from '@/lib/paymentModes';
 import { useMoney } from '@/lib/money';
 import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
 import { MasterDefaultsSettings } from '@/components/MasterDefaultsSettings';
+import { PolicySettings } from '@/components/PolicySettings';
 
 /**
  * The preferences screen.
@@ -96,6 +97,10 @@ export function SettingsPage(): React.JSX.Element {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SettingsCard title={t('policies.title')} hint={t('policies.hint')}>
+          <PolicySettings />
+        </SettingsCard>
+
         <SettingsCard title={t('settings.taxTitle')} hint={t('settings.taxHint')}>
           <SelectField
             label={t('settings.regime')}
