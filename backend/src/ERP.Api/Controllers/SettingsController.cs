@@ -28,6 +28,42 @@ public sealed class SettingsController : ApiControllerBase
     /// <param name="sender">The mediator.</param>
     public SettingsController(ISender sender) => _sender = sender;
 
+    /// <summary>Reads the rules the firm chose that the server enforces.</summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The policies, or the defaults where none were chosen.</returns>
+    /// <remarks>
+    /// Readable by anybody signed in: the sales screen needs to know whether a credit
+    /// limit warns or blocks, and the stock screens whether stock may go below zero,
+    /// before they say anything about it.
+    /// </remarks>
+    [HttpGet("policies")]
+    [ProducesResponseType(typeof(FirmPolicies), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPoliciesAsync(CancellationToken cancellationToken)
+    {
+        Result<FirmPolicies> result = await _sender.Send(
+            new GetFirmPoliciesQuery(), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Replaces the rules the firm chose that the server enforces.</summary>
+    /// <param name="request">The policies, whole.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>No content on success.</returns>
+    [HttpPut("policies")]
+    [RequiresPermission("platform", "setting", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SavePoliciesAsync(
+        [FromBody] FirmPolicies request,
+        CancellationToken cancellationToken)
+    {
+        Result result = await _sender.Send(
+            new SaveFirmPoliciesCommand(request), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
     /// <summary>Reads one block of the firm's configuration.</summary>
     /// <param name="key">The block's name.</param>
     /// <param name="cancellationToken">The cancellation token.</param>

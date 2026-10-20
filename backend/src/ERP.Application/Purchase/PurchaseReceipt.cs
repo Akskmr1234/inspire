@@ -78,6 +78,11 @@ internal static class PurchaseReceipt
     /// </summary>
     /// <param name="invoice">The purchase just posted.</param>
     /// <param name="products">Its products, loaded for the receipt.</param>
+    /// <param name="everyProduct">
+    /// Whether every product takes the rate, whatever it is costed at - the firm's "update
+    /// product rate" setting. A product carrying a profit percentage then has its retail
+    /// rate rebuilt on the new cost, so the shelf price follows what the goods now cost.
+    /// </param>
     /// <returns>How many products were repriced.</returns>
     /// <remarks>
     /// The rate per stock unit, net of the line's discount - the same figure the
@@ -87,7 +92,8 @@ internal static class PurchaseReceipt
     /// </remarks>
     internal static int ApplyLastPurchaseRates(
         PurchaseInvoice invoice,
-        IReadOnlyDictionary<ProductId, Product> products)
+        IReadOnlyDictionary<ProductId, Product> products,
+        bool everyProduct = false)
     {
         ArgumentNullException.ThrowIfNull(invoice);
         ArgumentNullException.ThrowIfNull(products);
@@ -103,7 +109,7 @@ internal static class PurchaseReceipt
         {
             if (line.StockQuantity <= 0m
                 || !products.TryGetValue(line.ProductId, out Product? product)
-                || product.CostingMethod != CostingMethod.LastPurchaseRate)
+                || (!everyProduct && product.CostingMethod != CostingMethod.LastPurchaseRate))
             {
                 continue;
             }
@@ -111,7 +117,25 @@ internal static class PurchaseReceipt
             decimal cost = decimal.Round(
                 CostPerStockUnit(line), ProductCostScale, MidpointRounding.AwayFromZero);
 
-            product.SetRates(product.Rates with { Cost = cost });
+            ProductRates rates = product.Rates with { Cost = cost };
+
+            if (everyProduct && rates.ProfitPercentage > 0m)
+            {
+                decimal retail = decimal.Round(
+                    cost * (1m + (rates.ProfitPercentage / 100m)),
+                    ProductCostScale,
+                    MidpointRounding.AwayFromZero);
+
+                // Never above a printed MRP: the label on the pack is the most it may sell for.
+                rates = rates with
+                {
+                    RetailRate = rates.MaximumRetailPrice > 0m
+                        ? Math.Min(retail, rates.MaximumRetailPrice)
+                        : retail,
+                };
+            }
+
+            product.SetRates(rates);
             repriced++;
         }
 

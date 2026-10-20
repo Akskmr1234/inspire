@@ -194,6 +194,11 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
     /// <summary>Takes goods out at the average cost, leaving the average alone.</summary>
     /// <param name="quantity">How much went out. Must be positive.</param>
     /// <param name="occurredAtUtc">When the movement was posted.</param>
+    /// <param name="allowNegative">
+    /// Whether the firm lets goods leave below zero. The position then goes negative at
+    /// the last average cost, and the next receipt brings it back: the average is taken
+    /// over the negative holding too, so the position's value and the books stay equal.
+    /// </param>
     /// <returns>The value taken out, or the reason it was refused.</returns>
     /// <remarks>
     /// An issue for more than is on hand is refused rather than allowed to drive the
@@ -204,7 +209,10 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
     /// about what such an issue costs; until somebody makes that decision, refusing is
     /// the honest answer.
     /// </remarks>
-    public Result<Money> Issue(decimal quantity, DateTimeOffset occurredAtUtc)
+    public Result<Money> Issue(
+        decimal quantity,
+        DateTimeOffset occurredAtUtc,
+        bool allowNegative = false)
     {
         if (quantity <= 0m)
         {
@@ -215,7 +223,7 @@ public sealed class StockBalance : AggregateRoot<StockBalanceId>, IFirmScoped, I
 
         decimal outgoing = decimal.Round(quantity, QuantityScale, MidpointRounding.AwayFromZero);
 
-        if (outgoing > Quantity)
+        if (outgoing > Quantity && !allowNegative)
         {
             return Result.Failure<Money>(Error.BusinessRule(
                 "StockBalance.Insufficient",

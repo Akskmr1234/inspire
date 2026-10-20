@@ -142,6 +142,15 @@ public sealed class SaveFirmSettingCommandHandler : ICommandHandler<SaveFirmSett
         }
 
         string key = FirmSetting.Normalise(request.Key);
+
+        // The policies change what documents may do and are validated on their own
+        // endpoint; written here, as an unread document, they could be anything.
+        if (key == FirmPolicies.Key)
+        {
+            return Result.Failure(Error.Validation(
+                "FirmSetting.Reserved", "The firm's policies are saved through their own endpoint."));
+        }
+
         FirmSetting? existing = await _settings.FindAsync(firmId, key, cancellationToken);
 
         // An upsert: the screen is saving "the firm's preferences", and making it know

@@ -1,6 +1,7 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Tenancy;
@@ -58,6 +59,7 @@ public sealed class CreateStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly IFirmPolicyReader? _policies;
     private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="CreateStockDocumentCommandHandler"/> class.</summary>
@@ -78,6 +80,7 @@ public sealed class CreateStockDocumentCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies, which decide whether stock may go below zero.</param>
     public CreateStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IInventoryMasterRepository masters,
@@ -95,8 +98,10 @@ public sealed class CreateStockDocumentCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null)
     {
+        _policies = policies;
         _documents = documents;
         _masters = masters;
         _products = products;
@@ -168,6 +173,9 @@ public sealed class CreateStockDocumentCommandHandler
             // The command is transactional, so a line that cannot move rolls the whole
             // document back - including the number it reserved, which is why a refused
             // posting leaves no gap in the sequence.
+            bool allowNegative = _policies is not null
+                && (await _policies.GetAsync(firmId, cancellationToken)).AllowsNegativeStock;
+
             Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
                 document,
                 context.Value.Products,
@@ -175,7 +183,8 @@ public sealed class CreateStockDocumentCommandHandler
                 built.Value.Serials,
                 context.Value.Firm.BaseCurrency,
                 _clock.UtcNow,
-                cancellationToken);
+                cancellationToken,
+                allowNegative);
 
             if (applied.IsFailure)
             {
@@ -263,6 +272,7 @@ public sealed class PostStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly IFirmPolicyReader? _policies;
     private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="PostStockDocumentCommandHandler"/> class.</summary>
@@ -282,6 +292,7 @@ public sealed class PostStockDocumentCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies, which decide whether stock may go below zero.</param>
     public PostStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IProductRepository products,
@@ -298,8 +309,10 @@ public sealed class PostStockDocumentCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null)
     {
+        _policies = policies;
         _documents = documents;
         _products = products;
         _batches = batches;
@@ -354,9 +367,12 @@ public sealed class PostStockDocumentCommandHandler
         IReadOnlyDictionary<SerialNumberId, SerialNumber> serials =
             await _serials.ForDocumentAsync(document.Id, cancellationToken);
 
+        bool allowNegative = _policies is not null
+            && (await _policies.GetAsync(document.FirmId, cancellationToken)).AllowsNegativeStock;
+
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
             document, products, batches, serials, firm.BaseCurrency, _clock.UtcNow,
-            cancellationToken);
+            cancellationToken, allowNegative);
 
         if (applied.IsFailure)
         {

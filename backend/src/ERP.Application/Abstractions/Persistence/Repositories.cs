@@ -328,6 +328,36 @@ public interface IFinancialYearRepository
         FirmId firmId,
         DateOnly date,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists a firm's years, earliest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The years.</returns>
+    Task<IReadOnlyList<FinancialYear>> ListAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds a year by its identifier.</summary>
+    /// <param name="id">The year.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The year, or <see langword="null"/>.</returns>
+    Task<FinancialYear?> FindAsync(FinancialYearId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Counts the posted documents of a year dated outside a range.</summary>
+    /// <param name="id">The year.</param>
+    /// <param name="startDate">The first date of the range.</param>
+    /// <param name="endDate">The last date of the range.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many vouchers, invoices and stock documents would fall outside it.</returns>
+    Task<int> CountDocumentsOutsideAsync(
+        FinancialYearId id,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a year.</summary>
+    /// <param name="year">The year.</param>
+    void Add(FinancialYear year);
 }
 
 /// <summary>Reads and creates numbering series.</summary>

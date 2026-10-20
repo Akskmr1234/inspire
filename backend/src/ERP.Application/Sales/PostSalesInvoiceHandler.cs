@@ -1,8 +1,10 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Accounting.Reports;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
@@ -57,6 +59,8 @@ public sealed class PostSalesInvoiceCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
     private readonly StockJournalPoster _stockJournal;
+    private readonly IFirmPolicyReader? _policies;
+    private readonly IOutstandingBillsReader? _outstanding;
 
     /// <summary>Initialises a new instance of the <see cref="PostSalesInvoiceCommandHandler"/> class.</summary>
     /// <param name="invoices">The sales invoice repository.</param>
@@ -80,6 +84,8 @@ public sealed class PostSalesInvoiceCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies: negative stock and credit limits.</param>
+    /// <param name="outstanding">The outstanding bills reader, for the credit limit.</param>
     public PostSalesInvoiceCommandHandler(
         ISalesInvoiceRepository invoices,
         IStockDocumentRepository documents,
@@ -101,8 +107,12 @@ public sealed class PostSalesInvoiceCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null,
+        IOutstandingBillsReader? outstanding = null)
     {
+        _policies = policies;
+        _outstanding = outstanding;
         _invoices = invoices;
         _documents = documents;
         _stockLedger = ledger;
@@ -167,8 +177,20 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(posted.Error);
         }
 
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
+        Result withinLimit = await CheckCreditLimitAsync(
+            invoice, loaded.Value.Customer, policies, cancellationToken);
+
+        if (withinLimit.IsFailure)
+        {
+            return Result.Failure<PostSalesInvoiceResponse>(withinLimit.Error);
+        }
+
         Result<StockDocument> issued = await IssueAsync(
-            invoice, loaded.Value, branchId, cancellationToken);
+            invoice, loaded.Value, branchId, policies.AllowsNegativeStock, cancellationToken);
 
         if (issued.IsFailure)
         {
@@ -351,6 +373,7 @@ public sealed class PostSalesInvoiceCommandHandler
         SalesInvoice invoice,
         Context context,
         BranchId branchId,
+        bool allowNegative,
         CancellationToken cancellationToken)
     {
         Result<string> number = await ReserveIssueNumberAsync(
@@ -389,7 +412,7 @@ public sealed class PostSalesInvoiceCommandHandler
 
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
             document, context.Products, context.Batches, context.Serials,
-            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken);
+            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken, allowNegative);
 
         if (applied.IsFailure)
         {
@@ -445,6 +468,48 @@ public sealed class PostSalesInvoiceCommandHandler
         _vouchers.Add(raised.Value);
 
         return raised;
+    }
+
+    /// <summary>Refuses a sale on credit that would take the customer past their limit.</summary>
+    /// <remarks>
+    /// Only where the firm chose to block: by default a limit warns, on the sales screen,
+    /// and the sale goes through. Measured as the sales screen measures it - the
+    /// customer's unpaid invoices plus the part of this one not paid at the counter - so
+    /// a sale paid in full never trips it, whatever the customer already owes.
+    /// </remarks>
+    private async Task<Result> CheckCreditLimitAsync(
+        SalesInvoice invoice,
+        Ledger customer,
+        FirmPolicies policies,
+        CancellationToken cancellationToken)
+    {
+        if (policies.CreditLimit != CreditLimitPolicy.Block
+            || invoice.IsReturn
+            || customer.CreditLimit is not { } limit
+            || _outstanding is null)
+        {
+            return Result.Success();
+        }
+
+        decimal unpaid = invoice.Total.Amount - invoice.AmountReceived;
+
+        if (unpaid <= 0m)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlyList<OutstandingBillRow> open = await _outstanding.ReadAsync(
+            invoice.FirmId, BillType.Receivable, invoice.Date, customer.Id, cancellationToken);
+
+        decimal owed = open.Sum(bill => bill.OutstandingAmount);
+
+        return owed + unpaid > limit
+            ? Result.Failure(Error.BusinessRule(
+                "Customer.OverCreditLimit",
+                $"{customer.Name} owes {owed:0.00} against a credit limit of {limit:0.00}; "
+                + $"{unpaid:0.00} more on account would take them past it. Take payment, "
+                + "or raise the limit."))
+            : Result.Success();
     }
 
     /// <summary>Raises the receipt for what was paid with the sale, settling its own bill.</summary>

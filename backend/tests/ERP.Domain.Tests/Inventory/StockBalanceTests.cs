@@ -87,6 +87,35 @@ public sealed class StockBalanceTests
     }
 
     [Fact]
+    public void Where_the_firm_allows_it_an_issue_goes_below_zero_at_the_last_average()
+    {
+        StockBalance balance = Open();
+        balance.Receive(5m, 10m, Now);
+
+        balance.Issue(8m, Now, allowNegative: true).Value.Amount.ShouldBe(80m);
+
+        balance.Quantity.ShouldBe(-3m);
+        balance.AverageCost.ShouldBe(10m);
+        balance.Value.Amount.ShouldBe(-30m);
+    }
+
+    [Fact]
+    public void A_receipt_into_a_negative_position_averages_over_the_shortfall_too()
+    {
+        // Three short at ten, then eight in at twelve: the books moved -30 then +96, so
+        // the five left are worth 66 - and the average says so. Restarting the average at
+        // twelve would value the shelf at 60 against 66 in the books.
+        StockBalance balance = Open();
+        balance.Receive(5m, 10m, Now);
+        balance.Issue(8m, Now, allowNegative: true);
+
+        balance.Receive(8m, 12m, Now).Value.Amount.ShouldBe(96m);
+
+        balance.Quantity.ShouldBe(5m);
+        balance.Value.Amount.ShouldBe(66m);
+    }
+
+    [Fact]
     public void A_position_emptied_keeps_the_cost_it_reached()
     {
         // A product that sells out did not stop having a history. Zeroing the average

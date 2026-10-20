@@ -50,6 +50,11 @@ internal sealed class StockPoster
     /// <param name="currency">The firm's base currency.</param>
     /// <param name="postedAtUtc">The instant it was posted.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="allowNegative">
+    /// Whether the firm lets goods leave a position below zero. Never a batch's or a
+    /// serial number's: those are physical lots and units, and a sale out of a lot the
+    /// firm does not hold is a typo rather than a timing difference.
+    /// </param>
     /// <returns>The movements written, or the first line that could not move.</returns>
     /// <remarks>
     /// A batched line moves two positions rather than one: the batch's, at what that
@@ -64,7 +69,8 @@ internal sealed class StockPoster
         IReadOnlyDictionary<SerialNumberId, SerialNumber> serials,
         CurrencyCode currency,
         DateTimeOffset postedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowNegative = false)
     {
         List<ProductId> productIds = [.. document.Lines.Select(line => line.ProductId)];
         List<BatchId> batchIds =
@@ -95,13 +101,16 @@ internal sealed class StockPoster
 
                 StockDocumentType.MaterialIssue or StockDocumentType.DamagedStock
                     or StockDocumentType.SalesIssue or StockDocumentType.PurchaseReturn =>
-                    Take(written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc)),
+                    Take(
+                        written,
+                        IssueFrom(
+                            source, document, line, line.StockQuantity, postedAtUtc, allowNegative)),
 
                 StockDocumentType.StockTransfer =>
-                    Transfer(written, source, destination!, document, line, postedAtUtc),
+                    Transfer(written, source, destination!, document, line, postedAtUtc, allowNegative),
 
                 StockDocumentType.StockAdjustment =>
-                    Adjust(written, source, document, line, postedAtUtc),
+                    Adjust(written, source, document, line, postedAtUtc, allowNegative),
 
                 StockDocumentType.PhysicalVerification =>
                     Count(written, source, document, line, postedAtUtc),
@@ -457,7 +466,8 @@ internal sealed class StockPoster
         StockDocument document,
         StockDocumentLine line,
         decimal quantity,
-        DateTimeOffset postedAtUtc)
+        DateTimeOffset postedAtUtc,
+        bool allowNegative = false)
     {
         StockBalance balance = positions.For(line.ProductId);
         Batch? batch = positions.BatchOf(line);
@@ -477,8 +487,11 @@ internal sealed class StockPoster
             }
         }
 
+        // A serialised unit is somewhere or it is not, so it never goes below zero either.
+        bool belowZero = allowNegative && line.Serials.Count == 0;
+
         Result<Money> issued = batch is null
-            ? balance.Issue(quantity, postedAtUtc)
+            ? balance.Issue(quantity, postedAtUtc, belowZero)
             : balance.IssueAt(quantity, unitCost, postedAtUtc);
 
         return issued.IsFailure
@@ -501,12 +514,14 @@ internal sealed class StockPoster
         PositionSet destination,
         StockDocument document,
         StockDocumentLine line,
-        DateTimeOffset postedAtUtc)
+        DateTimeOffset postedAtUtc,
+        bool allowNegative)
     {
         decimal unitCost = source.CostOf(line);
 
         Result outgoing = Take(
-            written, IssueFrom(source, document, line, line.StockQuantity, postedAtUtc));
+            written,
+            IssueFrom(source, document, line, line.StockQuantity, postedAtUtc, allowNegative));
 
         return outgoing.IsFailure
             ? outgoing
@@ -529,7 +544,8 @@ internal sealed class StockPoster
         PositionSet positions,
         StockDocument document,
         StockDocumentLine line,
-        DateTimeOffset postedAtUtc)
+        DateTimeOffset postedAtUtc,
+        bool allowNegative)
     {
         if (line.StockQuantity > 0m)
         {
@@ -542,7 +558,8 @@ internal sealed class StockPoster
         }
 
         return Take(
-            written, IssueFrom(positions, document, line, -line.StockQuantity, postedAtUtc));
+            written,
+            IssueFrom(positions, document, line, -line.StockQuantity, postedAtUtc, allowNegative));
     }
 
     /// <summary>Posts the difference between what was counted and what was expected.</summary>
