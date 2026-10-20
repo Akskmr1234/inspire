@@ -12,9 +12,9 @@ namespace ERP.Domain.Inventory;
 /// Seven kinds rather than the eight the specification names, because Stock
 /// Adjustment covers increases and decreases in one document - a stocktake correction
 /// is one piece of work and splitting it in two would make somebody enter it twice.
-/// Delivery Note and Receipt Note are not here: they belong to a sales order and a
-/// purchase order respectively, and modelling them before those exist would mean
-/// guessing at the link they carry.
+/// Delivery Note and Receipt Note came later, as goods that leave for a customer or
+/// arrive from a supplier ahead of the invoice; the invoice raised against one then
+/// moves nothing itself.
 /// </remarks>
 public enum StockDocumentType
 {
@@ -75,6 +75,20 @@ public enum StockDocumentType
     /// actually went back.
     /// </remarks>
     PurchaseReturn = 11,
+
+    /// <summary>Goods delivered to a customer before they are invoiced.</summary>
+    /// <remarks>
+    /// Costed like a sale's issue, because the goods are the customer's from the moment
+    /// they leave: the invoice raised against the note bills them and moves nothing.
+    /// </remarks>
+    DeliveryNote = 12,
+
+    /// <summary>Goods received from a supplier before the supplier's invoice.</summary>
+    /// <remarks>
+    /// Posted like a purchase's receipt, against the goods-received clearing account the
+    /// invoice raised against the note will settle.
+    /// </remarks>
+    ReceiptNote = 13,
 }
 
 /// <summary>Where a stock document stands in its lifecycle.</summary>
@@ -137,9 +151,11 @@ public sealed class StockDocument
         string number,
         DateOnly date,
         WarehouseId warehouseId,
-        WarehouseId? destinationWarehouseId)
+        WarehouseId? destinationWarehouseId,
+        LedgerId? partyLedgerId)
         : base(id)
     {
+        PartyLedgerId = partyLedgerId;
         TenantId = tenantId;
         FirmId = firmId;
         FinancialYearId = financialYearId;
@@ -177,6 +193,9 @@ public sealed class StockDocument
 
     /// <summary>Gets the warehouse a transfer moves goods into.</summary>
     public WarehouseId? DestinationWarehouseId { get; private set; }
+
+    /// <summary>Gets the customer a delivery note went to, or the supplier a receipt note came from.</summary>
+    public LedgerId? PartyLedgerId { get; private set; }
 
     /// <summary>Gets the reference this document relates to.</summary>
     public string? ReferenceNumber { get; private set; }
@@ -249,7 +268,10 @@ public sealed class StockDocument
     public bool CarriesRate =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
             or StockDocumentType.StockAdjustment or StockDocumentType.SalesReturn
-            or StockDocumentType.PurchaseReceipt;
+            or StockDocumentType.PurchaseReceipt or StockDocumentType.ReceiptNote;
+
+    /// <summary>Gets a value indicating whether this kind of document names a customer or a supplier.</summary>
+    public bool HasParty => NeedsParty(Type);
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may put a batch on the
@@ -264,7 +286,7 @@ public sealed class StockDocument
     public bool OpensBatches =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
             or StockDocumentType.StockAdjustment or StockDocumentType.PhysicalVerification
-            or StockDocumentType.PurchaseReceipt;
+            or StockDocumentType.PurchaseReceipt or StockDocumentType.ReceiptNote;
 
     /// <summary>
     /// Gets a value indicating whether this kind of document may invent the batch
@@ -284,7 +306,8 @@ public sealed class StockDocument
     /// </remarks>
     public bool GeneratesBatchNumbers =>
         Type is StockDocumentType.OpeningStock or StockDocumentType.MaterialReceipt
-            or StockDocumentType.StockAdjustment or StockDocumentType.PurchaseReceipt;
+            or StockDocumentType.StockAdjustment or StockDocumentType.PurchaseReceipt
+            or StockDocumentType.ReceiptNote;
 
     /// <summary>
     /// Gets a value indicating whether a line quantity may be negative.
@@ -305,6 +328,9 @@ public sealed class StockDocument
     /// <param name="date">The document date.</param>
     /// <param name="warehouse">The warehouse acted on, or moved out of.</param>
     /// <param name="destination">The warehouse a transfer moves into.</param>
+    /// <param name="party">
+    /// The customer a delivery note goes to, or the supplier a receipt note comes from.
+    /// </param>
     /// <returns>The draft, or the reason it could not be started.</returns>
     public static Result<StockDocument> CreateDraft(
         TenantId tenantId,
@@ -314,7 +340,8 @@ public sealed class StockDocument
         string number,
         DateOnly date,
         Warehouse warehouse,
-        Warehouse? destination = null)
+        Warehouse? destination = null,
+        Ledger? party = null)
     {
         ArgumentNullException.ThrowIfNull(financialYear);
         ArgumentNullException.ThrowIfNull(warehouse);
@@ -323,6 +350,13 @@ public sealed class StockDocument
         {
             return Result.Failure<StockDocument>(Error.Validation(
                 "StockDocument.UnknownType", $"'{type}' is not a recognised stock operation."));
+        }
+
+        Result named = CheckParty(type, firmId, party);
+
+        if (named.IsFailure)
+        {
+            return Result.Failure<StockDocument>(named.Error);
         }
 
         if (string.IsNullOrWhiteSpace(number))
@@ -391,7 +425,8 @@ public sealed class StockDocument
             number.Trim(),
             date,
             warehouse.Id,
-            isTransfer ? destination!.Id : null));
+            isTransfer ? destination!.Id : null,
+            party?.Id));
     }
 
     /// <summary>Adds a line to a draft document.</summary>
@@ -842,4 +877,37 @@ public sealed class StockDocument
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool NeedsParty(StockDocumentType type) =>
+        type is StockDocumentType.DeliveryNote or StockDocumentType.ReceiptNote;
+
+    /// <summary>A note names the customer or supplier on the other end; nothing else names one.</summary>
+    private static Result CheckParty(StockDocumentType type, FirmId firmId, Ledger? party)
+    {
+        if (!NeedsParty(type))
+        {
+            return party is null
+                ? Result.Success()
+                : Result.Failure(Error.Validation(
+                    "StockDocument.PartyNotAllowed",
+                    $"A {type} moves the firm's own goods, so it names no customer or supplier."));
+        }
+
+        LedgerKind wanted = type == StockDocumentType.DeliveryNote ? LedgerKind.Customer : LedgerKind.Supplier;
+
+        if (party is null || party.FirmId != firmId)
+        {
+            return Result.Failure(Error.Validation(
+                "StockDocument.PartyRequired",
+                type == StockDocumentType.DeliveryNote
+                    ? "A delivery note needs the customer the goods went to."
+                    : "A receipt note needs the supplier the goods came from."));
+        }
+
+        return party.Kind == wanted
+            ? Result.Success()
+            : Result.Failure(Error.Validation(
+                "StockDocument.PartyWrongKind",
+                $"'{party.Name}' is not a {wanted.ToString().ToLowerInvariant()}."));
+    }
 }

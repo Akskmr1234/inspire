@@ -80,6 +80,17 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
             .HasForeignKey(invoice => invoice.StockDocumentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The note whose goods the invoice bills. Looked up from the note's side - which
+        // invoice, if any, billed it - so it is indexed.
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReceiptNoteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(invoice => invoice.ReceiptNoteId)
+            .HasFilter("receipt_note_id IS NOT NULL")
+            .HasDatabaseName("ix_purchase_invoices_receipt_note");
+
         builder.HasOne<Bill>()
             .WithMany()
             .HasForeignKey(invoice => invoice.BillId)

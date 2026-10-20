@@ -2599,6 +2599,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("number");
 
+                    b.Property<Guid?>("PartyLedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("party_ledger_id");
+
                     b.Property<DateTimeOffset?>("PostedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("posted_at_utc");
@@ -2649,6 +2653,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("JournalVoucherId")
                         .HasDatabaseName("ix_stock_documents_journal_voucher_id");
 
+                    b.HasIndex("PartyLedgerId")
+                        .HasDatabaseName("ix_stock_documents_party_ledger_id");
+
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_stock_documents_tenant");
 
@@ -2657,6 +2664,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FirmId", "Date")
                         .HasDatabaseName("ix_stock_documents_date");
+
+                    b.HasIndex("FirmId", "PartyLedgerId")
+                        .HasDatabaseName("ix_stock_documents_party")
+                        .HasFilter("party_ledger_id IS NOT NULL");
 
                     b.HasIndex("FirmId", "Type", "Number")
                         .IsUnique()
@@ -4265,6 +4276,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("purchase_order_id");
 
+                    b.Property<Guid?>("ReceiptNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_note_id");
+
                     b.Property<Guid?>("ReturnsInvoiceId")
                         .HasColumnType("uuid")
                         .HasColumnName("returns_invoice_id");
@@ -4318,6 +4333,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("JournalVoucherId")
                         .HasDatabaseName("ix_purchase_invoices_journal_voucher_id");
+
+                    b.HasIndex("ReceiptNoteId")
+                        .HasDatabaseName("ix_purchase_invoices_receipt_note")
+                        .HasFilter("receipt_note_id IS NOT NULL");
 
                     b.HasIndex("ReturnsInvoiceId")
                         .HasDatabaseName("ix_purchase_invoices_returns_invoice")
@@ -4976,6 +4995,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid?>("DeliveryNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivery_note_id");
+
                     b.Property<Guid>("FinancialYearId")
                         .HasColumnType("uuid")
                         .HasColumnName("financial_year_id");
@@ -5094,6 +5117,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CustomerLedgerId")
                         .HasDatabaseName("ix_sales_invoices_customer_ledger_id");
+
+                    b.HasIndex("DeliveryNoteId")
+                        .HasDatabaseName("ix_sales_invoices_delivery_note")
+                        .HasFilter("delivery_note_id IS NOT NULL");
 
                     b.HasIndex("FinancialYearId")
                         .HasDatabaseName("ix_sales_invoices_financial_year_id");
@@ -6441,6 +6468,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_stock_documents_vouchers_journal_voucher_id");
 
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("PartyLedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_stock_documents_ledgers_party_ledger_id");
+
                     b.HasOne("ERP.Domain.Inventory.Warehouse", null)
                         .WithMany()
                         .HasForeignKey("WarehouseId")
@@ -6711,6 +6744,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_purchase_invoices_vouchers_journal_voucher_id");
 
+                    b.HasOne("ERP.Domain.Inventory.StockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptNoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_purchase_invoices_stock_documents_receipt_note_id");
+
                     b.HasOne("ERP.Domain.Purchase.PurchaseInvoice", null)
                         .WithMany()
                         .HasForeignKey("ReturnsInvoiceId")
@@ -6894,6 +6933,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_sales_invoices_ledgers_customer_ledger_id");
+
+                    b.HasOne("ERP.Domain.Inventory.StockDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DeliveryNoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_invoices_stock_documents_delivery_note_id");
 
                     b.HasOne("ERP.Domain.Tenancy.FinancialYear", null)
                         .WithMany()

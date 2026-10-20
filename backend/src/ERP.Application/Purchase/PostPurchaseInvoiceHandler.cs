@@ -175,8 +175,11 @@ public sealed class PostPurchaseInvoiceCommandHandler
             return Result.Failure<PostPurchaseInvoiceResponse>(posted.Error);
         }
 
-        Result<StockDocument> received = await ReceiveAsync(
-            invoice, loaded.Value, firmId, branchId, cancellationToken);
+        // A purchase against a receipt note pays for goods that are already on the shelf:
+        // the note is its receipt, and nothing moves again.
+        Result<StockDocument> received = invoice.ReceiptNoteId is { } noteId
+            ? await ReceivedAsync(invoice, noteId, firmId, cancellationToken)
+            : await ReceiveAsync(invoice, loaded.Value, firmId, branchId, cancellationToken);
 
         if (received.IsFailure)
         {
@@ -271,6 +274,54 @@ public sealed class PostPurchaseInvoiceCommandHandler
                 "TaxAccounts.NotConfigured",
                 "This firm has not chosen which accounts its tax heads post to."))
             : Result.Success(new Context(firm, year, supplier, accounts, taxAccounts));
+    }
+
+    /// <summary>Finds the receipt note a purchase pays for, and checks it describes the same goods.</summary>
+    private async Task<Result<StockDocument>> ReceivedAsync(
+        PurchaseInvoice invoice,
+        StockDocumentId noteId,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        StockDocument? note = await _documents.FindAsync(noteId, cancellationToken);
+
+        string? billedBy = await _invoices.FindBillingReceiptNoteAsync(
+            noteId, invoice.Id, cancellationToken);
+
+        IReadOnlyDictionary<ProductId, Product> products = await _products.GetManyAsync(
+            [
+                .. invoice.Lines.Select(line => line.ProductId)
+                    .Concat(note?.Lines.Select(line => line.ProductId) ?? [])
+                    .Distinct(),
+            ],
+            cancellationToken);
+
+        Result checkedNote = NoteBilling.Check(
+            note,
+            StockDocumentType.ReceiptNote,
+            invoice.SupplierLedgerId,
+            invoice.Lines
+                .Where(line => products.TryGetValue(line.ProductId, out Product? product)
+                    && product.ItemType == ItemType.Stock)
+                .Select(line => (line.ProductId, line.StockQuantity)),
+            products,
+            billedBy);
+
+        if (checkedNote.IsFailure)
+        {
+            return Result.Failure<StockDocument>(checkedNote.Error);
+        }
+
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
+        // The rates the supplier invoiced are still the last purchase rates, whichever
+        // document brought the goods in.
+        PurchaseReceipt.ApplyLastPurchaseRates(
+            invoice, products, policies.PurchasesUpdateProductRates);
+
+        return Result.Success(note!);
     }
 
     /// <summary>Raises the receipt that puts the goods on the shelf, and posts it.</summary>

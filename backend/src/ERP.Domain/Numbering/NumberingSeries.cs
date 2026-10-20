@@ -422,6 +422,9 @@ public static class DocumentTypes
     /// <summary>A purchase order.</summary>
     public const string PurchaseOrder = "purchase.order";
 
+    /// <summary>A receipt note: goods in from a supplier ahead of the invoice.</summary>
+    public const string ReceiptNote = "purchase.receipt-note";
+
     /// <summary>A purchase invoice.</summary>
     public const string PurchaseInvoice = "purchase.invoice";
 
@@ -516,6 +519,8 @@ public static class DocumentTypes
         Inventory.StockDocumentType.SalesReturn => SalesReturnReceipt,
         Inventory.StockDocumentType.PurchaseReceipt => PurchaseReceipt,
         Inventory.StockDocumentType.PurchaseReturn => PurchaseReturnIssue,
+        Inventory.StockDocumentType.DeliveryNote => DeliveryNote,
+        Inventory.StockDocumentType.ReceiptNote => ReceiptNote,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };

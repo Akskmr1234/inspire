@@ -34,6 +34,9 @@ public sealed class DataReset : IDataReset
         "DELETE FROM purchase_invoices WHERE firm_id = @firm",
         "DELETE FROM sales_orders WHERE firm_id = @firm",
         "DELETE FROM purchase_orders WHERE firm_id = @firm",
+
+        // Before the stock documents its dispatch and receipt point at; its lines go with it.
+        "DELETE FROM stock_transfer_requests WHERE firm_id = @firm",
         "DELETE FROM cheques WHERE firm_id = @firm",
         "DELETE FROM bills WHERE firm_id = @firm",
         "DELETE FROM stock_ledger_entries WHERE firm_id = @firm",

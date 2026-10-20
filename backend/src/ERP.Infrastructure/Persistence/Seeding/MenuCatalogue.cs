@@ -302,6 +302,16 @@ public static class MenuCatalogue
                     "/sales/orders",
                     "sales:order:view"),
 
+                // Goods out to a customer ahead of the invoice, which is raised from
+                // the note and bills it without moving the goods again.
+                new(
+                    "transactions.delivery-notes",
+                    "Delivery notes",
+                    "إشعارات التسليم",
+                    "sales",
+                    "/sales/delivery-notes",
+                    "inventory:stock-adjustment:view"),
+
                 new(
                     "transactions.sales",
                     "Sales invoices",
@@ -333,6 +343,14 @@ public static class MenuCatalogue
                 // is why one screen serves both - but somebody sending goods back is
                 // doing one of the two, and a single entry meant opening a list of
                 // purchases and switching a dropdown to find the returns among them.
+                new(
+                    "transactions.receipt-notes",
+                    "Receipt notes",
+                    "إشعارات الاستلام",
+                    "purchase",
+                    "/purchase/receipt-notes",
+                    "inventory:stock-adjustment:view"),
+
                 new(
                     "transactions.purchase",
                     "Purchases",

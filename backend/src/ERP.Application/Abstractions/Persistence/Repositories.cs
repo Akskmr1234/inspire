@@ -996,6 +996,16 @@ public interface ISalesInvoiceRepository
         SalesInvoiceId id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the invoice, other than one, that bills a delivery note and still stands.</summary>
+    /// <param name="deliveryNoteId">The note.</param>
+    /// <param name="except">The invoice asking, which does not count.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>That invoice's number, or <see langword="null"/> where none bills it.</returns>
+    Task<string?> FindBillingDeliveryNoteAsync(
+        StockDocumentId deliveryNoteId,
+        SalesInvoiceId? except,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds an invoice.</summary>
     /// <param name="invoice">The invoice.</param>
     void Add(SalesInvoice invoice);
@@ -1064,6 +1074,16 @@ public interface IPurchaseInvoiceRepository
     /// </remarks>
     Task<PurchaseInvoice?> FindAsync(
         PurchaseInvoiceId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the purchase, other than one, that pays for a receipt note and still stands.</summary>
+    /// <param name="receiptNoteId">The note.</param>
+    /// <param name="except">The purchase asking, which does not count.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>That purchase's number, or <see langword="null"/> where none pays for it.</returns>
+    Task<string?> FindBillingReceiptNoteAsync(
+        StockDocumentId receiptNoteId,
+        PurchaseInvoiceId? except,
         CancellationToken cancellationToken = default);
 
     /// <summary>Adds a purchase.</summary>

@@ -189,8 +189,12 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(withinLimit.Error);
         }
 
-        Result<StockDocument> issued = await IssueAsync(
-            invoice, loaded.Value, branchId, policies.AllowsNegativeStock, cancellationToken);
+        // An invoice against a delivery note bills goods that have already left: the note
+        // is its issue, and nothing moves again.
+        Result<StockDocument> issued = invoice.DeliveryNoteId is { } noteId
+            ? await DeliveredAsync(invoice, noteId, loaded.Value, cancellationToken)
+            : await IssueAsync(
+                invoice, loaded.Value, branchId, policies.AllowsNegativeStock, cancellationToken);
 
         if (issued.IsFailure)
         {
@@ -360,6 +364,34 @@ public sealed class PostSalesInvoiceCommandHandler
         return Result.Success(new Context(
             firm, year, warehouse, customer, accounts, taxAccounts, products, units, batches,
             serials));
+    }
+
+    /// <summary>Finds the delivery note an invoice bills, and checks it describes the same goods.</summary>
+    private async Task<Result<StockDocument>> DeliveredAsync(
+        SalesInvoice invoice,
+        StockDocumentId noteId,
+        Context context,
+        CancellationToken cancellationToken)
+    {
+        StockDocument? note = await _documents.FindAsync(noteId, cancellationToken);
+
+        string? billedBy = await _invoices.FindBillingDeliveryNoteAsync(
+            noteId, invoice.Id, cancellationToken);
+
+        Result checkedNote = NoteBilling.Check(
+            note,
+            StockDocumentType.DeliveryNote,
+            invoice.CustomerLedgerId,
+            invoice.Lines
+                .Where(line => context.Products.TryGetValue(line.ProductId, out Product? product)
+                    && product.ItemType == ItemType.Stock)
+                .Select(line => (line.ProductId, line.StockQuantity)),
+            context.Products,
+            billedBy);
+
+        return checkedNote.IsFailure
+            ? Result.Failure<StockDocument>(checkedNote.Error)
+            : Result.Success(note!);
     }
 
     /// <summary>Raises the issue that takes the goods off the shelf, and posts it.</summary>

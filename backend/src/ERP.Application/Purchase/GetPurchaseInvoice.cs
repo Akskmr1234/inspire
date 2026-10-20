@@ -78,6 +78,7 @@ public sealed record PurchaseInvoiceChargeDetail(
 /// <param name="StockDocumentId">The receipt that put the goods on the shelf, once posted.</param>
 /// <param name="BillId">The bill owed to the supplier, once posted.</param>
 /// <param name="JournalVoucherId">The journal in the nominal ledger, once posted.</param>
+/// <param name="ReceiptNoteId">The receipt note whose goods it pays for, where it pays for one.</param>
 public sealed record PurchaseInvoiceDetail(
     PurchaseInvoiceResponse Header,
     DateOnly Date,
@@ -94,7 +95,8 @@ public sealed record PurchaseInvoiceDetail(
     IReadOnlyList<PurchaseInvoiceChargeDetail> Charges,
     Guid? StockDocumentId,
     Guid? BillId,
-    Guid? JournalVoucherId);
+    Guid? JournalVoucherId,
+    Guid? ReceiptNoteId = null);
 
 /// <summary>Handles <see cref="GetPurchaseInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -183,6 +185,7 @@ public sealed class GetPurchaseInvoiceQueryHandler
             ],
             invoice.StockDocumentId?.Value,
             invoice.BillId?.Value,
-            invoice.JournalVoucherId?.Value));
+            invoice.JournalVoucherId?.Value,
+            invoice.ReceiptNoteId?.Value));
     }
 }

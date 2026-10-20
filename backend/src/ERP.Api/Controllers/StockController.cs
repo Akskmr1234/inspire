@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Purchase;
+using ERP.Application.Sales;
 using ERP.Domain.Inventory;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -134,7 +136,8 @@ public sealed class StockController : ApiControllerBase
                 request.DestinationWarehouseId,
                 request.ReferenceNumber,
                 request.Narration,
-                request.PostImmediately),
+                request.PostImmediately,
+                request.PartyLedgerId),
             cancellationToken);
 
         return result.IsSuccess
@@ -198,6 +201,51 @@ public sealed class StockController : ApiControllerBase
             new CancelStockDocumentCommand(id, request.Reason), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
+    /// <summary>Raises a draft sales invoice billing the goods of a delivery note.</summary>
+    /// <param name="id">The delivery note.</param>
+    /// <param name="request">The invoice date, if not today.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The draft invoice.</returns>
+    [HttpPost("documents/{id:guid}/sales-invoice")]
+    [RequiresPermission("sales", "invoice", "create")]
+    [ProducesResponseType(typeof(SalesInvoiceResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> InvoiceDeliveryNoteAsync(
+        Guid id,
+        [FromBody] InvoiceNoteRequest? request,
+        CancellationToken cancellationToken)
+    {
+        Result<SalesInvoiceResponse> result = await _sender.Send(
+            new InvoiceDeliveryNoteCommand(id, request?.Date), cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"/api/v1/sales/invoices/{result.Value.SalesInvoiceId}", result.Value)
+            : Problem(result.Error);
+    }
+
+    /// <summary>Raises a draft purchase paying for the goods of a receipt note.</summary>
+    /// <param name="id">The receipt note.</param>
+    /// <param name="request">The purchase date, if not today, and the supplier's invoice number.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The draft purchase.</returns>
+    [HttpPost("documents/{id:guid}/purchase-invoice")]
+    [RequiresPermission("purchase", "invoice", "create")]
+    [ProducesResponseType(typeof(PurchaseInvoiceResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> InvoiceReceiptNoteAsync(
+        Guid id,
+        [FromBody] InvoiceNoteRequest? request,
+        CancellationToken cancellationToken)
+    {
+        Result<PurchaseInvoiceResponse> result = await _sender.Send(
+            new InvoiceReceiptNoteCommand(id, request?.Date, request?.SupplierInvoiceNumber),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"/api/v1/purchase/invoices/{result.Value.PurchaseInvoiceId}", result.Value)
+            : Problem(result.Error);
     }
 
     /// <summary>Lists the corrections made to stock, line by line, with the stock either side.</summary>
@@ -520,6 +568,7 @@ public sealed record CreateStockDocumentLine(
 /// <param name="ReferenceNumber">A related reference.</param>
 /// <param name="Narration">The document narration.</param>
 /// <param name="PostImmediately">Whether to post on save, or leave an editable draft.</param>
+/// <param name="PartyLedgerId">The customer a delivery note goes to, or the supplier a receipt note comes from.</param>
 public sealed record CreateStockDocumentRequest(
     [property: JsonRequired] StockDocumentType Type,
     [property: JsonRequired] DateOnly Date,
@@ -528,7 +577,13 @@ public sealed record CreateStockDocumentRequest(
     Guid? DestinationWarehouseId = null,
     string? ReferenceNumber = null,
     string? Narration = null,
-    bool PostImmediately = true);
+    bool PostImmediately = true,
+    Guid? PartyLedgerId = null);
+
+/// <summary>Raising an invoice from a delivery or receipt note.</summary>
+/// <param name="Date">The invoice date; today where omitted.</param>
+/// <param name="SupplierInvoiceNumber">On a receipt note, the supplier's own invoice number.</param>
+public sealed record InvoiceNoteRequest(DateOnly? Date = null, string? SupplierInvoiceNumber = null);
 
 /// <summary>Cancelling a stock document.</summary>
 /// <param name="Reason">Why. Required, and kept on the document.</param>

@@ -2,6 +2,7 @@ using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Platform.Settings;
+using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Tenancy;
@@ -19,13 +20,15 @@ namespace ERP.Application.Inventory.Stock;
 /// <param name="Destination">The warehouse a transfer moves into.</param>
 /// <param name="Products">Every product named, by identifier.</param>
 /// <param name="Units">Every unit involved, entry units and stock units alike.</param>
+/// <param name="Party">The customer or supplier a delivery or receipt note names.</param>
 internal sealed record StockContext(
     Firm Firm,
     FinancialYear Year,
     Warehouse Warehouse,
     Warehouse? Destination,
     IReadOnlyDictionary<ProductId, Product> Products,
-    IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units);
+    IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units,
+    Ledger? Party = null);
 
 /// <summary>A document ready to post, and the batches its lines point at.</summary>
 /// <param name="Document">The draft, with its lines.</param>
@@ -73,6 +76,7 @@ public sealed class CreateStockDocumentCommandHandler
     /// The firm's policies, which decide whether stock may go below zero and whether a
     /// transfer may be made without a request.
     /// </param>
+    /// <param name="ledgers">The ledger repository, for the customer or supplier a note names.</param>
     public CreateStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IInventoryMasterRepository masters,
@@ -91,7 +95,8 @@ public sealed class CreateStockDocumentCommandHandler
         ICurrentUser currentUser,
         IClock clock,
         IUnitOfWork unitOfWork,
-        IFirmPolicyReader? policies = null)
+        IFirmPolicyReader? policies = null,
+        ILedgerRepository? ledgers = null)
     {
         _policies = policies;
         _tenantContext = tenantContext;
@@ -99,7 +104,7 @@ public sealed class CreateStockDocumentCommandHandler
         _writer = new StockDocumentWriter(
             documents, masters, products, batches, serials, balances, batchBalances, ledger,
             financialYears, numbering, accounts, vouchers, firms, tenantContext, currentUser,
-            clock);
+            clock, ledgers);
     }
 
     /// <inheritdoc />
@@ -534,7 +539,8 @@ internal static class StockLoader
         IFinancialYearRepository financialYears,
         IInventoryMasterRepository masters,
         IProductRepository products,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILedgerRepository? ledgers = null)
     {
         Firm? firm = await firms.FindAsync(firmId, cancellationToken);
 
@@ -626,7 +632,20 @@ internal static class StockLoader
             }
         }
 
-        return Result.Success(new StockContext(firm, year, warehouse.Value, destination, found, units));
+        Ledger? party = null;
+
+        if (request.PartyLedgerId is { } partyId)
+        {
+            party = ledgers is null ? null : await ledgers.FindAsync(LedgerId.From(partyId), cancellationToken);
+
+            if (party is null || party.FirmId != firmId)
+            {
+                return Result.Failure<StockContext>(Error.NotFound(
+                    "StockDocument.PartyNotFound", "No such customer or supplier in the selected firm."));
+            }
+        }
+
+        return Result.Success(new StockContext(firm, year, warehouse.Value, destination, found, units, party));
     }
 
     /// <summary>Builds the draft and its lines, converting every quantity to stock units.</summary>
@@ -648,7 +667,7 @@ internal static class StockLoader
     {
         Result<StockDocument> draft = StockDocument.CreateDraft(
             tenantId, firmId, context.Year, request.Type, number, request.Date,
-            context.Warehouse, context.Destination);
+            context.Warehouse, context.Destination, context.Party);
 
         if (draft.IsFailure)
         {

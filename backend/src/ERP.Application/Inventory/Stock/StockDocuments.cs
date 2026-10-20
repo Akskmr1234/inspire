@@ -67,6 +67,9 @@ public sealed record StockDocumentLineInput(
 /// <param name="PostImmediately">
 /// Whether to post on save, or leave an editable draft for somebody else to post.
 /// </param>
+/// <param name="PartyLedgerId">
+/// The customer a delivery note goes to, or the supplier a receipt note comes from.
+/// </param>
 /// <remarks>
 /// Entering and posting are one command because that is how the screen behaves: the
 /// storekeeper presses Save and expects the stock to have moved. The flag exists for
@@ -80,7 +83,8 @@ public sealed record CreateStockDocumentCommand(
     Guid? DestinationWarehouseId = null,
     string? ReferenceNumber = null,
     string? Narration = null,
-    bool PostImmediately = true) : ICommand<CreateStockDocumentResponse>, ITransactional;
+    bool PostImmediately = true,
+    Guid? PartyLedgerId = null) : ICommand<CreateStockDocumentResponse>, ITransactional;
 
 /// <summary>The document that was entered.</summary>
 /// <param name="StockDocumentId">The new document.</param>
@@ -199,6 +203,9 @@ public sealed record ListStockDocumentsQuery(
 /// <param name="LineCount">How many products it names.</param>
 /// <param name="TotalQuantity">The total quantity it moved, in stock units.</param>
 /// <param name="TotalValue">What those goods were valued at.</param>
+/// <param name="PartyName">The customer or supplier a delivery or receipt note names.</param>
+/// <param name="InvoiceId">The invoice raised against a delivery or receipt note.</param>
+/// <param name="InvoiceNumber">That invoice's number.</param>
 public sealed record StockDocumentSummary(
     Guid Id,
     string Number,
@@ -211,7 +218,10 @@ public sealed record StockDocumentSummary(
     StockDocumentStatus Status,
     int LineCount,
     decimal TotalQuantity,
-    decimal TotalValue);
+    decimal TotalValue,
+    string? PartyName = null,
+    Guid? InvoiceId = null,
+    string? InvoiceNumber = null);
 
 /// <summary>Reads one stock document in full.</summary>
 /// <param name="StockDocumentId">The document.</param>
@@ -289,6 +299,10 @@ public sealed record StockMovementView(
 /// reversals alongside the originals — which is the point of reversing rather than
 /// deleting.
 /// </param>
+/// <param name="PartyLedgerId">The customer or supplier a delivery or receipt note names.</param>
+/// <param name="PartyName">Their name.</param>
+/// <param name="InvoiceId">The invoice raised against a delivery or receipt note.</param>
+/// <param name="InvoiceNumber">That invoice's number.</param>
 public sealed record StockDocumentDetail(
     Guid Id,
     string Number,
@@ -304,7 +318,11 @@ public sealed record StockDocumentDetail(
     string Currency,
     string? CancellationReason,
     IReadOnlyList<StockDocumentLineView> Lines,
-    IReadOnlyList<StockMovementView> Movements);
+    IReadOnlyList<StockMovementView> Movements,
+    Guid? PartyLedgerId = null,
+    string? PartyName = null,
+    Guid? InvoiceId = null,
+    string? InvoiceNumber = null);
 
 /// <summary>Reads stock documents.</summary>
 public interface IStockDocumentReader

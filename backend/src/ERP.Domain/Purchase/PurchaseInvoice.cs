@@ -202,6 +202,14 @@ public sealed class PurchaseInvoice
     /// </remarks>
     public StockDocumentId? StockDocumentId { get; private set; }
 
+    /// <summary>Gets the receipt note whose goods this purchase pays for.</summary>
+    /// <remarks>
+    /// The goods came in with the note, so posting the purchase moves nothing: the note is
+    /// recorded as its receipt, and cancelling the purchase leaves the goods on the shelf,
+    /// waiting to be invoiced again.
+    /// </remarks>
+    public StockDocumentId? ReceiptNoteId { get; private set; }
+
     /// <summary>Gets the bill this purchase put into the supplier's outstanding.</summary>
     public BillId? BillId { get; private set; }
 
@@ -750,6 +758,30 @@ public sealed class PurchaseInvoice
         StockDocumentId = stockDocumentId;
         BillId = billId;
         JournalVoucherId = journalVoucherId;
+
+        return Result.Success();
+    }
+
+    /// <summary>Pays for the goods of a receipt note rather than receiving them again.</summary>
+    /// <param name="receiptNoteId">The note.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result BillReceiptNote(StockDocumentId receiptNoteId)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotEditable",
+                $"Purchase '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (IsReturn)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.ReturnAgainstReceiptNote",
+                "A return sends goods back; it cannot pay for a receipt note."));
+        }
+
+        ReceiptNoteId = receiptNoteId;
 
         return Result.Success();
     }

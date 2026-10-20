@@ -36,6 +36,19 @@ public sealed class StockDocumentConfiguration : IEntityTypeConfiguration<StockD
         builder.Ignore(document => document.IsTransfer);
         builder.Ignore(document => document.CarriesRate);
         builder.Ignore(document => document.AllowsSignedQuantity);
+        builder.Ignore(document => document.HasParty);
+
+        // The customer or supplier on a delivery or receipt note. Restricted for the
+        // reason every party reference is: a note pointing at nobody is a delivery
+        // nobody can be billed for.
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(document => document.PartyLedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(document => new { document.FirmId, document.PartyLedgerId })
+            .HasFilter("party_ledger_id IS NOT NULL")
+            .HasDatabaseName("ix_stock_documents_party");
 
         builder.HasOne<FinancialYear>()
             .WithMany()

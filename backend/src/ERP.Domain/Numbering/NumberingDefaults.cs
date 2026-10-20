@@ -43,6 +43,7 @@ public static class NumberingDefaults
         DocumentTypes.SalesReturn => "SR",
         DocumentTypes.PurchaseOrder => "PO",
         DocumentTypes.PurchaseInvoice => "PU",
+        DocumentTypes.ReceiptNote => "RN",
         DocumentTypes.PurchaseReturn => "PR",
         DocumentTypes.JobCard => "JC",
         DocumentTypes.OpeningStock => "OS",

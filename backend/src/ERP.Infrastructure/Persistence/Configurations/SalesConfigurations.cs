@@ -127,6 +127,17 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .HasForeignKey(invoice => invoice.StockDocumentId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The note whose goods the invoice bills. Looked up from the note's side - which
+        // invoice, if any, billed it - so it is indexed.
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.DeliveryNoteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(invoice => invoice.DeliveryNoteId)
+            .HasFilter("delivery_note_id IS NOT NULL")
+            .HasDatabaseName("ix_sales_invoices_delivery_note");
+
         builder.HasOne<Bill>()
             .WithMany()
             .HasForeignKey(invoice => invoice.BillId)

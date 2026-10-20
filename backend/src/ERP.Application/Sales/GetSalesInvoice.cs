@@ -82,6 +82,7 @@ public sealed record SalesInvoiceChargeDetail(Guid LedgerId, decimal Amount, boo
 /// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
 /// <param name="PaymentReference">An online payment's transaction ID.</param>
 /// <param name="ReceiptVoucherId">The receipt posting raised for the payment.</param>
+/// <param name="DeliveryNoteId">The delivery note whose goods it bills, where it bills one.</param>
 public sealed record SalesInvoiceDetail(
     SalesInvoiceResponse Header,
     DateOnly Date,
@@ -105,7 +106,8 @@ public sealed record SalesInvoiceDetail(
     decimal AmountReceived = 0m,
     Guid? ReceivedIntoLedgerId = null,
     string? PaymentReference = null,
-    Guid? ReceiptVoucherId = null);
+    Guid? ReceiptVoucherId = null,
+    Guid? DeliveryNoteId = null);
 
 /// <summary>Handles <see cref="GetSalesInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -215,6 +217,7 @@ public sealed class GetSalesInvoiceQueryHandler
             invoice.AmountReceived,
             invoice.ReceivedIntoLedgerId?.Value,
             invoice.PaymentReference,
-            invoice.ReceiptVoucherId?.Value));
+            invoice.ReceiptVoucherId?.Value,
+            invoice.DeliveryNoteId?.Value));
     }
 }

@@ -264,6 +264,14 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// </remarks>
     public StockDocumentId? StockDocumentId { get; private set; }
 
+    /// <summary>Gets the delivery note whose goods this invoice bills.</summary>
+    /// <remarks>
+    /// The goods left with the note, so posting the invoice moves nothing: the note is
+    /// recorded as the invoice's issue, and cancelling the invoice leaves the delivery
+    /// standing, waiting to be billed again.
+    /// </remarks>
+    public StockDocumentId? DeliveryNoteId { get; private set; }
+
     /// <summary>Gets the bill this invoice put into the customer's outstanding.</summary>
     public BillId? BillId { get; private set; }
 
@@ -962,6 +970,30 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         StockDocumentId = stockDocumentId;
         BillId = billId;
         JournalVoucherId = journalVoucherId;
+
+        return Result.Success();
+    }
+
+    /// <summary>Bills the goods of a delivery note rather than issuing them again.</summary>
+    /// <param name="deliveryNoteId">The note.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result BillDeliveryNote(StockDocumentId deliveryNoteId)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (IsReturn)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.ReturnAgainstDeliveryNote",
+                "A return brings goods back; it cannot bill a delivery note."));
+        }
+
+        DeliveryNoteId = deliveryNoteId;
 
         return Result.Success();
     }

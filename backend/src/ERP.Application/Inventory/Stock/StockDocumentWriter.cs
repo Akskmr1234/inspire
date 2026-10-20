@@ -39,6 +39,7 @@ internal sealed class StockDocumentWriter
     private readonly ITenantContext _tenantContext;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
+    private readonly ILedgerRepository? _ledgers;
     private readonly StockPoster _poster;
     private readonly StockJournalPoster _journal;
 
@@ -58,8 +59,10 @@ internal sealed class StockDocumentWriter
         IFirmRepository firms,
         ITenantContext tenantContext,
         ICurrentUser currentUser,
-        IClock clock)
+        IClock clock,
+        ILedgerRepository? ledgers = null)
     {
+        _ledgers = ledgers;
         _documents = documents;
         _masters = masters;
         _products = products;
@@ -95,7 +98,8 @@ internal sealed class StockDocumentWriter
         CancellationToken cancellationToken)
     {
         Result<StockContext> context = await StockLoader.LoadAsync(
-            request, firmId, _firms, _financialYears, _masters, _products, cancellationToken);
+            request, firmId, _firms, _financialYears, _masters, _products, cancellationToken,
+            _ledgers);
 
         if (context.IsFailure)
         {

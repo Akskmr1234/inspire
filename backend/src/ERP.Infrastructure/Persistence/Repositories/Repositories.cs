@@ -4,6 +4,7 @@ using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
@@ -310,6 +311,18 @@ public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
             .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public Task<string?> FindBillingDeliveryNoteAsync(
+        StockDocumentId deliveryNoteId,
+        SalesInvoiceId? except,
+        CancellationToken cancellationToken = default) =>
+        _context.SalesInvoices
+            .Where(invoice => invoice.DeliveryNoteId == deliveryNoteId
+                && invoice.Status != SalesInvoiceStatus.Cancelled
+                && (except == null || invoice.Id != except))
+            .Select(invoice => invoice.Number)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
     public void Add(SalesInvoice invoice) => _context.SalesInvoices.Add(invoice);
 }
 
@@ -375,6 +388,18 @@ public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
             .Include(invoice => invoice.Lines).ThenInclude(line => line.Serials)
             .Include(invoice => invoice.Charges)
             .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<string?> FindBillingReceiptNoteAsync(
+        StockDocumentId receiptNoteId,
+        PurchaseInvoiceId? except,
+        CancellationToken cancellationToken = default) =>
+        _context.PurchaseInvoices
+            .Where(invoice => invoice.ReceiptNoteId == receiptNoteId
+                && invoice.Status != PurchaseInvoiceStatus.Cancelled
+                && (except == null || invoice.Id != except))
+            .Select(invoice => invoice.Number)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />
     public void Add(PurchaseInvoice invoice) => _context.PurchaseInvoices.Add(invoice);

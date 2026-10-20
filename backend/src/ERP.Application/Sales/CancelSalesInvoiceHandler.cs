@@ -450,7 +450,9 @@ public sealed class CancelSalesInvoiceCommandHandler
         string reason,
         CancellationToken cancellationToken)
     {
-        if (invoice.StockDocumentId is not { } documentId)
+        // Goods that left on a delivery note stay delivered: cancelling the invoice
+        // un-bills them, and the note waits for another invoice.
+        if (invoice.StockDocumentId is not { } documentId || documentId == invoice.DeliveryNoteId)
         {
             return Result.Success();
         }

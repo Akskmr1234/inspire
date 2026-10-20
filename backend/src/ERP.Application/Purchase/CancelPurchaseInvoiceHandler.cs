@@ -419,7 +419,9 @@ public sealed class CancelPurchaseInvoiceCommandHandler
         string reason,
         CancellationToken cancellationToken)
     {
-        if (invoice.StockDocumentId is not { } documentId)
+        // Goods that came in on a receipt note stay on the shelf: cancelling the purchase
+        // un-bills them, and the note waits for another invoice.
+        if (invoice.StockDocumentId is not { } documentId || documentId == invoice.ReceiptNoteId)
         {
             return Result.Success();
         }
