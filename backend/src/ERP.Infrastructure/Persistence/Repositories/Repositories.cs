@@ -10,6 +10,7 @@ using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
+using ERP.Infrastructure.Auditing;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -20,10 +21,16 @@ namespace ERP.Infrastructure.Persistence.Repositories;
 public sealed class UnitOfWork : IUnitOfWork
 {
     private readonly ErpDbContext _context;
+    private readonly AuditTrail? _audit;
 
     /// <summary>Initialises a new instance of the <see cref="UnitOfWork"/> class.</summary>
     /// <param name="context">The database context.</param>
-    public UnitOfWork(ErpDbContext context) => _context = context;
+    /// <param name="audit">The audit trail, written once a transaction commits.</param>
+    public UnitOfWork(ErpDbContext context, AuditTrail? audit = null)
+    {
+        _context = context;
+        _audit = audit;
+    }
 
     /// <inheritdoc />
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
@@ -56,6 +63,9 @@ public sealed class UnitOfWork : IUnitOfWork
         // opened inside the strategy and not around it.
         return await strategy.ExecuteAsync(async () =>
         {
+            // A retried attempt starts again from nothing, its trail included.
+            _audit?.Discard();
+
             await using IDbContextTransaction transaction =
                 await _context.Database.BeginTransactionAsync(cancellationToken);
 
@@ -64,17 +74,25 @@ public sealed class UnitOfWork : IUnitOfWork
                 TResult result = await operation(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
+                // Only now did the changes happen, so only now are they written down.
+                if (_audit is not null)
+                {
+                    await _audit.FlushAsync(cancellationToken);
+                }
+
                 return result;
             }
             catch (TransactionRollbackException rollback)
             {
                 await transaction.RollbackAsync(cancellationToken);
+                _audit?.Discard();
 
                 return (TResult)rollback.Response;
             }
             catch
             {
                 await transaction.RollbackAsync(cancellationToken);
+                _audit?.Discard();
                 throw;
             }
         });

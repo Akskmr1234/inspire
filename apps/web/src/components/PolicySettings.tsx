@@ -106,6 +106,19 @@ export function PolicySettings({
         </>
       )}
 
+      {shows('editsRequireApproval') && (
+        <>
+          <CheckField
+            label={t('policies.editsRequireApproval')}
+            checked={policies.editsRequireApproval}
+            disabled={disabled}
+            onChange={(editsRequireApproval) => change({ editsRequireApproval })}
+          />
+          <p className="-mt-2 text-xs text-ink-muted">
+            {t('policies.editsRequireApprovalHint')}
+          </p>
+        </>
+      )}
       {shows('purchasesUpdateProductRates') && (
         <>
           <CheckField

@@ -1,3 +1,4 @@
+import { isHeldForApproval, type EditRequestSummary } from '@/lib/approvals';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -162,28 +163,36 @@ function VoucherForm({
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
-  const save = useMutation<{ readonly number: string }, ApiError>({
+  const save = useMutation<{ readonly number: string } | EditRequestSummary, ApiError>({
     mutationFn: () =>
-      request<{ readonly number: string }>(`/accounting/vouchers/${voucher.voucherId}`, {
-        method: 'PUT',
-        body: {
-          date,
-          currencyCode: voucher.currency,
-          exchangeRate: voucher.exchangeRate,
-          referenceNumber: reference.trim() || null,
-          narration: narration.trim() || null,
-          paymentMode: voucher.paymentMode,
-          postImmediately: true,
-          reason: reason.trim() || null,
-          lines: usable.map((line) => ({
-            ledgerId: line.ledgerId,
-            side: line.side,
-            amount: parse(line.amount),
-            narration: line.narration.trim() || null,
-          })),
+      request<{ readonly number: string } | EditRequestSummary>(
+        `/accounting/vouchers/${voucher.voucherId}`,
+        {
+          method: 'PUT',
+          body: {
+            date,
+            currencyCode: voucher.currency,
+            exchangeRate: voucher.exchangeRate,
+            referenceNumber: reference.trim() || null,
+            narration: narration.trim() || null,
+            paymentMode: voucher.paymentMode,
+            postImmediately: true,
+            reason: reason.trim() || null,
+            lines: usable.map((line) => ({
+              ledgerId: line.ledgerId,
+              side: line.side,
+              amount: parse(line.amount),
+              narration: line.narration.trim() || null,
+            })),
+          },
         },
-      }),
-    onSuccess: (saved) => onSaved(t('vouchers.updatedNotice', { number: saved.number })),
+      ),
+    onSuccess: (saved) =>
+      onSaved(
+        isHeldForApproval(saved)
+          ? t('approvals.heldNotice', { number: saved.documentNumber })
+          : t('vouchers.updatedNotice', { number: saved.number }),
+      ),
   });
 
   return (
@@ -380,13 +389,21 @@ export function VoucherCancelDialog({
   const { t } = useTranslation();
   const [reason, setReason] = useState('');
 
-  const cancel = useMutation<void, ApiError>({
+  const cancel = useMutation<EditRequestSummary | undefined, ApiError>({
     mutationFn: () =>
-      request<void>(`/accounting/vouchers/${voucherId}/cancel`, {
-        method: 'POST',
-        body: { reason: reason.trim() },
-      }),
-    onSuccess: () => onCancelled(t('vouchers.cancelledNotice', { number })),
+      request<EditRequestSummary | undefined>(
+        `/accounting/vouchers/${voucherId}/cancel`,
+        {
+          method: 'POST',
+          body: { reason: reason.trim() },
+        },
+      ),
+    onSuccess: (held) =>
+      onCancelled(
+        held
+          ? t('approvals.heldNotice', { number: held.documentNumber })
+          : t('vouchers.cancelledNotice', { number }),
+      ),
   });
 
   return (

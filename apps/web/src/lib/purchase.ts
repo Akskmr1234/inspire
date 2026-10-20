@@ -1,3 +1,4 @@
+import type { EditRequestSummary } from '@/lib/approvals';
 import { request } from '@/lib/api';
 import type { PagedResult } from '@/lib/sales';
 
@@ -228,16 +229,19 @@ export async function updatePurchaseInvoice(
     readonly post?: boolean;
     readonly reason?: string | null;
   },
-): Promise<PurchaseInvoiceHeader> {
-  return request<PurchaseInvoiceHeader>(`/purchase/invoices/${id}`, {
+): Promise<PurchaseInvoiceHeader | EditRequestSummary> {
+  return request<PurchaseInvoiceHeader | EditRequestSummary>(`/purchase/invoices/${id}`, {
     method: 'PUT',
     body: input,
   });
 }
 
 /** Cancels a posted document, putting back everything posting it moved. */
-export async function cancelPurchaseInvoice(id: string, reason: string): Promise<void> {
-  await request<void>(`/purchase/invoices/${id}/cancel`, {
+export async function cancelPurchaseInvoice(
+  id: string,
+  reason: string,
+): Promise<EditRequestSummary | undefined> {
+  return request<EditRequestSummary | undefined>(`/purchase/invoices/${id}/cancel`, {
     method: 'POST',
     body: { reason },
   });

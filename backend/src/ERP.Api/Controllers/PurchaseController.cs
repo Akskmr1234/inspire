@@ -3,6 +3,7 @@ using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Purchase;
 using ERP.Domain.Accounting;
+using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -149,21 +150,13 @@ public sealed class PurchaseController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        CreatePurchaseInvoiceCommand changes = new(
-            request.Date,
-            request.SupplierLedgerId,
-            request.WarehouseId,
-            request.Lines,
-            request.Charges,
-            request.Mode,
-            request.SupplierInvoiceNumber,
-            request.SupplierInvoiceDate,
-            request.Narration,
-            ReturnsInvoiceId: request.ReturnsInvoiceId);
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.PurchaseInvoice, id, EditAction.Edit, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
 
-        Result<PurchaseInvoiceResponse> result = await _sender.Send(
-            new UpdatePurchaseInvoiceCommand(id, changes, request.Post, request.Reason),
-            cancellationToken);
+        Result<PurchaseInvoiceResponse> result = await _sender.Send(EditCommand(id, request), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
@@ -223,10 +216,39 @@ public sealed class PurchaseController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.PurchaseInvoice, id, EditAction.Cancel, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
+
         Result result = await _sender.Send(
             new CancelPurchaseInvoiceCommand(id, request.Reason), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
+    /// <summary>Builds the command that makes a correction, here or once it is approved.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="request">The correction as submitted.</param>
+    /// <returns>The command.</returns>
+    internal static UpdatePurchaseInvoiceCommand EditCommand(Guid id, UpdatePurchaseInvoiceRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreatePurchaseInvoiceCommand changes = new(
+            request.Date,
+            request.SupplierLedgerId,
+            request.WarehouseId,
+            request.Lines,
+            request.Charges,
+            request.Mode,
+            request.SupplierInvoiceNumber,
+            request.SupplierInvoiceDate,
+            request.Narration,
+            ReturnsInvoiceId: request.ReturnsInvoiceId);
+
+        return new UpdatePurchaseInvoiceCommand(id, changes, request.Post, request.Reason);
     }
 }
 

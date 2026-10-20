@@ -254,6 +254,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets their histories.</summary>
     public DbSet<RmaEvent> RmaEvents => Set<RmaEvent>();
 
+    /// <summary>Gets the changes to posted documents held for approval.</summary>
+    public DbSet<EditRequest> EditRequests => Set<EditRequest>();
+
     /// <summary>
     /// Gets what is on hand of each product in each warehouse, and what it cost.
     /// </summary>
@@ -439,6 +442,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<RmaPhotoIdConverter>();
         configurationBuilder.Properties<RmaEventId>()
             .HaveConversion<RmaEventIdConverter>();
+        configurationBuilder.Properties<EditRequestId>()
+            .HaveConversion<EditRequestIdConverter>();
         configurationBuilder.Properties<StockBalanceId>()
             .HaveConversion<StockBalanceIdConverter>();
         configurationBuilder.Properties<StockLedgerEntryId>()

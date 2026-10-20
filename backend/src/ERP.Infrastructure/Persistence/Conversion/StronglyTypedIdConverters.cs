@@ -631,3 +631,13 @@ public sealed class RmaEventIdConverter : ValueConverter<RmaEventId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="EditRequestId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class EditRequestIdConverter : ValueConverter<EditRequestId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="EditRequestIdConverter"/> class.</summary>
+    public EditRequestIdConverter()
+        : base(id => id.Value, value => EditRequestId.From(value))
+    {
+    }
+}

@@ -648,6 +648,24 @@ public static class MenuCatalogue
                     "/settings/roles",
                     "platform:role:view"),
 
+                // Changes to posted documents waiting for approval. No permission: the
+                // screen shows each person the requests they may decide and those they made.
+                new(
+                    "settings.approvals",
+                    "Approvals",
+                    "الموافقات",
+                    "platform",
+                    "/settings/approvals"),
+
+                // Who created, changed or deleted what, kept in a database of its own.
+                new(
+                    "settings.audit-log",
+                    "Audit log",
+                    "سجل التدقيق",
+                    "platform",
+                    "/settings/audit-log",
+                    "platform:audit-log:view"),
+
                 // How each document prints - preview, layout, printer, copies, and a
                 // second run - and the layouts themselves. Readable by anybody who may
                 // read settings; the designer behind the print-template permission.

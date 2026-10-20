@@ -1,5 +1,7 @@
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Platform.Approvals;
 using ERP.Domain.Inventory;
+using ERP.Domain.Platform;
 using ERP.Domain.Service;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +98,41 @@ public sealed class RmaRepository : IRmaRepository
 
     /// <inheritdoc />
     public void Add(Rma rma) => _context.Rmas.Add(rma);
+}
+
+/// <summary>Reads and writes changes to posted documents held for approval.</summary>
+public sealed class EditRequestRepository : IEditRequestRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="EditRequestRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public EditRequestRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<EditRequest?> FindAsync(EditRequestId id, CancellationToken cancellationToken = default) =>
+        _context.EditRequests.FirstOrDefaultAsync(request => request.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<EditRequest?> FindPendingAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        _context.EditRequests.FirstOrDefaultAsync(
+            request => request.DocumentId == documentId && request.Status == EditRequestStatus.Pending,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EditRequest>> ListAsync(
+        FirmId firmId,
+        EditRequestStatus? status,
+        CancellationToken cancellationToken = default) =>
+        await _context.EditRequests
+            .Where(request => request.FirmId == firmId && (status == null || request.Status == status))
+            .OrderByDescending(request => request.RequestedAtUtc)
+            .Take(500)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(EditRequest request) => _context.EditRequests.Add(request);
 }
 
 /// <summary>Reads and writes stock transfer requests.</summary>

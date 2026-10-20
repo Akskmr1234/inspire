@@ -348,6 +348,9 @@ export function GeneralSettings(): React.JSX.Element {
           placeholder={t('settings.apiKeyOptional')}
         />
       </SettingsCard>
+      <SettingsCard title={t('prefs.approvalsTitle')} hint={t('policies.hint')}>
+        <PolicySettings only={['editsRequireApproval']} />
+      </SettingsCard>
     </Cards>
   );
 }

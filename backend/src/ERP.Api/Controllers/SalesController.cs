@@ -3,6 +3,7 @@ using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Sales;
 using ERP.Domain.Accounting;
+using ERP.Domain.Platform;
 using ERP.Domain.Sales;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -160,27 +161,13 @@ public sealed class SalesController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        CreateSalesInvoiceCommand changes = new(
-            request.Date,
-            request.CustomerLedgerId,
-            request.WarehouseId,
-            request.Lines,
-            request.Charges,
-            request.Mode,
-            request.ReferenceNumber,
-            request.Narration,
-            ReturnsInvoiceId: request.ReturnsInvoiceId,
-            PaymentMode: request.PaymentMode,
-            SalesmanLedgerId: request.SalesmanLedgerId,
-            BillingManLedgerId: request.BillingManLedgerId,
-            AmountReceived: request.AmountReceived,
-            ReceivedIntoLedgerId: request.ReceivedIntoLedgerId,
-            PaymentReference: request.PaymentReference,
-            PaidInFull: request.PaidInFull);
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.SalesInvoice, id, EditAction.Edit, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
 
-        Result<SalesInvoiceResponse> result = await _sender.Send(
-            new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason),
-            cancellationToken);
+        Result<SalesInvoiceResponse> result = await _sender.Send(EditCommand(id, request), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
@@ -240,10 +227,45 @@ public sealed class SalesController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.SalesInvoice, id, EditAction.Cancel, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
+
         Result result = await _sender.Send(
             new CancelSalesInvoiceCommand(id, request.Reason), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
+    /// <summary>Builds the command that makes a correction, here or once it is approved.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="request">The correction as submitted.</param>
+    /// <returns>The command.</returns>
+    internal static UpdateSalesInvoiceCommand EditCommand(Guid id, UpdateSalesInvoiceRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateSalesInvoiceCommand changes = new(
+            request.Date,
+            request.CustomerLedgerId,
+            request.WarehouseId,
+            request.Lines,
+            request.Charges,
+            request.Mode,
+            request.ReferenceNumber,
+            request.Narration,
+            ReturnsInvoiceId: request.ReturnsInvoiceId,
+            PaymentMode: request.PaymentMode,
+            SalesmanLedgerId: request.SalesmanLedgerId,
+            BillingManLedgerId: request.BillingManLedgerId,
+            AmountReceived: request.AmountReceived,
+            ReceivedIntoLedgerId: request.ReceivedIntoLedgerId,
+            PaymentReference: request.PaymentReference,
+            PaidInFull: request.PaidInFull);
+
+        return new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason);
     }
 }
 

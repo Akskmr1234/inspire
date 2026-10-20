@@ -1,3 +1,4 @@
+import { isHeldForApproval } from '@/lib/approvals';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -427,10 +428,12 @@ export function PurchasePage({
           }
           onCancel={(id, reason) =>
             run(async () => {
-              await cancelPurchaseInvoice(id, reason);
+              const held = await cancelPurchaseInvoice(id, reason);
               setViewing(null);
 
-              return t('purchase.cancelledNotice');
+              return held
+                ? t('approvals.heldNotice', { number: held.documentNumber })
+                : t('purchase.cancelledNotice');
             })
           }
           onEdit={(document) => {
@@ -754,7 +757,11 @@ function EntryDialog({
           reason: editReason.trim() || null,
         });
 
-        onSaved(t('purchase.updatedNotice', { number: header.number }));
+        onSaved(
+          isHeldForApproval(header)
+            ? t('approvals.heldNotice', { number: header.documentNumber })
+            : t('purchase.updatedNotice', { number: header.number }),
+        );
         return;
       }
 

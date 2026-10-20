@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
+import { isHeldForApproval } from '@/lib/approvals';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -513,10 +514,12 @@ export function SalesPage({
           }
           onCancel={(id, reason) =>
             run(async () => {
-              await cancelSalesInvoice(id, reason);
+              const held = await cancelSalesInvoice(id, reason);
               setViewing(null);
 
-              return t('sales.cancelledNotice');
+              return held
+                ? t('approvals.heldNotice', { number: held.documentNumber })
+                : t('sales.cancelledNotice');
             })
           }
           onEdit={(document) => {
@@ -1541,6 +1544,11 @@ function EntryDialog({
           post,
           reason: editReason.trim() || null,
         });
+
+        if (isHeldForApproval(header)) {
+          onSaved(t('approvals.heldNotice', { number: header.documentNumber }));
+          return;
+        }
 
         onSaved(
           t('sales.updatedNotice', { number: header.number }),

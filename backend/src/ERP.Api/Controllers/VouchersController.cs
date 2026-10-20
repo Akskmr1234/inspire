@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Domain.Accounting;
+using ERP.Domain.Platform;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
 using MediatR;
@@ -113,19 +114,13 @@ public sealed class VouchersController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        CreateVoucherCommand changes = new(
-            VoucherType.Journal,
-            request.Date,
-            request.Lines,
-            request.CurrencyCode,
-            request.ExchangeRate,
-            request.ReferenceNumber,
-            request.Narration,
-            request.PaymentMode,
-            request.PostImmediately);
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.Voucher, id, EditAction.Edit, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
 
-        Result<CreateVoucherResponse> result = await _sender.Send(
-            new UpdateVoucherCommand(id, changes, request.Reason), cancellationToken);
+        Result<CreateVoucherResponse> result = await _sender.Send(EditCommand(id, request), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
@@ -150,10 +145,38 @@ public sealed class VouchersController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.Voucher, id, EditAction.Cancel, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
+
         Result result = await _sender.Send(
             new CancelVoucherCommand(id, request.Reason), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
+    /// <summary>Builds the command that makes a correction, here or once it is approved.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="request">The correction as submitted.</param>
+    /// <returns>The command.</returns>
+    internal static UpdateVoucherCommand EditCommand(Guid id, UpdateVoucherRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateVoucherCommand changes = new(
+            VoucherType.Journal,
+            request.Date,
+            request.Lines,
+            request.CurrencyCode,
+            request.ExchangeRate,
+            request.ReferenceNumber,
+            request.Narration,
+            request.PaymentMode,
+            request.PostImmediately);
+
+        return new UpdateVoucherCommand(id, changes, request.Reason);
     }
 }
 
