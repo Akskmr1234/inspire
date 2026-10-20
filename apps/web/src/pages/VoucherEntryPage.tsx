@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -507,10 +507,13 @@ function AmountInput({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
+  /** Where the amount is what something else adds up to, such as the bills ticked. */
+  readonly disabled?: boolean;
 }): React.JSX.Element {
   return (
     <input
@@ -522,6 +525,7 @@ function AmountInput({
       placeholder="0.00"
       className="field-input-sm w-full text-end font-mono tabular-nums"
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -566,10 +570,172 @@ interface MoneyLine {
   ledgerId: string;
   amount: string;
   narration: string;
+  /** What is set against each of the party's open bills, by bill, as typed. */
+  allocations: Readonly<Record<string, string>>;
 }
 
 function emptyMoneyLine(): MoneyLine {
-  return { key: crypto.randomUUID(), ledgerId: '', amount: '', narration: '' };
+  return {
+    key: crypto.randomUUID(),
+    ledgerId: '',
+    amount: '',
+    narration: '',
+    allocations: {},
+  };
+}
+
+/** What a line's ticked bills come to. */
+function allocated(line: MoneyLine): number {
+  return Object.values(line.allocations).reduce(
+    (sum, value) => sum + parseAmount(value),
+    0,
+  );
+}
+
+/** One of a party's bills still open. */
+interface OpenBill {
+  readonly billId: string;
+  readonly billNumber: string;
+  readonly billDate: string;
+  readonly dueDate: string;
+  readonly outstandingAmount: number;
+  readonly daysOverdue: number;
+}
+
+/**
+ * The bills a bill-wise party still has open, under the line that pays or receives
+ * against them. Where bills may be filled, each can be ticked and given the part of the
+ * money that goes to it; the line's amount is then what the ticked bills come to.
+ */
+function PendingBills({
+  ledgerId,
+  billType,
+  fillable,
+  allocations,
+  onChange,
+}: {
+  readonly ledgerId: string;
+  readonly billType: number;
+  readonly fillable: boolean;
+  readonly allocations: Readonly<Record<string, string>>;
+  readonly onChange: (allocations: Readonly<Record<string, string>>) => void;
+}): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const bills = useQuery<readonly OpenBill[], ApiError>({
+    queryKey: ['open-bills', ledgerId, billType],
+    queryFn: () =>
+      request<readonly OpenBill[]>(
+        `/accounting/vouchers/open-bills?ledgerId=${ledgerId}&type=${billType}`,
+      ),
+  });
+
+  if (bills.isPending) {
+    return <p className="text-xs text-ink-muted">{t('common.loading')}</p>;
+  }
+
+  const rows = bills.data ?? [];
+
+  if (rows.length === 0) {
+    return <p className="text-xs text-ink-muted">{t('vouchers.noPendingBills')}</p>;
+  }
+
+  const outstanding = rows.reduce((sum, bill) => sum + bill.outstandingAmount, 0);
+  const set = (billId: string, value: string | null): void => {
+    const next = { ...allocations };
+    if (value === null) delete next[billId];
+    else next[billId] = value;
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-1 rounded-lg border border-line bg-surface-2/40 p-2">
+      <p className="text-xs font-semibold text-ink-muted">
+        {t('vouchers.pendingBills', { count: rows.length, total: money(outstanding) })}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="text-ink-muted">
+            <tr>
+              {fillable && <th className="w-8" />}
+              <th className="px-2 py-1 text-start font-semibold">
+                {t('vouchers.billNumber')}
+              </th>
+              <th className="px-2 py-1 text-start font-semibold">
+                {t('vouchers.billDate')}
+              </th>
+              <th className="px-2 py-1 text-start font-semibold">
+                {t('vouchers.billDue')}
+              </th>
+              <th className="px-2 py-1 text-end font-semibold">
+                {t('vouchers.billOutstanding')}
+              </th>
+              {fillable && (
+                <th className="px-2 py-1 text-end font-semibold">
+                  {t('vouchers.billAllocated')}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((bill) => {
+              const ticked = allocations[bill.billId] !== undefined;
+              return (
+                <tr key={bill.billId} className="border-t border-line/60">
+                  {fillable && (
+                    <td className="px-2 py-1">
+                      <input
+                        type="checkbox"
+                        aria-label={t('vouchers.settleBill', { number: bill.billNumber })}
+                        checked={ticked}
+                        onChange={(event) =>
+                          set(
+                            bill.billId,
+                            event.target.checked ? String(bill.outstandingAmount) : null,
+                          )
+                        }
+                      />
+                    </td>
+                  )}
+                  <td className="px-2 py-1 font-mono">{bill.billNumber}</td>
+                  <td className="px-2 py-1">{bill.billDate}</td>
+                  <td
+                    className={clsx('px-2 py-1', bill.daysOverdue > 0 && 'text-red-600')}
+                  >
+                    {bill.dueDate}
+                    {bill.daysOverdue > 0 ? ` (${bill.daysOverdue}d)` : ''}
+                  </td>
+                  <td className="px-2 py-1 text-end font-mono tabular-nums">
+                    {money(bill.outstandingAmount)}
+                  </td>
+                  {fillable && (
+                    <td className="px-2 py-1 text-end">
+                      {ticked && (
+                        <input
+                          inputMode="decimal"
+                          aria-label={t('vouchers.billAllocated')}
+                          value={allocations[bill.billId] ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value.replace(/[^\d.]/g, '');
+                            set(
+                              bill.billId,
+                              parseAmount(value) > bill.outstandingAmount
+                                ? String(bill.outstandingAmount)
+                                : value,
+                            );
+                          }}
+                          className="field-input-sm w-28 text-end font-mono tabular-nums"
+                        />
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 interface ChequeDetails {
@@ -612,6 +778,14 @@ function MoneyEntry({
   const navigate = useNavigate();
   const narrow = useIsNarrow(CARDS_BELOW);
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
+  const billWise = useSettings((state) =>
+    direction === 'receipt' ? state.billWiseReceipts : state.billWisePayments,
+  );
+  const fillBills = useSettings((state) =>
+    direction === 'receipt' ? state.fillBillsOnReceipts : state.fillBillsOnPayments,
+  );
+  // A receipt settles what customers owe; a payment what is owed to suppliers.
+  const billType = direction === 'receipt' ? 1 : 2;
 
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -733,11 +907,24 @@ function MoneyEntry({
 
       const partyLines = entered.map((line) => {
         const amount = parseAmount(line.amount);
+        const settled = Object.entries(line.allocations)
+          .map(([billId, value]) => ({ billId, amount: parseAmount(value) }))
+          .filter((allocation) => allocation.amount > 0);
         return {
           ledgerId: line.ledgerId,
           side: partySide,
           amount,
           narration: line.narration.trim() || null,
+          // The bills ticked against this line, settled by what was set against each.
+          ...(settled.length > 0
+            ? {
+                billReferences: settled.map((allocation) => ({
+                  kind: 2,
+                  amount: allocation.amount,
+                  billId: allocation.billId,
+                })),
+              }
+            : {}),
           // Each ledger the cheque pays carries its share into the cheque register,
           // under the cheque's own number.
           ...(mode === 'Cheque'
@@ -792,7 +979,7 @@ function MoneyEntry({
   const ledgerControl = (line: MoneyLine): React.JSX.Element => (
     <SearchSelect
       value={line.ledgerId}
-      onChange={(ledgerId) => update(line.key, { ledgerId })}
+      onChange={(ledgerId) => update(line.key, { ledgerId, allocations: {} })}
       options={ledgerOptions}
       disabled={ledgers.isPending}
       size="sm"
@@ -806,8 +993,33 @@ function MoneyEntry({
       label={t('vouchers.amount')}
       value={line.amount}
       onChange={(amount) => update(line.key, { amount })}
+      disabled={Object.keys(line.allocations).length > 0}
     />
   );
+
+  /** The party's open bills, where the party is kept bill-wise and the setting shows them. */
+  const billsControl = (line: MoneyLine): React.JSX.Element | null => {
+    const party = all.find((ledger) => ledger.ledgerId === line.ledgerId);
+    if (!billWise || !party?.isBillWise) return null;
+    return (
+      <PendingBills
+        ledgerId={party.ledgerId}
+        billType={billType}
+        fillable={fillBills}
+        allocations={line.allocations}
+        onChange={(allocations) => {
+          const next = { ...line, allocations };
+          const sum = allocated(next);
+          update(line.key, {
+            allocations,
+            ...(Object.keys(allocations).length > 0
+              ? { amount: sum > 0 ? String(Math.round(sum * 100) / 100) : '' }
+              : {}),
+          });
+        }}
+      />
+    );
+  };
 
   const narrationControl = (line: MoneyLine): React.JSX.Element => (
     <input
@@ -999,6 +1211,7 @@ function MoneyEntry({
                     {amountControl(line)}
                     {narrationControl(line)}
                   </div>
+                  {billsControl(line)}
                 </div>
               ))}
             </div>
@@ -1015,17 +1228,32 @@ function MoneyEntry({
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((line, index) => (
-                    <tr key={line.key}>
-                      <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
-                      <td className="min-w-48 py-2 lg:min-w-56">{ledgerControl(line)}</td>
-                      <td className="py-2">{amountControl(line)}</td>
-                      <td className="min-w-32 py-2 lg:min-w-40">
-                        {narrationControl(line)}
-                      </td>
-                      <td className="px-2 py-2 text-end">{removeControl(line)}</td>
-                    </tr>
-                  ))}
+                  {lines.map((line, index) => {
+                    const bills = billsControl(line);
+                    return (
+                      <Fragment key={line.key}>
+                        <tr>
+                          <td className="py-2 text-xs text-ink-muted">{index + 1}</td>
+                          <td className="min-w-48 py-2 lg:min-w-56">
+                            {ledgerControl(line)}
+                          </td>
+                          <td className="py-2">{amountControl(line)}</td>
+                          <td className="min-w-32 py-2 lg:min-w-40">
+                            {narrationControl(line)}
+                          </td>
+                          <td className="px-2 py-2 text-end">{removeControl(line)}</td>
+                        </tr>
+                        {bills && (
+                          <tr>
+                            <td />
+                            <td colSpan={4} className="pb-3">
+                              {bills}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

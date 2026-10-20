@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
+using ERP.Application.Accounting.Reports;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Domain.Accounting;
 using ERP.Domain.Platform;
@@ -67,6 +68,35 @@ public sealed class VouchersController : ApiControllerBase
         string location = $"{Request.Path.Value?.TrimEnd('/')}/{result.Value.VoucherId}";
 
         return Created(location, result.Value);
+    }
+
+    /// <summary>Lists a party's open bills, for a receipt or payment to settle bill by bill.</summary>
+    /// <param name="ledgerId">The party.</param>
+    /// <param name="type">Receivable for what a customer owes, payable for what is owed to a supplier.</param>
+    /// <param name="asAt">The date the position is stated as at; today when omitted.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The party's open bills, oldest due first; empty when it has none.</returns>
+    /// <remarks>
+    /// The debtors and creditors reports narrowed to one party, behind the permission to
+    /// view vouchers rather than reports: the clerk entering a receipt has to see what the
+    /// customer owes without being given the whole debtors report.
+    /// </remarks>
+    [HttpGet("open-bills")]
+    [RequiresPermission("accounting", "voucher", "view")]
+    [ProducesResponseType(typeof(IReadOnlyList<OutstandingBill>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> OpenBillsAsync(
+        [FromQuery] Guid ledgerId,
+        [FromQuery] BillType type,
+        [FromQuery] DateOnly? asAt,
+        CancellationToken cancellationToken)
+    {
+        Result<OutstandingBillsResponse> result = await _sender.Send(
+            new GetOutstandingBillsQuery(type, asAt ?? DateOnly.FromDateTime(DateTime.UtcNow), ledgerId),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value.Parties.SelectMany(party => party.Bills).ToList())
+            : Problem(result.Error);
     }
 
     /// <summary>Fetches a voucher and its lines.</summary>

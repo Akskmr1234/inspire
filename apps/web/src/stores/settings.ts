@@ -145,6 +145,14 @@ export interface AppSettings {
    * bank a bank receipt or payment starts at. Blank takes the firm's first bank account.
    */
   readonly defaultBankLedgerId: string;
+  /** Whether a receipt shows a bill-wise customer's pending bills. */
+  readonly billWiseReceipts: boolean;
+  /** Whether a receipt lets those bills be ticked and allocated, filling its amount. */
+  readonly fillBillsOnReceipts: boolean;
+  /** Whether a payment shows a bill-wise supplier's pending bills. */
+  readonly billWisePayments: boolean;
+  /** Whether a payment lets those bills be ticked and allocated, filling its amount. */
+  readonly fillBillsOnPayments: boolean;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
   /** Application-wide default theme ('light' or 'dark') applied for all users. */
@@ -209,6 +217,10 @@ const DEFAULTS: AppSettings = {
   defaultCreditAccountId: '',
   defaultCashLedgerId: '',
   defaultBankLedgerId: '',
+  billWiseReceipts: true,
+  fillBillsOnReceipts: true,
+  billWisePayments: true,
+  fillBillsOnPayments: true,
   defaultAdditionalLedgers: [],
   defaultTheme: 'light',
   gulfMode: true,

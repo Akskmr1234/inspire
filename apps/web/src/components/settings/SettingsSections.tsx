@@ -672,9 +672,48 @@ export function InventorySettings(): React.JSX.Element {
 /** The periods the books are kept in. */
 export function AccountsSettings(): React.JSX.Element {
   const { t } = useTranslation();
+  const settings = useSettings();
 
   return (
     <Cards>
+      <SettingsCard
+        title={t('prefs.billWiseReceiptsTitle')}
+        hint={t('prefs.billWiseHint')}
+      >
+        <CheckField
+          label={t('prefs.billWise')}
+          hint={t('prefs.billWiseReceiptsHint')}
+          checked={settings.billWiseReceipts}
+          onChange={(billWiseReceipts) => settings.update({ billWiseReceipts })}
+        />
+        <CheckField
+          label={t('prefs.fillBills')}
+          hint={t('prefs.fillBillsHint')}
+          checked={settings.fillBillsOnReceipts}
+          disabled={!settings.billWiseReceipts}
+          onChange={(fillBillsOnReceipts) => settings.update({ fillBillsOnReceipts })}
+        />
+      </SettingsCard>
+
+      <SettingsCard
+        title={t('prefs.billWisePaymentsTitle')}
+        hint={t('prefs.billWiseHint')}
+      >
+        <CheckField
+          label={t('prefs.billWise')}
+          hint={t('prefs.billWisePaymentsHint')}
+          checked={settings.billWisePayments}
+          onChange={(billWisePayments) => settings.update({ billWisePayments })}
+        />
+        <CheckField
+          label={t('prefs.fillBills')}
+          hint={t('prefs.fillBillsHint')}
+          checked={settings.fillBillsOnPayments}
+          disabled={!settings.billWisePayments}
+          onChange={(fillBillsOnPayments) => settings.update({ fillBillsOnPayments })}
+        />
+      </SettingsCard>
+
       <SettingsCard title={t('years.title')} hint={t('years.hint')} wide>
         <FinancialYearsSettings />
       </SettingsCard>
