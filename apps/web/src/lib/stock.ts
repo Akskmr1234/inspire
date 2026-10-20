@@ -15,6 +15,7 @@ export const StockDocumentType = {
   physicalVerification: 7,
   deliveryNote: 12,
   receiptNote: 13,
+  production: 14,
 } as const;
 
 /** Where a stock document stands. */

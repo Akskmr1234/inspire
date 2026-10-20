@@ -59,10 +59,19 @@ import { useSession } from '@/stores/session';
  * refused by the server, because what an issue costs was decided by the position it
  * comes out of, so offering the box would be offering something that cannot be saved.
  */
+/** What a screen-specific entry form is given in place of the generic one. */
+export interface StockEntryProps {
+  readonly warehouses: readonly WarehouseSummary[];
+  readonly busy: boolean;
+  readonly onCancel: () => void;
+  readonly onSubmit: (body: Parameters<typeof createStockDocument>[0]) => void;
+}
+
 export function StockOperationsPage({
   lockedType,
   title,
   reasonRequired = false,
+  renderEntry,
 }: {
   /**
    * One kind of document, when this screen is standing in for a menu entry of its
@@ -73,6 +82,11 @@ export function StockOperationsPage({
   readonly title?: string;
   /** Whether the narration is a reason the document cannot be saved without. */
   readonly reasonRequired?: boolean;
+  /**
+   * An entry form of the screen's own, for a document whose shape the generic grid
+   * does not suit - a production run has two lists, not one.
+   */
+  readonly renderEntry?: (props: StockEntryProps) => React.JSX.Element;
 } = {}): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -120,6 +134,23 @@ export function StockOperationsPage({
     setError(null);
     mutation.mutate(action);
   };
+
+  // Goods in transit move only through a transfer request, so the screens that enter
+  // documents by hand do not offer it.
+  const places = (warehouses.data ?? []).filter((warehouse) => !warehouse.isTransit);
+
+  const submit = (body: Parameters<typeof createStockDocument>[0]): void =>
+    run(async () => {
+      const created = await createStockDocument(body);
+      setEntering(false);
+
+      return created.status === StockDocumentStatus.draft
+        ? t('stock.draftNotice', { number: created.number })
+        : t('stock.postedNotice', {
+            number: created.number,
+            count: created.movements,
+          });
+    });
 
   const columns: readonly GridColumn<StockDocumentSummary>[] = [
     {
@@ -377,30 +408,23 @@ export function StockOperationsPage({
         >
           {error && <Alert tone="error">{error}</Alert>}
 
-          <StockEntry
-            // Goods in transit move only through a transfer request, so the screen
-            // that enters documents by hand does not offer it.
-            warehouses={(warehouses.data ?? []).filter(
-              (warehouse) => !warehouse.isTransit,
-            )}
-            {...(lockedType === undefined ? {} : { lockedType })}
-            reasonRequired={reasonRequired}
-            busy={mutation.isPending}
-            onCancel={() => setEntering(false)}
-            onSubmit={(body) =>
-              run(async () => {
-                const created = await createStockDocument(body);
-                setEntering(false);
-
-                return created.status === StockDocumentStatus.draft
-                  ? t('stock.draftNotice', { number: created.number })
-                  : t('stock.postedNotice', {
-                      number: created.number,
-                      count: created.movements,
-                    });
-              })
-            }
-          />
+          {renderEntry ? (
+            renderEntry({
+              warehouses: places,
+              busy: mutation.isPending,
+              onCancel: () => setEntering(false),
+              onSubmit: submit,
+            })
+          ) : (
+            <StockEntry
+              warehouses={places}
+              {...(lockedType === undefined ? {} : { lockedType })}
+              reasonRequired={reasonRequired}
+              busy={mutation.isPending}
+              onCancel={() => setEntering(false)}
+              onSubmit={submit}
+            />
+          )}
         </Modal>
       )}
     </>
@@ -1569,6 +1593,8 @@ export function typeKey(type: number): string {
       return 'stock.typeDeliveryNote';
     case StockDocumentType.receiptNote:
       return 'stock.typeReceiptNote';
+    case StockDocumentType.production:
+      return 'stock.typeProduction';
     case 8:
       return 'stock.typeSalesIssue';
     case 9:
