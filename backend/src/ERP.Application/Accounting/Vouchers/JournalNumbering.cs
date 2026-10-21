@@ -1,6 +1,5 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Domain.Accounting;
-using ERP.Domain.Numbering;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -24,35 +23,13 @@ internal static class JournalNumbering
     /// <param name="year">The financial year it falls in.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The number, or the reason one could not be issued.</returns>
-    internal static async Task<Result<string>> ReserveAsync(
+    internal static Task<Result<string>> ReserveAsync(
         INumberingSeriesRepository numbering,
         TenantId tenantId,
         FirmId firmId,
         BranchId branchId,
         FinancialYear year,
-        CancellationToken cancellationToken)
-    {
-        string documentType = DocumentTypes.ForVoucher(VoucherType.Journal);
-
-        NumberingSeries? series = await numbering.FindForUpdateAsync(
-            documentType, firmId, branchId, year.Id, cancellationToken);
-
-        if (series is null)
-        {
-            Result<NumberingSeries> created = NumberingSeries.Create(
-                tenantId, firmId, documentType, branchId, year.Id);
-
-            if (created.IsFailure)
-            {
-                return Result.Failure<string>(created.Error);
-            }
-
-            series = created.Value;
-            NumberingDefaults.Apply(series, year.Code);
-
-            numbering.Add(series);
-        }
-
-        return series.Reserve();
-    }
+        CancellationToken cancellationToken) =>
+        VoucherNumbering.ReserveAsync(
+            numbering, tenantId, firmId, branchId, year, VoucherType.Journal, cancellationToken);
 }

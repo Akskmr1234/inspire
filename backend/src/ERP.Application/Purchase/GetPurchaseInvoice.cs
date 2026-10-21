@@ -37,6 +37,7 @@ public sealed record PurchaseInvoiceLineTaxDetail(
 /// <param name="Tax">The input tax on it.</param>
 /// <param name="Components">That tax, head by head, as the engine assessed it.</param>
 /// <param name="SerialNumbers">The units arriving, where the product is serialised.</param>
+/// <param name="SellingRate">What one entered unit of the batch is to sell at, where stated.</param>
 public sealed record PurchaseInvoiceLineDetail(
     int LineNumber,
     Guid ProductId,
@@ -50,7 +51,8 @@ public sealed record PurchaseInvoiceLineDetail(
     decimal Taxable,
     decimal Tax,
     IReadOnlyList<PurchaseInvoiceLineTaxDetail> Components,
-    IReadOnlyList<string> SerialNumbers);
+    IReadOnlyList<string> SerialNumbers,
+    decimal? SellingRate = null);
 
 /// <summary>One charge carried beside the goods.</summary>
 /// <param name="LedgerId">The account it posts to.</param>
@@ -78,6 +80,7 @@ public sealed record PurchaseInvoiceChargeDetail(
 /// <param name="StockDocumentId">The receipt that put the goods on the shelf, once posted.</param>
 /// <param name="BillId">The bill owed to the supplier, once posted.</param>
 /// <param name="JournalVoucherId">The journal in the nominal ledger, once posted.</param>
+/// <param name="ReceiptNoteId">The receipt note whose goods it pays for, where it pays for one.</param>
 public sealed record PurchaseInvoiceDetail(
     PurchaseInvoiceResponse Header,
     DateOnly Date,
@@ -94,7 +97,8 @@ public sealed record PurchaseInvoiceDetail(
     IReadOnlyList<PurchaseInvoiceChargeDetail> Charges,
     Guid? StockDocumentId,
     Guid? BillId,
-    Guid? JournalVoucherId);
+    Guid? JournalVoucherId,
+    Guid? ReceiptNoteId = null);
 
 /// <summary>Handles <see cref="GetPurchaseInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -174,7 +178,8 @@ public sealed class GetPurchaseInvoiceQueryHandler
                                 new PurchaseInvoiceLineTaxDetail(
                                     component.Type, component.Percentage, component.Amount)),
                         ],
-                        [.. line.Serials.Select(serial => serial.SerialNumber)])),
+                        [.. line.Serials.Select(serial => serial.SerialNumber)],
+                        line.SellingRate)),
             ],
             [
                 .. invoice.Charges.Select(charge =>
@@ -183,6 +188,7 @@ public sealed class GetPurchaseInvoiceQueryHandler
             ],
             invoice.StockDocumentId?.Value,
             invoice.BillId?.Value,
-            invoice.JournalVoucherId?.Value));
+            invoice.JournalVoucherId?.Value,
+            invoice.ReceiptNoteId?.Value));
     }
 }

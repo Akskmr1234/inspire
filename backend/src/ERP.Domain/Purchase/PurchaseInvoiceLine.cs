@@ -84,9 +84,11 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
         TaxAssessment assessment,
         int lineNumber,
         string? batchNumber,
-        DateOnly? expiresOn)
+        DateOnly? expiresOn,
+        decimal? sellingRate = null)
         : base(id)
     {
+        SellingRate = sellingRate;
         TenantId = tenantId;
         PurchaseInvoiceId = invoiceId;
         ProductId = productId;
@@ -130,6 +132,13 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
 
     /// <summary>Gets when that batch expires, where the supplier stated it.</summary>
     public DateOnly? ExpiresOn { get; private set; }
+
+    /// <summary>Gets what one stock unit of the batch is to sell at, where it was stated.</summary>
+    /// <remarks>
+    /// Carried to the batch when the receipt posts, and offered by the sales screen when the
+    /// counter sells at batch-wise rates. Not a cost: nothing in the books reads it.
+    /// </remarks>
+    public decimal? SellingRate { get; private set; }
 
     /// <summary>Gets the unit the quantity was entered in.</summary>
     public UnitOfMeasureId UnitId { get; private set; }

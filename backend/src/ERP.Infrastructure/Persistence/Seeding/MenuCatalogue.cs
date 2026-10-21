@@ -130,6 +130,14 @@ public static class MenuCatalogue
                             "inventory",
                             "/inventory/units",
                             "inventory:unit:view"),
+                        // What goes into each finished good, read by a production run.
+                        new(
+                            "masters.boms",
+                            "Bills of materials",
+                            "قوائم المواد",
+                            "inventory",
+                            "/inventory/boms",
+                            "inventory:product:view"),
                         new(
                             "masters.warehouses",
                             "Warehouses",
@@ -260,11 +268,58 @@ public static class MenuCatalogue
                     "/inventory/stock",
                     "inventory:stock-adjustment:view"),
 
+                // Its own entry rather than a type on the stock screen: a transfer between
+                // branches is a conversation - asked for, agreed, sent, received - and the
+                // people at each step need to find the requests waiting on them.
+                new(
+                    "transactions.stock-transfers",
+                    "Stock transfers",
+                    "تحويلات المخزون",
+                    "inventory",
+                    "/inventory/stock-transfers",
+                    "inventory:stock-transfer:view"),
+
+                // A count against the shelf, entered by hand or from a spreadsheet,
+                // reviewed as differences before anything moves.
+                new(
+                    "transactions.stock-adjustment",
+                    "Stock adjustment",
+                    "تسوية المخزون",
+                    "inventory",
+                    "/inventory/stock-adjustment",
+                    "inventory:stock-adjustment:view"),
+
+                // Materials used up and finished goods made, by hand or from a bill.
+                new(
+                    "transactions.production",
+                    "Production",
+                    "الإنتاج",
+                    "inventory",
+                    "/inventory/production",
+                    "inventory:stock-adjustment:view"),
+
+                new(
+                    "transactions.damaged-stock",
+                    "Damaged stock",
+                    "المخزون التالف",
+                    "inventory",
+                    "/inventory/damaged-stock",
+                    "inventory:stock-adjustment:view"),
+
                 // Invoices and credit notes on one entry, because they are one kind of
                 // document: a screen showing a customer's history wants both, and two
                 // entries would suggest two places to look for the same sale.
                 // Before the invoices, because that is the order the work happens in:
                 // an order is taken, then filled.
+                // Before the orders: an offer is made, then accepted.
+                new(
+                    "transactions.sales-quotations",
+                    "Sales quotations",
+                    "عروض الأسعار",
+                    "sales",
+                    "/sales/quotations",
+                    "sales:order:view"),
+
                 new(
                     "transactions.sales-orders",
                     "Sales orders",
@@ -272,6 +327,16 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/orders",
                     "sales:order:view"),
+
+                // Goods out to a customer ahead of the invoice, which is raised from
+                // the note and bills it without moving the goods again.
+                new(
+                    "transactions.delivery-notes",
+                    "Delivery notes",
+                    "إشعارات التسليم",
+                    "sales",
+                    "/sales/delivery-notes",
+                    "inventory:stock-adjustment:view"),
 
                 new(
                     "transactions.sales",
@@ -305,6 +370,14 @@ public static class MenuCatalogue
                 // doing one of the two, and a single entry meant opening a list of
                 // purchases and switching a dropdown to find the returns among them.
                 new(
+                    "transactions.receipt-notes",
+                    "Receipt notes",
+                    "إشعارات الاستلام",
+                    "purchase",
+                    "/purchase/receipt-notes",
+                    "inventory:stock-adjustment:view"),
+
+                new(
                     "transactions.purchase",
                     "Purchases",
                     "المشتريات",
@@ -319,6 +392,33 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/returns",
                     "purchase:invoice:view"),
+            ]),
+
+        // Devices taken in for repair, worked and handed back; their parts and labour are
+        // billed through an ordinary sales invoice.
+        new(
+            "service",
+            "Service",
+            "الصيانة",
+            "service",
+            Children:
+            [
+                new(
+                    "service.job-cards",
+                    "Job cards",
+                    "بطاقات العمل",
+                    "service",
+                    "/service/job-cards",
+                    "service:job-card:view"),
+
+                // Goods coming back from customers or going back to suppliers.
+                new(
+                    "service.rmas",
+                    "Returns (RMA)",
+                    "المرتجعات (RMA)",
+                    "service",
+                    "/service/rmas",
+                    "service:rma:view"),
             ]),
 
         new(
@@ -363,6 +463,16 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/expiry",
                     ViewInventoryReports),
+
+                // Profit on what was sold, each batch at its own cost. Behind the
+                // accounts' report permission, because it shows margins.
+                new(
+                    "inventory-reports.batch-profit",
+                    "Batch-wise profit",
+                    "الربح حسب الدفعة",
+                    "inventory",
+                    "/inventory/batch-profit",
+                    ViewReports),
                 new(
                     "inventory-reports.serials",
                     "Serial numbers",
@@ -556,6 +666,24 @@ public static class MenuCatalogue
                     "platform",
                     "/settings/roles",
                     "platform:role:view"),
+
+                // Changes to posted documents waiting for approval. No permission: the
+                // screen shows each person the requests they may decide and those they made.
+                new(
+                    "settings.approvals",
+                    "Approvals",
+                    "الموافقات",
+                    "platform",
+                    "/settings/approvals"),
+
+                // Who created, changed or deleted what, kept in a database of its own.
+                new(
+                    "settings.audit-log",
+                    "Audit log",
+                    "سجل التدقيق",
+                    "platform",
+                    "/settings/audit-log",
+                    "platform:audit-log:view"),
 
                 // How each document prints - preview, layout, printer, copies, and a
                 // second run - and the layouts themselves. Readable by anybody who may

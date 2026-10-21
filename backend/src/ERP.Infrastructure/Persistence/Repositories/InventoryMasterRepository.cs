@@ -85,6 +85,14 @@ public sealed class InventoryMasterRepository : IInventoryMasterRepository
             cancellationToken);
 
     /// <inheritdoc />
+    public Task<Warehouse?> FindTransitWarehouseAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        _context.Warehouses.FirstOrDefaultAsync(
+            warehouse => warehouse.FirmId == firmId && warehouse.IsTransit,
+            cancellationToken);
+
+    /// <inheritdoc />
     public Task<bool> CodeExistsAsync(
         InventoryMasterKind kind,
         FirmId firmId,
@@ -279,6 +287,7 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
                     pair.warehouse.Address,
                     pair.warehouse.IsDefault,
                     pair.warehouse.IsActive,
+                    pair.warehouse.IsTransit,
                 })
             // The default leads, being the one most rows will be entered against.
             .OrderByDescending(row => row.IsDefault)
@@ -296,7 +305,8 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
                 row.BranchName,
                 row.Address,
                 row.IsDefault,
-                row.IsActive)),
+                row.IsActive,
+                row.IsTransit)),
         ];
     }
 }

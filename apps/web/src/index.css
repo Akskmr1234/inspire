@@ -441,10 +441,11 @@
     Title and the one action that belongs beside it. Filters live in `.filter-bar`
     below rather than across the row: on a wide screen a heading at one edge and its
     own controls at the other are separated by most of a metre of nothing, and stop
-    reading as related.
+    reading as related. It wraps, so on a phone the buttons go under a long title
+    rather than squeezing it into a column a word wide beside them.
   */
   .page-header {
-    @apply flex items-start justify-between gap-4;
+    @apply flex flex-wrap items-start justify-between gap-x-4 gap-y-3;
   }
 
   /*
@@ -1091,10 +1092,11 @@
   */
   @media (max-width: 639px) {
     .table thead th:first-child,
-    .table tbody td:first-child,
-    /* Not a totals label that spans columns: `max-width` loses to the span, so
-       pinning one covers most of a phone with the word "Totals" and hides the
-       figures it is introducing. */
+    /* Not a cell that spans columns - a totals label, or the postings opened
+       under a ledger: `max-width` loses to the span, so pinning one covers most
+       of a phone with the word "Totals", or squeezes a whole panel of postings
+       into the width of a name. */
+    .table tbody td:first-child:not([colspan]),
     .table tfoot td:first-child:not([colspan]) {
       @apply sticky start-0 z-10;
       /* Capped hard, or the column being held takes half a 390px screen and the
@@ -1103,11 +1105,13 @@
       max-width: 8.5rem;
     }
 
+    /* A heading capped to the pinned width wraps rather than running on under
+       the next column's. */
     .table thead th:first-child {
-      @apply z-20 bg-surface-3;
+      @apply z-20 bg-surface-3 whitespace-normal;
     }
 
-    .table tbody td:first-child {
+    .table tbody td:first-child:not([colspan]) {
       @apply bg-surface;
     }
 
@@ -1118,7 +1122,7 @@
     /* A hairline down the anchored edge, so it reads as a column that has been
        held rather than one the others happen to be sliding under. */
     .table thead th:first-child::after,
-    .table tbody td:first-child::after,
+    .table tbody td:first-child:not([colspan])::after,
     .table tfoot td:first-child:not([colspan])::after {
       @apply pointer-events-none absolute inset-y-0 end-0 w-px bg-line;
       content: '';
@@ -1128,6 +1132,16 @@
     .table thead th,
     .table tbody td {
       @apply px-2;
+    }
+
+    /* The account reports name each row with a code, a name and an indent for
+       its level, which 8.5rem cut to a word a line. A little wider, so a ledger
+       reads as one, and still leaving the figures half the screen. */
+    .hierarchy-table thead th:first-child,
+    .hierarchy-table tbody td:first-child:not([colspan]),
+    .hierarchy-table tfoot td:first-child:not([colspan]) {
+      min-width: 9rem;
+      max-width: 11rem;
     }
   }
 
@@ -1431,6 +1445,9 @@
     .line-table tbody td::before {
       content: attr(data-label);
       text-align: start;
+      /* In the face of the captions, not of the cell: a figure's cell is set in
+         the monospaced face, and its caption came out in it too. */
+      font-family: var(--font-sans);
       @apply text-xs font-medium tracking-wide text-ink-muted uppercase;
     }
 

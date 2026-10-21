@@ -1,6 +1,8 @@
+import { isHeldForApproval } from '@/lib/approvals';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -74,6 +76,8 @@ interface DraftLine {
    */
   batchNumber: string;
   expiresOn: string;
+  /** What the batch is to sell at, where the firm prices by batch. Blank for the product's rates. */
+  sellingRate: string;
   /** The numbers on the units arriving, one per line as they are keyed in. */
   serialNumbers: string;
 }
@@ -88,6 +92,7 @@ function emptyLine(taxRate: number): DraftLine {
     discount: '0',
     batchNumber: '',
     expiresOn: '',
+    sellingRate: '',
     serialNumbers: '',
   };
 }
@@ -111,6 +116,7 @@ function lineFrom(line: PurchaseInvoiceDetail['lines'][number]): DraftLine {
     discount: String(line.discount),
     batchNumber: line.batchNumber ?? '',
     expiresOn: line.expiresOn ?? '',
+    sellingRate: line.sellingRate ? String(line.sellingRate) : '',
     serialNumbers: line.serialNumbers.join('\n'),
   };
 }
@@ -172,6 +178,17 @@ export function PurchasePage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+
+  // Opened on a particular purchase by another screen - a receipt note raising the
+  // purchase that pays for it - and the parameter dropped so a refresh lands on the list.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setViewing(open);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
   // The document being corrected, read back in full so the entry screen starts from it.
   const [editing, setEditing] = useState<PurchaseInvoiceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -415,10 +432,12 @@ export function PurchasePage({
           }
           onCancel={(id, reason) =>
             run(async () => {
-              await cancelPurchaseInvoice(id, reason);
+              const held = await cancelPurchaseInvoice(id, reason);
               setViewing(null);
 
-              return t('purchase.cancelledNotice');
+              return held
+                ? t('approvals.heldNotice', { number: held.documentNumber })
+                : t('purchase.cancelledNotice');
             })
           }
           onEdit={(document) => {
@@ -706,6 +725,7 @@ function EntryDialog({
           discount: Number(line.discount || 0),
           batchNumber: line.batchNumber.trim() || null,
           expiresOn: line.expiresOn || null,
+          sellingRate: Number(line.sellingRate) > 0 ? Number(line.sellingRate) : null,
           serialNumbers: splitSerials(line.serialNumbers),
         }));
 
@@ -742,7 +762,11 @@ function EntryDialog({
           reason: editReason.trim() || null,
         });
 
-        onSaved(t('purchase.updatedNotice', { number: header.number }));
+        onSaved(
+          isHeldForApproval(header)
+            ? t('approvals.heldNotice', { number: header.documentNumber })
+            : t('purchase.updatedNotice', { number: header.number }),
+        );
         return;
       }
 
@@ -937,7 +961,7 @@ function EntryDialog({
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[44rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('purchase.product')}</th>
@@ -1085,7 +1109,7 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td data-label={t('purchase.product')} className="min-w-64 px-2 py-1">
+        <td data-label={t('purchase.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           {/*
             The picker shows what each product is and what is on the shelf, and it
             can be typed into. It was a native select listing `code — description`
@@ -1171,7 +1195,7 @@ function LineRow({
               value={line.taxPercentage}
               onChange={(event) => onChange({ taxPercentage: event.target.value })}
               className={clsx(
-                'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+                'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
                 errors['taxPercentage'] && 'field-invalid',
               )}
             />
@@ -1248,6 +1272,21 @@ function LineRow({
                       size="sm"
                       value={line.expiresOn}
                       onChange={(value) => onChange({ expiresOn: value })}
+                    />
+                  )}
+
+                  {/* What the batch sells at, offered by the sales screen when the
+                      counter sells at batch-wise rates. */}
+                  {!isReturn && (
+                    <TextField
+                      label={t('purchase.batchSellingRate')}
+                      size="sm"
+                      value={line.sellingRate}
+                      onChange={(value) =>
+                        onChange({ sellingRate: value.replace(/[^0-9.]/g, '') })
+                      }
+                      placeholder={t('purchase.batchSellingRateHint')}
+                      className="w-full sm:w-36"
                     />
                   )}
                 </>
@@ -1372,7 +1411,7 @@ function DocumentDialog({
           </div>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[32rem] text-sm">
+            <table className="line-table sm:min-w-[32rem]">
               <thead className="text-xs text-ink-muted">
                 <tr>
                   <th className="px-2 py-1 text-start">#</th>
@@ -1386,18 +1425,37 @@ function DocumentDialog({
               <tbody>
                 {document.lines.map((line) => (
                   <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-1">{line.lineNumber}</td>
-                    <td className="px-2 py-1 font-mono text-xs">
+                    <td data-label="#" className="px-2 py-1">
+                      {line.lineNumber}
+                    </td>
+                    <td
+                      data-label={t('purchase.batch')}
+                      className="px-2 py-1 font-mono text-xs"
+                    >
                       {line.batchNumber ?? '—'}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.quantity')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
+                      {line.quantity}
+                    </td>
+                    <td
+                      data-label={t('purchase.rate')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.rate)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.taxable')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.taxable)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('purchase.tax')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.tax)}
                     </td>
                   </tr>
@@ -1476,6 +1534,7 @@ function DocumentDialog({
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('purchase.cancelReason')}
+                className="max-sm:min-w-0 max-sm:flex-1"
                 size="sm"
                 value={reason}
                 onChange={setReason}
@@ -1555,7 +1614,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

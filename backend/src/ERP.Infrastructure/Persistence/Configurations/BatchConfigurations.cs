@@ -21,6 +21,8 @@ public sealed class BatchConfiguration : IEntityTypeConfiguration<Batch>
 
         builder.Property(batch => batch.PurchaseRate)
             .HasPrecision(19, StockBalance.CostScale).IsRequired();
+        builder.Property(batch => batch.SellingRate)
+            .HasPrecision(19, StockBalance.CostScale);
 
         builder.Ignore(batch => batch.IsSequenced);
 

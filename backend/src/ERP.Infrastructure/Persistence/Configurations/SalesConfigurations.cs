@@ -89,6 +89,26 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         // fills it in for them as credit.
         builder.Property(invoice => invoice.PaymentMode).HasConversion<int>().IsRequired();
 
+        // What was paid with the sale, and where it went. Zero and empty for every sale
+        // entered before the columns existed, which were all left on account.
+        builder.Property(invoice => invoice.AmountReceived)
+            .HasPrecision(19, 4)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
+        builder.Property(invoice => invoice.PaymentReference)
+            .HasMaxLength(SalesInvoice.MaximumPaymentReferenceLength);
+
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReceivedIntoLedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Voucher>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReceiptVoucherId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasOne<Ledger>()
             .WithMany()
             .HasForeignKey(invoice => invoice.SalesmanLedgerId)
@@ -106,6 +126,17 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .WithMany()
             .HasForeignKey(invoice => invoice.StockDocumentId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // The note whose goods the invoice bills. Looked up from the note's side - which
+        // invoice, if any, billed it - so it is indexed.
+        builder.HasOne<StockDocument>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.DeliveryNoteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(invoice => invoice.DeliveryNoteId)
+            .HasFilter("delivery_note_id IS NOT NULL")
+            .HasDatabaseName("ix_sales_invoices_delivery_note");
 
         builder.HasOne<Bill>()
             .WithMany()

@@ -16,6 +16,14 @@ import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
  * them read them from here. When the firm endpoint arrives this store reads from it
  * instead and nothing else moves.
  */
+/**
+ * Where a sale's line rate comes from: one of the product's own rates, the customer's
+ * last quotation, the customer's last sale, or the selling rate of the batch picked.
+ * The last three start from retail where there is nothing to take.
+ */
+export type SalesRateType =
+  'retail' | 'wholesale' | 'mrp' | 'lastQuotation' | 'customerRate' | 'batch';
+
 export interface AppSettings {
   /**
    * Whether an Arabic name is filled in automatically from the English one.
@@ -100,7 +108,7 @@ export interface AppSettings {
   /** Whether device attributes (IMEI, Serial Number, Warranty, Model) are enabled. */
   readonly enableDeviceAttributes: boolean;
   /** Default sales rate type: retail, wholesale, or maximum retail price (MRP). */
-  readonly defaultSalesRateType: 'retail' | 'wholesale' | 'mrp';
+  readonly defaultSalesRateType: SalesRateType;
   /** Default tax mode: NT (Non-Tax), TAX (VAT), or GST. */
   readonly defaultTaxMode: 'NT' | 'TAX' | 'GST';
   /** Default customer for sales transactions. */
@@ -135,10 +143,34 @@ export interface AppSettings {
   readonly defaultDebitAccountId: string;
   /** Default credit account for receipt vouchers. */
   readonly defaultCreditAccountId: string;
+  /**
+   * The cash account a sale paid in cash is received into. Blank takes the firm's first
+   * cash account, which is the only one most shops have.
+   */
+  readonly defaultCashLedgerId: string;
+  /**
+   * The bank account an online payment - Google Pay, a card - is received into, and the
+   * bank a bank receipt or payment starts at. Blank takes the firm's first bank account.
+   */
+  readonly defaultBankLedgerId: string;
+  /** Whether a receipt shows a bill-wise customer's pending bills. */
+  readonly billWiseReceipts: boolean;
+  /** Whether a receipt lets those bills be ticked and allocated, filling its amount. */
+  readonly fillBillsOnReceipts: boolean;
+  /** Whether a payment shows a bill-wise supplier's pending bills. */
+  readonly billWisePayments: boolean;
+  /** Whether a payment lets those bills be ticked and allocated, filling its amount. */
+  readonly fillBillsOnPayments: boolean;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
   /** Application-wide default theme ('light' or 'dark') applied for all users. */
   readonly defaultTheme: 'light' | 'dark';
+  /**
+   * Whether the firm trades in the Gulf: Arabic names beside the English ones on the
+   * masters, and documents that can be printed in both languages. Off, the Arabic
+   * fields stay out of the way unless one already holds something.
+   */
+  readonly gulfMode: boolean;
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -191,9 +223,61 @@ const DEFAULTS: AppSettings = {
   defaultBrandId: '',
   defaultDebitAccountId: '',
   defaultCreditAccountId: '',
+  defaultCashLedgerId: '',
+  defaultBankLedgerId: '',
+  billWiseReceipts: true,
+  fillBillsOnReceipts: true,
+  billWisePayments: true,
+  fillBillsOnPayments: true,
   defaultAdditionalLedgers: [],
   defaultTheme: 'light',
+  gulfMode: true,
 };
+
+/**
+ * Brings settings written by an earlier release up to date.
+ *
+ * The standing charges each kind of document starts with were once kept in a second,
+ * simpler list; they now live with the additional-ledger defaults, and an older copy's
+ * list is folded in rather than left applying where nothing can show or change it.
+ */
+function upgrade(settings: AppSettings): AppSettings {
+  const legacy = Object.entries(settings.defaultCharges ?? {}).filter(
+    ([, rows]) => rows.length > 0,
+  );
+
+  if (legacy.length === 0) {
+    return settings;
+  }
+
+  const kinds: Record<string, string> = {
+    sales: 'Sales',
+    salesReturn: 'SalesReturn',
+    salesOrder: 'SalesOrder',
+    purchase: 'Purchase',
+    purchaseReturn: 'PurchaseReturn',
+    purchaseOrder: 'PurchaseOrder',
+  };
+
+  const folded: DefaultAdditionalLedgerConfig[] = legacy.flatMap(([kind, rows]) =>
+    rows
+      .filter((row) => row.ledgerId)
+      .map((row, index) => ({
+        id: `legacy-${kind}-${index}`,
+        transactionType: kinds[kind] ?? kind,
+        ledgerId: row.ledgerId,
+        isAddition: true,
+        defaultAmount: row.amount,
+        isDefaultActive: true,
+      })),
+  );
+
+  return {
+    ...settings,
+    defaultCharges: NO_DEFAULT_CHARGES,
+    defaultAdditionalLedgers: [...(settings.defaultAdditionalLedgers ?? []), ...folded],
+  };
+}
 
 const STORAGE_KEY = 'erp.settings';
 
@@ -208,7 +292,7 @@ function read(): AppSettings {
     // Merged over the defaults rather than trusted whole: a stored blob written by
     // an older release is missing whatever has been added since, and spreading it
     // over the defaults is what stops a new setting arriving as `undefined`.
-    return { ...DEFAULTS, ...(JSON.parse(stored) as Partial<AppSettings>) };
+    return upgrade({ ...DEFAULTS, ...(JSON.parse(stored) as Partial<AppSettings>) });
   } catch {
     return DEFAULTS;
   }
@@ -380,7 +464,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
     // Over the defaults, as `read` does, so a setting added since the firm last saved
     // arrives at its default rather than as `undefined`.
-    const next: AppSettings = { ...DEFAULTS, ...firm, ...device };
+    const next: AppSettings = upgrade({ ...DEFAULTS, ...firm, ...device });
 
     set({ ...next, sync: 'firm' });
     store(next);

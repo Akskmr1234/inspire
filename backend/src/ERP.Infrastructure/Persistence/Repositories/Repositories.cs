@@ -4,11 +4,13 @@ using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
+using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
+using ERP.Infrastructure.Auditing;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -19,10 +21,16 @@ namespace ERP.Infrastructure.Persistence.Repositories;
 public sealed class UnitOfWork : IUnitOfWork
 {
     private readonly ErpDbContext _context;
+    private readonly AuditTrail? _audit;
 
     /// <summary>Initialises a new instance of the <see cref="UnitOfWork"/> class.</summary>
     /// <param name="context">The database context.</param>
-    public UnitOfWork(ErpDbContext context) => _context = context;
+    /// <param name="audit">The audit trail, written once a transaction commits.</param>
+    public UnitOfWork(ErpDbContext context, AuditTrail? audit = null)
+    {
+        _context = context;
+        _audit = audit;
+    }
 
     /// <inheritdoc />
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
@@ -55,6 +63,9 @@ public sealed class UnitOfWork : IUnitOfWork
         // opened inside the strategy and not around it.
         return await strategy.ExecuteAsync(async () =>
         {
+            // A retried attempt starts again from nothing, its trail included.
+            _audit?.Discard();
+
             await using IDbContextTransaction transaction =
                 await _context.Database.BeginTransactionAsync(cancellationToken);
 
@@ -63,17 +74,25 @@ public sealed class UnitOfWork : IUnitOfWork
                 TResult result = await operation(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
+                // Only now did the changes happen, so only now are they written down.
+                if (_audit is not null)
+                {
+                    await _audit.FlushAsync(cancellationToken);
+                }
+
                 return result;
             }
             catch (TransactionRollbackException rollback)
             {
                 await transaction.RollbackAsync(cancellationToken);
+                _audit?.Discard();
 
                 return (TResult)rollback.Response;
             }
             catch
             {
                 await transaction.RollbackAsync(cancellationToken);
+                _audit?.Discard();
                 throw;
             }
         });
@@ -310,6 +329,18 @@ public sealed class SalesInvoiceRepository : ISalesInvoiceRepository
             .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public Task<string?> FindBillingDeliveryNoteAsync(
+        StockDocumentId deliveryNoteId,
+        SalesInvoiceId? except,
+        CancellationToken cancellationToken = default) =>
+        _context.SalesInvoices
+            .Where(invoice => invoice.DeliveryNoteId == deliveryNoteId
+                && invoice.Status != SalesInvoiceStatus.Cancelled
+                && (except == null || invoice.Id != except))
+            .Select(invoice => invoice.Number)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
     public void Add(SalesInvoice invoice) => _context.SalesInvoices.Add(invoice);
 }
 
@@ -375,6 +406,18 @@ public sealed class PurchaseInvoiceRepository : IPurchaseInvoiceRepository
             .Include(invoice => invoice.Lines).ThenInclude(line => line.Serials)
             .Include(invoice => invoice.Charges)
             .FirstOrDefaultAsync(invoice => invoice.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<string?> FindBillingReceiptNoteAsync(
+        StockDocumentId receiptNoteId,
+        PurchaseInvoiceId? except,
+        CancellationToken cancellationToken = default) =>
+        _context.PurchaseInvoices
+            .Where(invoice => invoice.ReceiptNoteId == receiptNoteId
+                && invoice.Status != PurchaseInvoiceStatus.Cancelled
+                && (except == null || invoice.Id != except))
+            .Select(invoice => invoice.Number)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />
     public void Add(PurchaseInvoice invoice) => _context.PurchaseInvoices.Add(invoice);
@@ -612,6 +655,58 @@ public sealed class FinancialYearRepository : IFinancialYearRepository
         _context.FinancialYears
             .Where(y => y.FirmId == firmId && y.StartDate <= date && y.EndDate >= date)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<FinancialYear>> ListAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default) =>
+        await _context.FinancialYears
+            .Where(y => y.FirmId == firmId)
+            .OrderBy(y => y.StartDate)
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public Task<FinancialYear?> FindAsync(
+        FinancialYearId id,
+        CancellationToken cancellationToken = default) =>
+        _context.FinancialYears.FirstOrDefaultAsync(y => y.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every document that belongs to a year carries it, so the question is the same for
+    /// each kind. Cancelled documents count too: they are kept as the record of what was
+    /// entered, and a year that moved out from under one would leave it in no period.
+    /// </remarks>
+    public async Task<int> CountDocumentsOutsideAsync(
+        FinancialYearId id,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default)
+    {
+        int vouchers = await _context.Vouchers.CountAsync(
+            v => v.FinancialYearId == id && (v.Date < startDate || v.Date > endDate),
+            cancellationToken);
+        int sales = await _context.SalesInvoices.CountAsync(
+            i => i.FinancialYearId == id && (i.Date < startDate || i.Date > endDate),
+            cancellationToken);
+        int purchases = await _context.PurchaseInvoices.CountAsync(
+            i => i.FinancialYearId == id && (i.Date < startDate || i.Date > endDate),
+            cancellationToken);
+        int stock = await _context.StockDocuments.CountAsync(
+            d => d.FinancialYearId == id && (d.Date < startDate || d.Date > endDate),
+            cancellationToken);
+        int orders = await _context.SalesOrders.CountAsync(
+            o => o.FinancialYearId == id && (o.Date < startDate || o.Date > endDate),
+            cancellationToken)
+            + await _context.PurchaseOrders.CountAsync(
+                o => o.FinancialYearId == id && (o.Date < startDate || o.Date > endDate),
+                cancellationToken);
+
+        return vouchers + sales + purchases + stock + orders;
+    }
+
+    /// <inheritdoc />
+    public void Add(FinancialYear year) => _context.FinancialYears.Add(year);
 }
 
 /// <summary>The EF Core numbering-series repository.</summary>

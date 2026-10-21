@@ -163,7 +163,9 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             PersonName(document.BillingManLedgerId),
             document.Lines.Sum(line => line.Discount),
             document.ChargeTotal.Amount,
-            document.Narration);
+            document.Narration,
+            document.AmountReceived,
+            document.PaymentReference);
 
         string? PersonName(LedgerId? id) =>
             id is { } ledger ? customers.GetValueOrDefault(ledger)?.Name : null;

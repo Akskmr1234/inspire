@@ -1,8 +1,10 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Accounting.Reports;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
@@ -57,6 +59,8 @@ public sealed class PostSalesInvoiceCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
     private readonly StockJournalPoster _stockJournal;
+    private readonly IFirmPolicyReader? _policies;
+    private readonly IOutstandingBillsReader? _outstanding;
 
     /// <summary>Initialises a new instance of the <see cref="PostSalesInvoiceCommandHandler"/> class.</summary>
     /// <param name="invoices">The sales invoice repository.</param>
@@ -80,6 +84,8 @@ public sealed class PostSalesInvoiceCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies: negative stock and credit limits.</param>
+    /// <param name="outstanding">The outstanding bills reader, for the credit limit.</param>
     public PostSalesInvoiceCommandHandler(
         ISalesInvoiceRepository invoices,
         IStockDocumentRepository documents,
@@ -101,8 +107,12 @@ public sealed class PostSalesInvoiceCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null,
+        IOutstandingBillsReader? outstanding = null)
     {
+        _policies = policies;
+        _outstanding = outstanding;
         _invoices = invoices;
         _documents = documents;
         _stockLedger = ledger;
@@ -167,8 +177,24 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(posted.Error);
         }
 
-        Result<StockDocument> issued = await IssueAsync(
-            invoice, loaded.Value, branchId, cancellationToken);
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
+        Result withinLimit = await CheckCreditLimitAsync(
+            invoice, loaded.Value.Customer, policies, cancellationToken);
+
+        if (withinLimit.IsFailure)
+        {
+            return Result.Failure<PostSalesInvoiceResponse>(withinLimit.Error);
+        }
+
+        // An invoice against a delivery note bills goods that have already left: the note
+        // is its issue, and nothing moves again.
+        Result<StockDocument> issued = invoice.DeliveryNoteId is { } noteId
+            ? await DeliveredAsync(invoice, noteId, loaded.Value, cancellationToken)
+            : await IssueAsync(
+                invoice, loaded.Value, branchId, policies.AllowsNegativeStock, cancellationToken);
 
         if (issued.IsFailure)
         {
@@ -191,12 +217,30 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(billed.Error);
         }
 
+        Result<Voucher?> received = await ReceiveAsync(
+            invoice, loaded.Value, billed.Value, branchId, cancellationToken);
+
+        if (received.IsFailure)
+        {
+            return Result.Failure<PostSalesInvoiceResponse>(received.Error);
+        }
+
         Result recorded = invoice.RecordPosting(
             issued.Value.Id, billed.Value?.Id, journalled.Value.Id);
 
         if (recorded.IsFailure)
         {
             return Result.Failure<PostSalesInvoiceResponse>(recorded.Error);
+        }
+
+        if (received.Value is { } receipt)
+        {
+            Result noted = invoice.RecordReceipt(receipt.Id);
+
+            if (noted.IsFailure)
+            {
+                return Result.Failure<PostSalesInvoiceResponse>(noted.Error);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -322,6 +366,34 @@ public sealed class PostSalesInvoiceCommandHandler
             serials));
     }
 
+    /// <summary>Finds the delivery note an invoice bills, and checks it describes the same goods.</summary>
+    private async Task<Result<StockDocument>> DeliveredAsync(
+        SalesInvoice invoice,
+        StockDocumentId noteId,
+        Context context,
+        CancellationToken cancellationToken)
+    {
+        StockDocument? note = await _documents.FindAsync(noteId, cancellationToken);
+
+        string? billedBy = await _invoices.FindBillingDeliveryNoteAsync(
+            noteId, invoice.Id, cancellationToken);
+
+        Result checkedNote = NoteBilling.Check(
+            note,
+            StockDocumentType.DeliveryNote,
+            invoice.CustomerLedgerId,
+            invoice.Lines
+                .Where(line => context.Products.TryGetValue(line.ProductId, out Product? product)
+                    && product.ItemType == ItemType.Stock)
+                .Select(line => (line.ProductId, line.StockQuantity)),
+            context.Products,
+            billedBy);
+
+        return checkedNote.IsFailure
+            ? Result.Failure<StockDocument>(checkedNote.Error)
+            : Result.Success(note!);
+    }
+
     /// <summary>Raises the issue that takes the goods off the shelf, and posts it.</summary>
     /// <remarks>
     /// Numbered from a series of its own so a stock ledger distinguishes goods that went
@@ -333,6 +405,7 @@ public sealed class PostSalesInvoiceCommandHandler
         SalesInvoice invoice,
         Context context,
         BranchId branchId,
+        bool allowNegative,
         CancellationToken cancellationToken)
     {
         Result<string> number = await ReserveIssueNumberAsync(
@@ -371,7 +444,7 @@ public sealed class PostSalesInvoiceCommandHandler
 
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
             document, context.Products, context.Batches, context.Serials,
-            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken);
+            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken, allowNegative);
 
         if (applied.IsFailure)
         {
@@ -427,6 +500,170 @@ public sealed class PostSalesInvoiceCommandHandler
         _vouchers.Add(raised.Value);
 
         return raised;
+    }
+
+    /// <summary>Refuses a sale on credit that would take the customer past their limit.</summary>
+    /// <remarks>
+    /// Only where the firm chose to block: by default a limit warns, on the sales screen,
+    /// and the sale goes through. Measured as the sales screen measures it - the
+    /// customer's unpaid invoices plus the part of this one not paid at the counter - so
+    /// a sale paid in full never trips it, whatever the customer already owes.
+    /// </remarks>
+    private async Task<Result> CheckCreditLimitAsync(
+        SalesInvoice invoice,
+        Ledger customer,
+        FirmPolicies policies,
+        CancellationToken cancellationToken)
+    {
+        if (policies.CreditLimit != CreditLimitPolicy.Block
+            || invoice.IsReturn
+            || customer.CreditLimit is not { } limit
+            || _outstanding is null)
+        {
+            return Result.Success();
+        }
+
+        decimal unpaid = invoice.Total.Amount - invoice.AmountReceived;
+
+        if (unpaid <= 0m)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlyList<OutstandingBillRow> open = await _outstanding.ReadAsync(
+            invoice.FirmId, BillType.Receivable, invoice.Date, customer.Id, cancellationToken);
+
+        decimal owed = open.Sum(bill => bill.OutstandingAmount);
+
+        return owed + unpaid > limit
+            ? Result.Failure(Error.BusinessRule(
+                "Customer.OverCreditLimit",
+                $"{customer.Name} owes {owed:0.00} against a credit limit of {limit:0.00}; "
+                + $"{unpaid:0.00} more on account would take them past it. Take payment, "
+                + "or raise the limit."))
+            : Result.Success();
+    }
+
+    /// <summary>Raises the receipt for what was paid with the sale, settling its own bill.</summary>
+    /// <remarks>
+    /// <para>
+    /// A cash sale used to post its bill and stop there, leaving it outstanding until
+    /// somebody entered the same money again as a receipt - so every counter sale sat in
+    /// the debtors report for a day, and the ones nobody got round to sat there for good.
+    /// What the counter took is now received in the same transaction as the sale.
+    /// </para>
+    /// <para>
+    /// An ordinary receipt, numbered from the firm's own receipt series and posted like one
+    /// entered by hand, so the cash book and the bank book show it where they would show
+    /// any other: in cash for a cash sale, in the bank for an online payment, with the
+    /// transaction ID as its reference.
+    /// </para>
+    /// </remarks>
+    private async Task<Result<Voucher?>> ReceiveAsync(
+        SalesInvoice invoice,
+        Context context,
+        Bill? bill,
+        BranchId branchId,
+        CancellationToken cancellationToken)
+    {
+        if (invoice.AmountReceived <= 0m || invoice.ReceivedIntoLedgerId is not { } intoId)
+        {
+            return Result.Success<Voucher?>(null);
+        }
+
+        Ledger? into = await _ledgers.FindAsync(intoId, cancellationToken);
+
+        if (into is null || into.FirmId != invoice.FirmId || !into.IsCashOrBank)
+        {
+            return Result.Failure<Voucher?>(Error.NotFound(
+                "SalesInvoice.ReceivedIntoNotFound",
+                "The cash or bank account the payment went into no longer exists."));
+        }
+
+        VoucherType type = into.Kind == LedgerKind.Bank
+            ? VoucherType.BankReceipt
+            : VoucherType.CashReceipt;
+
+        Result<string> number = await VoucherNumbering.ReserveAsync(
+            _numbering, invoice.TenantId, invoice.FirmId, branchId, context.Year, type,
+            cancellationToken);
+
+        if (number.IsFailure)
+        {
+            return Result.Failure<Voucher?>(number.Error);
+        }
+
+        Result<Voucher> draft = Voucher.CreateDraft(
+            invoice.TenantId,
+            invoice.FirmId,
+            invoice.BranchId,
+            context.Year,
+            type,
+            number.Value,
+            invoice.Date,
+            invoice.Currency,
+            context.Firm.BaseCurrency);
+
+        if (draft.IsFailure)
+        {
+            return Result.Failure<Voucher?>(draft.Error);
+        }
+
+        Voucher receipt = draft.Value;
+        decimal amount = invoice.AmountReceived;
+        string narration = $"Received with sales invoice {invoice.Number}";
+
+        Result<VoucherLine> debit = receipt.AddLine(into.Id, EntrySide.Debit, amount, narration);
+
+        if (debit.IsFailure)
+        {
+            return Result.Failure<Voucher?>(debit.Error);
+        }
+
+        Result<VoucherLine> credit = receipt.AddLine(
+            invoice.CustomerLedgerId, EntrySide.Credit, amount, narration);
+
+        if (credit.IsFailure)
+        {
+            return Result.Failure<Voucher?>(credit.Error);
+        }
+
+        string mode = invoice.PaymentMode switch
+        {
+            SalesPaymentMode.Online => "Online",
+            _ when into.Kind == LedgerKind.Bank => "Bank transfer",
+            _ => "Cash",
+        };
+
+        Result details = receipt.SetDetails(
+            invoice.PaymentReference ?? invoice.Number, narration, mode);
+
+        if (details.IsFailure)
+        {
+            return Result.Failure<Voucher?>(details.Error);
+        }
+
+        Result posted = receipt.Post(_currentUser.UserId, _clock.UtcNow);
+
+        if (posted.IsFailure)
+        {
+            return Result.Failure<Voucher?>(posted.Error);
+        }
+
+        if (bill is not null)
+        {
+            Result allocated = bill.Allocate(
+                receipt.Id, Money.Of(amount, invoice.Currency), invoice.Date);
+
+            if (allocated.IsFailure)
+            {
+                return Result.Failure<Voucher?>(allocated.Error);
+            }
+        }
+
+        _vouchers.Add(receipt);
+
+        return Result.Success<Voucher?>(receipt);
     }
 
     /// <summary>Works out what returned goods come back onto the shelf at.</summary>

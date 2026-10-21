@@ -93,6 +93,10 @@ public sealed record ListWarehousesQuery(bool IncludeInactive = false)
 /// <param name="Address">Where it is.</param>
 /// <param name="IsDefault">Whether new documents default to it.</param>
 /// <param name="IsActive">Whether stock may still move through it.</param>
+/// <param name="IsTransit">
+/// Whether it is the goods-in-transit location, which the stock screens leave out of their
+/// pickers because only a transfer request moves goods through it.
+/// </param>
 public sealed record WarehouseSummary(
     Guid Id,
     string Code,
@@ -102,7 +106,8 @@ public sealed record WarehouseSummary(
     string? BranchName,
     string? Address,
     bool IsDefault,
-    bool IsActive);
+    bool IsActive,
+    bool IsTransit = false);
 
 /// <summary>Reads the inventory masters for a firm.</summary>
 public interface IInventoryMasterReader

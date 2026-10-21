@@ -202,6 +202,14 @@ public sealed class PurchaseInvoice
     /// </remarks>
     public StockDocumentId? StockDocumentId { get; private set; }
 
+    /// <summary>Gets the receipt note whose goods this purchase pays for.</summary>
+    /// <remarks>
+    /// The goods came in with the note, so posting the purchase moves nothing: the note is
+    /// recorded as its receipt, and cancelling the purchase leaves the goods on the shelf,
+    /// waiting to be invoiced again.
+    /// </remarks>
+    public StockDocumentId? ReceiptNoteId { get; private set; }
+
     /// <summary>Gets the bill this purchase put into the supplier's outstanding.</summary>
     public BillId? BillId { get; private set; }
 
@@ -440,6 +448,7 @@ public sealed class PurchaseInvoice
     /// <param name="expiresOn">When that batch expires, where the supplier stated it.</param>
     /// <param name="serialNumbers">The units arriving, where the product is serialised.</param>
     /// <param name="discount">What was taken off the line before tax.</param>
+    /// <param name="sellingRate">What one stock unit of the batch is to sell at.</param>
     /// <returns>The line, or the reason it was refused.</returns>
     /// <remarks>
     /// The conversion and the tax both arrive computed, for the same reason they do on a
@@ -457,11 +466,18 @@ public sealed class PurchaseInvoice
         string? batchNumber = null,
         DateOnly? expiresOn = null,
         IReadOnlyCollection<string>? serialNumbers = null,
-        decimal discount = 0m)
+        decimal discount = 0m,
+        decimal? sellingRate = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         ArgumentNullException.ThrowIfNull(unit);
         ArgumentNullException.ThrowIfNull(assessment);
+
+        if (sellingRate < 0m)
+        {
+            return Result.Failure<PurchaseInvoiceLine>(Error.Validation(
+                "PurchaseInvoice.SellingRateNegative", "A selling rate cannot be negative."));
+        }
 
         if (!IsEditable)
         {
@@ -552,7 +568,8 @@ public sealed class PurchaseInvoice
             assessment,
             _lines.Count + 1,
             Trimmed(batchNumber),
-            expiresOn);
+            expiresOn,
+            product.TracksBatches && sellingRate > 0m ? sellingRate : null);
 
         foreach (string serial in serialNumbers ?? [])
         {
@@ -750,6 +767,30 @@ public sealed class PurchaseInvoice
         StockDocumentId = stockDocumentId;
         BillId = billId;
         JournalVoucherId = journalVoucherId;
+
+        return Result.Success();
+    }
+
+    /// <summary>Pays for the goods of a receipt note rather than receiving them again.</summary>
+    /// <param name="receiptNoteId">The note.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result BillReceiptNote(StockDocumentId receiptNoteId)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "PurchaseInvoice.NotEditable",
+                $"Purchase '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (IsReturn)
+        {
+            return Result.Failure(Error.Validation(
+                "PurchaseInvoice.ReturnAgainstReceiptNote",
+                "A return sends goods back; it cannot pay for a receipt note."));
+        }
+
+        ReceiptNoteId = receiptNoteId;
 
         return Result.Success();
     }

@@ -1,6 +1,7 @@
 using System.Reflection;
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Platform.Settings;
 using ERP.SharedKernel.Results;
 using FluentValidation;
 using MediatR;
@@ -34,6 +35,8 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(assembly, includeInternalTypes: true);
+
+        services.AddScoped<IFirmPolicyReader, FirmPolicyReader>();
 
         return services;
     }

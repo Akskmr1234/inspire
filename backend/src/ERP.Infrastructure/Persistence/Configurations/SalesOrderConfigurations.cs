@@ -23,6 +23,7 @@ public sealed class SalesOrderConfiguration : IEntityTypeConfiguration<SalesOrde
         builder.Property(order => order.Date).IsRequired();
         builder.Property(order => order.Mode).HasConversion<int>().IsRequired();
         builder.Property(order => order.Status).HasConversion<int>().IsRequired();
+        builder.Property(order => order.Kind).HasConversion<int>().IsRequired();
 
         builder.Property(order => order.Currency)
             .HasMaxLength(3).IsFixedLength().IsRequired();
@@ -36,6 +37,7 @@ public sealed class SalesOrderConfiguration : IEntityTypeConfiguration<SalesOrde
 
         // Every total is derived from the lines and the charges, and so is every question
         // about what is still owed. Storing them as well would create a second answer.
+        builder.Ignore(order => order.IsQuotation);
         builder.Ignore(order => order.IsEditable);
         builder.Ignore(order => order.IsOpen);
         builder.Ignore(order => order.IsPartlyInvoiced);

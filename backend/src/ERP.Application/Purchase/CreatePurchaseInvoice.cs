@@ -21,6 +21,10 @@ namespace ERP.Application.Purchase;
 /// </param>
 /// <param name="ExpiresOn">When that batch expires, where the supplier stated it.</param>
 /// <param name="SerialNumbers">The units arriving, where the product is serialised.</param>
+/// <param name="SellingRate">
+/// What one entered unit of the batch is to sell at, where the product is batched and
+/// the firm prices by batch.
+/// </param>
 public sealed record PurchaseInvoiceLineInput(
     Guid ProductId,
     decimal Quantity,
@@ -30,7 +34,8 @@ public sealed record PurchaseInvoiceLineInput(
     decimal Discount = 0m,
     string? BatchNumber = null,
     DateOnly? ExpiresOn = null,
-    IReadOnlyList<string>? SerialNumbers = null);
+    IReadOnlyList<string>? SerialNumbers = null,
+    decimal? SellingRate = null);
 
 /// <summary>One charge carried beside the goods.</summary>
 /// <param name="LedgerId">The account it posts to, from the firm's charge matrix.</param>

@@ -57,6 +57,20 @@ public sealed record SalesInvoiceChargeInput(Guid LedgerId, decimal Amount);
 /// Post it as soon as it is saved, in the same transaction, so a sale the books refuse
 /// leaves no draft behind. Ignored on a correction, which says so itself.
 /// </param>
+/// <param name="AmountReceived">
+/// What the customer paid with the sale. Posting raises the receipt for it against the
+/// sale's own bill. Zero, the default, leaves the whole of it on account.
+/// </param>
+/// <param name="ReceivedIntoLedgerId">
+/// The cash or bank account the payment went into. Required when anything was paid.
+/// </param>
+/// <param name="PaymentReference">The payment's own reference: an online transaction ID.</param>
+/// <param name="PaidInFull">
+/// The customer paid the whole bill, whatever it comes to once rounded: the amount received
+/// is taken from the invoice's own total rather than from <paramref name="AmountReceived"/>.
+/// A counter's figure can differ from the rounded total by a fraction, and a payment in
+/// full refused for being a fils over the bill is a sale the counter cannot make.
+/// </param>
 /// <remarks>
 /// A draft, and only a draft. Nothing moves until it is posted, which is a command of its
 /// own - so an invoice can be corrected while it is being typed, and a mistake found at
@@ -76,7 +90,11 @@ public sealed record CreateSalesInvoiceCommand(
     SalesPaymentMode PaymentMode = SalesPaymentMode.Credit,
     Guid? SalesmanLedgerId = null,
     Guid? BillingManLedgerId = null,
-    bool Post = false) : ICommand<SalesInvoiceResponse>, ITransactional;
+    bool Post = false,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null,
+    bool PaidInFull = false) : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>An invoice as it now stands.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
@@ -123,6 +141,18 @@ public sealed class CreateSalesInvoiceCommandValidator
 
         RuleFor(c => c.Mode!.Value).IsInEnum().When(c => c.Mode is not null);
         RuleFor(c => c.PaymentMode).IsInEnum();
+
+        RuleFor(c => c.AmountReceived)
+            .GreaterThanOrEqualTo(0m)
+            .WithMessage("An amount received cannot be negative.");
+
+        RuleFor(c => c.ReceivedIntoLedgerId)
+            .NotNull()
+            .When(c => c.AmountReceived > 0m || c.PaidInFull)
+            .WithMessage("Say which cash or bank account the payment went into.");
+
+        RuleFor(c => c.PaymentReference)
+            .MaximumLength(SalesInvoice.MaximumPaymentReferenceLength);
 
         RuleFor(c => c.Lines)
             .NotEmpty()

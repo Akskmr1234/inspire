@@ -113,9 +113,13 @@ public sealed partial class TenantResolutionMiddleware
         using IDisposable tenantScope = tenantContext.BeginScope(
             TenantId.From(tenantId), firmId, branchId);
 
+        // The sign-in name, not the identity's Name: that is configured to be the subject
+        // claim, which is the user's identifier rather than anything a person would read.
         using IDisposable userScope = currentUser.BeginScope(
             ResolveUserId(principal),
-            principal.Identity?.Name);
+            principal.FindFirstValue("unique_name")
+                ?? principal.FindFirstValue(ClaimTypes.Name)
+                ?? principal.Identity?.Name);
 
         await _next(context);
     }

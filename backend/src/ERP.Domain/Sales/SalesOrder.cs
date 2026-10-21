@@ -10,6 +10,23 @@ using ERP.SharedKernel.ValueObjects;
 
 namespace ERP.Domain.Sales;
 
+/// <summary>What a sales order is to the customer.</summary>
+/// <remarks>
+/// A quotation and an order are the same document at two moments of one conversation: the
+/// lines, the rates and the tax are worked out the same way, neither moves stock or writes
+/// the books, and either can become an invoice. What differs is what the customer has said
+/// - nothing yet, for a quotation - and so the series it is numbered in and the list it is
+/// kept on.
+/// </remarks>
+public enum SalesOrderKind
+{
+    /// <summary>The customer has asked for the goods.</summary>
+    Order = 1,
+
+    /// <summary>The firm has offered the goods at these rates; the customer has not yet answered.</summary>
+    Quotation = 2,
+}
+
 /// <summary>Where a sales order stands in its lifecycle.</summary>
 /// <remarks>
 /// Four states rather than three, because "finished" and "abandoned" are different facts
@@ -78,9 +95,11 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
         WarehouseId warehouseId,
         TaxMode mode,
         CurrencyCode currency,
-        DateOnly? expectedOn)
+        DateOnly? expectedOn,
+        SalesOrderKind kind)
         : base(id)
     {
+        Kind = kind;
         TenantId = tenantId;
         FirmId = firmId;
         BranchId = branchId;
@@ -109,6 +128,12 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
 
     /// <summary>Gets the financial year it falls in.</summary>
     public FinancialYearId FinancialYearId { get; private set; }
+
+    /// <summary>Gets whether this is an order or a quotation.</summary>
+    public SalesOrderKind Kind { get; private set; } = SalesOrderKind.Order;
+
+    /// <summary>Gets whether this is a quotation.</summary>
+    public bool IsQuotation => Kind == SalesOrderKind.Quotation;
 
     /// <summary>Gets the order number.</summary>
     public string Number { get; private set; }
@@ -220,6 +245,7 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
     /// <param name="mode">The tax mode, defaulted from the firm's regime.</param>
     /// <param name="currency">The currency it is stated in.</param>
     /// <param name="expectedOn">When the customer was told to expect the goods.</param>
+    /// <param name="kind">An order, or a quotation.</param>
     /// <returns>The draft, or the reason it was refused.</returns>
     public static Result<SalesOrder> CreateDraft(
         TenantId tenantId,
@@ -232,7 +258,8 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
         Warehouse warehouse,
         TaxMode mode,
         CurrencyCode currency,
-        DateOnly? expectedOn = null)
+        DateOnly? expectedOn = null,
+        SalesOrderKind kind = SalesOrderKind.Order)
     {
         ArgumentNullException.ThrowIfNull(financialYear);
         ArgumentNullException.ThrowIfNull(customer);
@@ -248,6 +275,12 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
         {
             return Result.Failure<SalesOrder>(Error.Validation(
                 "SalesOrder.UnknownMode", $"'{mode}' is not a recognised tax mode."));
+        }
+
+        if (!Enum.IsDefined(kind))
+        {
+            return Result.Failure<SalesOrder>(Error.Validation(
+                "SalesOrder.UnknownKind", $"'{kind}' is neither an order nor a quotation."));
         }
 
         if (customer.Kind != LedgerKind.Customer)
@@ -305,7 +338,8 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
                 warehouse.Id,
                 mode,
                 currency,
-                expectedOn));
+                expectedOn,
+                kind));
     }
 
     /// <summary>Adds a line to a draft order.</summary>
@@ -435,7 +469,9 @@ public sealed class SalesOrder : AggregateRoot<SalesOrderId>, IFirmScoped, IAudi
                 "SalesOrder.ChargeNotInFirm", "That charge belongs to another firm."));
         }
 
-        if (mapping.Document != ChargeableDocument.SalesOrder)
+        // A quotation takes the charges an order would, and any mapped to quotations alone.
+        if (mapping.Document != ChargeableDocument.SalesOrder
+            && !(IsQuotation && mapping.Document == ChargeableDocument.SalesQuotation))
         {
             return Result.Failure<SalesOrderCharge>(Error.Validation(
                 "SalesOrder.ChargeNotForOrders",

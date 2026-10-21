@@ -152,6 +152,7 @@ public sealed class WarehouseConfiguration : IEntityTypeConfiguration<Warehouse>
             .HasMaxLength(Warehouse.MaximumAddressLength);
         builder.Property(warehouse => warehouse.IsDefault).IsRequired();
         builder.Property(warehouse => warehouse.IsActive).IsRequired();
+        builder.Property(warehouse => warehouse.IsTransit).IsRequired().HasDefaultValue(false);
 
         builder.HasOne<Branch>()
             .WithMany()

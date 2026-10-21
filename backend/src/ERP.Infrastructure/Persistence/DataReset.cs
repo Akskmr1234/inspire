@@ -29,11 +29,19 @@ public sealed class DataReset : IDataReset
     [
         // Links back to other documents first, so the documents can go in any order.
         "UPDATE sales_invoices SET returns_invoice_id = NULL WHERE firm_id = @firm",
+
+        // Before the invoices that billed them; their lines go with them.
+        "DELETE FROM job_cards WHERE firm_id = @firm",
+        "DELETE FROM rmas WHERE firm_id = @firm",
+        "DELETE FROM edit_requests WHERE firm_id = @firm",
         "UPDATE purchase_invoices SET returns_invoice_id = NULL WHERE firm_id = @firm",
         "DELETE FROM sales_invoices WHERE firm_id = @firm",
         "DELETE FROM purchase_invoices WHERE firm_id = @firm",
         "DELETE FROM sales_orders WHERE firm_id = @firm",
         "DELETE FROM purchase_orders WHERE firm_id = @firm",
+
+        // Before the stock documents its dispatch and receipt point at; its lines go with it.
+        "DELETE FROM stock_transfer_requests WHERE firm_id = @firm",
         "DELETE FROM cheques WHERE firm_id = @firm",
         "DELETE FROM bills WHERE firm_id = @firm",
         "DELETE FROM stock_ledger_entries WHERE firm_id = @firm",
@@ -60,6 +68,7 @@ public sealed class DataReset : IDataReset
         // Every record imported from another system is cleared below, so nothing it was
         // linked to is left: a fresh import starts from nothing.
         "DELETE FROM import_links WHERE firm_id = @firm",
+        "DELETE FROM bills_of_materials WHERE firm_id = @firm",
         "DELETE FROM products WHERE firm_id = @firm",
         "UPDATE categories SET parent_id = NULL WHERE firm_id = @firm",
         "DELETE FROM categories WHERE firm_id = @firm",

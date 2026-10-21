@@ -47,6 +47,10 @@ internal static class StockJournal
             // to say about it.
             StockDocumentType.StockTransfer => null,
 
+            // Making something moves value from the materials to the finished goods at
+            // exactly what the materials cost, so the books have nothing to record.
+            StockDocumentType.Production => null,
+
             StockDocumentType.OpeningStock => StockAccount.OpeningEquity,
             StockDocumentType.MaterialReceipt or StockDocumentType.MaterialIssue =>
                 StockAccount.Consumption,
@@ -58,14 +62,16 @@ internal static class StockJournal
             // charges the cost of what was sold, and a return credits it back. Sending
             // the return anywhere else would leave the cost of goods sold overstated by
             // everything that ever came back.
-            StockDocumentType.SalesIssue or StockDocumentType.SalesReturn =>
+            StockDocumentType.SalesIssue or StockDocumentType.SalesReturn
+                or StockDocumentType.DeliveryNote =>
                 StockAccount.CostOfGoodsSold,
 
             // Both halves of a purchase's stock movement go to the clearing account the
             // invoice settles against: the receipt credits what arrived, the invoice
             // debits it back, and the account is empty once both have landed. A return
             // debits it again on the way out.
-            StockDocumentType.PurchaseReceipt or StockDocumentType.PurchaseReturn =>
+            StockDocumentType.PurchaseReceipt or StockDocumentType.PurchaseReturn
+                or StockDocumentType.ReceiptNote =>
                 StockAccount.GoodsReceived,
             StockDocumentType.DamagedStock => StockAccount.Loss,
             StockDocumentType.StockAdjustment => StockAccount.Variance,

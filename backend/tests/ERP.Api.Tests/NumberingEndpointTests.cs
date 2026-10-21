@@ -33,7 +33,7 @@ public sealed class NumberingEndpointTests
 
         rows.Select(row => row.DocumentType).ShouldContain("sales.invoice");
         rows.Select(row => row.DocumentType).ShouldContain("purchase.return");
-        rows.Count.ShouldBe(11);
+        rows.Count.ShouldBe(12);
 
         foreach (DocumentNumberingView row in rows)
         {

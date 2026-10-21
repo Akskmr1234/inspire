@@ -5,6 +5,7 @@ using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 using ERP.SharedKernel.ValueObjects;
@@ -526,6 +527,117 @@ public sealed class PartyPhotoIdConverter : ValueConverter<PartyPhotoId, Guid>
     /// <summary>Initialises a new instance of the <see cref="PartyPhotoIdConverter"/> class.</summary>
     public PartyPhotoIdConverter()
         : base(id => id.Value, value => PartyPhotoId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockTransferRequestId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockTransferRequestIdConverter : ValueConverter<StockTransferRequestId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestIdConverter"/> class.</summary>
+    public StockTransferRequestIdConverter()
+        : base(id => id.Value, value => StockTransferRequestId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="StockTransferRequestLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class StockTransferRequestLineIdConverter
+    : ValueConverter<StockTransferRequestLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestLineIdConverter"/> class.</summary>
+    public StockTransferRequestLineIdConverter()
+        : base(id => id.Value, value => StockTransferRequestLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BillOfMaterialsId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillOfMaterialsIdConverter : ValueConverter<BillOfMaterialsId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsIdConverter"/> class.</summary>
+    public BillOfMaterialsIdConverter()
+        : base(id => id.Value, value => BillOfMaterialsId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="BillOfMaterialsLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class BillOfMaterialsLineIdConverter : ValueConverter<BillOfMaterialsLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsLineIdConverter"/> class.</summary>
+    public BillOfMaterialsLineIdConverter()
+        : base(id => id.Value, value => BillOfMaterialsLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="JobCardId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class JobCardIdConverter : ValueConverter<JobCardId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="JobCardIdConverter"/> class.</summary>
+    public JobCardIdConverter()
+        : base(id => id.Value, value => JobCardId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="JobCardLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class JobCardLineIdConverter : ValueConverter<JobCardLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="JobCardLineIdConverter"/> class.</summary>
+    public JobCardLineIdConverter()
+        : base(id => id.Value, value => JobCardLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaIdConverter : ValueConverter<RmaId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaIdConverter"/> class.</summary>
+    public RmaIdConverter()
+        : base(id => id.Value, value => RmaId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaLineId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaLineIdConverter : ValueConverter<RmaLineId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaLineIdConverter"/> class.</summary>
+    public RmaLineIdConverter()
+        : base(id => id.Value, value => RmaLineId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaPhotoId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaPhotoIdConverter : ValueConverter<RmaPhotoId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaPhotoIdConverter"/> class.</summary>
+    public RmaPhotoIdConverter()
+        : base(id => id.Value, value => RmaPhotoId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="RmaEventId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class RmaEventIdConverter : ValueConverter<RmaEventId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="RmaEventIdConverter"/> class.</summary>
+    public RmaEventIdConverter()
+        : base(id => id.Value, value => RmaEventId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="EditRequestId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class EditRequestIdConverter : ValueConverter<EditRequestId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="EditRequestIdConverter"/> class.</summary>
+    public EditRequestIdConverter()
+        : base(id => id.Value, value => EditRequestId.From(value))
     {
     }
 }

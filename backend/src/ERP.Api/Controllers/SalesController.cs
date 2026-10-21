@@ -3,6 +3,7 @@ using Asp.Versioning;
 using ERP.Application.Abstractions;
 using ERP.Application.Sales;
 using ERP.Domain.Accounting;
+using ERP.Domain.Platform;
 using ERP.Domain.Sales;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -108,6 +109,48 @@ public sealed class SalesController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>What goods sold in a period made, product by product and batch by batch.</summary>
+    /// <param name="from">The first invoice date.</param>
+    /// <param name="to">The last.</param>
+    /// <param name="productId">One product, or every one.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Sales, cost and profit per product and batch, with the totals.</returns>
+    /// <response code="200">The report.</response>
+    [HttpGet("profit")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(SalesProfitReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ProfitAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? productId,
+        CancellationToken cancellationToken)
+    {
+        Result<SalesProfitReport> result = await _sender.Send(
+            new SalesProfitQuery(from, to, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads what a customer was last quoted, and last charged, for a product.</summary>
+    /// <param name="customerLedgerId">The customer.</param>
+    /// <param name="productId">The product.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The rates, either of which may be missing.</returns>
+    /// <response code="200">The rates.</response>
+    [HttpGet("rates")]
+    [RequiresPermission("sales", "invoice", "view")]
+    [ProducesResponseType(typeof(SalesRateHints), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RatesAsync(
+        [FromQuery] Guid customerLedgerId,
+        [FromQuery] Guid productId,
+        CancellationToken cancellationToken)
+    {
+        Result<SalesRateHints> result = await _sender.Send(
+            new GetSalesRateHintsQuery(customerLedgerId, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Enters an invoice as a draft.</summary>
     /// <param name="request">What is being sold, and to whom.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -160,23 +203,13 @@ public sealed class SalesController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        CreateSalesInvoiceCommand changes = new(
-            request.Date,
-            request.CustomerLedgerId,
-            request.WarehouseId,
-            request.Lines,
-            request.Charges,
-            request.Mode,
-            request.ReferenceNumber,
-            request.Narration,
-            ReturnsInvoiceId: request.ReturnsInvoiceId,
-            PaymentMode: request.PaymentMode,
-            SalesmanLedgerId: request.SalesmanLedgerId,
-            BillingManLedgerId: request.BillingManLedgerId);
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.SalesInvoice, id, EditAction.Edit, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
 
-        Result<SalesInvoiceResponse> result = await _sender.Send(
-            new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason),
-            cancellationToken);
+        Result<SalesInvoiceResponse> result = await _sender.Send(EditCommand(id, request), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
@@ -236,10 +269,45 @@ public sealed class SalesController : ApiControllerBase
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (await HoldForApprovalAsync(
+            _sender, EditDocumentKind.SalesInvoice, id, EditAction.Cancel, request, request.Reason, cancellationToken) is { } held)
+        {
+            return held;
+        }
+
         Result result = await _sender.Send(
             new CancelSalesInvoiceCommand(id, request.Reason), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
+    /// <summary>Builds the command that makes a correction, here or once it is approved.</summary>
+    /// <param name="id">The document.</param>
+    /// <param name="request">The correction as submitted.</param>
+    /// <returns>The command.</returns>
+    internal static UpdateSalesInvoiceCommand EditCommand(Guid id, UpdateSalesInvoiceRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        CreateSalesInvoiceCommand changes = new(
+            request.Date,
+            request.CustomerLedgerId,
+            request.WarehouseId,
+            request.Lines,
+            request.Charges,
+            request.Mode,
+            request.ReferenceNumber,
+            request.Narration,
+            ReturnsInvoiceId: request.ReturnsInvoiceId,
+            PaymentMode: request.PaymentMode,
+            SalesmanLedgerId: request.SalesmanLedgerId,
+            BillingManLedgerId: request.BillingManLedgerId,
+            AmountReceived: request.AmountReceived,
+            ReceivedIntoLedgerId: request.ReceivedIntoLedgerId,
+            PaymentReference: request.PaymentReference,
+            PaidInFull: request.PaidInFull);
+
+        return new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason);
     }
 }
 
@@ -258,6 +326,10 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="PaymentMode">Paid in cash at the counter, or on credit.</param>
 /// <param name="SalesmanLedgerId">The employee who made the sale.</param>
 /// <param name="BillingManLedgerId">The employee who billed it.</param>
+/// <param name="AmountReceived">What the customer paid with the sale.</param>
+/// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
+/// <param name="PaymentReference">An online payment's transaction ID.</param>
+/// <param name="PaidInFull">The customer paid the whole bill, whatever it rounds to.</param>
 public sealed record UpdateSalesInvoiceRequest(
     [property: JsonRequired] DateOnly Date,
     [property: JsonRequired] Guid CustomerLedgerId,
@@ -272,7 +344,11 @@ public sealed record UpdateSalesInvoiceRequest(
     string? Reason = null,
     SalesPaymentMode PaymentMode = SalesPaymentMode.Credit,
     Guid? SalesmanLedgerId = null,
-    Guid? BillingManLedgerId = null);
+    Guid? BillingManLedgerId = null,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null,
+    bool PaidInFull = false);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

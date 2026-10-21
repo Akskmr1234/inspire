@@ -1,4 +1,5 @@
 using ERP.Application.Inventory.Stock;
+using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,7 @@ public sealed class StockDocumentReader : IStockDocumentReader
                 document.ReferenceNumber,
                 document.Narration,
                 document.Status,
+                document.PartyLedgerId,
                 LineCount = document.Lines.Count,
                 TotalQuantity = document.Lines.Sum(line => line.StockQuantity),
             })
@@ -102,6 +104,12 @@ public sealed class StockDocumentReader : IStockDocumentReader
             })
             .ToDictionaryAsync(row => row.DocumentId, row => row.Value, cancellationToken);
 
+        List<StockDocumentId> notes = [.. rows.Where(row => row.PartyLedgerId is not null).Select(row => row.Id)];
+        Dictionary<StockDocumentId, (Guid Id, string Number)> invoices = await NoteInvoicesAsync(notes, cancellationToken);
+        Dictionary<LedgerId, string> parties = await PartyNamesAsync(
+            [.. rows.Where(row => row.PartyLedgerId is not null).Select(row => row.PartyLedgerId!.Value)],
+            cancellationToken);
+
         return
         [
             .. rows.Select(row => new StockDocumentSummary(
@@ -120,7 +128,10 @@ public sealed class StockDocumentReader : IStockDocumentReader
                 row.TotalQuantity,
                 values.TryGetValue(row.Id, out decimal received) && received != 0m
                     ? received
-                    : Math.Abs(issued.GetValueOrDefault(row.Id)))),
+                    : Math.Abs(issued.GetValueOrDefault(row.Id)),
+                row.PartyLedgerId is { } party ? parties.GetValueOrDefault(party) : null,
+                invoices.TryGetValue(row.Id, out var billed) ? billed.Id : null,
+                invoices.TryGetValue(row.Id, out var named) ? named.Number : null)),
         ];
     }
 
@@ -144,6 +155,7 @@ public sealed class StockDocumentReader : IStockDocumentReader
                 row.Narration,
                 row.Status,
                 row.CancellationReason,
+                row.PartyLedgerId,
                 Lines = row.Lines
                     .OrderBy(line => line.LineNumber)
                     .Select(line => new
@@ -224,6 +236,19 @@ public sealed class StockDocumentReader : IStockDocumentReader
             })
             .ToListAsync(cancellationToken);
 
+        string? party = document.PartyLedgerId is { } partyId
+            ? (await PartyNamesAsync([partyId], cancellationToken)).GetValueOrDefault(partyId)
+            : null;
+
+        (Guid Id, string? Number) billing = (Guid.Empty, null);
+
+        if (document.PartyLedgerId is not null
+            && (await NoteInvoicesAsync([document.Id], cancellationToken))
+                .TryGetValue(document.Id, out (Guid Id, string Number) billed))
+        {
+            billing = billed;
+        }
+
         return new StockDocumentDetail(
             document.Id.Value,
             document.Number,
@@ -278,8 +303,60 @@ public sealed class StockDocumentReader : IStockDocumentReader
                     entry.BalanceQuantity,
                     entry.BalanceAverageCost,
                     entry.BatchNumber)),
-            ]);
+            ],
+            document.PartyLedgerId?.Value,
+            party,
+            billing.Id == Guid.Empty ? null : billing.Id,
+            billing.Number);
     }
+
+    /// <summary>The invoice that bills each note, where one still stands.</summary>
+    private async Task<Dictionary<StockDocumentId, (Guid Id, string Number)>> NoteInvoicesAsync(
+        List<StockDocumentId> notes,
+        CancellationToken cancellationToken)
+    {
+        if (notes.Count == 0)
+        {
+            return [];
+        }
+
+        var sales = await _context.SalesInvoices
+            .Where(invoice => invoice.DeliveryNoteId != null
+                && notes.Contains(invoice.DeliveryNoteId.Value)
+                && invoice.Status != Domain.Sales.SalesInvoiceStatus.Cancelled)
+            .Select(invoice => new { Note = invoice.DeliveryNoteId!.Value, Id = invoice.Id.Value, invoice.Number })
+            .ToListAsync(cancellationToken);
+
+        var purchases = await _context.PurchaseInvoices
+            .Where(invoice => invoice.ReceiptNoteId != null
+                && notes.Contains(invoice.ReceiptNoteId.Value)
+                && invoice.Status != Domain.Purchase.PurchaseInvoiceStatus.Cancelled)
+            .Select(invoice => new { Note = invoice.ReceiptNoteId!.Value, Id = invoice.Id.Value, invoice.Number })
+            .ToListAsync(cancellationToken);
+
+        Dictionary<StockDocumentId, (Guid Id, string Number)> found = [];
+
+        foreach (var row in sales)
+        {
+            found[row.Note] = (row.Id, row.Number);
+        }
+
+        foreach (var row in purchases)
+        {
+            found[row.Note] = (row.Id, row.Number);
+        }
+
+        return found;
+    }
+
+    private async Task<Dictionary<LedgerId, string>> PartyNamesAsync(
+        List<LedgerId> parties,
+        CancellationToken cancellationToken) =>
+        parties.Count == 0
+            ? []
+            : await _context.Ledgers
+                .Where(ledger => parties.Contains(ledger.Id))
+                .ToDictionaryAsync(ledger => ledger.Id, ledger => ledger.Name, cancellationToken);
 
     private async Task<Dictionary<WarehouseId, string>> WarehouseNamesAsync(
         FirmId firmId,

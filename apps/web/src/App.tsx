@@ -115,6 +115,10 @@ const PurchaseOrdersPage = lazyScreen(
   'PurchaseOrdersPage',
 );
 const SalesOrdersPage = lazyScreen(() => import('@/pages/OrdersPage'), 'SalesOrdersPage');
+const SalesQuotationsPage = lazyScreen(
+  () => import('@/pages/OrdersPage'),
+  'SalesQuotationsPage',
+);
 const SettingsPage = lazyScreen(() => import('@/pages/SettingsPage'), 'SettingsPage');
 const OpeningStockPage = lazyScreen(
   () => import('@/pages/StockOperationsPage'),
@@ -124,6 +128,35 @@ const SuppliersPage = lazyScreen(() => import('@/pages/SuppliersPage'), 'Supplie
 const TaxReturnsPage = lazyScreen(
   () => import('@/pages/TaxReturnsPage'),
   'TaxReturnsPage',
+);
+const BomsPage = lazyScreen(() => import('@/pages/ProductionPage'), 'BomsPage');
+const JobCardsPage = lazyScreen(() => import('@/pages/ServicePage'), 'JobCardsPage');
+const RmasPage = lazyScreen(() => import('@/pages/RmaPage'), 'RmasPage');
+const AuditLogPage = lazyScreen(() => import('@/pages/AuditLogPage'), 'AuditLogPage');
+const ApprovalsPage = lazyScreen(() => import('@/pages/ApprovalsPage'), 'ApprovalsPage');
+const ProductionPage = lazyScreen(
+  () => import('@/pages/ProductionPage'),
+  'ProductionPage',
+);
+const DeliveryNotesPage = lazyScreen(
+  () => import('@/pages/StockOperationsPage'),
+  'DeliveryNotesPage',
+);
+const ReceiptNotesPage = lazyScreen(
+  () => import('@/pages/StockOperationsPage'),
+  'ReceiptNotesPage',
+);
+const StockAdjustmentPage = lazyScreen(
+  () => import('@/pages/StockAdjustmentPage'),
+  'StockAdjustmentPage',
+);
+const DamagedStockPage = lazyScreen(
+  () => import('@/pages/StockAdjustmentPage'),
+  'DamagedStockPage',
+);
+const StockTransfersPage = lazyScreen(
+  () => import('@/pages/StockTransfersPage'),
+  'StockTransfersPage',
 );
 const StockOperationsPage = lazyScreen(
   () => import('@/pages/StockOperationsPage'),
@@ -149,6 +182,10 @@ const ChequeRegisterPage = lazyScreen(
 const BatchStockPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'BatchStockPage',
+);
+const BatchProfitPage = lazyScreen(
+  () => import('@/pages/StockReportPages'),
+  'BatchProfitPage',
 );
 const ExpiryReportPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
@@ -313,15 +350,31 @@ export function App(): React.JSX.Element {
               <Route path="/purchase/returns" element={<PurchaseReturnsPage />} />
               <Route path="/purchase/orders" element={<PurchaseOrdersPage />} />
               <Route path="/sales/orders" element={<SalesOrdersPage />} />
+              <Route path="/sales/quotations" element={<SalesQuotationsPage />} />
               <Route path="/purchase/suppliers" element={<SuppliersPage />} />
               <Route path="/inventory/products" element={<ProductsPage />} />
               <Route path="/inventory/tax-rates" element={<TaxRatesPage />} />
               <Route path="/inventory/stock" element={<StockOperationsPage />} />
+              <Route path="/inventory/stock-transfers" element={<StockTransfersPage />} />
+              <Route
+                path="/inventory/stock-adjustment"
+                element={<StockAdjustmentPage />}
+              />
+              <Route path="/inventory/damaged-stock" element={<DamagedStockPage />} />
+              <Route path="/sales/delivery-notes" element={<DeliveryNotesPage />} />
+              <Route path="/inventory/boms" element={<BomsPage />} />
+              <Route path="/inventory/production" element={<ProductionPage />} />
+              <Route path="/service/job-cards" element={<JobCardsPage />} />
+              <Route path="/service/rmas" element={<RmasPage />} />
+              <Route path="/settings/audit-log" element={<AuditLogPage />} />
+              <Route path="/settings/approvals" element={<ApprovalsPage />} />
+              <Route path="/purchase/receipt-notes" element={<ReceiptNotesPage />} />
               <Route path="/inventory/opening-stock" element={<OpeningStockPage />} />
               <Route path="/inventory/valuation" element={<StockValuationPage />} />
               <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
               <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
               <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
+              <Route path="/inventory/batch-profit" element={<BatchProfitPage />} />
               <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
               <Route path="/inventory/serials" element={<SerialStockPage />} />
               <Route path="/inventory/units" element={<UnitsPage />} />

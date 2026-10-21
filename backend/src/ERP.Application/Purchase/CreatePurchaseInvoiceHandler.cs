@@ -385,7 +385,8 @@ public sealed class CreatePurchaseInvoiceCommandHandler
                 input.BatchNumber,
                 input.ExpiresOn,
                 input.SerialNumbers,
-                input.Discount);
+                input.Discount,
+                input.SellingRate);
 
             if (added.IsFailure)
             {

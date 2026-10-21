@@ -78,6 +78,11 @@ public sealed record SalesInvoiceChargeDetail(Guid LedgerId, decimal Amount, boo
 /// <param name="SalesmanLedgerId">The employee who made the sale.</param>
 /// <param name="BillingManLedgerId">The employee who billed it.</param>
 /// <param name="CreatedAtUtc">When it was entered.</param>
+/// <param name="AmountReceived">What the customer paid with the sale.</param>
+/// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
+/// <param name="PaymentReference">An online payment's transaction ID.</param>
+/// <param name="ReceiptVoucherId">The receipt posting raised for the payment.</param>
+/// <param name="DeliveryNoteId">The delivery note whose goods it bills, where it bills one.</param>
 public sealed record SalesInvoiceDetail(
     SalesInvoiceResponse Header,
     DateOnly Date,
@@ -97,7 +102,12 @@ public sealed record SalesInvoiceDetail(
     SalesPaymentMode PaymentMode,
     Guid? SalesmanLedgerId,
     Guid? BillingManLedgerId,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null,
+    Guid? ReceiptVoucherId = null,
+    Guid? DeliveryNoteId = null);
 
 /// <summary>Handles <see cref="GetSalesInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -203,6 +213,11 @@ public sealed class GetSalesInvoiceQueryHandler
             invoice.PaymentMode,
             invoice.SalesmanLedgerId?.Value,
             invoice.BillingManLedgerId?.Value,
-            invoice.CreatedAtUtc));
+            invoice.CreatedAtUtc,
+            invoice.AmountReceived,
+            invoice.ReceivedIntoLedgerId?.Value,
+            invoice.PaymentReference,
+            invoice.ReceiptVoucherId?.Value,
+            invoice.DeliveryNoteId?.Value));
     }
 }

@@ -570,10 +570,18 @@ export function HierarchicalAccountsTable({
       {/* Main Hierarchical Tree Grid */}
       <div className="card overflow-hidden border border-line shadow-sm">
         <div className="overflow-x-auto">
-          <table className="table min-w-full text-xs">
+          <table className="table hierarchy-table min-w-full text-xs">
             <thead>
               <tr className="border-b-2 border-line bg-surface-3 text-ink-muted font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4 text-start min-w-[20rem]">
+                {/* A minimum from `sm` up only. On a phone the first column is
+                    pinned and capped so the figures have the rest of the screen; a
+                    fixed minimum here outranked the cap, took 320 of 364 pixels and
+                    left the amounts off the edge. It grows with the screen, so a
+                    trial balance's six columns of figures fit beside it on a laptop
+                    — at 20rem throughout, the closing balances were behind a
+                    sideways scroll at 1024 and 1280 pixels. The heading wraps for
+                    the same reason: on one line it was wider than the minimum. */}
+                <th className="py-3 px-4 text-start whitespace-normal sm:min-w-[13rem] xl:min-w-[16rem] 2xl:min-w-[20rem]">
                   <span>
                     {t('reports.accountHierarchy') ||
                       'Account Head → Group → Ledger → Details'}
@@ -622,11 +630,11 @@ export function HierarchicalAccountsTable({
                         'hover:bg-primary-500/10 border-t-2 border-line-strong',
                       )}
                     >
-                      <td className="py-2.5 px-4">
-                        <div className="flex items-center gap-2">
+                      <td className="py-2.5 px-2 sm:px-4">
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 sm:gap-x-2">
                           <span
                             className={clsx(
-                              'inline-flex size-5 items-center justify-center rounded transition-transform text-ink-muted',
+                              'inline-flex size-5 shrink-0 items-center justify-center rounded transition-transform text-ink-muted',
                               isHeadExpanded ? 'rotate-90' : 'rotate-0',
                             )}
                           >
@@ -635,7 +643,7 @@ export function HierarchicalAccountsTable({
 
                           <span
                             className={clsx(
-                              'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs uppercase tracking-wider border shadow-2xs font-extrabold',
+                              'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs uppercase tracking-wider whitespace-nowrap border shadow-2xs font-extrabold',
                               tone.badge,
                             )}
                           >
@@ -643,7 +651,7 @@ export function HierarchicalAccountsTable({
                             {isArabic && head.nameArabic ? head.nameArabic : head.name}
                           </span>
 
-                          <span className="text-[11px] font-medium text-ink-subtle">
+                          <span className="hidden text-[11px] font-medium text-ink-subtle sm:inline">
                             ({head.groups.length} {t('reports.groups') || 'groups'} ·{' '}
                             {headLedgersCount} {t('reports.accounts') || 'accounts'})
                           </span>
@@ -680,11 +688,11 @@ export function HierarchicalAccountsTable({
                               onClick={() => toggleGroup(group.id)}
                               className="cursor-pointer bg-surface-2/60 hover:bg-surface-3 transition-colors font-semibold select-none border-t border-line/40"
                             >
-                              <td className="py-2 ps-8 pe-4">
-                                <div className="flex items-center gap-2">
+                              <td className="py-2 ps-3 pe-2 sm:ps-8 sm:pe-4">
+                                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2">
                                   <span
                                     className={clsx(
-                                      'inline-flex size-4 items-center justify-center rounded transition-transform text-ink-muted',
+                                      'inline-flex size-4 shrink-0 items-center justify-center rounded transition-transform text-ink-muted',
                                       isGroupExpanded ? 'rotate-90' : 'rotate-0',
                                     )}
                                   >
@@ -699,7 +707,7 @@ export function HierarchicalAccountsTable({
                                     {group.name}
                                   </span>
 
-                                  <span className="text-[10px] text-ink-subtle font-normal">
+                                  <span className="hidden text-[10px] text-ink-subtle font-normal sm:inline">
                                     ({group.ledgers.length}{' '}
                                     {t('reports.accounts') || 'ledgers'})
                                   </span>
@@ -745,11 +753,19 @@ export function HierarchicalAccountsTable({
                                           : 'hover:bg-surface-2/40',
                                       )}
                                     >
-                                      <td className="py-1.5 ps-14 pe-4">
-                                        <div className="flex items-center gap-2">
+                                      <td className="py-1.5 ps-3 pe-2 sm:ps-14 sm:pe-4">
+                                        {/* Wraps, so a ledger's own buttons go
+                                            under its name on a phone rather than
+                                            squeezing it to a word a line, and on a
+                                            laptop a long code and the name go one
+                                            above the other rather than holding the
+                                            column wide enough for both side by
+                                            side — imported codes run to twenty-odd
+                                            unbroken characters. */}
+                                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-x-2">
                                           <span
                                             className={clsx(
-                                              'inline-flex size-3.5 items-center justify-center rounded transition-transform text-ink-subtle hover:text-ink',
+                                              'inline-flex size-3.5 shrink-0 items-center justify-center rounded transition-transform text-ink-subtle hover:text-ink',
                                               isLedgerExpanded ? 'rotate-90' : 'rotate-0',
                                             )}
                                           >
@@ -770,7 +786,7 @@ export function HierarchicalAccountsTable({
 
                                           {ledgerActions && (
                                             <span
-                                              className="ms-auto flex shrink-0 items-center gap-1"
+                                              className="flex w-full shrink-0 flex-wrap items-center gap-1 sm:ms-auto sm:w-auto sm:flex-nowrap"
                                               onClick={(event) => event.stopPropagation()}
                                               onKeyDown={(event) =>
                                                 event.stopPropagation()
@@ -810,9 +826,14 @@ export function HierarchicalAccountsTable({
                                       <tr className="bg-surface-2/30 border-y border-line">
                                         <td
                                           colSpan={columns.length + 1}
-                                          className="p-3 ps-16 pe-6"
+                                          className="p-2 sm:p-3 sm:ps-16 sm:pe-6"
                                         >
-                                          <div className="rounded-xl border border-line bg-surface p-3 shadow-inner">
+                                          {/* Held in view on a phone, where the
+                                              row it opens under is wider than the
+                                              screen: pinned to the visible edge and
+                                              as wide as the screen, with its own
+                                              table scrolling inside it. */}
+                                          <div className="sticky start-2 w-[calc(100vw-3rem)] rounded-xl border border-line bg-surface p-3 shadow-inner sm:static sm:w-auto">
                                             <div className="flex items-center justify-between border-b border-line pb-2 mb-2">
                                               <span className="text-[11px] font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
                                                 <span>
@@ -844,7 +865,10 @@ export function HierarchicalAccountsTable({
                                               </p>
                                             ) : (
                                               <div className="overflow-x-auto">
-                                                <table className="w-full text-xs border-collapse">
+                                                {/* Scrolls inside the panel on a phone
+                                                    rather than squeezing seven columns
+                                                    into its width. */}
+                                                <table className="w-full min-w-[40rem] text-xs border-collapse sm:min-w-0">
                                                   <thead>
                                                     <tr className="border-b border-line text-[10px] font-bold text-ink-muted uppercase">
                                                       <th className="py-1 px-2 text-start w-24">
@@ -956,7 +980,7 @@ export function HierarchicalAccountsTable({
                             {/* Group Subtotal Row */}
                             {isGroupExpanded && (
                               <tr className="bg-surface-2/40 text-ink-muted text-[11px] font-semibold border-b border-line">
-                                <td className="py-1.5 ps-10 pe-4 text-start italic">
+                                <td className="py-1.5 ps-3 pe-2 text-start italic sm:ps-10 sm:pe-4">
                                   {t('reports.subtotal') || 'Subtotal'} {group.name}
                                 </td>
                                 {columns.map((col) => (
@@ -980,7 +1004,7 @@ export function HierarchicalAccountsTable({
                     {/* Head Subtotal Row */}
                     {isHeadExpanded && (
                       <tr className="bg-surface-3 text-ink text-xs font-bold border-b-2 border-line">
-                        <td className="py-2 ps-6 pe-4 text-start uppercase">
+                        <td className="py-2 ps-2 pe-2 text-start uppercase sm:ps-6 sm:pe-4">
                           {t('reports.totalHead') || 'Total'} {head.name}
                         </td>
                         {columns.map((col) => (
@@ -1005,7 +1029,7 @@ export function HierarchicalAccountsTable({
             {/* Grand Total Footer */}
             <tfoot className="border-t-3 border-line-strong bg-surface-3 font-bold text-xs">
               <tr className="border-b border-line text-ink">
-                <td className="py-3 px-4 text-start text-sm uppercase tracking-wider font-black">
+                <td className="py-3 px-2 text-start text-sm uppercase tracking-wider font-black sm:px-4">
                   {t('reports.grandTotal') || 'GRAND TOTAL'} ({currency})
                 </td>
                 {columns.map((col) => (

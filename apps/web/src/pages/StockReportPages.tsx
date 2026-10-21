@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
 import { EmptyState, ReportFrame } from '@/components/ReportFrame';
+import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
@@ -12,6 +13,8 @@ import { listProducts, type ProductSummary } from '@/lib/products';
 import {
   fetchBatchStock,
   fetchExpiring,
+  fetchSalesProfit,
+  setBatchSellingRate,
   fetchItemMovement,
   fetchProductSerials,
   fetchStockLedger,
@@ -20,6 +23,8 @@ import {
   type BatchStockReport,
   type BatchStockRow,
   type ItemMovementRow,
+  type SalesProfitReport,
+  type SalesProfitRow,
   type SerialNumberView,
   type StockLedgerReport,
   type StockValuationReport,
@@ -298,6 +303,16 @@ function batchColumns(
       hiddenByDefault: !expiring,
     },
     {
+      key: 'sellingRate',
+      header: t('stock.sellingRate'),
+      value: (row) => row.sellingRate ?? 0,
+      numeric: true,
+      // Set here as well as on the purchase that brought the batch in, for a batch
+      // whose price changes while it is on the shelf.
+      render: (row) => <SellingRateCell row={row} />,
+      hiddenByDefault: expiring,
+    },
+    {
       key: 'value',
       header: t('stock.value'),
       value: (row) => row.value,
@@ -340,6 +355,188 @@ function batchColumns(
       hiddenByDefault: !expiring,
     },
   ];
+}
+
+/** A batch's selling rate, changed where it is shown and saved when the field is left. */
+function SellingRateCell({ row }: { readonly row: BatchStockRow }): React.JSX.Element {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const shown = row.sellingRate ? String(row.sellingRate) : '';
+  const [value, setValue] = useState(shown);
+
+  const save = useMutation<void, ApiError, number | null>({
+    mutationFn: (rate) => setBatchSellingRate(row.batchId, rate),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['batch-stock'] }),
+  });
+
+  const commit = (): void => {
+    const rate = Number(value) > 0 ? Number(value) : null;
+
+    if ((rate ?? 0) !== (row.sellingRate ?? 0)) {
+      save.mutate(rate);
+    }
+  };
+
+  return (
+    <input
+      value={value}
+      inputMode="decimal"
+      aria-label={t('stock.sellingRate')}
+      placeholder="—"
+      onChange={(event) => setValue(event.target.value.replace(/[^0-9.]/g, ''))}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+      className={clsx(
+        'field-input-sm w-24 text-end tabular-nums',
+        save.isError && 'border-red-500',
+      )}
+    />
+  );
+}
+
+/**
+ * Profit on what was sold, each batch at its own cost.
+ *
+ * The requirement's own example is the test of it: a product bought in one batch at 10
+ * and another at 15, both sold at 20, shows 10 on the first and 5 on the second - the
+ * cost the stock ledger took each batch out at, not the product's average.
+ */
+export function BatchProfitPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [productId, setProductId] = useState('');
+  const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
+  const [to, setTo] = useState(today);
+
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', '', '', false],
+    queryFn: () => listProducts('', '', false),
+  });
+
+  const query = useQuery<SalesProfitReport, ApiError>({
+    queryKey: ['batch-profit', from, to, productId],
+    queryFn: () => fetchSalesProfit(from, to, productId),
+  });
+
+  const columns: readonly GridColumn<SalesProfitRow>[] = [
+    { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
+    { key: 'name', header: t('products.description'), value: (row) => row.productName },
+    { key: 'batch', header: t('stock.batch'), value: (row) => row.batchNumber ?? '—' },
+    {
+      key: 'quantity',
+      header: t('stock.soldQuantity'),
+      value: (row) => row.quantity,
+      numeric: true,
+      render: (row) => trim(row.quantity),
+    },
+    {
+      key: 'purchaseRate',
+      header: t('stock.purchaseRate'),
+      value: (row) => row.purchaseRate ?? 0,
+      numeric: true,
+      render: (row) => (row.purchaseRate === null ? '—' : trim(row.purchaseRate)),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'sellingRate',
+      header: t('stock.sellingRate'),
+      value: (row) => row.sellingRate ?? 0,
+      numeric: true,
+      render: (row) => (row.sellingRate === null ? '—' : trim(row.sellingRate)),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'sales',
+      header: t('stock.salesValue'),
+      value: (row) => row.sales,
+      numeric: true,
+      render: (row) => moneyAlways(row.sales),
+    },
+    {
+      key: 'cost',
+      header: t('stock.costOfSales'),
+      value: (row) => row.cost,
+      numeric: true,
+      render: (row) => moneyAlways(row.cost),
+    },
+    {
+      key: 'profit',
+      header: t('stock.profit'),
+      value: (row) => row.profit,
+      numeric: true,
+      render: (row) => (
+        <span
+          className={clsx(
+            row.profit < 0 && 'font-semibold text-red-700 dark:text-red-300',
+          )}
+        >
+          {moneyAlways(row.profit)}
+        </span>
+      ),
+    },
+    {
+      key: 'margin',
+      header: t('stock.margin'),
+      value: (row) => row.marginPercent ?? 0,
+      numeric: true,
+      render: (row) => (row.marginPercent === null ? '—' : `${row.marginPercent}%`),
+    },
+  ];
+
+  const controls = (
+    <div className="toolbar">
+      <DateBox label={t('reports.from')} value={from} onChange={setFrom} />
+      <DateBox label={t('reports.to')} value={to} onChange={setTo} />
+      <label className="field">
+        <span className="field-label">{t('stock.product')}</span>
+        <SearchSelect
+          value={productId}
+          onChange={setProductId}
+          clearable
+          size="sm"
+          className="w-full sm:w-72"
+          label={t('stock.product')}
+          placeholder={t('stock.allProducts')}
+          options={(products.data ?? []).map((product) => ({
+            value: product.id,
+            label: `${product.code} — ${product.description}`,
+          }))}
+        />
+      </label>
+    </div>
+  );
+
+  return (
+    <ReportFrame title={t('nav.batchProfit')} controls={controls} query={query}>
+      {(report) => (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3 text-sm">
+            <Figure
+              label={t('stock.salesValue')}
+              value={moneyAlways(report.totalSales)}
+            />
+            <Figure
+              label={t('stock.costOfSales')}
+              value={moneyAlways(report.totalCost)}
+            />
+            <Figure label={t('stock.profit')} value={moneyAlways(report.totalProfit)} />
+          </div>
+
+          <DataGrid
+            gridKey="batch-profit"
+            rows={report.rows}
+            columns={columns}
+            rowKey={(row) => `${row.productId}-${row.batchId ?? ''}`}
+            emptyMessage={t('stock.noSales')}
+          />
+        </div>
+      )}
+    </ReportFrame>
+  );
 }
 
 /**
@@ -399,13 +596,13 @@ export function StockLedgerPage(): React.JSX.Element {
 
   if (!productId) {
     return (
+      // The same arrangement as the report once a product is chosen: the title in
+      // the bar, the filters in their strip. It used to put the title and the
+      // filters side by side, which on a phone left the four fields a third of
+      // the screen beside a two-line heading.
       <section className="page">
-        <header className="page-header">
-          <h1 className="page-title">{t('nav.stockLedger')}</h1>
-          <div className="-mx-3 overflow-x-auto px-3 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
-            {controls}
-          </div>
-        </header>
+        <PageHeading title={t('nav.stockLedger')} />
+        <div className="filter-bar">{controls}</div>
         <EmptyState message={t('stock.chooseProduct')} />
       </section>
     );

@@ -156,6 +156,7 @@ public sealed class BatchReader : IBatchReader
                 row.balance.Quantity,
                 row.balance.UnitCost,
                 row.batch.PurchaseRate,
+                row.batch.SellingRate,
                 row.batch.ManufacturedOn,
                 row.batch.ExpiresOn,
             })
@@ -201,7 +202,8 @@ public sealed class BatchReader : IBatchReader
                     row.PurchaseRate,
                     row.ManufacturedOn,
                     row.ExpiresOn,
-                    row.ExpiresOn is { } expiry ? expiry.DayNumber - asOn.DayNumber : null)),
+                    row.ExpiresOn is { } expiry ? expiry.DayNumber - asOn.DayNumber : null,
+                    row.SellingRate)),
         ];
     }
 

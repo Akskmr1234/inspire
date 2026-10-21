@@ -1,6 +1,8 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
+using ERP.Application.Platform.Settings;
+using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Tenancy;
@@ -18,13 +20,15 @@ namespace ERP.Application.Inventory.Stock;
 /// <param name="Destination">The warehouse a transfer moves into.</param>
 /// <param name="Products">Every product named, by identifier.</param>
 /// <param name="Units">Every unit involved, entry units and stock units alike.</param>
+/// <param name="Party">The customer or supplier a delivery or receipt note names.</param>
 internal sealed record StockContext(
     Firm Firm,
     FinancialYear Year,
     Warehouse Warehouse,
     Warehouse? Destination,
     IReadOnlyDictionary<ProductId, Product> Products,
-    IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units);
+    IReadOnlyDictionary<UnitOfMeasureId, UnitOfMeasure> Units,
+    Ledger? Party = null);
 
 /// <summary>A document ready to post, and the batches its lines point at.</summary>
 /// <param name="Document">The draft, with its lines.</param>
@@ -45,20 +49,10 @@ internal sealed record StockAssembly(
 public sealed class CreateStockDocumentCommandHandler
     : ICommandHandler<CreateStockDocumentCommand, CreateStockDocumentResponse>
 {
-    private readonly IStockDocumentRepository _documents;
-    private readonly IInventoryMasterRepository _masters;
-    private readonly IProductRepository _products;
-    private readonly IBatchRepository _batches;
-    private readonly ISerialNumberRepository _serials;
-    private readonly IFinancialYearRepository _financialYears;
-    private readonly INumberingSeriesRepository _numbering;
-    private readonly IFirmRepository _firms;
     private readonly ITenantContext _tenantContext;
-    private readonly ICurrentUser _currentUser;
-    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly StockPoster _poster;
-    private readonly StockJournalPoster _journal;
+    private readonly IFirmPolicyReader? _policies;
+    private readonly StockDocumentWriter _writer;
 
     /// <summary>Initialises a new instance of the <see cref="CreateStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
@@ -78,6 +72,11 @@ public sealed class CreateStockDocumentCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">
+    /// The firm's policies, which decide whether stock may go below zero and whether a
+    /// transfer may be made without a request.
+    /// </param>
+    /// <param name="ledgers">The ledger repository, for the customer or supplier a note names.</param>
     public CreateStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IInventoryMasterRepository masters,
@@ -95,22 +94,17 @@ public sealed class CreateStockDocumentCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null,
+        ILedgerRepository? ledgers = null)
     {
-        _documents = documents;
-        _masters = masters;
-        _products = products;
-        _batches = batches;
-        _serials = serials;
-        _financialYears = financialYears;
-        _numbering = numbering;
-        _firms = firms;
+        _policies = policies;
         _tenantContext = tenantContext;
-        _currentUser = currentUser;
-        _clock = clock;
         _unitOfWork = unitOfWork;
-        _poster = new StockPoster(balances, batchBalances, ledger);
-        _journal = new StockJournalPoster(accounts, vouchers, numbering, financialYears);
+        _writer = new StockDocumentWriter(
+            documents, masters, products, batches, serials, balances, batchBalances, ledger,
+            financialYears, numbering, accounts, vouchers, firms, tenantContext, currentUser,
+            clock, ledgers);
     }
 
     /// <inheritdoc />
@@ -128,124 +122,27 @@ public sealed class CreateStockDocumentCommandHandler
                 "A firm and a branch must be selected before entering a stock document."));
         }
 
-        Result<StockContext> context = await StockLoader.LoadAsync(
-            request, firmId, _firms, _financialYears, _masters, _products, cancellationToken);
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
 
-        if (context.IsFailure)
+        if (request.Type == StockDocumentType.StockTransfer && policies.TransfersRequireApproval)
         {
-            return Result.Failure<CreateStockDocumentResponse>(context.Error);
+            return Result.Failure<CreateStockDocumentResponse>(StockTransferRules.RequestRequired());
         }
 
-        Result<string> number = await ReserveNumberAsync(
-            request.Type, firmId, branchId, context.Value.Year, cancellationToken);
+        Result<StockWritten> written = await _writer.WriteAsync(
+            request, firmId, branchId, policies.AllowsNegativeStock,
+            throughTransferRequest: false, cancellationToken);
 
-        if (number.IsFailure)
+        if (written.IsFailure)
         {
-            return Result.Failure<CreateStockDocumentResponse>(number.Error);
+            return Result.Failure<CreateStockDocumentResponse>(written.Error);
         }
 
-        Result<StockAssembly> built = await StockLoader.BuildAsync(
-            request, _tenantContext.TenantId, firmId, number.Value, context.Value, _batches,
-            _serials, cancellationToken);
-
-        if (built.IsFailure)
-        {
-            return Result.Failure<CreateStockDocumentResponse>(built.Error);
-        }
-
-        StockDocument document = built.Value.Document;
-        IReadOnlyList<StockLedgerEntry> movements = [];
-
-        if (request.PostImmediately)
-        {
-            Result posted = document.Post(_currentUser.UserId, _clock.UtcNow);
-
-            if (posted.IsFailure)
-            {
-                return Result.Failure<CreateStockDocumentResponse>(posted.Error);
-            }
-
-            // The command is transactional, so a line that cannot move rolls the whole
-            // document back - including the number it reserved, which is why a refused
-            // posting leaves no gap in the sequence.
-            Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
-                document,
-                context.Value.Products,
-                built.Value.Batches,
-                built.Value.Serials,
-                context.Value.Firm.BaseCurrency,
-                _clock.UtcNow,
-                cancellationToken);
-
-            if (applied.IsFailure)
-            {
-                return Result.Failure<CreateStockDocumentResponse>(applied.Error);
-            }
-
-            movements = applied.Value;
-
-            // The journal is part of the posting, not a consequence of it. A document
-            // whose accounts nobody has chosen does not post at all, which is the only
-            // arrangement under which the stock ledger and the nominal ledger keep
-            // describing the same firm.
-            Result journalled = await _journal.RaiseAsync(
-                document,
-                movements,
-                context.Value.Firm,
-                branchId,
-                _currentUser.UserId,
-                _clock.UtcNow,
-                cancellationToken);
-
-            if (journalled.IsFailure)
-            {
-                return Result.Failure<CreateStockDocumentResponse>(journalled.Error);
-            }
-        }
-
-        _documents.Add(document);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(StockLoader.Describe(document, movements));
-    }
-
-    /// <summary>
-    /// Takes the next number, creating the series if the firm has none configured.
-    /// </summary>
-    /// <remarks>
-    /// Auto-created for the same reason vouchers auto-create theirs: refusing to
-    /// record a receipt until somebody visits a settings screen makes a fresh
-    /// installation look broken.
-    /// </remarks>
-    private async Task<Result<string>> ReserveNumberAsync(
-        StockDocumentType type,
-        FirmId firmId,
-        BranchId branchId,
-        FinancialYear year,
-        CancellationToken cancellationToken)
-    {
-        string documentType = DocumentTypes.ForStockDocument(type);
-
-        NumberingSeries? series = await _numbering.FindForUpdateAsync(
-            documentType, firmId, branchId, year.Id, cancellationToken);
-
-        if (series is null)
-        {
-            Result<NumberingSeries> created = NumberingSeries.Create(
-                _tenantContext.TenantId, firmId, documentType, branchId, year.Id);
-
-            if (created.IsFailure)
-            {
-                return Result.Failure<string>(created.Error);
-            }
-
-            series = created.Value;
-            NumberingDefaults.Apply(series, year.Code);
-
-            _numbering.Add(series);
-        }
-
-        return series.Reserve();
+        return Result.Success(StockLoader.Describe(written.Value.Document, written.Value.Movements));
     }
 }
 
@@ -263,6 +160,7 @@ public sealed class PostStockDocumentCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly IFirmPolicyReader? _policies;
     private readonly StockJournalPoster _journal;
 
     /// <summary>Initialises a new instance of the <see cref="PostStockDocumentCommandHandler"/> class.</summary>
@@ -282,6 +180,7 @@ public sealed class PostStockDocumentCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies, which decide whether stock may go below zero.</param>
     public PostStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IProductRepository products,
@@ -298,8 +197,10 @@ public sealed class PostStockDocumentCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null)
     {
+        _policies = policies;
         _documents = documents;
         _products = products;
         _batches = batches;
@@ -354,9 +255,20 @@ public sealed class PostStockDocumentCommandHandler
         IReadOnlyDictionary<SerialNumberId, SerialNumber> serials =
             await _serials.ForDocumentAsync(document.Id, cancellationToken);
 
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(document.FirmId, cancellationToken);
+
+        // A draft entered before the firm made requests compulsory is still a transfer
+        // made without one.
+        if (document.Type == StockDocumentType.StockTransfer && policies.TransfersRequireApproval)
+        {
+            return Result.Failure<CreateStockDocumentResponse>(StockTransferRules.RequestRequired());
+        }
+
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
             document, products, batches, serials, firm.BaseCurrency, _clock.UtcNow,
-            cancellationToken);
+            cancellationToken, policies.AllowsNegativeStock);
 
         if (applied.IsFailure)
         {
@@ -401,6 +313,7 @@ public sealed class CancelStockDocumentCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
     private readonly StockJournalPoster _journal;
+    private readonly IStockTransferRequestRepository? _transfers;
 
     /// <summary>Initialises a new instance of the <see cref="CancelStockDocumentCommandHandler"/> class.</summary>
     /// <param name="documents">The stock document repository.</param>
@@ -418,6 +331,10 @@ public sealed class CancelStockDocumentCommandHandler
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="transfers">
+    /// The transfer requests, so cancelling a dispatch or a receipt puts its request back
+    /// a step.
+    /// </param>
     public CancelStockDocumentCommandHandler(
         IStockDocumentRepository documents,
         IStockBalanceRepository balances,
@@ -433,8 +350,10 @@ public sealed class CancelStockDocumentCommandHandler
         IFirmRepository firms,
         ITenantContext tenantContext,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IStockTransferRequestRepository? transfers = null)
     {
+        _transfers = transfers;
         _documents = documents;
         _ledger = ledger;
         _products = products;
@@ -480,6 +399,23 @@ public sealed class CancelStockDocumentCommandHandler
         if (cancelled.IsFailure)
         {
             return cancelled;
+        }
+
+        // A dispatch or a receipt cancelled puts its request back a step: goods taken
+        // back off the road are approved and waiting again, and goods taken back out of
+        // the destination are on the road again. A dispatch whose goods have arrived
+        // cannot be undone before the receipt is.
+        if (document.Type == StockDocumentType.StockTransfer && _transfers is not null
+            && await _transfers.FindByDocumentAsync(document.Id, cancellationToken) is { } transfer)
+        {
+            Result stepped = transfer.ReceiptDocumentId == document.Id
+                ? transfer.UndoReceipt()
+                : transfer.UndoDispatch();
+
+            if (stepped.IsFailure)
+            {
+                return stepped;
+            }
         }
 
         IReadOnlyList<StockLedgerEntry> movements =
@@ -603,7 +539,8 @@ internal static class StockLoader
         IFinancialYearRepository financialYears,
         IInventoryMasterRepository masters,
         IProductRepository products,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILedgerRepository? ledgers = null)
     {
         Firm? firm = await firms.FindAsync(firmId, cancellationToken);
 
@@ -695,7 +632,20 @@ internal static class StockLoader
             }
         }
 
-        return Result.Success(new StockContext(firm, year, warehouse.Value, destination, found, units));
+        Ledger? party = null;
+
+        if (request.PartyLedgerId is { } partyId)
+        {
+            party = ledgers is null ? null : await ledgers.FindAsync(LedgerId.From(partyId), cancellationToken);
+
+            if (party is null || party.FirmId != firmId)
+            {
+                return Result.Failure<StockContext>(Error.NotFound(
+                    "StockDocument.PartyNotFound", "No such customer or supplier in the selected firm."));
+            }
+        }
+
+        return Result.Success(new StockContext(firm, year, warehouse.Value, destination, found, units, party));
     }
 
     /// <summary>Builds the draft and its lines, converting every quantity to stock units.</summary>
@@ -717,7 +667,7 @@ internal static class StockLoader
     {
         Result<StockDocument> draft = StockDocument.CreateDraft(
             tenantId, firmId, context.Year, request.Type, number, request.Date,
-            context.Warehouse, context.Destination);
+            context.Warehouse, context.Destination, context.Party);
 
         if (draft.IsFailure)
         {

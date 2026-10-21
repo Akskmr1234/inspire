@@ -76,6 +76,8 @@ public sealed class SalesOrderReader : ISalesOrderReader
         IQueryable<SalesOrder> orders,
         SalesOrderFilter filter)
     {
+        orders = orders.Where(order => order.Kind == filter.Kind);
+
         if (filter.From is { } from)
         {
             orders = orders.Where(order => order.Date >= from);
@@ -140,6 +142,7 @@ public sealed class SalesOrderReader : ISalesOrderReader
             order.Lines.Count(line => !line.IsFulfilled),
             order.Taxable.Amount,
             order.Tax.Amount,
-            order.Total.Amount);
+            order.Total.Amount,
+            order.Kind);
     }
 }

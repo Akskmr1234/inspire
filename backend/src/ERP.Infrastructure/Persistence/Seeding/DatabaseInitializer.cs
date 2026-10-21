@@ -1,4 +1,5 @@
 using System.Globalization;
+using ERP.Infrastructure.Auditing;
 using ERP.SharedKernel.Results;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -96,6 +97,11 @@ public static partial class DatabaseInitializer
                 await context.Database.MigrateAsync(cancellationToken);
             }
         }
+
+        // The audit trail's own database: found, created, or failing both, kept beside
+        // the books - and brought up to date where migrations are run at all.
+        await scope.ServiceProvider.GetRequiredService<AuditStore>()
+            .InitialiseAsync(services, logger, applyMigrations, cancellationToken);
 
         SeedOptions options = scope.ServiceProvider
             .GetRequiredService<IOptions<SeedOptions>>().Value;

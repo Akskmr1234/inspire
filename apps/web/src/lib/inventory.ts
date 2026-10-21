@@ -45,6 +45,8 @@ export interface WarehouseSummary {
   readonly address: string | null;
   readonly isDefault: boolean;
   readonly isActive: boolean;
+  /** The goods-in-transit location, which only a transfer request moves goods through. */
+  readonly isTransit?: boolean;
 }
 
 /**

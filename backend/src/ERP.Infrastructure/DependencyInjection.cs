@@ -3,9 +3,12 @@ using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
+using ERP.Application.Inventory.Production;
 using ERP.Application.Inventory.Products;
 using ERP.Application.Inventory.Stock;
 using ERP.Application.Parties;
+using ERP.Application.Platform.Approvals;
+using ERP.Application.Platform.Audit;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Data;
 using ERP.Application.Platform.Grids;
@@ -13,6 +16,9 @@ using ERP.Application.Platform.Import;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
 using ERP.Application.Platform.Users;
+using ERP.Application.Sales;
+using ERP.Application.Service;
+using ERP.Infrastructure.Auditing;
 using ERP.Infrastructure.Import;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Persistence.Interceptors;
@@ -88,6 +94,7 @@ public static class DependencyInjection
         services.AddScoped<IFinancialYearRepository, FinancialYearRepository>();
         services.AddScoped<INumberingSeriesRepository, NumberingSeriesRepository>();
         services.AddScoped<ITrialBalanceReader, TrialBalanceReader>();
+        services.AddScoped<ILedgerBalanceReader, LedgerBalanceReader>();
         services.AddScoped<ILedgerStatementReader, LedgerStatementReader>();
         services.AddScoped<IDayBookReader, DayBookReader>();
         services.AddScoped<IVoucherReportReader, VoucherReportReader>();
@@ -110,6 +117,11 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IProductReader, ProductReader>();
         services.AddScoped<IStockDocumentRepository, StockDocumentRepository>();
+        services.AddScoped<IStockTransferRequestRepository, StockTransferRequestRepository>();
+        services.AddScoped<IBillOfMaterialsRepository, BillOfMaterialsRepository>();
+        services.AddScoped<IJobCardRepository, JobCardRepository>();
+        services.AddScoped<IRmaRepository, RmaRepository>();
+        services.AddScoped<IEditRequestRepository, EditRequestRepository>();
         services.AddScoped<IStockBalanceRepository, StockBalanceRepository>();
         services.AddScoped<IStockLedgerRepository, StockLedgerRepository>();
         services.AddScoped<IBatchRepository, BatchRepository>();
@@ -127,6 +139,13 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseInvoiceReader, PurchaseInvoiceReader>();
         services.AddScoped<IPurchaseOrderReader, PurchaseOrderReader>();
         services.AddScoped<IStockDocumentReader, StockDocumentReader>();
+        services.AddScoped<IStockTransferReader, StockTransferReader>();
+        services.AddScoped<IStockHistoryReader, StockHistoryReader>();
+        services.AddScoped<IBillOfMaterialsReader, BillOfMaterialsReader>();
+        services.AddScoped<IJobCardReader, JobCardReader>();
+        services.AddScoped<ISalesRateReader, SalesRateReader>();
+        services.AddScoped<ISalesProfitReader, SalesProfitReader>();
+        services.AddScoped<IRmaReader, RmaReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();
         services.AddScoped<ISerialReader, SerialReader>();
@@ -135,6 +154,25 @@ public static class DependencyInjection
 
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();
+
+        // The audit trail, in a database of its own. Which database is settled at startup,
+        // so the options are built per scope from wherever that turned out to be.
+        services.AddSingleton(new AuditStore(connectionString, configuration.GetConnectionString("Audit")));
+        services.AddDbContextFactory<AuditDbContext>(
+            (serviceProvider, options) =>
+            {
+                options.UseNpgsql(
+                    serviceProvider.GetRequiredService<AuditStore>().ConnectionString,
+                    npgsql => npgsql
+                        .MigrationsAssembly(typeof(AuditDbContext).Assembly.FullName)
+                        .MigrationsHistoryTable("__ef_migrations_history", AuditDbContext.Schema));
+
+                options.AddInterceptors(serviceProvider.GetRequiredService<TenantConnectionInterceptor>());
+            },
+            ServiceLifetime.Scoped);
+        services.AddScoped<AuditTrail>();
+        services.AddScoped<AuditTrailInterceptor>();
+        services.AddScoped<IAuditLogReader, AuditLogReader>();
 
         services.AddDbContext<ErpDbContext>((serviceProvider, options) =>
         {
@@ -153,6 +191,7 @@ public static class DependencyInjection
 
             options.AddInterceptors(
                 serviceProvider.GetRequiredService<AuditingInterceptor>(),
+                serviceProvider.GetRequiredService<AuditTrailInterceptor>(),
                 serviceProvider.GetRequiredService<TenantConnectionInterceptor>());
         });
 

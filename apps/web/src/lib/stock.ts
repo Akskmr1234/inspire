@@ -13,6 +13,9 @@ export const StockDocumentType = {
   stockAdjustment: 5,
   damagedStock: 6,
   physicalVerification: 7,
+  deliveryNote: 12,
+  receiptNote: 13,
+  production: 14,
 } as const;
 
 /** Where a stock document stands. */
@@ -41,7 +44,15 @@ export function carriesRate(type: number): boolean {
   return (
     type === StockDocumentType.openingStock ||
     type === StockDocumentType.materialReceipt ||
-    type === StockDocumentType.stockAdjustment
+    type === StockDocumentType.stockAdjustment ||
+    type === StockDocumentType.receiptNote
+  );
+}
+
+/** Whether a kind of document names the customer or supplier on the other end. */
+export function namesParty(type: number): boolean {
+  return (
+    type === StockDocumentType.deliveryNote || type === StockDocumentType.receiptNote
   );
 }
 
@@ -74,6 +85,11 @@ export interface StockDocumentSummary {
   readonly lineCount: number;
   readonly totalQuantity: number;
   readonly totalValue: number;
+  /** The customer or supplier a delivery or receipt note names. */
+  readonly partyName?: string | null;
+  /** The invoice that billed a delivery or receipt note, while it stands. */
+  readonly invoiceId?: string | null;
+  readonly invoiceNumber?: string | null;
 }
 
 /** One line of a stock document. */
@@ -124,6 +140,10 @@ export interface StockDocumentDetail {
   readonly cancellationReason: string | null;
   readonly lines: readonly StockDocumentLineView[];
   readonly movements: readonly StockMovementView[];
+  readonly partyLedgerId?: string | null;
+  readonly partyName?: string | null;
+  readonly invoiceId?: string | null;
+  readonly invoiceNumber?: string | null;
 }
 
 /** What a posting did. */
@@ -258,6 +278,8 @@ export interface BatchStockRow {
   readonly unitCost: number;
   readonly value: number;
   readonly purchaseRate: number;
+  /** What one stock unit of the batch sells at, where the firm has said. */
+  readonly sellingRate?: number | null;
   readonly manufacturedOn: string | null;
   readonly expiresOn: string | null;
   readonly daysToExpiry: number | null;
@@ -320,6 +342,7 @@ export function createStockDocument(body: {
   readonly referenceNumber?: string | null;
   readonly narration?: string | null;
   readonly postImmediately: boolean;
+  readonly partyLedgerId?: string | null;
 }): Promise<CreateStockDocumentResponse> {
   return request<CreateStockDocumentResponse>(`${STOCK}/documents`, {
     method: 'POST',
@@ -429,6 +452,59 @@ export function fetchProductBatches(
 }
 
 /** Reads the batch-wise stock. */
+/** Sets what one stock unit of a batch sells at; null leaves it to the product's rates. */
+export function setBatchSellingRate(
+  batchId: string,
+  sellingRate: number | null,
+): Promise<void> {
+  return request<void>(`/inventory/stock/batches/${batchId}/selling-rate`, {
+    method: 'PUT',
+    body: { sellingRate },
+  });
+}
+
+/** What one product, or one batch of it, made on what was sold. */
+export interface SalesProfitRow {
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productName: string;
+  readonly batchId: string | null;
+  readonly batchNumber: string | null;
+  readonly quantity: number;
+  readonly sales: number;
+  readonly cost: number;
+  readonly profit: number;
+  readonly marginPercent: number | null;
+  readonly purchaseRate: number | null;
+  readonly sellingRate: number | null;
+}
+
+/** A period's profit on goods sold, batch by batch. */
+export interface SalesProfitReport {
+  readonly from: string;
+  readonly to: string;
+  readonly currency: string;
+  readonly rows: readonly SalesProfitRow[];
+  readonly totalSales: number;
+  readonly totalCost: number;
+  readonly totalProfit: number;
+}
+
+/** Reads a period's profit on goods sold, each batch at its own cost. */
+export function fetchSalesProfit(
+  from: string,
+  to: string,
+  productId: string,
+): Promise<SalesProfitReport> {
+  const query = new URLSearchParams({ from, to });
+
+  if (productId) {
+    query.set('productId', productId);
+  }
+
+  return request<SalesProfitReport>(`/sales/invoices/profit?${query.toString()}`);
+}
+
 export function fetchBatchStock(
   warehouseId: string,
   categoryId: string,
@@ -502,4 +578,61 @@ export function fetchExpiring(
   }
 
   return request<readonly BatchStockRow[]>(`${STOCK}/expiry?${query.toString()}`);
+}
+
+/** Which corrections a history lists: counts and adjustments, or write-offs. */
+export const StockHistoryKind = { adjustments: 1, damaged: 2 } as const;
+
+/** One product on one correction, with the stock either side of it. */
+export interface StockHistoryRow {
+  readonly documentId: string;
+  readonly number: string;
+  readonly date: string;
+  readonly type: number;
+  readonly status: number;
+  readonly warehouseName: string;
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productName: string;
+  readonly stockUnitCode: string;
+  readonly batchNumber: string | null;
+  readonly previousQuantity: number;
+  readonly actualQuantity: number;
+  readonly adjustedQuantity: number;
+  readonly value: number;
+  readonly reason: string | null;
+}
+
+/** Lists the corrections made to stock, line by line. */
+export function fetchStockHistory(
+  kind: number,
+  from: string,
+  to: string,
+  warehouseId: string,
+): Promise<readonly StockHistoryRow[]> {
+  const query = new URLSearchParams({ kind: String(kind), from, to });
+
+  if (warehouseId) {
+    query.set('warehouseId', warehouseId);
+  }
+
+  return request<readonly StockHistoryRow[]>(`${STOCK}/history?${query.toString()}`);
+}
+
+/** Raises a draft sales invoice billing the goods of a delivery note. */
+export function invoiceDeliveryNote(
+  id: string,
+): Promise<{ readonly salesInvoiceId: string; readonly number: string }> {
+  return request(`${STOCK}/documents/${id}/sales-invoice`, { method: 'POST', body: {} });
+}
+
+/** Raises a draft purchase paying for the goods of a receipt note. */
+export function invoiceReceiptNote(
+  id: string,
+  supplierInvoiceNumber: string | null,
+): Promise<{ readonly purchaseInvoiceId: string; readonly number: string }> {
+  return request(`${STOCK}/documents/${id}/purchase-invoice`, {
+    method: 'POST',
+    body: { supplierInvoiceNumber },
+  });
 }

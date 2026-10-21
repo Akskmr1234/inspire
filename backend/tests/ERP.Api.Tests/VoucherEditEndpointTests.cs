@@ -42,6 +42,14 @@ public sealed class VoucherEditEndpointTests
 
         (await OutstandingAsync(client, masters.CustomerId)).ShouldBe(600m);
 
+        // The next receipt for the customer offers the sale with what is left of it.
+        OutstandingBill open = (await client.GetFromJsonAsync<List<OutstandingBill>>(
+            $"{Vouchers}/open-bills?ledgerId={masters.CustomerId}&type={(int)BillType.Receivable}"))!.Single();
+        open.BillNumber.ShouldBe(sale.Header.Number);
+        open.OutstandingAmount.ShouldBe(600m);
+        (await client.GetFromJsonAsync<List<OutstandingBill>>(
+            $"{Vouchers}/open-bills?ledgerId={masters.CustomerId}&type={(int)BillType.Payable}"))!.ShouldBeEmpty();
+
         // It was 450.
         HttpResponseMessage edited = await client.PutAsJsonAsync(
             $"{Vouchers}/{receipt.VoucherId}",

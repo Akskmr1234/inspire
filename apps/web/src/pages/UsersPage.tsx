@@ -53,6 +53,28 @@ export function UsersPage(): React.JSX.Element {
     void queryClient.invalidateQueries({ queryKey: ['platform-roles'] });
   };
 
+  const lastLogin = (user: UserSummary): string =>
+    user.lastLoginAtUtc ? new Date(user.lastLoginAtUtc).toLocaleString() : '—';
+
+  const actions = (user: UserSummary): React.JSX.Element => (
+    <>
+      <button
+        type="button"
+        onClick={() => setEditing(user)}
+        className="row-action row-action-neutral"
+      >
+        {t('common.edit')}
+      </button>
+      <button
+        type="button"
+        onClick={() => setResetting(user)}
+        className="row-action row-action-neutral"
+      >
+        {t('users.resetPassword')}
+      </button>
+    </>
+  );
+
   return (
     <section className="page">
       <PageHeading
@@ -89,69 +111,99 @@ export function UsersPage(): React.JSX.Element {
       )}
 
       {users.data && (
-        <div className="table-wrap">
-          <table className="table min-w-[48rem] text-sm">
-            <thead>
-              <tr>
-                <th className="text-start">{t('users.userName')}</th>
-                <th className="text-start">{t('users.displayName')}</th>
-                <th className="text-start">{t('users.email')}</th>
-                <th className="text-start">{t('users.roles')}</th>
-                <th className="text-start">{t('users.status')}</th>
-                <th className="text-start">{t('users.lastLogin')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {users.data.map((user) => (
-                <tr key={user.userId}>
-                  <td className="font-mono">{user.userName}</td>
-                  <td>{user.displayName}</td>
-                  <td className="text-ink-muted">{user.email}</td>
-                  <td>{user.roleIds.map(roleName).join(', ')}</td>
-                  <td>
-                    <span className="inline-flex flex-wrap items-center gap-1">
-                      <ActiveBadge isActive={user.isActive} />
-                      {user.mustChangePassword && (
-                        <span className="text-[11px] text-ink-muted">
-                          {t('users.mustChange')}
-                        </span>
-                      )}
-                      {user.isLockedOut && (
-                        <span className="text-[11px] text-red-600">
-                          {t('users.lockedOut')}
-                        </span>
-                      )}
-                    </span>
-                  </td>
-                  <td className="text-ink-muted whitespace-nowrap">
-                    {user.lastLoginAtUtc
-                      ? new Date(user.lastLoginAtUtc).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td className="text-end whitespace-nowrap">
-                    <span className="inline-flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditing(user)}
-                        className="row-action row-action-neutral"
-                      >
-                        {t('common.edit')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setResetting(user)}
-                        className="row-action row-action-neutral"
-                      >
-                        {t('users.resetPassword')}
-                      </button>
-                    </span>
-                  </td>
+        <>
+          {/*
+            A card a user below 1280px, the table only where its seven columns fit.
+            Scrolled sideways, they left the roles, the status and both buttons off
+            the screen on a phone and still the buttons on a laptop, so the one thing
+            anybody comes here to do — edit somebody or reset their password — took a
+            sideways drag to find.
+          */}
+          <ul className="grid gap-2 sm:grid-cols-2 xl:hidden">
+            {users.data.map((user) => (
+              <li key={user.userId} className="card card-body space-y-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ink [overflow-wrap:anywhere]">
+                      {user.displayName}
+                    </p>
+                    <p className="font-mono text-xs text-ink-muted [overflow-wrap:anywhere]">
+                      {user.userName}
+                    </p>
+                  </div>
+                  <ActiveBadge isActive={user.isActive} />
+                </div>
+
+                <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+                  {user.email && (
+                    <>
+                      <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                        {t('users.email')}
+                      </dt>
+                      <dd className="min-w-0 text-end text-ink [overflow-wrap:anywhere]">
+                        {user.email}
+                      </dd>
+                    </>
+                  )}
+                  <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                    {t('users.roles')}
+                  </dt>
+                  <dd className="min-w-0 text-end text-ink [overflow-wrap:anywhere]">
+                    {user.roleIds.map(roleName).join(', ') || '—'}
+                  </dd>
+                  <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                    {t('users.lastLogin')}
+                  </dt>
+                  <dd className="min-w-0 text-end text-ink-muted">{lastLogin(user)}</dd>
+                </dl>
+
+                {(user.mustChangePassword || user.isLockedOut) && <Flags user={user} />}
+
+                <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+                  {actions(user)}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="table-wrap hidden xl:block">
+            <table className="table min-w-[48rem] text-sm">
+              <thead>
+                <tr>
+                  <th className="text-start">{t('users.userName')}</th>
+                  <th className="text-start">{t('users.displayName')}</th>
+                  <th className="text-start">{t('users.email')}</th>
+                  <th className="text-start">{t('users.roles')}</th>
+                  <th className="text-start">{t('users.status')}</th>
+                  <th className="text-start">{t('users.lastLogin')}</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.data.map((user) => (
+                  <tr key={user.userId}>
+                    <td className="font-mono">{user.userName}</td>
+                    <td>{user.displayName}</td>
+                    <td className="text-ink-muted">{user.email}</td>
+                    <td>{user.roleIds.map(roleName).join(', ')}</td>
+                    <td>
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        <ActiveBadge isActive={user.isActive} />
+                        <Flags user={user} />
+                      </span>
+                    </td>
+                    <td className="text-ink-muted whitespace-nowrap">
+                      {lastLogin(user)}
+                    </td>
+                    <td className="text-end whitespace-nowrap">
+                      <span className="inline-flex gap-1">{actions(user)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {editing && roles.data && (
@@ -171,6 +223,22 @@ export function UsersPage(): React.JSX.Element {
         />
       )}
     </section>
+  );
+}
+
+/** What else stands in the way of a user signing in, beside the account being active. */
+function Flags({ user }: { readonly user: UserSummary }): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      {user.mustChangePassword && (
+        <span className="text-[11px] text-ink-muted">{t('users.mustChange')}</span>
+      )}
+      {user.isLockedOut && (
+        <span className="text-[11px] text-red-600">{t('users.lockedOut')}</span>
+      )}
+    </span>
   );
 }
 

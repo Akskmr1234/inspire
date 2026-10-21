@@ -1,5 +1,8 @@
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Platform.Approvals;
 using ERP.Domain.Inventory;
+using ERP.Domain.Platform;
+using ERP.Domain.Service;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +28,143 @@ public sealed class StockDocumentRepository : IStockDocumentRepository
 
     /// <inheritdoc />
     public void Add(StockDocument document) => _context.StockDocuments.Add(document);
+}
+
+/// <summary>Reads and writes bills of materials.</summary>
+public sealed class BillOfMaterialsRepository : IBillOfMaterialsRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="BillOfMaterialsRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public BillOfMaterialsRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<BillOfMaterials?> FindAsync(
+        BillOfMaterialsId id,
+        CancellationToken cancellationToken = default) =>
+        _context.BillsOfMaterials
+            .Include(bill => bill.Lines)
+            .FirstOrDefaultAsync(bill => bill.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> ExistsForAsync(
+        FirmId firmId,
+        ProductId productId,
+        CancellationToken cancellationToken = default) =>
+        _context.BillsOfMaterials.AnyAsync(
+            bill => bill.FirmId == firmId && bill.ProductId == productId, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(BillOfMaterials bill) => _context.BillsOfMaterials.Add(bill);
+}
+
+/// <summary>Reads and writes service job cards.</summary>
+public sealed class JobCardRepository : IJobCardRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="JobCardRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public JobCardRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<JobCard?> FindAsync(JobCardId id, CancellationToken cancellationToken = default) =>
+        _context.JobCards
+            .Include(card => card.Lines)
+            .FirstOrDefaultAsync(card => card.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(JobCard card) => _context.JobCards.Add(card);
+}
+
+/// <summary>Reads and writes return merchandise authorisations.</summary>
+public sealed class RmaRepository : IRmaRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="RmaRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public RmaRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<Rma?> FindAsync(RmaId id, CancellationToken cancellationToken = default) =>
+        _context.Rmas
+            .Include(rma => rma.Lines)
+            .Include(rma => rma.Photos)
+            .Include(rma => rma.Events)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(rma => rma.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Rma rma) => _context.Rmas.Add(rma);
+}
+
+/// <summary>Reads and writes changes to posted documents held for approval.</summary>
+public sealed class EditRequestRepository : IEditRequestRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="EditRequestRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public EditRequestRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<EditRequest?> FindAsync(EditRequestId id, CancellationToken cancellationToken = default) =>
+        _context.EditRequests.FirstOrDefaultAsync(request => request.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<EditRequest?> FindPendingAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        _context.EditRequests.FirstOrDefaultAsync(
+            request => request.DocumentId == documentId && request.Status == EditRequestStatus.Pending,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EditRequest>> ListAsync(
+        FirmId firmId,
+        EditRequestStatus? status,
+        CancellationToken cancellationToken = default) =>
+        await _context.EditRequests
+            .Where(request => request.FirmId == firmId && (status == null || request.Status == status))
+            .OrderByDescending(request => request.RequestedAtUtc)
+            .Take(500)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(EditRequest request) => _context.EditRequests.Add(request);
+}
+
+/// <summary>Reads and writes stock transfer requests.</summary>
+public sealed class StockTransferRequestRepository : IStockTransferRequestRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="StockTransferRequestRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public StockTransferRequestRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<StockTransferRequest?> FindAsync(
+        StockTransferRequestId id,
+        CancellationToken cancellationToken = default) =>
+        _context.StockTransferRequests
+            .Include(request => request.Lines)
+            .FirstOrDefaultAsync(request => request.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<StockTransferRequest?> FindByDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default) =>
+        _context.StockTransferRequests
+            .Include(request => request.Lines)
+            .FirstOrDefaultAsync(
+                request => request.DispatchDocumentId == documentId
+                    || request.ReceiptDocumentId == documentId,
+                cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(StockTransferRequest request) => _context.StockTransferRequests.Add(request);
 }
 
 /// <summary>Reads and writes stock positions.</summary>

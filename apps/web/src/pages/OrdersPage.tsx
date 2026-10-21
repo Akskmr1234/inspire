@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
+import { IconPrinter } from '@/components/icons';
+import { PrintCenter } from '@/components/print/PrintCenter';
+import { printableOrder } from '@/lib/printing';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
@@ -45,6 +48,8 @@ import {
   listPurchaseOrders,
   listSalesOrders,
   OrderStatus,
+  SalesOrderKind,
+  type SalesOrderDetail,
   type OrderChargeDetail,
   type OrderLineDetail,
   type OrderLineInput,
@@ -104,6 +109,8 @@ interface OrderDocument {
   readonly total: number;
   readonly lines: readonly OrderLineDetail[];
   readonly charges: readonly OrderChargeDetail[];
+  /** The order as the server read it back, for printing; sales orders and quotations only. */
+  readonly sales?: SalesOrderDetail;
 }
 
 /** A line being entered on an order. */
@@ -143,8 +150,36 @@ export function SalesOrdersPage(): React.JSX.Element {
   return <OrdersPage kind="sales" />;
 }
 
-function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
+/**
+ * Quotations given to customers: a sales order the customer has not yet accepted.
+ * Accepted, one is raised as an invoice like any order; its rates are what the sales
+ * screen offers as the customer's last quotation rate.
+ */
+export function SalesQuotationsPage(): React.JSX.Element {
+  return <OrdersPage kind="sales" quotation />;
+}
+
+/** The orders wording, with a quotation's own words where it has them. */
+function useOrderWords(
+  quotation: boolean,
+): (key: string, options?: Record<string, unknown>) => string {
+  const { t, i18n } = useTranslation();
+
+  return (key, options = {}) =>
+    quotation && i18n.exists(`quotations.${key}`)
+      ? t(`quotations.${key}`, options)
+      : t(`orders.${key}`, options);
+}
+
+function OrdersPage({
+  kind,
+  quotation = false,
+}: {
+  readonly kind: OrderKind;
+  readonly quotation?: boolean;
+}): React.JSX.Element {
   const { t } = useTranslation();
+  const words = useOrderWords(quotation);
   const queryClient = useQueryClient();
   const pageSize = useSettings((state) => state.pageSize);
 
@@ -163,7 +198,12 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const listKey = kind === 'purchase' ? 'purchase-orders' : 'sales-orders';
+  const listKey =
+    kind === 'purchase'
+      ? 'purchase-orders'
+      : quotation
+        ? 'sales-quotations'
+        : 'sales-orders';
 
   const query = useQuery<PagedResult<OrderRow>, ApiError>({
     queryKey: [listKey, from, to, statusFilter, outstandingOnly, search, page, pageSize],
@@ -199,7 +239,12 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
         };
       }
 
-      const result = await listSalesOrders(filter, page, pageSize);
+      const result = await listSalesOrders(
+        filter,
+        page,
+        pageSize,
+        quotation ? SalesOrderKind.quotation : SalesOrderKind.order,
+      );
 
       return {
         ...result,
@@ -230,7 +275,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       window.setTimeout(() => setNotice(null), 6000);
 
       await queryClient.invalidateQueries({ queryKey: [listKey] });
-      await queryClient.invalidateQueries({ queryKey: [`${listKey}-detail`] });
+      await queryClient.invalidateQueries({ queryKey: [`${kind}-orders-detail`] });
       // A conversion produces a draft document in the other module, so its list is
       // stale the moment this succeeds.
       await queryClient.invalidateQueries({
@@ -252,7 +297,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
   const columns: readonly GridColumn<OrderRow>[] = [
     {
       key: 'number',
-      header: t('orders.number'),
+      header: words('number'),
       value: (row) => row.number,
       render: (row) => (
         <button type="button" onClick={() => setViewing(row.id)} className="cell-link">
@@ -260,10 +305,10 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
         </button>
       ),
     },
-    { key: 'date', header: t('orders.date'), value: (row) => row.date },
+    { key: 'date', header: words('date'), value: (row) => row.date },
     {
       key: 'expected',
-      header: t('orders.expectedOn'),
+      header: words('expectedOn'),
       value: (row) => row.expectedOn ?? '',
     },
     {
@@ -313,11 +358,11 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
     {
       key: 'status',
       header: t('orders.status'),
-      value: (row) => statusLabel(row.status, t),
+      value: (row) => statusLabel(row.status, words),
       render: (row) => (
         <StatusBadge
           tone={statusTone(row.status)}
-          label={statusLabel(row.status, t)}
+          label={statusLabel(row.status, words)}
           struck={row.status === OrderStatus.cancelled}
         />
       ),
@@ -359,9 +404,9 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
         options={[
           { value: '', label: t('orders.allStatuses') },
           { value: OrderStatus.draft, label: t('orders.draft') },
-          { value: OrderStatus.confirmed, label: t('orders.confirmed') },
+          { value: OrderStatus.confirmed, label: words('confirmed') },
           { value: OrderStatus.completed, label: t('orders.completed') },
-          { value: OrderStatus.cancelled, label: t('orders.cancelled') },
+          { value: OrderStatus.cancelled, label: words('cancelled') },
         ]}
       />
 
@@ -370,7 +415,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
         type="search"
         value={search}
         onChange={(value) => narrow(setSearch)(value)}
-        placeholder={t('orders.searchHint')}
+        placeholder={words('searchHint')}
         size="sm"
       />
 
@@ -385,7 +430,13 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
   return (
     <>
       <ReportFrame
-        title={kind === 'purchase' ? t('nav.purchaseOrders') : t('nav.salesOrders')}
+        title={
+          kind === 'purchase'
+            ? t('nav.purchaseOrders')
+            : quotation
+              ? t('nav.salesQuotations')
+              : t('nav.salesOrders')
+        }
         controls={controls}
         query={query}
       >
@@ -399,9 +450,9 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
               rows={result.items}
               columns={columns}
               rowKey={(row) => row.id}
-              emptyMessage={t('orders.none')}
+              emptyMessage={words('none')}
               actions={
-                <GridAction label={t('orders.new')} onClick={() => setEntering(true)} />
+                <GridAction label={words('new')} onClick={() => setEntering(true)} />
               }
               paging={{
                 page: result.page,
@@ -418,6 +469,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       {entering && (
         <OrderEntryDialog
           kind={kind}
+          quotation={quotation}
           onClose={() => setEntering(false)}
           onSaved={(message) => {
             setEntering(false);
@@ -431,6 +483,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
       {viewing && (
         <OrderDialog
           kind={kind}
+          quotation={quotation}
           id={viewing}
           busy={mutation.isPending}
           onClose={() => setViewing(null)}
@@ -441,7 +494,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
                   ? await confirmPurchaseOrder(id)
                   : await confirmSalesOrder(id);
 
-              return t('orders.confirmedNotice', { number: confirmed.number });
+              return words('confirmedNotice', { number: confirmed.number });
             })
           }
           onConvert={(id) =>
@@ -467,7 +520,7 @@ function OrdersPage({ kind }: { readonly kind: OrderKind }): React.JSX.Element {
 
               setViewing(null);
 
-              return t('orders.closedNotice');
+              return words('closedNotice');
             })
           }
         />
@@ -489,16 +542,19 @@ interface OrderHeaderDraft {
 /** Enters an order as a draft. */
 function OrderEntryDialog({
   kind,
+  quotation,
   onClose,
   onSaved,
   onError,
 }: {
   readonly kind: OrderKind;
+  readonly quotation: boolean;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const words = useOrderWords(quotation);
   const { taxRates, defaultTaxRate, preferredWarehouseId } = useSettings();
 
   const [mode, setMode] = useState<number>(PurchaseTaxMode.tax);
@@ -512,7 +568,11 @@ function OrderEntryDialog({
   });
   // The number the series will issue this order, read without reserving it.
   const { next: nextNumber } = useNextNumber(
-    kind === 'purchase' ? DocumentType.purchaseOrder : DocumentType.salesOrder,
+    kind === 'purchase'
+      ? DocumentType.purchaseOrder
+      : quotation
+        ? DocumentType.salesQuotation
+        : DocumentType.salesOrder,
     draft.date,
   );
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
@@ -726,9 +786,13 @@ function OrderEntryDialog({
       const header =
         kind === 'purchase'
           ? await createPurchaseOrder({ ...common, supplierLedgerId: draft.partyId })
-          : await createSalesOrder({ ...common, customerLedgerId: draft.partyId });
+          : await createSalesOrder({
+              ...common,
+              customerLedgerId: draft.partyId,
+              kind: quotation ? SalesOrderKind.quotation : SalesOrderKind.order,
+            });
 
-      onSaved(t('orders.savedNotice', { number: header.number }));
+      onSaved(words('savedNotice', { number: header.number }));
     } catch (failure) {
       const api = failure as ApiError;
       onError(api.detail || api.code);
@@ -749,12 +813,12 @@ function OrderEntryDialog({
 
   return (
     <Modal
-      title={kind === 'purchase' ? t('orders.newPurchase') : t('orders.newSales')}
+      title={kind === 'purchase' ? t('orders.newPurchase') : words('newSales')}
       size="full"
       onClose={onClose}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
-        <Field label={t('orders.number')}>
+        <Field label={words('number')}>
           <input
             value={nextNumber ?? t('orders.numberOnSave')}
             disabled
@@ -763,7 +827,7 @@ function OrderEntryDialog({
         </Field>
 
         <DateField
-          label={t('orders.date')}
+          label={words('date')}
           required
           value={draft.date}
           onChange={(value) => set('date', value)}
@@ -771,7 +835,7 @@ function OrderEntryDialog({
         />
 
         <DateField
-          label={t('orders.expectedOn')}
+          label={words('expectedOn')}
           value={draft.expectedOn}
           onChange={(value) => set('expectedOn', value)}
           error={errors['expectedOn']}
@@ -833,14 +897,14 @@ function OrderEntryDialog({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink">{t('orders.linesTitle')}</h3>
+        <h3 className="text-sm font-semibold text-ink">{words('linesTitle')}</h3>
         {columns.picker}
       </div>
 
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[42rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
           <thead className="text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('orders.product')}</th>
@@ -864,7 +928,10 @@ function OrderEntryDialog({
 
               return (
                 <tr key={line.key} className="border-t border-line">
-                  <td data-label={t('orders.product')} className="min-w-64 px-2 py-1">
+                  <td
+                    data-label={t('orders.product')}
+                    className="min-w-40 px-2 py-1 lg:min-w-64"
+                  >
                     <SearchSelect
                       value={line.productId}
                       onChange={(value) => {
@@ -939,7 +1006,7 @@ function OrderEntryDialog({
                           change(index, { taxPercentage: event.target.value })
                         }
                         className={clsx(
-                          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+                          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
                           errorsForLine['taxPercentage'] && 'field-invalid',
                         )}
                       />
@@ -1016,6 +1083,7 @@ function OrderEntryDialog({
 /** Reads an order back, and offers what may still be done to it. */
 function OrderDialog({
   kind,
+  quotation,
   id,
   busy,
   onClose,
@@ -1024,6 +1092,7 @@ function OrderDialog({
   onClose_,
 }: {
   readonly kind: OrderKind;
+  readonly quotation: boolean;
   readonly id: string;
   readonly busy: boolean;
   readonly onClose: () => void;
@@ -1033,6 +1102,7 @@ function OrderDialog({
   readonly onClose_: (id: string, reason: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const words = useOrderWords(quotation);
   const [reason, setReason] = useState('');
 
   const query = useQuery<OrderDocument, ApiError>({
@@ -1076,14 +1146,62 @@ function OrderDialog({
         total: found.header.total,
         lines: found.lines,
         charges: found.charges,
+        sales: found,
       };
     },
   });
 
   const order = query.data;
+  const [printing, setPrinting] = useState(false);
+
+  // What the print names: read only once somebody asks to print.
+  const customers = useQuery<readonly CustomerSummary[], ApiError>({
+    queryKey: ['customers', 'picker'],
+    queryFn: () => listCustomers('', true),
+    enabled: printing,
+  });
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+    enabled: printing,
+  });
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+    enabled: printing,
+  });
+
+  if (printing && order?.sales) {
+    return (
+      <Modal title={order.number} size="full" onClose={() => setPrinting(false)}>
+        {customers.isPending || products.isPending || warehouses.isPending ? (
+          <span className="skeleton block h-24 w-full rounded-lg" />
+        ) : (
+          <PrintCenter
+            document={printableOrder(
+              order.sales,
+              quotation,
+              {
+                customers: customers.data ?? [],
+                products: products.data ?? [],
+                warehouses: warehouses.data ?? [],
+              },
+              {
+                taxable: t('printing.taxable'),
+                tax: t('printing.taxTotal'),
+                charges: t('printing.charges'),
+                roundOff: t('printing.roundOff'),
+              },
+            )}
+            onDone={() => setPrinting(false)}
+          />
+        )}
+      </Modal>
+    );
+  }
 
   return (
-    <Modal title={order?.number ?? t('orders.document')} onClose={onClose}>
+    <Modal title={order?.number ?? words('document')} onClose={onClose}>
       {query.isLoading && (
         <div className="space-y-3" aria-busy="true">
           <span className="skeleton block h-4 w-40 rounded" />
@@ -1094,15 +1212,15 @@ function OrderDialog({
       {order && (
         <>
           <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-            <Detail label={t('orders.number')} value={order.number} />
-            <Detail label={t('orders.date')} value={order.date} />
-            <Detail label={t('orders.expectedOn')} value={order.expectedOn ?? '—'} />
+            <Detail label={words('number')} value={order.number} />
+            <Detail label={words('date')} value={order.date} />
+            <Detail label={words('expectedOn')} value={order.expectedOn ?? '—'} />
             <div>
               <span className="text-xs text-ink-muted">{t('orders.status')}</span>
               <div className="mt-0.5">
                 <StatusBadge
                   tone={statusTone(order.status)}
-                  label={statusLabel(order.status, t)}
+                  label={statusLabel(order.status, words)}
                   struck={order.status === OrderStatus.cancelled}
                 />
               </div>
@@ -1113,7 +1231,7 @@ function OrderDialog({
 
           {order.closureReason && (
             <p className="alert-warn text-xs">
-              {t('orders.closedFor', { reason: order.closureReason })}
+              {words('closedFor', { reason: order.closureReason })}
             </p>
           )}
 
@@ -1129,7 +1247,7 @@ function OrderDialog({
           </p>
 
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <table className="w-full min-w-[34rem] text-sm">
+            <table className="line-table sm:min-w-[34rem]">
               <thead className="text-xs text-ink-muted">
                 <tr>
                   <th className="px-2 py-1 text-start">#</th>
@@ -1143,12 +1261,23 @@ function OrderDialog({
               <tbody>
                 {order.lines.map((line) => (
                   <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-1">{line.lineNumber}</td>
-                    <td className="px-2 py-1 text-end font-mono">{line.quantity}</td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td data-label="#" className="px-2 py-1">
+                      {line.lineNumber}
+                    </td>
+                    <td
+                      data-label={t('orders.ordered')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
+                      {line.quantity}
+                    </td>
+                    <td
+                      data-label={t('orders.invoiced')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {line.invoicedQuantity}
                     </td>
                     <td
+                      data-label={t('orders.outstanding')}
                       className={clsx(
                         'px-2 py-1 text-end font-mono',
                         line.outstandingQuantity > 0 && 'font-semibold text-ink',
@@ -1156,10 +1285,16 @@ function OrderDialog({
                     >
                       {line.outstandingQuantity}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('orders.rate')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.rate)}
                     </td>
-                    <td className="px-2 py-1 text-end font-mono">
+                    <td
+                      data-label={t('orders.taxable')}
+                      className="px-2 py-1 text-end font-mono"
+                    >
                       {moneyAlways(line.taxable)}
                     </td>
                   </tr>
@@ -1196,7 +1331,7 @@ function OrderDialog({
           {order.status === OrderStatus.draft && (
             <div className="flex justify-end">
               <ModalButton primary disabled={busy} onClick={() => onConfirm(id)}>
-                {t('orders.confirm')}
+                {words('confirm')}
               </ModalButton>
             </div>
           )}
@@ -1216,6 +1351,7 @@ function OrderDialog({
             <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('orders.closeReason')}
+                className="max-sm:min-w-0 max-sm:flex-1"
                 size="sm"
                 value={reason}
                 onChange={setReason}
@@ -1224,26 +1360,33 @@ function OrderDialog({
                 disabled={busy || reason.trim() === ''}
                 onClick={() => onClose_(id, reason.trim())}
               >
-                {t('orders.close')}
+                {words('close')}
               </ModalButton>
             </div>
           )}
         </>
       )}
 
-      <div className="flex justify-end pt-3 border-t border-line/60">
+      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
+        {order?.sales && (
+          <ModalButton onClick={() => setPrinting(true)}>
+            <IconPrinter className="size-4" />
+            {t('printing.print')}
+          </ModalButton>
+        )}
         <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
       </div>
     </Modal>
   );
 }
 
-function statusLabel(status: number, t: (key: string) => string): string {
-  if (status === OrderStatus.confirmed) return t('orders.confirmed');
-  if (status === OrderStatus.completed) return t('orders.completed');
-  if (status === OrderStatus.cancelled) return t('orders.cancelled');
+/** A status in the page's own words: an order's, or a quotation's. */
+function statusLabel(status: number, words: (key: string) => string): string {
+  if (status === OrderStatus.confirmed) return words('confirmed');
+  if (status === OrderStatus.completed) return words('completed');
+  if (status === OrderStatus.cancelled) return words('cancelled');
 
-  return t('orders.draft');
+  return words('draft');
 }
 
 function statusTone(status: number): StatusTone {
@@ -1296,7 +1439,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

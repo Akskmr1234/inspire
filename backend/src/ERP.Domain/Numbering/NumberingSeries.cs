@@ -422,6 +422,9 @@ public static class DocumentTypes
     /// <summary>A purchase order.</summary>
     public const string PurchaseOrder = "purchase.order";
 
+    /// <summary>A receipt note: goods in from a supplier ahead of the invoice.</summary>
+    public const string ReceiptNote = "purchase.receipt-note";
+
     /// <summary>A purchase invoice.</summary>
     public const string PurchaseInvoice = "purchase.invoice";
 
@@ -430,6 +433,9 @@ public static class DocumentTypes
 
     /// <summary>A service job card.</summary>
     public const string JobCard = "service.job-card";
+
+    /// <summary>A return merchandise authorisation.</summary>
+    public const string Rma = "service.rma";
 
     /// <summary>An opening-stock document.</summary>
     public const string OpeningStock = "inventory.opening-stock";
@@ -443,8 +449,14 @@ public static class DocumentTypes
     /// <summary>A stock transfer between warehouses.</summary>
     public const string StockTransfer = "inventory.stock-transfer";
 
+    /// <summary>One branch's request for another's goods.</summary>
+    public const string StockTransferRequest = "inventory.transfer-request";
+
     /// <summary>A stock adjustment.</summary>
     public const string StockAdjustment = "inventory.stock-adjustment";
+
+    /// <summary>A production run: materials consumed and finished goods made.</summary>
+    public const string Production = "inventory.production";
 
     /// <summary>A damaged-stock write-off.</summary>
     public const string DamagedStock = "inventory.damaged-stock";
@@ -513,6 +525,9 @@ public static class DocumentTypes
         Inventory.StockDocumentType.SalesReturn => SalesReturnReceipt,
         Inventory.StockDocumentType.PurchaseReceipt => PurchaseReceipt,
         Inventory.StockDocumentType.PurchaseReturn => PurchaseReturnIssue,
+        Inventory.StockDocumentType.DeliveryNote => DeliveryNote,
+        Inventory.StockDocumentType.ReceiptNote => ReceiptNote,
+        Inventory.StockDocumentType.Production => Production,
         _ => throw new ArgumentOutOfRangeException(
             nameof(type), type, "No document type is mapped for this stock operation."),
     };

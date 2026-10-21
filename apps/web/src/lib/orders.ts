@@ -266,18 +266,22 @@ export function closePurchaseOrder(id: string, reason: string): Promise<void> {
 
 // --------------------------------------------------------------------- sales
 
-/** Lists sales orders, newest first. */
+/** Whether a sales order is an order or a quotation, as the API numbers them. */
+export const SalesOrderKind = { order: 1, quotation: 2 } as const;
+
+/** Lists sales orders, or quotations, newest first. */
 export function listSalesOrders(
   filter: OrderFilter,
   page: number,
   pageSize = 25,
+  kind: number = SalesOrderKind.order,
 ): Promise<PagedResult<SalesOrderSummary>> {
   const query = orderQuery(filter, page, pageSize);
   const scoped = filter.partyLedgerId
     ? `${query}&customerLedgerId=${filter.partyLedgerId}`
     : query;
 
-  return request<PagedResult<SalesOrderSummary>>(`/sales/orders?${scoped}`);
+  return request<PagedResult<SalesOrderSummary>>(`/sales/orders?${scoped}&kind=${kind}`);
 }
 
 /** Reads one sales order. */
@@ -296,6 +300,7 @@ export function createSalesOrder(input: {
   readonly expectedOn?: string | null;
   readonly referenceNumber?: string | null;
   readonly narration?: string | null;
+  readonly kind?: number;
 }): Promise<SalesOrderHeader> {
   return request<SalesOrderHeader>('/sales/orders', { method: 'POST', body: input });
 }

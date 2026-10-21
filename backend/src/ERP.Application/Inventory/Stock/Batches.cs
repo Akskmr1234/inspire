@@ -22,6 +22,25 @@ public sealed record CorrectBatchDatesCommand(
     DateOnly? ManufacturedOn,
     DateOnly? ExpiresOn) : ICommand;
 
+/// <summary>Sets what one stock unit of a batch sells at.</summary>
+/// <param name="BatchId">The batch.</param>
+/// <param name="SellingRate">The rate, or null for the product's own rates.</param>
+public sealed record SetBatchSellingRateCommand(Guid BatchId, decimal? SellingRate) : ICommand;
+
+/// <summary>Validates a <see cref="SetBatchSellingRateCommand"/>.</summary>
+public sealed class SetBatchSellingRateCommandValidator : AbstractValidator<SetBatchSellingRateCommand>
+{
+    /// <summary>Initialises a new instance of the <see cref="SetBatchSellingRateCommandValidator"/> class.</summary>
+    public SetBatchSellingRateCommandValidator()
+    {
+        RuleFor(command => command.BatchId).NotEqual(Guid.Empty);
+        RuleFor(command => command.SellingRate)
+            .GreaterThanOrEqualTo(0m)
+            .When(command => command.SellingRate is not null)
+            .WithMessage("A batch cannot sell at a negative rate.");
+    }
+}
+
 /// <summary>Validates a <see cref="CorrectBatchDatesCommand"/>.</summary>
 public sealed class CorrectBatchDatesCommandValidator
     : AbstractValidator<CorrectBatchDatesCommand>
@@ -68,6 +87,7 @@ public sealed record ListProductBatchesQuery(
 /// <param name="DaysToExpiry">
 /// How many days are left, negative once past. Null where the batch never expires.
 /// </param>
+/// <param name="SellingRate">What one stock unit of it sells at, where the firm has said.</param>
 public sealed record BatchStockRow(
     Guid BatchId,
     string BatchNumber,
@@ -83,7 +103,8 @@ public sealed record BatchStockRow(
     decimal PurchaseRate,
     DateOnly? ManufacturedOn,
     DateOnly? ExpiresOn,
-    int? DaysToExpiry);
+    int? DaysToExpiry,
+    decimal? SellingRate = null);
 
 /// <summary>The batch-wise stock report of section 8.3.</summary>
 /// <param name="WarehouseId">One warehouse, or null for every one.</param>

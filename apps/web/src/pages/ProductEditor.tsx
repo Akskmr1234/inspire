@@ -396,7 +396,10 @@ function EditorBody({
         Scrolls rather than wraps below `sm`. Four tabs and a badge do not fit across
         390px, and a tab strip that becomes two rows of buttons stops reading as a strip.
       */}
-      <nav className="flex items-center gap-1 overflow-x-auto border-b border-line">
+      <nav
+        role="tablist"
+        className="flex items-center gap-1 overflow-x-auto border-b border-line"
+      >
         <Tab active={tab === 'description'} onClick={() => setTab('description')}>
           {t('products.tabDescription')}
         </Tab>
@@ -560,8 +563,10 @@ function DescriptionFields({
         </Field>
 
         {/* With the translate button where the firm has turned translation on, as on
-            every other master's Arabic name. */}
-        <div className="lg:col-span-3">
+            every other master's Arabic name. Four and two, the first row the other way
+            round, so both rows break on the thirds every section below them uses; at
+            three and three this row split down the middle and lined up with nothing. */}
+        <div className="lg:col-span-4">
           <ArabicNameField
             label={t('products.descriptionArabic')}
             source={form.description}
@@ -570,7 +575,7 @@ function DescriptionFields({
           />
         </div>
 
-        <Field label={t('products.shortDescription')} span={3}>
+        <Field label={t('products.shortDescription')} span={2}>
           <input
             value={form.shortDescription}
             onChange={(e) => set({ shortDescription: e.target.value })}
@@ -1105,6 +1110,8 @@ function Tab({
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={clsx(
         '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition sm:px-4',

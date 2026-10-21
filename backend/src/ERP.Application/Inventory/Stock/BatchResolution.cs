@@ -234,7 +234,8 @@ internal static class BatchResolver
             line.ManufacturedOn,
             line.ExpiresOn,
             document.CarriesRate ? line.Rate : 0m,
-            sequence);
+            sequence,
+            document.CarriesRate ? line.SellingRate : null);
 
         if (opened.IsFailure)
         {
@@ -257,6 +258,11 @@ internal static class BatchResolver
         if (document.CarriesRate && line.Rate > 0m)
         {
             batch.RecordPurchaseRate(line.Rate);
+        }
+
+        if (document.CarriesRate && line.SellingRate > 0m)
+        {
+            batch.SetSellingRate(line.SellingRate);
         }
 
         return batch;

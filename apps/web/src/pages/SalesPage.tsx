@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
+import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
+import { isHeldForApproval } from '@/lib/approvals';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -29,7 +32,7 @@ import {
 } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, type SalesRateType } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import {
   chargeSetupKey,
@@ -61,7 +64,9 @@ import {
 import {
   cancelSalesInvoice,
   createSalesInvoice,
+  getCustomerAccount,
   getSalesInvoice,
+  getSalesRateHints,
   isReturn,
   listSalesInvoices,
   postSalesInvoice,
@@ -70,6 +75,7 @@ import {
   SalesPaymentMode,
   TaxMode,
   updateSalesInvoice,
+  type CustomerAccount,
   type PagedResult,
   type SalesInvoiceDetail,
   type SalesInvoiceLineDetail,
@@ -127,6 +133,18 @@ function lineTaxRate(
   return mode === 'TAX' && product?.taxPercentage != null
     ? product.taxPercentage
     : modeTaxRate(mode, defaultTaxRate);
+}
+
+/**
+ * What a product sells at from its own master under a rate type. The rate types that
+ * look elsewhere - the customer's quotation or last sale, the batch - start from retail,
+ * which stands where there is nothing to take.
+ */
+function masterRate(product: ProductSummary, rateType: SalesRateType): number {
+  if (rateType === 'wholesale') return product.wholesaleRate || product.retailRate;
+  if (rateType === 'mrp') return product.maximumRetailPrice || product.retailRate;
+
+  return product.retailRate;
 }
 
 const emptyLine: DraftLine = {
@@ -201,6 +219,17 @@ export function SalesPage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
+
+  // Opened on a particular invoice by another screen - a delivery note raising the
+  // invoice that bills it - and the parameter dropped so a refresh lands on the list.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setViewing({ id: open });
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
   // The document being corrected, read back in full so the entry screen can start
   // from what it says.
   const [editing, setEditing] = useState<SalesInvoiceDetail | null>(null);
@@ -260,10 +289,30 @@ export function SalesPage({
       value: (row) => paymentModeLabel(row.paymentMode, t),
       render: (row) => (
         <StatusBadge
-          tone={row.paymentMode === SalesPaymentMode.cash ? 'success' : 'neutral'}
+          tone={
+            row.paymentMode === SalesPaymentMode.cash
+              ? 'success'
+              : row.paymentMode === SalesPaymentMode.online
+                ? 'info'
+                : 'neutral'
+          }
           label={paymentModeLabel(row.paymentMode, t)}
         />
       ),
+    },
+    {
+      key: 'amountReceived',
+      header: t('sales.amountReceived'),
+      value: (row) => row.amountReceived,
+      numeric: true,
+      render: (row) => (row.amountReceived > 0 ? moneyAlways(row.amountReceived) : ''),
+      hiddenByDefault: true,
+    },
+    {
+      key: 'paymentReference',
+      header: t('sales.paymentReference'),
+      value: (row) => row.paymentReference ?? '',
+      hiddenByDefault: true,
     },
     {
       key: 'salesman',
@@ -478,10 +527,12 @@ export function SalesPage({
           }
           onCancel={(id, reason) =>
             run(async () => {
-              await cancelSalesInvoice(id, reason);
+              const held = await cancelSalesInvoice(id, reason);
               setViewing(null);
 
-              return t('sales.cancelledNotice');
+              return held
+                ? t('approvals.heldNotice', { number: held.documentNumber })
+                : t('sales.cancelledNotice');
             })
           }
           onEdit={(document) => {
@@ -609,7 +660,9 @@ function AdditionalLedgersSection({
       )}
 
       {rows.length === 0 ? (
-        <p className="py-2 text-center text-xs text-ink-muted">{t('sales.none')}</p>
+        <p className="py-2 text-center text-xs text-ink-muted">
+          {t('sales.noAdditionalLedgers')}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -850,7 +903,7 @@ function EntryDialog({
 
     return editing.mode === TaxMode.nonTax ? 'NT' : fallback === 'NT' ? 'TAX' : fallback;
   });
-  const [rateType, setRateType] = useState<'retail' | 'wholesale' | 'mrp'>(
+  const [rateType, setRateType] = useState<SalesRateType>(
     settings.defaultSalesRateType || 'retail',
   );
   const reverseCalc = settings.enableReverseCalculation ?? false;
@@ -862,8 +915,19 @@ function EntryDialog({
   const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
 
   const [narration, setNarration] = useState(editing?.narration ?? '');
-  const [paidAmount, setPaidAmount] = useState<string>('');
+  // Blank means the whole bill for a cash or online sale and nothing for one on account;
+  // a figure typed here is a part payment. A posted sale being corrected shows what it
+  // took, unless that was the whole of it.
+  const [paidAmount, setPaidAmount] = useState<string>(() =>
+    editing && editing.amountReceived > 0 && editing.amountReceived < editing.header.total
+      ? String(editing.amountReceived)
+      : '',
+  );
   const [cashGiven, setCashGiven] = useState<string>('');
+  const [receivedInto, setReceivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
+  const [paymentReference, setPaymentReference] = useState(
+    editing?.paymentReference ?? '',
+  );
   const [additionalLedgers, setAdditionalLedgers] = useState<
     readonly AdditionalLedgerItem[]
   >(() => {
@@ -919,7 +983,23 @@ function EntryDialog({
     [customers.data, customerId],
   );
 
-  const prevBalance = selectedCustomer?.openingBalance ?? 0;
+  // What the customer owes before this sale: their balance across everything posted to
+  // them. It used to be their opening balance, which is what they owed the day the firm
+  // started using the system and nothing since.
+  const account = useQuery<CustomerAccount, ApiError>({
+    queryKey: ['customer-account', customerId],
+    queryFn: () => getCustomerAccount(customerId),
+    enabled: customerId !== '',
+    staleTime: 30 * 1000,
+  });
+
+  // A posted sale being corrected is already in that balance - its bill, and the receipt
+  // for whatever was paid with it - so it is taken back out to show what came before it.
+  const ownEffect =
+    editing && editing.header.status === SalesInvoiceStatus.posted
+      ? (isReturn(editing.kind) ? -1 : 1) * editing.header.total - editing.amountReceived
+      : 0;
+  const prevBalance = (account.data?.balance ?? 0) - ownEffect;
 
   useEffect(() => {
     if (!customerId && settings.defaultCustomerId) {
@@ -942,6 +1022,36 @@ function EntryDialog({
     queryFn: () => listLedgers(true),
     staleTime: 5 * 60 * 1000,
   });
+
+  // Where a payment goes: the cash in the drawer, or the bank an online payment lands in.
+  const cashAccounts = useMemo(
+    () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.cash),
+    [ledgers.data],
+  );
+  const bankAccounts = useMemo(
+    () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.bank),
+    [ledgers.data],
+  );
+  const receivingAccounts =
+    paymentMode === SalesPaymentMode.online
+      ? bankAccounts
+      : paymentMode === SalesPaymentMode.cash
+        ? cashAccounts
+        : [...cashAccounts, ...bankAccounts];
+  // The account chosen, or the firm's default for the mode, or the first there is.
+  const receivingAccountId = receivingAccounts.some(
+    (ledger) => ledger.ledgerId === receivedInto,
+  )
+    ? receivedInto
+    : (receivingAccounts.find(
+        (ledger) =>
+          ledger.ledgerId ===
+          (paymentMode === SalesPaymentMode.online
+            ? settings.defaultBankLedgerId
+            : settings.defaultCashLedgerId),
+      )?.ledgerId ??
+      receivingAccounts[0]?.ledgerId ??
+      '');
 
   // The salesman and the billing man come from the employee master, so a sale is
   // credited to somebody a commission report can find.
@@ -1089,23 +1199,61 @@ function EntryDialog({
     return Number.isFinite(raw) ? Math.max(0, raw) : 0;
   }, [totals.total, additionalLedgersTotal]);
 
+  // What the customer is paying now. Blank is the whole bill for cash or online and
+  // nothing on account; more than the bill is cash tendered, and only the bill is
+  // received - the rest is change.
+  const typedPaid = paidAmount.trim() === '' ? null : Number(paidAmount);
+  const paidInFull =
+    !isReturn(kind) &&
+    grandTotal > 0 &&
+    (typedPaid === null
+      ? paymentMode !== SalesPaymentMode.credit
+      : Number.isFinite(typedPaid) && typedPaid >= grandTotal);
   const effectivePaid = useMemo(() => {
-    if (paidAmount !== '') {
-      const parsed = Number(paidAmount);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return paymentMode === SalesPaymentMode.credit ? 0 : grandTotal;
-  }, [paidAmount, paymentMode, grandTotal]);
+    if (isReturn(kind)) return 0;
+    if (paidInFull) return grandTotal;
+    return typedPaid !== null && Number.isFinite(typedPaid) ? Math.max(0, typedPaid) : 0;
+  }, [kind, paidInFull, grandTotal, typedPaid]);
 
-  const balanceDue = useMemo(() => {
-    return Math.max(0, grandTotal - effectivePaid);
-  }, [grandTotal, effectivePaid]);
+  // Where the customer stands once this document is posted: what they owed, plus this
+  // bill (or less this return), less what they are paying now.
+  const balanceAfter =
+    prevBalance + (isReturn(kind) ? -grandTotal : grandTotal) - effectivePaid;
 
+  // The firm's credit-limit rule: ignored, a warning, or a refusal when the sale posts.
+  const policies = useQuery<FirmPolicies, ApiError>({
+    queryKey: ['firm-policies'],
+    queryFn: getPolicies,
+    staleTime: 60 * 1000,
+  });
+  const creditRule = policies.data?.creditLimit ?? CreditLimitPolicy.warn;
+
+  // How far past their credit limit the unpaid part of this bill takes them, if it does.
+  const overLimitBy = useMemo(() => {
+    const limit = account.data?.creditLimit;
+    if (limit === null || limit === undefined || isReturn(kind)) return 0;
+    if (creditRule === CreditLimitPolicy.ignore) return 0;
+    const unpaid = Math.max(0, grandTotal - effectivePaid);
+    const ownOutstanding =
+      editing && editing.header.status === SalesInvoiceStatus.posted
+        ? Math.max(0, editing.header.total - editing.amountReceived)
+        : 0;
+    const after = (account.data?.outstanding ?? 0) - ownOutstanding + unpaid;
+    return after > limit + 0.004 ? after - limit : 0;
+  }, [account.data, kind, grandTotal, effectivePaid, editing, creditRule]);
+
+  // Cash handed over beyond what is being paid comes back as change - whether it was
+  // typed as cash tendered or as more than the bill in the amount received.
   const changeBack = useMemo(() => {
-    const cash = Number(cashGiven);
-    if (!Number.isFinite(cash) || cash <= 0) return 0;
-    return Math.max(0, cash - effectivePaid);
-  }, [cashGiven, effectivePaid]);
+    const tendered =
+      cashGiven.trim() !== ''
+        ? Number(cashGiven)
+        : typedPaid !== null && typedPaid > grandTotal
+          ? typedPaid
+          : 0;
+    if (!Number.isFinite(tendered) || tendered <= 0) return 0;
+    return Math.max(0, tendered - effectivePaid);
+  }, [cashGiven, typedPaid, grandTotal, effectivePaid]);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -1117,12 +1265,7 @@ function EntryDialog({
   /** Adds one unit of a product to the invoice, with its serial number if it has one. */
   const addScanned = (found: ProductSummary, serial: string | null): void => {
     const defaultTax = lineTaxRate(taxMode, found, settings.defaultTaxRate);
-    const baseRate =
-      rateType === 'wholesale'
-        ? found.wholesaleRate || found.retailRate
-        : rateType === 'mrp'
-          ? found.maximumRetailPrice || found.retailRate
-          : found.retailRate;
+    const baseRate = masterRate(found, rateType);
     const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
 
     const existingIndex = lines.findIndex((l) => l.productId === found.id);
@@ -1261,19 +1404,14 @@ function EntryDialog({
     );
   };
 
-  const handleRateTypeChange = (newRateType: 'retail' | 'wholesale' | 'mrp'): void => {
+  const handleRateTypeChange = (newRateType: SalesRateType): void => {
     setRateType(newRateType);
     setLines((prev) =>
       prev.map((l) => {
         if (!l.productId) return l;
         const prod = products.data?.find((p) => p.id === l.productId);
         if (!prod) return l;
-        const baseRate =
-          newRateType === 'wholesale'
-            ? prod.wholesaleRate || prod.retailRate
-            : newRateType === 'mrp'
-              ? prod.maximumRetailPrice || prod.retailRate
-              : prod.retailRate;
+        const baseRate = masterRate(prod, newRateType);
         const taxPct = Number(l.taxPercentage || 0);
         return {
           ...l,
@@ -1330,6 +1468,23 @@ function EntryDialog({
       return;
     }
 
+    // What was paid with the sale. In full is sent as such, so the server takes the
+    // figure from its own rounded total rather than this screen's arithmetic.
+    const payment = isReturn(kind)
+      ? { amountReceived: 0, paidInFull: false, receivedIntoLedgerId: null }
+      : {
+          amountReceived: paidInFull ? 0 : roundMoney(effectivePaid),
+          paidInFull,
+          receivedIntoLedgerId:
+            paidInFull || effectivePaid > 0 ? receivingAccountId || null : null,
+          paymentReference: paymentReference.trim() || null,
+        };
+
+    if (payment.receivedIntoLedgerId === null && (paidInFull || effectivePaid > 0)) {
+      onError(t('sales.noReceivingAccount'));
+      return;
+    }
+
     setBusy(true);
 
     try {
@@ -1383,6 +1538,7 @@ function EntryDialog({
         paymentMode,
         salesmanLedgerId: employeeId(salesman),
         billingManLedgerId: employeeId(billingman),
+        ...payment,
       };
 
       if (editing) {
@@ -1391,6 +1547,11 @@ function EntryDialog({
           post,
           reason: editReason.trim() || null,
         });
+
+        if (isHeldForApproval(header)) {
+          onSaved(t('approvals.heldNotice', { number: header.documentNumber }));
+          return;
+        }
 
         onSaved(
           t('sales.updatedNotice', { number: header.number }),
@@ -1441,7 +1602,11 @@ function EntryDialog({
           </label>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
+      {/* Four groups of fields: two to a row until there is room for all four,
+          which leaves the paired fields inside each group a usable width - at
+          three or four to a row on a tablet the dates, the warehouse and the
+          salesman were cut to a few characters each. */}
+      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface-2/40 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
         {/* Document Numbers */}
         <div className="space-y-2">
           <TextField
@@ -1489,6 +1654,7 @@ function EntryDialog({
             onChange={(val) => setPaymentMode(Number(val))}
             options={[
               { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
+              { value: SalesPaymentMode.online, label: t('paymentModes.online') },
               { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
             ]}
             size="sm"
@@ -1586,16 +1752,17 @@ function EntryDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <SelectField<'retail' | 'wholesale' | 'mrp'>
+            <SelectField<SalesRateType>
               label={t('sales.salesRateType')}
               value={rateType}
-              onChange={(val) =>
-                handleRateTypeChange(val as 'retail' | 'wholesale' | 'mrp')
-              }
+              onChange={(val) => handleRateTypeChange(val as SalesRateType)}
               options={[
-                { value: 'retail', label: 'Retail' },
-                { value: 'wholesale', label: 'Wholesale' },
-                { value: 'mrp', label: 'MRP' },
+                { value: 'retail', label: t('prefs.rateRetail') },
+                { value: 'wholesale', label: t('prefs.rateWholesale') },
+                { value: 'mrp', label: t('prefs.rateMrp') },
+                { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+                { value: 'customerRate', label: t('prefs.rateCustomer') },
+                { value: 'batch', label: t('prefs.rateBatch') },
               ]}
               size="sm"
             />
@@ -1653,10 +1820,13 @@ function EntryDialog({
       )}
 
       {/* Line Items Table. The columns are the user's to choose, remembered in this
-          browser, for the same reason the purchase lines' are. */}
+          browser, for the same reason the purchase lines' are. Below `lg` the product
+          and the figures are a little narrower, so a portrait tablet has every
+          column on screen rather than the tax and the net behind a sideways
+          scroll; the purchase and order lines do the same. */}
       <div className="flex justify-end">{lineColumns.picker}</div>
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[46rem]">
+        <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
           <thead className="text-start text-xs text-ink-muted">
             <tr>
               <th className="px-2 py-1 text-start">{t('sales.product')}</th>
@@ -1693,6 +1863,7 @@ function EntryDialog({
                 warehouseId={warehouseId}
                 serialDirection={isReturn(kind) ? 'back' : 'out'}
                 rateType={rateType}
+                customerId={customerId}
                 modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
                 productTax={taxMode === 'TAX'}
                 reverseCalc={reverseCalc}
@@ -1847,18 +2018,25 @@ function EntryDialog({
           />
         </div>
 
-        {/* Panel 3: Partial Payment & Grand Totals */}
+        {/*
+          Panel 3: the bill, what is paid against it, and where that leaves the customer.
+
+          Three blocks because they answer three different questions, and one list of
+          figures had been answering all three at once: a "Balance" that was the bill
+          minus the cash, beside a "Prev. Balance" that was the customer's opening
+          balance from the day the firm started, beside a grand total nobody could tell
+          the paid amount was taken from.
+        */}
         <div
           className={clsx(
-            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col justify-between gap-3',
+            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col gap-3 text-xs',
             'lg:col-span-4',
           )}
         >
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between text-ink-muted">
-              <span>{t('sales.prevBalance')}</span>
-              <span className="font-mono tabular-nums">{moneyAlways(prevBalance)}</span>
-            </div>
+          <section aria-label={t('sales.billSection')} className="space-y-1.5">
+            <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {t('sales.billSection')}
+            </h3>
             <div className="flex justify-between text-ink-muted">
               <span>{t('sales.taxable')}</span>
               <span className="font-mono tabular-nums">
@@ -1882,63 +2060,162 @@ function EntryDialog({
                 </span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-line">
-              <span>{t('sales.grandTotal')}</span>
-              <span className="font-mono text-base text-brand-700 dark:text-brand-300 tabular-nums">
+            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+              <span>
+                {isReturn(kind) ? t('sales.returnTotal') : t('sales.billTotal')}
+              </span>
+              <span className="font-mono text-base text-brand-700 tabular-nums dark:text-brand-300">
                 {moneyAlways(grandTotal)}
               </span>
             </div>
-          </div>
+          </section>
 
-          {/* Partial Payment inputs */}
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line/70">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                {t('sales.paidAmount')}
-              </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={paidAmount}
-                placeholder={moneyAlways(effectivePaid)}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                className="field-input-sm w-full text-end font-mono tabular-nums font-semibold"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                {t('sales.balanceDue')}
-              </label>
-              <div className="h-8 flex items-center justify-end font-mono text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
-                {moneyAlways(balanceDue)}
-              </div>
-            </div>
-            {paymentMode === SalesPaymentMode.cash && (
-              <>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                    {t('sales.cashGiven')}
-                  </label>
+          {!isReturn(kind) && (
+            <section
+              aria-label={t('sales.paymentSection')}
+              className="space-y-2 border-t border-line/70 pt-2"
+            >
+              <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+                {t('sales.paymentSection')}
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                    {t('sales.receivedNow')}
+                  </span>
                   <input
                     type="number"
                     inputMode="decimal"
-                    value={cashGiven}
-                    placeholder="0.00"
-                    onChange={(e) => setCashGiven(e.target.value)}
-                    className="field-input-sm w-full text-end font-mono tabular-nums"
+                    min="0"
+                    value={paidAmount}
+                    placeholder={
+                      paymentMode === SalesPaymentMode.credit
+                        ? '0.00'
+                        : moneyAlways(grandTotal)
+                    }
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="field-input-sm w-full text-end font-mono font-semibold tabular-nums"
                   />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-ink-muted mb-1">
-                    {t('sales.changeBack')}
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                    {t('sales.receivedInto')}
+                  </span>
+                  <select
+                    value={receivingAccountId}
+                    onChange={(e) => setReceivedInto(e.target.value)}
+                    disabled={effectivePaid <= 0}
+                    className="field-input-sm w-full"
+                  >
+                    {receivingAccounts.length === 0 && (
+                      <option value="">{t('sales.noReceivingAccount')}</option>
+                    )}
+                    {receivingAccounts.map((ledger) => (
+                      <option key={ledger.ledgerId} value={ledger.ledgerId}>
+                        {ledger.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {paymentMode === SalesPaymentMode.online && (
+                  <label className="col-span-2 block">
+                    <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                      {t('sales.transactionId')}
+                    </span>
+                    <input
+                      value={paymentReference}
+                      maxLength={60}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      placeholder={t('sales.transactionIdPlaceholder')}
+                      className="field-input-sm w-full font-mono"
+                    />
                   </label>
-                  <div className="h-8 flex items-center justify-end font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                    {moneyAlways(changeBack)}
-                  </div>
-                </div>
-              </>
+                )}
+
+                {paymentMode === SalesPaymentMode.cash && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                        {t('sales.cashGiven')}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={cashGiven}
+                        placeholder="0.00"
+                        onChange={(e) => setCashGiven(e.target.value)}
+                        className="field-input-sm w-full text-end font-mono tabular-nums"
+                      />
+                    </label>
+                    <div>
+                      <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                        {t('sales.changeBack')}
+                      </span>
+                      <div className="flex h-8 items-center justify-end font-mono text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
+                        {moneyAlways(changeBack)}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section
+            aria-label={t('sales.accountSection')}
+            className="space-y-1.5 border-t border-line/70 pt-2"
+          >
+            <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {t('sales.accountSection')}
+            </h3>
+            <div className="flex justify-between text-ink-muted">
+              <span>{t('sales.prevBalance')}</span>
+              <span className="font-mono tabular-nums">
+                {customerId === '' || account.isPending ? '—' : moneyAlways(prevBalance)}
+              </span>
+            </div>
+            <div className="flex justify-between text-ink-muted">
+              <span>{isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}</span>
+              <span className="font-mono tabular-nums">
+                {isReturn(kind) ? '−' : '+'}
+                {moneyAlways(grandTotal)}
+              </span>
+            </div>
+            {effectivePaid > 0 && (
+              <div className="flex justify-between text-ink-muted">
+                <span>{t('sales.receivedNow')}</span>
+                <span className="font-mono tabular-nums">
+                  −{moneyAlways(effectivePaid)}
+                </span>
+              </div>
             )}
-          </div>
+            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+              <span>{t('sales.balanceAfter')}</span>
+              <span
+                className={clsx(
+                  'font-mono tabular-nums',
+                  balanceAfter > 0.004 && 'text-red-600 dark:text-red-400',
+                )}
+              >
+                {moneyAlways(balanceAfter)}
+              </span>
+            </div>
+            {overLimitBy > 0 && (
+              <p
+                role="alert"
+                className="text-[11px] font-medium text-amber-700 dark:text-amber-400"
+              >
+                {t('sales.overCreditLimit', {
+                  limit: moneyAlways(account.data?.creditLimit ?? 0),
+                  by: moneyAlways(overLimitBy),
+                })}
+                {creditRule === CreditLimitPolicy.block &&
+                  ` ${t('sales.creditLimitBlocks')}`}
+              </p>
+            )}
+          </section>
         </div>
       </div>
 
@@ -1973,6 +2250,7 @@ function LineRow({
   warehouseId,
   serialDirection,
   rateType,
+  customerId,
   modeRate,
   productTax,
   reverseCalc,
@@ -1992,7 +2270,9 @@ function LineRow({
   readonly warehouseId: string;
   /** Out of stock for a sale, back from the customer for a return. */
   readonly serialDirection: SerialDirection;
-  readonly rateType: 'retail' | 'wholesale' | 'mrp';
+  readonly rateType: SalesRateType;
+  /** The customer, for the rates they were last quoted or charged. */
+  readonly customerId: string;
   /** The rate the tax mode starts a line at. */
   readonly modeRate: number;
   /** Whether a chosen product brings its own rate from the tax rate master. */
@@ -2031,6 +2311,67 @@ function LineRow({
     queryFn: () => fetchProductBatches(line.productId, warehouseId),
     enabled: needsBatch && line.productId !== '' && warehouseId !== '',
   });
+
+  // The line as it now stands, for answers that arrive after somebody has moved on.
+  const latest = useRef(line);
+  latest.current = line;
+
+  /** The rate fields for a rate, at the line's own tax. */
+  const priced = (rate: number): Partial<DraftLine> => ({
+    rate: String(rate),
+    inclusiveRate: (rate * (1 + Number(latest.current.taxPercentage || 0) / 100)).toFixed(
+      2,
+    ),
+  });
+
+  /** A batch's own selling rate, where the counter sells at batch rates and it has one. */
+  const batchRate = (batchNumber: string): Partial<DraftLine> => {
+    if (rateType !== 'batch') return {};
+
+    const chosen = (batches.data ?? []).find(
+      (batch) => batch.batchNumber === batchNumber,
+    );
+
+    return chosen?.sellingRate ? priced(chosen.sellingRate) : {};
+  };
+
+  // The customer's last quotation or last sale, asked for when the product, the
+  // customer or the rate type changes - never when a saved line is first shown, whose
+  // rate somebody already chose. Where there is none, the master's rate stands.
+  const hintKey = `${rateType}|${customerId}|${line.productId}`;
+  const lastHintKey = useRef(hintKey);
+
+  useEffect(() => {
+    if (hintKey === lastHintKey.current) return;
+    lastHintKey.current = hintKey;
+
+    if (rateType !== 'lastQuotation' && rateType !== 'customerRate') return;
+    if (!customerId || !line.productId) return;
+
+    const productId = line.productId;
+
+    getSalesRateHints(customerId, productId)
+      .then((hints) => {
+        const hint = rateType === 'lastQuotation' ? hints.lastQuotation : hints.lastSale;
+
+        if (hint && latest.current.productId === productId) {
+          onChange(priced(hint.rate));
+        }
+      })
+      .catch(() => undefined);
+  }, [hintKey]);
+
+  // Switched to batch rates: the batch already picked takes its own.
+  const lastRateType = useRef(rateType);
+
+  useEffect(() => {
+    if (rateType === lastRateType.current) return;
+    lastRateType.current = rateType;
+
+    const patch = line.batchNumber ? batchRate(line.batchNumber) : {};
+
+    if (patch.rate) onChange(patch);
+  }, [rateType]);
 
   // What the shelf holds, read only to decide whether to offer the picker the moment
   // a serialised product is chosen for a sale. The firm asked for exactly that: a popup
@@ -2090,6 +2431,7 @@ function LineRow({
         onChange({
           batchNumber: available.batchNumber,
           expiresOn: available.expiresOn ?? '',
+          ...batchRate(available.batchNumber),
         });
       }
     }
@@ -2098,12 +2440,7 @@ function LineRow({
   const handleProductSelect = (value: string): void => {
     const chosen = products.find((candidate) => candidate.id === value);
     if (chosen) {
-      const baseRate =
-        rateType === 'wholesale'
-          ? chosen.wholesaleRate || chosen.retailRate
-          : rateType === 'mrp'
-            ? chosen.maximumRetailPrice || chosen.retailRate
-            : chosen.retailRate;
+      const baseRate = masterRate(chosen, rateType);
       // A product chosen afresh starts at the mode's rate, like its price starts at
       // the master's: whatever the previous product on this line carried is not a
       // rate anybody chose for this one.
@@ -2143,7 +2480,7 @@ function LineRow({
   return (
     <>
       <tr className="border-t border-line">
-        <td data-label={t('sales.product')} className="min-w-64 px-2 py-1">
+        <td data-label={t('sales.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           <SearchSelect
             value={line.productId}
             onChange={handleProductSelect}
@@ -2260,6 +2597,7 @@ function LineRow({
                         onChange({
                           batchNumber: String(value),
                           expiresOn: chosen?.expiresOn ?? '',
+                          ...batchRate(String(value)),
                         });
                       }}
                       options={[
@@ -2483,10 +2821,26 @@ function DocumentDialog({
                   </div>
                 </div>
                 <Detail label={t('sales.currency')} value={document.currency} />
+                <Detail
+                  label={t('sales.paymentMode')}
+                  value={paymentModeLabel(document.paymentMode, t)}
+                />
+                {document.amountReceived > 0 && (
+                  <Detail
+                    label={t('sales.amountReceived')}
+                    value={moneyAlways(document.amountReceived)}
+                  />
+                )}
+                {document.paymentReference && (
+                  <Detail
+                    label={t('sales.paymentReference')}
+                    value={document.paymentReference}
+                  />
+                )}
               </div>
 
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <table className="w-full min-w-[32rem] text-sm">
+                <table className="line-table sm:min-w-[32rem]">
                   <thead className="text-xs text-ink-muted">
                     <tr>
                       <th className="px-2 py-1 text-start">#</th>
@@ -2504,8 +2858,10 @@ function DocumentDialog({
                       const prod = products.data?.find((p) => p.id === line.productId);
                       return (
                         <tr key={line.lineNumber} className="border-t border-line">
-                          <td className="px-2 py-1">{line.lineNumber}</td>
-                          <td className="px-2 py-1">
+                          <td data-label="#" className="px-2 py-1">
+                            {line.lineNumber}
+                          </td>
+                          <td data-label={t('sales.product')} className="px-2 py-1">
                             <span className="font-medium text-ink">
                               {prod?.description || prod?.code || line.productId}
                             </span>
@@ -2517,16 +2873,28 @@ function DocumentDialog({
                               </div>
                             )}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.quantity')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {line.quantity}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.rate')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.rate)}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.taxable')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.taxable)}
                           </td>
-                          <td className="px-2 py-1 text-end font-mono">
+                          <td
+                            data-label={t('sales.tax')}
+                            className="px-2 py-1 text-end font-mono"
+                          >
                             {moneyAlways(line.tax)}
                           </td>
                         </tr>
@@ -2564,7 +2932,7 @@ function DocumentDialog({
                 <p className="text-xs text-ink-muted">{t('sales.postedProduced')}</p>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-line">
+              <div className="flex flex-wrap items-end justify-between gap-3 pt-4 border-t border-line max-sm:justify-start max-sm:gap-2">
                 <div className="flex items-center gap-2">
                   <ModalButton onClick={() => setActiveTab('print')}>
                     <span className="inline-flex items-center gap-1.5">
@@ -2574,7 +2942,13 @@ function DocumentDialog({
                   </ModalButton>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-2">
+                {/*
+                  On a phone the two groups flow as one row of buttons, and the
+                  reason for a cancellation gets a line of its own under them: wrapped
+                  inside the right-hand group it landed in a corner, half the width of
+                  the screen, below a button it had nothing to do with.
+                */}
+                <div className="flex flex-wrap items-end gap-2 max-sm:contents">
                   {document.header.status !== SalesInvoiceStatus.cancelled && (
                     <ModalButton disabled={busy} onClick={() => onEdit(document)}>
                       {t('sales.edit')}
@@ -2588,14 +2962,16 @@ function DocumentDialog({
                   )}
 
                   {document.header.status !== SalesInvoiceStatus.cancelled && (
-                    <div className="flex flex-wrap items-end justify-end gap-2">
-                      <Field label={t('sales.cancelReason')}>
-                        <input
-                          value={reason}
-                          onChange={(event) => setReason(event.target.value)}
-                          className="field-input-sm"
-                        />
-                      </Field>
+                    <div className="flex flex-wrap items-end justify-end gap-2 max-sm:order-last max-sm:w-full max-sm:flex-nowrap">
+                      <div className="max-sm:min-w-0 max-sm:flex-1">
+                        <Field label={t('sales.cancelReason')}>
+                          <input
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            className="field-input-sm"
+                          />
+                        </Field>
+                      </div>
                       <ModalButton
                         disabled={busy || reason.trim() === ''}
                         onClick={() => onCancel(id, reason.trim())}
@@ -2628,7 +3004,9 @@ function timeOfSale(createdAtUtc: string): string {
 function paymentModeLabel(mode: number, t: (key: string) => string): string {
   return mode === SalesPaymentMode.cash
     ? t('paymentModes.cash')
-    : t('paymentModes.credit');
+    : mode === SalesPaymentMode.online
+      ? t('paymentModes.online')
+      : t('paymentModes.credit');
 }
 
 function statusLabel(status: number, t: (key: string) => string): string {
@@ -2702,7 +3080,7 @@ function NumberCell({
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-24 text-end font-mono tabular-nums',
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />

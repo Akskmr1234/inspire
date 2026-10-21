@@ -95,6 +95,7 @@ public static class NumberedDocuments
         DocumentTypes.SalesInvoice,
         DocumentTypes.SalesReturn,
         DocumentTypes.SalesOrder,
+        DocumentTypes.SalesQuotation,
         DocumentTypes.PurchaseInvoice,
         DocumentTypes.PurchaseReturn,
         DocumentTypes.PurchaseOrder,

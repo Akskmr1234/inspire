@@ -7,6 +7,7 @@ using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Tenancy;
 
@@ -328,6 +329,36 @@ public interface IFinancialYearRepository
         FirmId firmId,
         DateOnly date,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists a firm's years, earliest first.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The years.</returns>
+    Task<IReadOnlyList<FinancialYear>> ListAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds a year by its identifier.</summary>
+    /// <param name="id">The year.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The year, or <see langword="null"/>.</returns>
+    Task<FinancialYear?> FindAsync(FinancialYearId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Counts the posted documents of a year dated outside a range.</summary>
+    /// <param name="id">The year.</param>
+    /// <param name="startDate">The first date of the range.</param>
+    /// <param name="endDate">The last date of the range.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>How many vouchers, invoices and stock documents would fall outside it.</returns>
+    Task<int> CountDocumentsOutsideAsync(
+        FinancialYearId id,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a year.</summary>
+    /// <param name="year">The year.</param>
+    void Add(FinancialYear year);
 }
 
 /// <summary>Reads and creates numbering series.</summary>
@@ -492,6 +523,14 @@ public interface IInventoryMasterRepository
         FirmId firmId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the firm's goods-in-transit location.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The location, or <see langword="null"/> before the first dispatch made one.</returns>
+    Task<Warehouse?> FindTransitWarehouseAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Determines whether a code is already used by a master of one kind.</summary>
     /// <param name="kind">Which master to look in.</param>
     /// <param name="firmId">The firm.</param>
@@ -616,6 +655,79 @@ public interface IStockDocumentRepository
     /// <summary>Adds a stock document.</summary>
     /// <param name="document">The document to add.</param>
     void Add(StockDocument document);
+}
+
+/// <summary>Reads and writes bills of materials.</summary>
+public interface IBillOfMaterialsRepository
+{
+    /// <summary>Finds a bill with its components.</summary>
+    /// <param name="id">The bill.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The bill, or <see langword="null"/>.</returns>
+    Task<BillOfMaterials?> FindAsync(BillOfMaterialsId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Says whether a finished good already has a bill.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="productId">The finished good.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><see langword="true"/> when it has one.</returns>
+    Task<bool> ExistsForAsync(FirmId firmId, ProductId productId, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a bill.</summary>
+    /// <param name="bill">The bill to add.</param>
+    void Add(BillOfMaterials bill);
+}
+
+/// <summary>Reads and writes service job cards.</summary>
+public interface IJobCardRepository
+{
+    /// <summary>Finds a card with its parts and labour.</summary>
+    /// <param name="id">The card.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The card, or <see langword="null"/>.</returns>
+    Task<JobCard?> FindAsync(JobCardId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a card.</summary>
+    /// <param name="card">The card to add.</param>
+    void Add(JobCard card);
+}
+
+/// <summary>Reads and writes return merchandise authorisations.</summary>
+public interface IRmaRepository
+{
+    /// <summary>Finds a return with its products, photographs and history.</summary>
+    /// <param name="id">The return.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The return, or <see langword="null"/>.</returns>
+    Task<Rma?> FindAsync(RmaId id, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a return.</summary>
+    /// <param name="rma">The return to add.</param>
+    void Add(Rma rma);
+}
+
+/// <summary>Reads and writes stock transfer requests.</summary>
+public interface IStockTransferRequestRepository
+{
+    /// <summary>Finds a request with its lines.</summary>
+    /// <param name="id">The request.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The request, or <see langword="null"/>.</returns>
+    Task<StockTransferRequest?> FindAsync(
+        StockTransferRequestId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the request a dispatch or a receipt was raised for.</summary>
+    /// <param name="documentId">The stock document.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The request, or <see langword="null"/> where the document filled none.</returns>
+    Task<StockTransferRequest?> FindByDocumentAsync(
+        StockDocumentId documentId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Adds a request.</summary>
+    /// <param name="request">The request to add.</param>
+    void Add(StockTransferRequest request);
 }
 
 /// <summary>Reads and writes stock positions.</summary>
@@ -934,6 +1046,16 @@ public interface ISalesInvoiceRepository
         SalesInvoiceId id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Finds the invoice, other than one, that bills a delivery note and still stands.</summary>
+    /// <param name="deliveryNoteId">The note.</param>
+    /// <param name="except">The invoice asking, which does not count.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>That invoice's number, or <see langword="null"/> where none bills it.</returns>
+    Task<string?> FindBillingDeliveryNoteAsync(
+        StockDocumentId deliveryNoteId,
+        SalesInvoiceId? except,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Adds an invoice.</summary>
     /// <param name="invoice">The invoice.</param>
     void Add(SalesInvoice invoice);
@@ -962,13 +1084,15 @@ public interface ISalesOrderRepository
 /// <param name="CustomerLedgerId">One customer, or all.</param>
 /// <param name="Search">Matched against the order number and the customer's reference.</param>
 /// <param name="OutstandingOnly">Only orders with goods still owed.</param>
+/// <param name="Kind">Orders or quotations.</param>
 public sealed record SalesOrderFilter(
     DateOnly? From = null,
     DateOnly? To = null,
     SalesOrderStatus? Status = null,
     LedgerId? CustomerLedgerId = null,
     string? Search = null,
-    bool OutstandingOnly = false);
+    bool OutstandingOnly = false,
+    SalesOrderKind Kind = SalesOrderKind.Order);
 
 /// <summary>Reads sales orders for a list.</summary>
 public interface ISalesOrderReader
@@ -1002,6 +1126,16 @@ public interface IPurchaseInvoiceRepository
     /// </remarks>
     Task<PurchaseInvoice?> FindAsync(
         PurchaseInvoiceId id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finds the purchase, other than one, that pays for a receipt note and still stands.</summary>
+    /// <param name="receiptNoteId">The note.</param>
+    /// <param name="except">The purchase asking, which does not count.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>That purchase's number, or <see langword="null"/> where none pays for it.</returns>
+    Task<string?> FindBillingReceiptNoteAsync(
+        StockDocumentId receiptNoteId,
+        PurchaseInvoiceId? except,
         CancellationToken cancellationToken = default);
 
     /// <summary>Adds a purchase.</summary>

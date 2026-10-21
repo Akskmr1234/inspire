@@ -11,6 +11,17 @@ import {
 } from '@/lib/numbering';
 
 /**
+ * The columns every row and the heading share from a laptop up, where the series read as
+ * a table. Below that each series is a card of labelled fields: eight columns of inputs
+ * were wider than a tablet, and on a phone the counter and the save button were off the
+ * edge of the screen.
+ */
+const COLUMNS =
+  'lg:grid-cols-[minmax(9rem,1.4fr)_6rem_5.5rem_3.5rem_5rem_6rem_minmax(7rem,1fr)_4.5rem]';
+
+const CAPTION = 'mb-1 block text-[11px] text-ink-muted lg:sr-only';
+
+/**
  * How each document is numbered, as the server issues the numbers.
  *
  * This replaces a card whose prefixes lived in the browser and reached nothing: the
@@ -46,26 +57,29 @@ export function NumberingSettings(): React.JSX.Element {
       )}
 
       {query.data && (
-        <div className="table-wrap">
-          <table className="table min-w-[44rem] text-sm">
-            <thead>
-              <tr>
-                <th className="text-start">{t('numbering.document')}</th>
-                <th className="text-start">{t('numbering.prefix')}</th>
-                <th className="text-start">{t('numbering.separator')}</th>
-                <th className="text-start">{t('numbering.year')}</th>
-                <th className="text-start">{t('numbering.suffix')}</th>
-                <th className="text-end">{t('numbering.nextNumber')}</th>
-                <th className="text-start">{t('numbering.preview')}</th>
-                <th className="w-20" />
-              </tr>
-            </thead>
-            <tbody>
+        // A laptop with the sidebar open can be narrower than the columns: the box
+        // scrolls then, rather than clipping the counter and the save button.
+        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-line bg-surface">
+          <div className="lg:min-w-[52rem]">
+            <div
+              aria-hidden="true"
+              className={`hidden gap-x-3 border-b border-line bg-surface-3 px-3 py-2 text-xs font-semibold tracking-wide text-ink-muted uppercase lg:grid ${COLUMNS}`}
+            >
+              <span>{t('numbering.document')}</span>
+              <span>{t('numbering.prefix')}</span>
+              <span>{t('numbering.separator')}</span>
+              <span>{t('numbering.year')}</span>
+              <span>{t('numbering.suffix')}</span>
+              <span className="text-end">{t('numbering.nextNumber')}</span>
+              <span>{t('numbering.preview')}</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-line">
               {query.data.map((row) => (
                 <NumberingRow key={row.documentType} row={row} date={today} />
               ))}
-            </tbody>
-          </table>
+            </ul>
+          </div>
         </div>
       )}
     </div>
@@ -124,81 +138,91 @@ function NumberingRow({
     .filter((segment) => segment !== '')
     .join(separator);
 
+  const name = t(`numbering.types.${row.documentType}`);
+
   return (
-    <>
-      <tr>
-        <td className="whitespace-nowrap">
-          {t(`numbering.types.${row.documentType}`)}
-          {!row.isConfigured && (
-            <span className="ms-1.5 text-[11px] text-ink-muted">
-              ({t('numbering.default')})
-            </span>
-          )}
-        </td>
-        <td>
-          <input
-            value={prefix}
-            onChange={(event) => setPrefix(event.target.value)}
-            maxLength={20}
-            aria-label={`${t('numbering.prefix')} — ${t(`numbering.types.${row.documentType}`)}`}
-            className="field-input-sm w-24 font-mono"
-          />
-        </td>
-        <td>
-          <input
-            value={separator}
-            onChange={(event) => setSeparator(event.target.value)}
-            maxLength={5}
-            aria-label={t('numbering.separator')}
-            className="field-input-sm w-12 text-center font-mono"
-          />
-        </td>
-        <td>
-          <input
-            type="checkbox"
-            checked={includeYear}
-            onChange={(event) => setIncludeYear(event.target.checked)}
-            aria-label={t('numbering.year')}
-          />
-        </td>
-        <td>
-          <input
-            value={suffix}
-            onChange={(event) => setSuffix(event.target.value)}
-            maxLength={20}
-            aria-label={t('numbering.suffix')}
-            className="field-input-sm w-20 font-mono"
-          />
-        </td>
-        <td className="text-end">
-          <input
-            type="number"
-            min={row.nextNumber}
-            value={nextNumber}
-            onChange={(event) => setNextNumber(event.target.value)}
-            aria-label={t('numbering.nextNumber')}
-            className="field-input-sm ms-auto w-24 text-end font-mono tabular-nums"
-          />
-        </td>
-        <td className="font-mono text-xs whitespace-nowrap text-ink">{preview}</td>
-        <td className="text-end">
-          <button
-            type="button"
-            disabled={!changed || save.isPending}
-            onClick={() => save.mutate()}
-            className="btn-primary btn-sm"
-          >
-            {save.isPending ? t('common.saving') : t('common.save')}
-          </button>
-        </td>
-      </tr>
+    <li
+      className={`grid grid-cols-6 items-end gap-x-3 gap-y-2 p-3 lg:items-center lg:py-2 ${COLUMNS}`}
+    >
+      <div className="col-span-6 text-sm font-medium text-ink lg:col-span-1">
+        {name}
+        {!row.isConfigured && (
+          <span className="ms-1.5 text-[11px] font-normal text-ink-muted">
+            ({t('numbering.default')})
+          </span>
+        )}
+      </div>
+      <label className="col-span-2 min-w-0 lg:col-span-1">
+        <span className={CAPTION}>{t('numbering.prefix')}</span>
+        <input
+          value={prefix}
+          onChange={(event) => setPrefix(event.target.value)}
+          maxLength={20}
+          aria-label={`${t('numbering.prefix')} — ${name}`}
+          className="field-input-sm w-full font-mono"
+        />
+      </label>
+      <label className="col-span-2 min-w-0 lg:col-span-1">
+        <span className={CAPTION}>{t('numbering.separator')}</span>
+        <input
+          value={separator}
+          onChange={(event) => setSeparator(event.target.value)}
+          maxLength={5}
+          aria-label={`${t('numbering.separator')} — ${name}`}
+          className="field-input-sm w-full text-center font-mono"
+        />
+      </label>
+      <label className="field-check col-span-2 lg:col-span-1">
+        <input
+          type="checkbox"
+          checked={includeYear}
+          onChange={(event) => setIncludeYear(event.target.checked)}
+          aria-label={`${t('numbering.year')} — ${name}`}
+        />
+        <span className="text-xs text-ink-muted lg:sr-only">{t('numbering.year')}</span>
+      </label>
+      <label className="col-span-3 min-w-0 lg:col-span-1">
+        <span className={CAPTION}>{t('numbering.suffix')}</span>
+        <input
+          value={suffix}
+          onChange={(event) => setSuffix(event.target.value)}
+          maxLength={20}
+          aria-label={`${t('numbering.suffix')} — ${name}`}
+          className="field-input-sm w-full font-mono"
+        />
+      </label>
+      <label className="col-span-3 min-w-0 lg:col-span-1">
+        <span className={`${CAPTION} text-end`}>{t('numbering.nextNumber')}</span>
+        <input
+          type="number"
+          min={row.nextNumber}
+          value={nextNumber}
+          onChange={(event) => setNextNumber(event.target.value)}
+          aria-label={`${t('numbering.nextNumber')} — ${name}`}
+          className="field-input-sm w-full text-end font-mono tabular-nums"
+        />
+      </label>
+      <div className="col-span-4 min-w-0 lg:col-span-1">
+        <span className={CAPTION}>{t('numbering.preview')}</span>
+        <span className="font-mono text-xs text-ink [overflow-wrap:anywhere]">
+          {preview}
+        </span>
+      </div>
+      <div className="col-span-2 text-end lg:col-span-1">
+        <button
+          type="button"
+          disabled={!changed || save.isPending}
+          onClick={() => save.mutate()}
+          className="btn-primary btn-sm"
+        >
+          {save.isPending ? t('common.saving') : t('common.save')}
+        </button>
+      </div>
       {save.isError && (
-        <tr>
-          <td colSpan={8} className="text-xs text-red-600 dark:text-red-400">
-            {save.error.detail || save.error.code}
-          </td>
-        </tr>
+        <p className="col-span-full text-xs text-red-600 dark:text-red-400">
+          {save.error.detail || save.error.code}
+        </p>
       )}
-    </>
+    </li>
   );
 }

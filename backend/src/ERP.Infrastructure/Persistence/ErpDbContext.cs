@@ -9,6 +9,7 @@ using ERP.Domain.Parties;
 using ERP.Domain.Platform;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
+using ERP.Domain.Service;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Conversion;
 using ERP.SharedKernel.Abstractions;
@@ -223,6 +224,39 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the lines of those documents.</summary>
     public DbSet<StockDocumentLine> StockDocumentLines => Set<StockDocumentLine>();
 
+    /// <summary>Gets the requests one branch has made for another's goods.</summary>
+    public DbSet<StockTransferRequest> StockTransferRequests => Set<StockTransferRequest>();
+
+    /// <summary>Gets the products on those requests.</summary>
+    public DbSet<StockTransferRequestLine> StockTransferRequestLines => Set<StockTransferRequestLine>();
+
+    /// <summary>Gets the bills of materials: what goes into each finished good.</summary>
+    public DbSet<BillOfMaterials> BillsOfMaterials => Set<BillOfMaterials>();
+
+    /// <summary>Gets their components.</summary>
+    public DbSet<BillOfMaterialsLine> BillOfMaterialsLines => Set<BillOfMaterialsLine>();
+
+    /// <summary>Gets the devices taken in for service.</summary>
+    public DbSet<JobCard> JobCards => Set<JobCard>();
+
+    /// <summary>Gets the parts and labour on them.</summary>
+    public DbSet<JobCardLine> JobCardLines => Set<JobCardLine>();
+
+    /// <summary>Gets the return merchandise authorisations.</summary>
+    public DbSet<Rma> Rmas => Set<Rma>();
+
+    /// <summary>Gets the products going back on them.</summary>
+    public DbSet<RmaLine> RmaLines => Set<RmaLine>();
+
+    /// <summary>Gets the photographs kept as evidence.</summary>
+    public DbSet<RmaPhoto> RmaPhotos => Set<RmaPhoto>();
+
+    /// <summary>Gets their histories.</summary>
+    public DbSet<RmaEvent> RmaEvents => Set<RmaEvent>();
+
+    /// <summary>Gets the changes to posted documents held for approval.</summary>
+    public DbSet<EditRequest> EditRequests => Set<EditRequest>();
+
     /// <summary>
     /// Gets what is on hand of each product in each warehouse, and what it cost.
     /// </summary>
@@ -388,6 +422,28 @@ public class ErpDbContext : DbContext
             .HaveConversion<StockDocumentIdConverter>();
         configurationBuilder.Properties<StockDocumentLineId>()
             .HaveConversion<StockDocumentLineIdConverter>();
+        configurationBuilder.Properties<StockTransferRequestId>()
+            .HaveConversion<StockTransferRequestIdConverter>();
+        configurationBuilder.Properties<StockTransferRequestLineId>()
+            .HaveConversion<StockTransferRequestLineIdConverter>();
+        configurationBuilder.Properties<BillOfMaterialsId>()
+            .HaveConversion<BillOfMaterialsIdConverter>();
+        configurationBuilder.Properties<BillOfMaterialsLineId>()
+            .HaveConversion<BillOfMaterialsLineIdConverter>();
+        configurationBuilder.Properties<JobCardId>()
+            .HaveConversion<JobCardIdConverter>();
+        configurationBuilder.Properties<JobCardLineId>()
+            .HaveConversion<JobCardLineIdConverter>();
+        configurationBuilder.Properties<RmaId>()
+            .HaveConversion<RmaIdConverter>();
+        configurationBuilder.Properties<RmaLineId>()
+            .HaveConversion<RmaLineIdConverter>();
+        configurationBuilder.Properties<RmaPhotoId>()
+            .HaveConversion<RmaPhotoIdConverter>();
+        configurationBuilder.Properties<RmaEventId>()
+            .HaveConversion<RmaEventIdConverter>();
+        configurationBuilder.Properties<EditRequestId>()
+            .HaveConversion<EditRequestIdConverter>();
         configurationBuilder.Properties<StockBalanceId>()
             .HaveConversion<StockBalanceIdConverter>();
         configurationBuilder.Properties<StockLedgerEntryId>()

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSettings } from '@/stores/settings';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
@@ -38,6 +39,7 @@ function sampleDocument(
     partyLabel: voucher ? (type === 'payment' ? 'paidTo' : 'receivedFrom') : 'billTo',
     party: {
       name: 'Al-Noor Trading LLC',
+      nameArabic: 'شركة النور التجارية',
       code: 'C-0001',
       lines: ['Building 12, Street 340, Doha', '+974 5555 0101'],
       taxNumber: '300112233400003',
@@ -48,6 +50,7 @@ function sampleDocument(
       : [
           {
             description: 'Samsung Galaxy S24 128GB',
+            descriptionArabic: 'سامسونج جالكسي S24 سعة 128 جيجابايت',
             code: 'MOB-S24',
             serials: ['356916756701'],
             quantity: 1,
@@ -60,6 +63,7 @@ function sampleDocument(
           },
           {
             description: 'USB-C charger 25W',
+            descriptionArabic: 'شاحن USB-C بقوة 25 واط',
             code: 'CHG-25W',
             serials: [],
             quantity: 2,
@@ -73,9 +77,16 @@ function sampleDocument(
         ],
     entries: voucher
       ? [
-          { account: 'Cash in Hand', narration: null, debit: 500, credit: 0 },
+          {
+            account: 'Cash in Hand',
+            accountArabic: 'النقد في الصندوق',
+            narration: null,
+            debit: 500,
+            credit: 0,
+          },
           {
             account: 'Al-Noor Trading LLC',
+            accountArabic: 'شركة النور التجارية',
             narration: 'Against SL/2026/0042',
             debit: 0,
             credit: 500,
@@ -85,8 +96,8 @@ function sampleDocument(
     totals: voucher
       ? []
       : [
-          { label: t('printing.taxable'), amount: 3084 },
-          { label: t('printing.taxTotal'), amount: 154.2 },
+          { label: t('printing.taxable'), key: 'taxable', amount: 3084 },
+          { label: t('printing.taxTotal'), key: 'tax', amount: 154.2 },
         ],
     grandTotal: voucher ? 500 : 3238.2,
     watermark: null,
@@ -128,6 +139,7 @@ export function PrintTemplatesPage(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { setup, loading, error } = usePrintSetup();
+  const gulfMode = useSettings((state) => state.gulfMode);
 
   const [draft, setDraft] = useState<PrintSetup | null>(null);
   const [selectedId, setSelectedId] = useState<string>('');
@@ -301,7 +313,14 @@ export function PrintTemplatesPage(): React.JSX.Element {
                 }
                 className="field-input-sm"
               >
-                {(['salesInvoice', 'purchaseInvoice', 'receipt'] as const).map((type) => (
+                {(
+                  [
+                    'salesInvoice',
+                    'salesQuotation',
+                    'purchaseInvoice',
+                    'receipt',
+                  ] as const
+                ).map((type) => (
                   <option key={type} value={type}>
                     {t(`printing.documents.${type}`)}
                   </option>
@@ -310,7 +329,11 @@ export function PrintTemplatesPage(): React.JSX.Element {
             </label>
             <div className="rounded-xl bg-slate-200 p-2 sm:p-4 dark:bg-slate-900">
               <FitToWidth>
-                <PrintedDocument document={sample} template={selected} />
+                <PrintedDocument
+                  document={sample}
+                  template={selected}
+                  bilingual={gulfMode && setup.bilingual}
+                />
               </FitToWidth>
             </div>
           </div>

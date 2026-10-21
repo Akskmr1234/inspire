@@ -173,6 +173,48 @@ public sealed class FinancialYear : AggregateRoot<FinancialYearId>, IFirmScoped,
             endDate));
     }
 
+    /// <summary>Renames the year or moves its dates.</summary>
+    /// <param name="code">The label.</param>
+    /// <param name="startDate">The first date, inclusive.</param>
+    /// <param name="endDate">The last date, inclusive.</param>
+    /// <param name="otherYears">The firm's other years, checked for overlap.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// For a year set up with the wrong dates - a calendar year where the firm's runs April
+    /// to March. Whether any document already posted would fall outside the new dates is
+    /// the caller's question, since the documents are not this aggregate's to read; a
+    /// locked year is sealed and cannot move at all.
+    /// </remarks>
+    public Result Reschedule(
+        string code,
+        DateOnly startDate,
+        DateOnly endDate,
+        IEnumerable<FinancialYear> otherYears)
+    {
+        ArgumentNullException.ThrowIfNull(otherYears);
+
+        if (Status == FinancialYearStatus.Locked)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "FinancialYear.Locked",
+                $"Financial year '{Code}' is locked and cannot be changed."));
+        }
+
+        Result<FinancialYear> candidate = Create(
+            TenantId, FirmId, code, startDate, endDate, otherYears.Where(year => year.Id != Id));
+
+        if (candidate.IsFailure)
+        {
+            return Result.Failure(candidate.Error);
+        }
+
+        Code = candidate.Value.Code;
+        StartDate = startDate;
+        EndDate = endDate;
+
+        return Result.Success();
+    }
+
     /// <summary>Determines whether a date falls within this year, inclusive of both ends.</summary>
     /// <param name="date">The date to test.</param>
     /// <returns><see langword="true"/> when the date is in range.</returns>

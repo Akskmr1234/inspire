@@ -3,6 +3,7 @@ using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Vouchers;
 using ERP.Application.Inventory.Stock;
+using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
@@ -55,6 +56,7 @@ public sealed class PostPurchaseInvoiceCommandHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly StockPoster _poster;
+    private readonly IFirmPolicyReader? _policies;
     private readonly StockJournalPoster _stockJournal;
 
     /// <summary>Initialises a new instance of the <see cref="PostPurchaseInvoiceCommandHandler"/> class.</summary>
@@ -79,6 +81,7 @@ public sealed class PostPurchaseInvoiceCommandHandler
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="policies">The firm's policies, which decide whether a return may go below zero.</param>
     public PostPurchaseInvoiceCommandHandler(
         IPurchaseInvoiceRepository invoices,
         IStockDocumentRepository documents,
@@ -100,8 +103,10 @@ public sealed class PostPurchaseInvoiceCommandHandler
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IFirmPolicyReader? policies = null)
     {
+        _policies = policies;
         _invoices = invoices;
         _documents = documents;
         _masters = masters;
@@ -170,8 +175,11 @@ public sealed class PostPurchaseInvoiceCommandHandler
             return Result.Failure<PostPurchaseInvoiceResponse>(posted.Error);
         }
 
-        Result<StockDocument> received = await ReceiveAsync(
-            invoice, loaded.Value, firmId, branchId, cancellationToken);
+        // A purchase against a receipt note pays for goods that are already on the shelf:
+        // the note is its receipt, and nothing moves again.
+        Result<StockDocument> received = invoice.ReceiptNoteId is { } noteId
+            ? await ReceivedAsync(invoice, noteId, firmId, cancellationToken)
+            : await ReceiveAsync(invoice, loaded.Value, firmId, branchId, cancellationToken);
 
         if (received.IsFailure)
         {
@@ -268,6 +276,54 @@ public sealed class PostPurchaseInvoiceCommandHandler
             : Result.Success(new Context(firm, year, supplier, accounts, taxAccounts));
     }
 
+    /// <summary>Finds the receipt note a purchase pays for, and checks it describes the same goods.</summary>
+    private async Task<Result<StockDocument>> ReceivedAsync(
+        PurchaseInvoice invoice,
+        StockDocumentId noteId,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        StockDocument? note = await _documents.FindAsync(noteId, cancellationToken);
+
+        string? billedBy = await _invoices.FindBillingReceiptNoteAsync(
+            noteId, invoice.Id, cancellationToken);
+
+        IReadOnlyDictionary<ProductId, Product> products = await _products.GetManyAsync(
+            [
+                .. invoice.Lines.Select(line => line.ProductId)
+                    .Concat(note?.Lines.Select(line => line.ProductId) ?? [])
+                    .Distinct(),
+            ],
+            cancellationToken);
+
+        Result checkedNote = NoteBilling.Check(
+            note,
+            StockDocumentType.ReceiptNote,
+            invoice.SupplierLedgerId,
+            invoice.Lines
+                .Where(line => products.TryGetValue(line.ProductId, out Product? product)
+                    && product.ItemType == ItemType.Stock)
+                .Select(line => (line.ProductId, line.StockQuantity)),
+            products,
+            billedBy);
+
+        if (checkedNote.IsFailure)
+        {
+            return Result.Failure<StockDocument>(checkedNote.Error);
+        }
+
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
+        // The rates the supplier invoiced are still the last purchase rates, whichever
+        // document brought the goods in.
+        PurchaseReceipt.ApplyLastPurchaseRates(
+            invoice, products, policies.PurchasesUpdateProductRates);
+
+        return Result.Success(note!);
+    }
+
     /// <summary>Raises the receipt that puts the goods on the shelf, and posts it.</summary>
     /// <remarks>
     /// Numbered from a series of its own so a stock ledger distinguishes goods that came
@@ -318,17 +374,27 @@ public sealed class PostPurchaseInvoiceCommandHandler
             return Result.Failure<StockDocument>(opened.Error);
         }
 
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
+        // A purchase return takes goods back out, and goes below zero only where the firm
+        // allows it; a purchase only ever brings goods in.
+        bool allowNegative = policies.AllowsNegativeStock;
+
         Result<IReadOnlyList<StockLedgerEntry>> applied = await _poster.ApplyAsync(
             document, stock.Value.Products, built.Value.Batches, built.Value.Serials,
-            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken);
+            context.Firm.BaseCurrency, _clock.UtcNow, cancellationToken, allowNegative);
 
         if (applied.IsFailure)
         {
             return Result.Failure<StockDocument>(applied.Error);
         }
 
-        // Products costed at their last purchase rate take this one's.
-        PurchaseReceipt.ApplyLastPurchaseRates(invoice, stock.Value.Products);
+        // Products costed at their last purchase rate take this one's - and every product
+        // does, where the firm has purchases update the product rates.
+        PurchaseReceipt.ApplyLastPurchaseRates(
+            invoice, stock.Value.Products, policies.PurchasesUpdateProductRates);
 
         Result journalled = await _stockJournal.RaiseAsync(
             document, applied.Value, context.Firm, branchId, _currentUser.UserId,

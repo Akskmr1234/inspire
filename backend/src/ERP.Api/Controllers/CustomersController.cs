@@ -80,6 +80,34 @@ public sealed class CustomersController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Reads where a customer stands: their balance and their unpaid invoices.</summary>
+    /// <param name="id">The customer.</param>
+    /// <param name="asAt">The date to state it as at. Today when omitted.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The balance, the outstanding and the credit limit.</returns>
+    /// <remarks>
+    /// For the sales screen, which shows a customer's previous balance beside a new bill
+    /// and warns when it would take them past their credit limit. Behind the permission
+    /// to see customers rather than the accounting reports, because a counter that may
+    /// sell to a customer may see what they owe.
+    /// </remarks>
+    /// <response code="200">The customer's account.</response>
+    /// <response code="404">No such customer in the selected firm.</response>
+    [HttpGet("{id:guid}/account")]
+    [RequiresPermission("sales", "customer", "view")]
+    [ProducesResponseType(typeof(CustomerAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAccountAsync(
+        Guid id,
+        [FromQuery] DateOnly? asAt,
+        CancellationToken cancellationToken)
+    {
+        Result<CustomerAccount> result = await _sender.Send(
+            new GetCustomerAccountQuery(id, asAt), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Creates a customer.</summary>
     /// <param name="request">Their code, name, terms and contact details.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
