@@ -115,6 +115,10 @@ const PurchaseOrdersPage = lazyScreen(
   'PurchaseOrdersPage',
 );
 const SalesOrdersPage = lazyScreen(() => import('@/pages/OrdersPage'), 'SalesOrdersPage');
+const SalesQuotationsPage = lazyScreen(
+  () => import('@/pages/OrdersPage'),
+  'SalesQuotationsPage',
+);
 const SettingsPage = lazyScreen(() => import('@/pages/SettingsPage'), 'SettingsPage');
 const OpeningStockPage = lazyScreen(
   () => import('@/pages/StockOperationsPage'),
@@ -178,6 +182,10 @@ const ChequeRegisterPage = lazyScreen(
 const BatchStockPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
   'BatchStockPage',
+);
+const BatchProfitPage = lazyScreen(
+  () => import('@/pages/StockReportPages'),
+  'BatchProfitPage',
 );
 const ExpiryReportPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
@@ -342,6 +350,7 @@ export function App(): React.JSX.Element {
               <Route path="/purchase/returns" element={<PurchaseReturnsPage />} />
               <Route path="/purchase/orders" element={<PurchaseOrdersPage />} />
               <Route path="/sales/orders" element={<SalesOrdersPage />} />
+              <Route path="/sales/quotations" element={<SalesQuotationsPage />} />
               <Route path="/purchase/suppliers" element={<SuppliersPage />} />
               <Route path="/inventory/products" element={<ProductsPage />} />
               <Route path="/inventory/tax-rates" element={<TaxRatesPage />} />
@@ -365,6 +374,7 @@ export function App(): React.JSX.Element {
               <Route path="/inventory/stock-ledger" element={<StockLedgerPage />} />
               <Route path="/inventory/item-movement" element={<ItemMovementPage />} />
               <Route path="/inventory/batch-stock" element={<BatchStockPage />} />
+              <Route path="/inventory/batch-profit" element={<BatchProfitPage />} />
               <Route path="/inventory/expiry" element={<ExpiryReportPage />} />
               <Route path="/inventory/serials" element={<SerialStockPage />} />
               <Route path="/inventory/units" element={<UnitsPage />} />

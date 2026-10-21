@@ -278,6 +278,8 @@ export interface BatchStockRow {
   readonly unitCost: number;
   readonly value: number;
   readonly purchaseRate: number;
+  /** What one stock unit of the batch sells at, where the firm has said. */
+  readonly sellingRate?: number | null;
   readonly manufacturedOn: string | null;
   readonly expiresOn: string | null;
   readonly daysToExpiry: number | null;
@@ -450,6 +452,59 @@ export function fetchProductBatches(
 }
 
 /** Reads the batch-wise stock. */
+/** Sets what one stock unit of a batch sells at; null leaves it to the product's rates. */
+export function setBatchSellingRate(
+  batchId: string,
+  sellingRate: number | null,
+): Promise<void> {
+  return request<void>(`/inventory/stock/batches/${batchId}/selling-rate`, {
+    method: 'PUT',
+    body: { sellingRate },
+  });
+}
+
+/** What one product, or one batch of it, made on what was sold. */
+export interface SalesProfitRow {
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productName: string;
+  readonly batchId: string | null;
+  readonly batchNumber: string | null;
+  readonly quantity: number;
+  readonly sales: number;
+  readonly cost: number;
+  readonly profit: number;
+  readonly marginPercent: number | null;
+  readonly purchaseRate: number | null;
+  readonly sellingRate: number | null;
+}
+
+/** A period's profit on goods sold, batch by batch. */
+export interface SalesProfitReport {
+  readonly from: string;
+  readonly to: string;
+  readonly currency: string;
+  readonly rows: readonly SalesProfitRow[];
+  readonly totalSales: number;
+  readonly totalCost: number;
+  readonly totalProfit: number;
+}
+
+/** Reads a period's profit on goods sold, each batch at its own cost. */
+export function fetchSalesProfit(
+  from: string,
+  to: string,
+  productId: string,
+): Promise<SalesProfitReport> {
+  const query = new URLSearchParams({ from, to });
+
+  if (productId) {
+    query.set('productId', productId);
+  }
+
+  return request<SalesProfitReport>(`/sales/invoices/profit?${query.toString()}`);
+}
+
 export function fetchBatchStock(
   warehouseId: string,
   categoryId: string,

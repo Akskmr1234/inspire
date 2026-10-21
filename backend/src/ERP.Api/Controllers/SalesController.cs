@@ -109,6 +109,48 @@ public sealed class SalesController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>What goods sold in a period made, product by product and batch by batch.</summary>
+    /// <param name="from">The first invoice date.</param>
+    /// <param name="to">The last.</param>
+    /// <param name="productId">One product, or every one.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Sales, cost and profit per product and batch, with the totals.</returns>
+    /// <response code="200">The report.</response>
+    [HttpGet("profit")]
+    [RequiresPermission("accounting", "report", "view")]
+    [ProducesResponseType(typeof(SalesProfitReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ProfitAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? productId,
+        CancellationToken cancellationToken)
+    {
+        Result<SalesProfitReport> result = await _sender.Send(
+            new SalesProfitQuery(from, to, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads what a customer was last quoted, and last charged, for a product.</summary>
+    /// <param name="customerLedgerId">The customer.</param>
+    /// <param name="productId">The product.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The rates, either of which may be missing.</returns>
+    /// <response code="200">The rates.</response>
+    [HttpGet("rates")]
+    [RequiresPermission("sales", "invoice", "view")]
+    [ProducesResponseType(typeof(SalesRateHints), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RatesAsync(
+        [FromQuery] Guid customerLedgerId,
+        [FromQuery] Guid productId,
+        CancellationToken cancellationToken)
+    {
+        Result<SalesRateHints> result = await _sender.Send(
+            new GetSalesRateHintsQuery(customerLedgerId, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Enters an invoice as a draft.</summary>
     /// <param name="request">What is being sold, and to whom.</param>
     /// <param name="cancellationToken">A cancellation token.</param>

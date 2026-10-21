@@ -6,6 +6,7 @@ export const DocumentType = {
   salesInvoice: 'sales.invoice',
   salesReturn: 'sales.return',
   salesOrder: 'sales.order',
+  salesQuotation: 'sales.quotation',
   purchaseInvoice: 'purchase.invoice',
   purchaseReturn: 'purchase.return',
   purchaseOrder: 'purchase.order',

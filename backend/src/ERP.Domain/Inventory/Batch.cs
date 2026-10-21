@@ -53,9 +53,11 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
         int? autoSequence,
         DateOnly? manufacturedOn,
         DateOnly? expiresOn,
-        decimal purchaseRate)
+        decimal purchaseRate,
+        decimal? sellingRate)
         : base(id)
     {
+        SellingRate = sellingRate;
         TenantId = tenantId;
         FirmId = firmId;
         ProductId = productId;
@@ -116,6 +118,14 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
     /// <summary>Gets what one stock unit of this batch was bought at.</summary>
     public decimal PurchaseRate { get; private set; }
 
+    /// <summary>Gets what one stock unit of the batch sells at, where the firm has said.</summary>
+    /// <remarks>
+    /// Set from the purchase that brought the batch in, or on the batch itself, and offered
+    /// by the sales screen when the counter sells at batch-wise rates. The product's own
+    /// rates apply where it is not set.
+    /// </remarks>
+    public decimal? SellingRate { get; private set; }
+
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
@@ -140,6 +150,7 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
     /// <param name="expiresOn">When they expire. Derived from the shelf life if omitted.</param>
     /// <param name="purchaseRate">What one stock unit was bought at.</param>
     /// <param name="autoSequence">The sequence position, when the number was generated.</param>
+    /// <param name="sellingRate">What one stock unit is to sell at, where stated.</param>
     /// <returns>The batch, or the reason it was refused.</returns>
     public static Result<Batch> Open(
         TenantId tenantId,
@@ -149,7 +160,8 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
         DateOnly? manufacturedOn = null,
         DateOnly? expiresOn = null,
         decimal purchaseRate = 0m,
-        int? autoSequence = null)
+        int? autoSequence = null,
+        decimal? sellingRate = null)
     {
         ArgumentNullException.ThrowIfNull(product);
 
@@ -185,6 +197,12 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
                 "Batch.RateNegative", "A batch cannot have been bought at a negative rate."));
         }
 
+        if (sellingRate < 0m)
+        {
+            return Result.Failure<Batch>(Error.Validation(
+                "Batch.SellingRateNegative", "A batch cannot sell at a negative rate."));
+        }
+
         // Derived only where nothing was given. A supplier's printed expiry date beats
         // this arithmetic every time, and the shelf life is a default for the goods a
         // firm produces itself rather than a rule about the ones it buys.
@@ -194,6 +212,7 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
                 : null);
 
         Result dated = EnsureOrdered(manufacturedOn, expiry);
+        decimal? priced = sellingRate > 0m ? sellingRate : null;
 
         return dated.IsFailure
             ? Result.Failure<Batch>(dated.Error)
@@ -206,7 +225,8 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
                 autoSequence ?? SequenceOf(trimmed),
                 manufacturedOn,
                 expiry,
-                purchaseRate));
+                purchaseRate,
+                priced));
     }
 
     /// <summary>The number the next generated batch of a product carries.</summary>
@@ -297,6 +317,26 @@ public sealed class Batch : AggregateRoot<BatchId>, IFirmScoped, IAuditable
 
         ManufacturedOn = manufacturedOn;
         ExpiresOn = expiresOn;
+
+        return Result.Success();
+    }
+
+    /// <summary>Sets what one stock unit of the batch sells at.</summary>
+    /// <param name="sellingRate">The rate, or null for the product's own rates.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Unlike the purchase rate, this is a price rather than a fact, and the latest word
+    /// on it stands: a later delivery into the batch that states a selling rate restates it.
+    /// </remarks>
+    public Result SetSellingRate(decimal? sellingRate)
+    {
+        if (sellingRate < 0m)
+        {
+            return Result.Failure(Error.Validation(
+                "Batch.SellingRateNegative", "A batch cannot sell at a negative rate."));
+        }
+
+        SellingRate = sellingRate > 0m ? sellingRate : null;
 
         return Result.Success();
     }

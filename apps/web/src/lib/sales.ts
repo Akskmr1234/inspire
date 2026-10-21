@@ -270,6 +270,30 @@ export interface CustomerAccount {
   readonly isOverLimit: boolean;
 }
 
+/** One rate a customer has seen for a product, and the document it was on. */
+export interface SalesRateHint {
+  readonly rate: number;
+  readonly unitId: string;
+  readonly number: string;
+  readonly date: string;
+}
+
+/** What a customer was last quoted, and last charged, for a product. */
+export interface SalesRateHints {
+  readonly lastQuotation: SalesRateHint | null;
+  readonly lastSale: SalesRateHint | null;
+}
+
+/** Reads what a customer was last quoted, and last charged, for a product. */
+export async function getSalesRateHints(
+  customerId: string,
+  productId: string,
+): Promise<SalesRateHints> {
+  return request<SalesRateHints>(
+    `/sales/invoices/rates?customerLedgerId=${customerId}&productId=${productId}`,
+  );
+}
+
 /** Reads a customer's balance and unpaid invoices. */
 export async function getCustomerAccount(customerId: string): Promise<CustomerAccount> {
   return request<CustomerAccount>(`/sales/customers/${customerId}/account`);

@@ -47,6 +47,7 @@ public sealed class SalesOrdersController : ApiControllerBase
     /// <param name="outstandingOnly">Only orders with goods still owed.</param>
     /// <param name="page">Which page, from one.</param>
     /// <param name="pageSize">How many rows a page holds, up to 200.</param>
+    /// <param name="kind">Orders or quotations. Omit for orders.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>One page, and how many rows the filter matched.</returns>
     /// <response code="200">The page.</response>
@@ -64,6 +65,7 @@ public sealed class SalesOrdersController : ApiControllerBase
         [FromQuery] bool outstandingOnly,
         [FromQuery] int page,
         [FromQuery] int pageSize,
+        [FromQuery] SalesOrderKind? kind,
         CancellationToken cancellationToken)
     {
         Result<PagedResult<SalesOrderSummary>> result = await _sender.Send(
@@ -75,7 +77,8 @@ public sealed class SalesOrdersController : ApiControllerBase
                 search,
                 outstandingOnly,
                 page <= 0 ? 1 : page,
-                pageSize <= 0 ? 50 : pageSize),
+                pageSize <= 0 ? 50 : pageSize,
+                kind ?? SalesOrderKind.Order),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);

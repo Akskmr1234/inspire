@@ -156,7 +156,12 @@ public sealed class CreateSalesOrderCommandHandler
                 ],
                 cancellationToken);
 
-        Result<string> number = await ReserveAsync(firmId, branchId, year, cancellationToken);
+        Result<string> number = await ReserveAsync(
+            request.Kind == SalesOrderKind.Quotation ? DocumentTypes.SalesQuotation : DocumentTypes.SalesOrder,
+            firmId,
+            branchId,
+            year,
+            cancellationToken);
 
         if (number.IsFailure)
         {
@@ -177,7 +182,8 @@ public sealed class CreateSalesOrderCommandHandler
             warehouse,
             mode,
             firm.BaseCurrency,
-            request.ExpectedOn);
+            request.ExpectedOn,
+            request.Kind);
 
         if (draft.IsFailure)
         {
@@ -234,6 +240,15 @@ public sealed class CreateSalesOrderCommandHandler
         Dictionary<LedgerId, AdditionalLedger> byLedger =
             mapped.ToDictionary(charge => charge.LedgerId);
 
+        if (order.IsQuotation)
+        {
+            foreach (AdditionalLedger quoted in await _charges.ListForDocumentAsync(
+                firmId, ChargeableDocument.SalesQuotation, cancellationToken))
+            {
+                byLedger[quoted.LedgerId] = quoted;
+            }
+        }
+
         foreach (SalesInvoiceChargeInput input in request.Charges ?? [])
         {
             if (!byLedger.TryGetValue(LedgerId.From(input.LedgerId), out AdditionalLedger? charge))
@@ -277,22 +292,24 @@ public sealed class CreateSalesOrderCommandHandler
             order.Tax.Amount,
             order.ChargeTotal.Amount,
             order.RoundingDifference.Amount,
-            order.Total.Amount);
+            order.Total.Amount,
+            order.Kind);
 
-    /// <summary>Takes the next order number, creating the series if there is none.</summary>
+    /// <summary>Takes the next number in the series, creating the series if there is none.</summary>
     private async Task<Result<string>> ReserveAsync(
+        string documentType,
         FirmId firmId,
         BranchId branchId,
         FinancialYear year,
         CancellationToken cancellationToken)
     {
         NumberingSeries? series = await _numbering.FindForUpdateAsync(
-            DocumentTypes.SalesOrder, firmId, branchId, year.Id, cancellationToken);
+            documentType, firmId, branchId, year.Id, cancellationToken);
 
         if (series is null)
         {
             Result<NumberingSeries> created = NumberingSeries.Create(
-                _tenantContext.TenantId, firmId, DocumentTypes.SalesOrder, branchId, year.Id);
+                _tenantContext.TenantId, firmId, documentType, branchId, year.Id);
 
             if (created.IsFailure)
             {
@@ -548,7 +565,8 @@ public sealed class ListSalesOrdersQueryHandler
                 request.Status,
                 request.CustomerLedgerId is { } customer ? LedgerId.From(customer) : null,
                 request.Search,
-                request.OutstandingOnly),
+                request.OutstandingOnly,
+                request.Kind),
             request.Page,
             request.PageSize,
             cancellationToken));

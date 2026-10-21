@@ -70,7 +70,14 @@ internal static class PurchaseReceipt
             ManufacturedOn: null,
             ExpiresOn: line.ExpiresOn,
             SerialNumbers: [.. line.Serials.Select(serial => serial.SerialNumber)],
-            WarrantyUntil: null);
+            WarrantyUntil: null,
+            SellingRate: carriesRate ? SellingRatePerStockUnit(line) : null);
+
+    /// <summary>The batch's selling rate per stock unit, from the rate stated per entered unit.</summary>
+    private static decimal? SellingRatePerStockUnit(PurchaseInvoiceLine line) =>
+        line.SellingRate is { } rate && line.StockQuantity > 0m
+            ? Math.Round(rate * line.Quantity / line.StockQuantity, 4, MidpointRounding.AwayFromZero)
+            : null;
 
     /// <summary>
     /// Sets the cost of every product costed at its last purchase rate to what this

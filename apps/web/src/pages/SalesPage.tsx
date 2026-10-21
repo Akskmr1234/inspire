@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -32,7 +32,7 @@ import {
 } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, type SalesRateType } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import {
   chargeSetupKey,
@@ -66,6 +66,7 @@ import {
   createSalesInvoice,
   getCustomerAccount,
   getSalesInvoice,
+  getSalesRateHints,
   isReturn,
   listSalesInvoices,
   postSalesInvoice,
@@ -132,6 +133,18 @@ function lineTaxRate(
   return mode === 'TAX' && product?.taxPercentage != null
     ? product.taxPercentage
     : modeTaxRate(mode, defaultTaxRate);
+}
+
+/**
+ * What a product sells at from its own master under a rate type. The rate types that
+ * look elsewhere - the customer's quotation or last sale, the batch - start from retail,
+ * which stands where there is nothing to take.
+ */
+function masterRate(product: ProductSummary, rateType: SalesRateType): number {
+  if (rateType === 'wholesale') return product.wholesaleRate || product.retailRate;
+  if (rateType === 'mrp') return product.maximumRetailPrice || product.retailRate;
+
+  return product.retailRate;
 }
 
 const emptyLine: DraftLine = {
@@ -890,7 +903,7 @@ function EntryDialog({
 
     return editing.mode === TaxMode.nonTax ? 'NT' : fallback === 'NT' ? 'TAX' : fallback;
   });
-  const [rateType, setRateType] = useState<'retail' | 'wholesale' | 'mrp'>(
+  const [rateType, setRateType] = useState<SalesRateType>(
     settings.defaultSalesRateType || 'retail',
   );
   const reverseCalc = settings.enableReverseCalculation ?? false;
@@ -1252,12 +1265,7 @@ function EntryDialog({
   /** Adds one unit of a product to the invoice, with its serial number if it has one. */
   const addScanned = (found: ProductSummary, serial: string | null): void => {
     const defaultTax = lineTaxRate(taxMode, found, settings.defaultTaxRate);
-    const baseRate =
-      rateType === 'wholesale'
-        ? found.wholesaleRate || found.retailRate
-        : rateType === 'mrp'
-          ? found.maximumRetailPrice || found.retailRate
-          : found.retailRate;
+    const baseRate = masterRate(found, rateType);
     const incRate = (baseRate * (1 + defaultTax / 100)).toFixed(2);
 
     const existingIndex = lines.findIndex((l) => l.productId === found.id);
@@ -1396,19 +1404,14 @@ function EntryDialog({
     );
   };
 
-  const handleRateTypeChange = (newRateType: 'retail' | 'wholesale' | 'mrp'): void => {
+  const handleRateTypeChange = (newRateType: SalesRateType): void => {
     setRateType(newRateType);
     setLines((prev) =>
       prev.map((l) => {
         if (!l.productId) return l;
         const prod = products.data?.find((p) => p.id === l.productId);
         if (!prod) return l;
-        const baseRate =
-          newRateType === 'wholesale'
-            ? prod.wholesaleRate || prod.retailRate
-            : newRateType === 'mrp'
-              ? prod.maximumRetailPrice || prod.retailRate
-              : prod.retailRate;
+        const baseRate = masterRate(prod, newRateType);
         const taxPct = Number(l.taxPercentage || 0);
         return {
           ...l,
@@ -1749,16 +1752,17 @@ function EntryDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <SelectField<'retail' | 'wholesale' | 'mrp'>
+            <SelectField<SalesRateType>
               label={t('sales.salesRateType')}
               value={rateType}
-              onChange={(val) =>
-                handleRateTypeChange(val as 'retail' | 'wholesale' | 'mrp')
-              }
+              onChange={(val) => handleRateTypeChange(val as SalesRateType)}
               options={[
-                { value: 'retail', label: 'Retail' },
-                { value: 'wholesale', label: 'Wholesale' },
-                { value: 'mrp', label: 'MRP' },
+                { value: 'retail', label: t('prefs.rateRetail') },
+                { value: 'wholesale', label: t('prefs.rateWholesale') },
+                { value: 'mrp', label: t('prefs.rateMrp') },
+                { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+                { value: 'customerRate', label: t('prefs.rateCustomer') },
+                { value: 'batch', label: t('prefs.rateBatch') },
               ]}
               size="sm"
             />
@@ -1859,6 +1863,7 @@ function EntryDialog({
                 warehouseId={warehouseId}
                 serialDirection={isReturn(kind) ? 'back' : 'out'}
                 rateType={rateType}
+                customerId={customerId}
                 modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
                 productTax={taxMode === 'TAX'}
                 reverseCalc={reverseCalc}
@@ -2245,6 +2250,7 @@ function LineRow({
   warehouseId,
   serialDirection,
   rateType,
+  customerId,
   modeRate,
   productTax,
   reverseCalc,
@@ -2264,7 +2270,9 @@ function LineRow({
   readonly warehouseId: string;
   /** Out of stock for a sale, back from the customer for a return. */
   readonly serialDirection: SerialDirection;
-  readonly rateType: 'retail' | 'wholesale' | 'mrp';
+  readonly rateType: SalesRateType;
+  /** The customer, for the rates they were last quoted or charged. */
+  readonly customerId: string;
   /** The rate the tax mode starts a line at. */
   readonly modeRate: number;
   /** Whether a chosen product brings its own rate from the tax rate master. */
@@ -2303,6 +2311,67 @@ function LineRow({
     queryFn: () => fetchProductBatches(line.productId, warehouseId),
     enabled: needsBatch && line.productId !== '' && warehouseId !== '',
   });
+
+  // The line as it now stands, for answers that arrive after somebody has moved on.
+  const latest = useRef(line);
+  latest.current = line;
+
+  /** The rate fields for a rate, at the line's own tax. */
+  const priced = (rate: number): Partial<DraftLine> => ({
+    rate: String(rate),
+    inclusiveRate: (rate * (1 + Number(latest.current.taxPercentage || 0) / 100)).toFixed(
+      2,
+    ),
+  });
+
+  /** A batch's own selling rate, where the counter sells at batch rates and it has one. */
+  const batchRate = (batchNumber: string): Partial<DraftLine> => {
+    if (rateType !== 'batch') return {};
+
+    const chosen = (batches.data ?? []).find(
+      (batch) => batch.batchNumber === batchNumber,
+    );
+
+    return chosen?.sellingRate ? priced(chosen.sellingRate) : {};
+  };
+
+  // The customer's last quotation or last sale, asked for when the product, the
+  // customer or the rate type changes - never when a saved line is first shown, whose
+  // rate somebody already chose. Where there is none, the master's rate stands.
+  const hintKey = `${rateType}|${customerId}|${line.productId}`;
+  const lastHintKey = useRef(hintKey);
+
+  useEffect(() => {
+    if (hintKey === lastHintKey.current) return;
+    lastHintKey.current = hintKey;
+
+    if (rateType !== 'lastQuotation' && rateType !== 'customerRate') return;
+    if (!customerId || !line.productId) return;
+
+    const productId = line.productId;
+
+    getSalesRateHints(customerId, productId)
+      .then((hints) => {
+        const hint = rateType === 'lastQuotation' ? hints.lastQuotation : hints.lastSale;
+
+        if (hint && latest.current.productId === productId) {
+          onChange(priced(hint.rate));
+        }
+      })
+      .catch(() => undefined);
+  }, [hintKey]);
+
+  // Switched to batch rates: the batch already picked takes its own.
+  const lastRateType = useRef(rateType);
+
+  useEffect(() => {
+    if (rateType === lastRateType.current) return;
+    lastRateType.current = rateType;
+
+    const patch = line.batchNumber ? batchRate(line.batchNumber) : {};
+
+    if (patch.rate) onChange(patch);
+  }, [rateType]);
 
   // What the shelf holds, read only to decide whether to offer the picker the moment
   // a serialised product is chosen for a sale. The firm asked for exactly that: a popup
@@ -2362,6 +2431,7 @@ function LineRow({
         onChange({
           batchNumber: available.batchNumber,
           expiresOn: available.expiresOn ?? '',
+          ...batchRate(available.batchNumber),
         });
       }
     }
@@ -2370,12 +2440,7 @@ function LineRow({
   const handleProductSelect = (value: string): void => {
     const chosen = products.find((candidate) => candidate.id === value);
     if (chosen) {
-      const baseRate =
-        rateType === 'wholesale'
-          ? chosen.wholesaleRate || chosen.retailRate
-          : rateType === 'mrp'
-            ? chosen.maximumRetailPrice || chosen.retailRate
-            : chosen.retailRate;
+      const baseRate = masterRate(chosen, rateType);
       // A product chosen afresh starts at the mode's rate, like its price starts at
       // the master's: whatever the previous product on this line carried is not a
       // rate anybody chose for this one.
@@ -2532,6 +2597,7 @@ function LineRow({
                         onChange({
                           batchNumber: String(value),
                           expiresOn: chosen?.expiresOn ?? '',
+                          ...batchRate(String(value)),
                         });
                       }}
                       options={[

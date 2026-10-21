@@ -76,6 +76,8 @@ interface DraftLine {
    */
   batchNumber: string;
   expiresOn: string;
+  /** What the batch is to sell at, where the firm prices by batch. Blank for the product's rates. */
+  sellingRate: string;
   /** The numbers on the units arriving, one per line as they are keyed in. */
   serialNumbers: string;
 }
@@ -90,6 +92,7 @@ function emptyLine(taxRate: number): DraftLine {
     discount: '0',
     batchNumber: '',
     expiresOn: '',
+    sellingRate: '',
     serialNumbers: '',
   };
 }
@@ -113,6 +116,7 @@ function lineFrom(line: PurchaseInvoiceDetail['lines'][number]): DraftLine {
     discount: String(line.discount),
     batchNumber: line.batchNumber ?? '',
     expiresOn: line.expiresOn ?? '',
+    sellingRate: line.sellingRate ? String(line.sellingRate) : '',
     serialNumbers: line.serialNumbers.join('\n'),
   };
 }
@@ -721,6 +725,7 @@ function EntryDialog({
           discount: Number(line.discount || 0),
           batchNumber: line.batchNumber.trim() || null,
           expiresOn: line.expiresOn || null,
+          sellingRate: Number(line.sellingRate) > 0 ? Number(line.sellingRate) : null,
           serialNumbers: splitSerials(line.serialNumbers),
         }));
 
@@ -1267,6 +1272,21 @@ function LineRow({
                       size="sm"
                       value={line.expiresOn}
                       onChange={(value) => onChange({ expiresOn: value })}
+                    />
+                  )}
+
+                  {/* What the batch sells at, offered by the sales screen when the
+                      counter sells at batch-wise rates. */}
+                  {!isReturn && (
+                    <TextField
+                      label={t('purchase.batchSellingRate')}
+                      size="sm"
+                      value={line.sellingRate}
+                      onChange={(value) =>
+                        onChange({ sellingRate: value.replace(/[^0-9.]/g, '') })
+                      }
+                      placeholder={t('purchase.batchSellingRateHint')}
+                      className="w-full sm:w-36"
                     />
                   )}
                 </>

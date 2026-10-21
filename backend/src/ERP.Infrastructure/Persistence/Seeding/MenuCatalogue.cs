@@ -311,6 +311,15 @@ public static class MenuCatalogue
                 // entries would suggest two places to look for the same sale.
                 // Before the invoices, because that is the order the work happens in:
                 // an order is taken, then filled.
+                // Before the orders: an offer is made, then accepted.
+                new(
+                    "transactions.sales-quotations",
+                    "Sales quotations",
+                    "عروض الأسعار",
+                    "sales",
+                    "/sales/quotations",
+                    "sales:order:view"),
+
                 new(
                     "transactions.sales-orders",
                     "Sales orders",
@@ -454,6 +463,16 @@ public static class MenuCatalogue
                     "inventory",
                     "/inventory/expiry",
                     ViewInventoryReports),
+
+                // Profit on what was sold, each batch at its own cost. Behind the
+                // accounts' report permission, because it shows margins.
+                new(
+                    "inventory-reports.batch-profit",
+                    "Batch-wise profit",
+                    "الربح حسب الدفعة",
+                    "inventory",
+                    "/inventory/batch-profit",
+                    ViewReports),
                 new(
                     "inventory-reports.serials",
                     "Serial numbers",

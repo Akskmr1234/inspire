@@ -448,6 +448,7 @@ public sealed class PurchaseInvoice
     /// <param name="expiresOn">When that batch expires, where the supplier stated it.</param>
     /// <param name="serialNumbers">The units arriving, where the product is serialised.</param>
     /// <param name="discount">What was taken off the line before tax.</param>
+    /// <param name="sellingRate">What one stock unit of the batch is to sell at.</param>
     /// <returns>The line, or the reason it was refused.</returns>
     /// <remarks>
     /// The conversion and the tax both arrive computed, for the same reason they do on a
@@ -465,11 +466,18 @@ public sealed class PurchaseInvoice
         string? batchNumber = null,
         DateOnly? expiresOn = null,
         IReadOnlyCollection<string>? serialNumbers = null,
-        decimal discount = 0m)
+        decimal discount = 0m,
+        decimal? sellingRate = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         ArgumentNullException.ThrowIfNull(unit);
         ArgumentNullException.ThrowIfNull(assessment);
+
+        if (sellingRate < 0m)
+        {
+            return Result.Failure<PurchaseInvoiceLine>(Error.Validation(
+                "PurchaseInvoice.SellingRateNegative", "A selling rate cannot be negative."));
+        }
 
         if (!IsEditable)
         {
@@ -560,7 +568,8 @@ public sealed class PurchaseInvoice
             assessment,
             _lines.Count + 1,
             Trimmed(batchNumber),
-            expiresOn);
+            expiresOn,
+            product.TracksBatches && sellingRate > 0m ? sellingRate : null);
 
         foreach (string serial in serialNumbers ?? [])
         {

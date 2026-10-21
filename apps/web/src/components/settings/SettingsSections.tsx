@@ -590,6 +590,9 @@ export function SalesSettings(): React.JSX.Element {
             { value: 'retail', label: t('prefs.rateRetail') },
             { value: 'wholesale', label: t('prefs.rateWholesale') },
             { value: 'mrp', label: t('prefs.rateMrp') },
+            { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+            { value: 'customerRate', label: t('prefs.rateCustomer') },
+            { value: 'batch', label: t('prefs.rateBatch') },
           ]}
         />
         <CheckField

@@ -1585,6 +1585,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(19,6)")
                         .HasColumnName("purchase_rate");
 
+                    b.Property<decimal?>("SellingRate")
+                        .HasPrecision(19, 6)
+                        .HasColumnType("numeric(19,6)")
+                        .HasColumnName("selling_rate");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -4705,6 +4710,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(19,6)")
                         .HasColumnName("rate");
 
+                    b.Property<decimal?>("SellingRate")
+                        .HasPrecision(19, 6)
+                        .HasColumnType("numeric(19,6)")
+                        .HasColumnName("selling_rate");
+
                     b.Property<decimal>("StockQuantity")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
@@ -5694,6 +5704,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
 
                     b.Property<int>("Mode")
                         .HasColumnType("integer")

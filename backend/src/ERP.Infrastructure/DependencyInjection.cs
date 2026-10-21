@@ -16,6 +16,7 @@ using ERP.Application.Platform.Import;
 using ERP.Application.Platform.Menus;
 using ERP.Application.Platform.Settings;
 using ERP.Application.Platform.Users;
+using ERP.Application.Sales;
 using ERP.Application.Service;
 using ERP.Infrastructure.Auditing;
 using ERP.Infrastructure.Import;
@@ -142,6 +143,8 @@ public static class DependencyInjection
         services.AddScoped<IStockHistoryReader, StockHistoryReader>();
         services.AddScoped<IBillOfMaterialsReader, BillOfMaterialsReader>();
         services.AddScoped<IJobCardReader, JobCardReader>();
+        services.AddScoped<ISalesRateReader, SalesRateReader>();
+        services.AddScoped<ISalesProfitReader, SalesProfitReader>();
         services.AddScoped<IRmaReader, RmaReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();

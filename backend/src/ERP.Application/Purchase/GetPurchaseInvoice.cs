@@ -37,6 +37,7 @@ public sealed record PurchaseInvoiceLineTaxDetail(
 /// <param name="Tax">The input tax on it.</param>
 /// <param name="Components">That tax, head by head, as the engine assessed it.</param>
 /// <param name="SerialNumbers">The units arriving, where the product is serialised.</param>
+/// <param name="SellingRate">What one entered unit of the batch is to sell at, where stated.</param>
 public sealed record PurchaseInvoiceLineDetail(
     int LineNumber,
     Guid ProductId,
@@ -50,7 +51,8 @@ public sealed record PurchaseInvoiceLineDetail(
     decimal Taxable,
     decimal Tax,
     IReadOnlyList<PurchaseInvoiceLineTaxDetail> Components,
-    IReadOnlyList<string> SerialNumbers);
+    IReadOnlyList<string> SerialNumbers,
+    decimal? SellingRate = null);
 
 /// <summary>One charge carried beside the goods.</summary>
 /// <param name="LedgerId">The account it posts to.</param>
@@ -176,7 +178,8 @@ public sealed class GetPurchaseInvoiceQueryHandler
                                 new PurchaseInvoiceLineTaxDetail(
                                     component.Type, component.Percentage, component.Amount)),
                         ],
-                        [.. line.Serials.Select(serial => serial.SerialNumber)])),
+                        [.. line.Serials.Select(serial => serial.SerialNumber)],
+                        line.SellingRate)),
             ],
             [
                 .. invoice.Charges.Select(charge =>

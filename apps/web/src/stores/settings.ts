@@ -16,6 +16,14 @@ import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
  * them read them from here. When the firm endpoint arrives this store reads from it
  * instead and nothing else moves.
  */
+/**
+ * Where a sale's line rate comes from: one of the product's own rates, the customer's
+ * last quotation, the customer's last sale, or the selling rate of the batch picked.
+ * The last three start from retail where there is nothing to take.
+ */
+export type SalesRateType =
+  'retail' | 'wholesale' | 'mrp' | 'lastQuotation' | 'customerRate' | 'batch';
+
 export interface AppSettings {
   /**
    * Whether an Arabic name is filled in automatically from the English one.
@@ -100,7 +108,7 @@ export interface AppSettings {
   /** Whether device attributes (IMEI, Serial Number, Warranty, Model) are enabled. */
   readonly enableDeviceAttributes: boolean;
   /** Default sales rate type: retail, wholesale, or maximum retail price (MRP). */
-  readonly defaultSalesRateType: 'retail' | 'wholesale' | 'mrp';
+  readonly defaultSalesRateType: SalesRateType;
   /** Default tax mode: NT (Non-Tax), TAX (VAT), or GST. */
   readonly defaultTaxMode: 'NT' | 'TAX' | 'GST';
   /** Default customer for sales transactions. */

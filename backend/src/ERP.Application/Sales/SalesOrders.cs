@@ -35,6 +35,7 @@ public sealed record SalesOrderLineInput(
 /// <param name="ExpectedOn">When the customer was told to expect the goods.</param>
 /// <param name="ReferenceNumber">The customer's own reference.</param>
 /// <param name="Narration">What is recorded against the order.</param>
+/// <param name="Kind">An order, or a quotation. Defaults to an order.</param>
 public sealed record CreateSalesOrderCommand(
     DateOnly Date,
     Guid CustomerLedgerId,
@@ -44,7 +45,8 @@ public sealed record CreateSalesOrderCommand(
     TaxMode? Mode = null,
     DateOnly? ExpectedOn = null,
     string? ReferenceNumber = null,
-    string? Narration = null) : ICommand<SalesOrderResponse>, ITransactional;
+    string? Narration = null,
+    SalesOrderKind Kind = SalesOrderKind.Order) : ICommand<SalesOrderResponse>, ITransactional;
 
 /// <summary>Confirms a draft order, so invoices may be raised from it.</summary>
 /// <param name="SalesOrderId">The order.</param>
@@ -103,6 +105,7 @@ public sealed record ConvertSalesOrderCommand(
 /// </param>
 /// <param name="Page">Which page, from one.</param>
 /// <param name="PageSize">How many rows a page holds.</param>
+/// <param name="Kind">Orders or quotations. Defaults to orders.</param>
 public sealed record ListSalesOrdersQuery(
     DateOnly? From = null,
     DateOnly? To = null,
@@ -111,7 +114,8 @@ public sealed record ListSalesOrdersQuery(
     string? Search = null,
     bool OutstandingOnly = false,
     int Page = 1,
-    int PageSize = 50) : IQuery<PagedResult<SalesOrderSummary>>;
+    int PageSize = 50,
+    SalesOrderKind Kind = SalesOrderKind.Order) : IQuery<PagedResult<SalesOrderSummary>>;
 
 /// <summary>Reads one order, with its lines and what is still owed on each.</summary>
 /// <param name="SalesOrderId">The order.</param>
@@ -126,6 +130,7 @@ public sealed record GetSalesOrderQuery(Guid SalesOrderId) : IQuery<SalesOrderDe
 /// <param name="ChargeTotal">What the charges add, net of what they deduct.</param>
 /// <param name="RoundingDifference">What rounding the total to the currency moved it by.</param>
 /// <param name="Total">What the customer was quoted.</param>
+/// <param name="Kind">An order, or a quotation.</param>
 public sealed record SalesOrderResponse(
     Guid SalesOrderId,
     string Number,
@@ -134,7 +139,8 @@ public sealed record SalesOrderResponse(
     decimal Tax,
     decimal ChargeTotal,
     decimal RoundingDifference,
-    decimal Total);
+    decimal Total,
+    SalesOrderKind Kind = SalesOrderKind.Order);
 
 /// <summary>An order as a list shows it.</summary>
 /// <param name="SalesOrderId">The order.</param>
@@ -152,6 +158,7 @@ public sealed record SalesOrderResponse(
 /// <param name="Taxable">The goods, before tax.</param>
 /// <param name="Tax">The tax quoted on them.</param>
 /// <param name="Total">What it comes to.</param>
+/// <param name="Kind">An order, or a quotation.</param>
 public sealed record SalesOrderSummary(
     Guid SalesOrderId,
     string Number,
@@ -167,7 +174,8 @@ public sealed record SalesOrderSummary(
     int OutstandingLines,
     decimal Taxable,
     decimal Tax,
-    decimal Total);
+    decimal Total,
+    SalesOrderKind Kind = SalesOrderKind.Order);
 
 /// <summary>One line of an order, and how much of it has gone out.</summary>
 /// <param name="SalesOrderLineId">The line, which a conversion names.</param>
@@ -243,6 +251,8 @@ public sealed class CreateSalesOrderCommandValidator : AbstractValidator<CreateS
 
         RuleFor(c => c.Mode!.Value).IsInEnum().When(c => c.Mode is not null);
 
+        RuleFor(c => c.Kind).IsInEnum();
+
         RuleFor(c => c.Lines)
             .NotEmpty()
             .WithMessage("An order needs at least one line.");
@@ -302,6 +312,8 @@ public sealed class ListSalesOrdersQueryValidator : AbstractValidator<ListSalesO
             .WithMessage($"A page holds between 1 and {MaximumPageSize} rows.");
 
         RuleFor(q => q.Status!.Value).IsInEnum().When(q => q.Status is not null);
+
+        RuleFor(q => q.Kind).IsInEnum();
 
         RuleFor(q => q.To)
             .GreaterThanOrEqualTo(q => q.From!.Value)

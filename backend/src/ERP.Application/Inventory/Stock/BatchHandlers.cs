@@ -63,6 +63,61 @@ public sealed class CorrectBatchDatesCommandHandler : ICommandHandler<CorrectBat
     }
 }
 
+/// <summary>Handles <see cref="SetBatchSellingRateCommand"/>.</summary>
+public sealed class SetBatchSellingRateCommandHandler : ICommandHandler<SetBatchSellingRateCommand>
+{
+    private readonly IBatchRepository _batches;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="SetBatchSellingRateCommandHandler"/> class.</summary>
+    /// <param name="batches">The batch repository.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public SetBatchSellingRateCommandHandler(
+        IBatchRepository batches,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _batches = batches;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> Handle(
+        SetBatchSellingRateCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure(Error.Forbidden(
+                "Batch.NoFirmSelected", "A firm must be selected to work with batches."));
+        }
+
+        Batch? batch = await _batches.FindAsync(BatchId.From(request.BatchId), cancellationToken);
+
+        if (batch is null || batch.FirmId != firmId)
+        {
+            return Result.Failure(Error.NotFound(
+                "Batch.NotFound", "No such batch in the selected firm."));
+        }
+
+        Result set = batch.SetSellingRate(request.SellingRate);
+
+        if (set.IsFailure)
+        {
+            return set;
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+}
+
 /// <summary>Handles the three batch read queries.</summary>
 public sealed class BatchQueryHandler
     : IQueryHandler<ListProductBatchesQuery, IReadOnlyList<BatchStockRow>>,

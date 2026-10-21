@@ -58,6 +58,8 @@ export interface PurchaseInvoiceLineDetail {
   readonly tax: number;
   readonly components: readonly PurchaseInvoiceLineTax[];
   readonly serialNumbers: readonly string[];
+  /** What the batch is to sell at, where it was stated. */
+  readonly sellingRate?: number | null;
 }
 
 /** A charge carried beside the goods. */
@@ -127,6 +129,8 @@ export interface PurchaseLineInput {
   /** The batch the goods arrived in. Typed, not chosen: this is what opens it. */
   readonly batchNumber?: string | null;
   readonly expiresOn?: string | null;
+  /** What the batch is to sell at, per entered unit. */
+  readonly sellingRate?: number | null;
   readonly serialNumbers?: readonly string[];
 }
 

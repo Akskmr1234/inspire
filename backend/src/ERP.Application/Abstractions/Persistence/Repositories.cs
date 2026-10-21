@@ -1084,13 +1084,15 @@ public interface ISalesOrderRepository
 /// <param name="CustomerLedgerId">One customer, or all.</param>
 /// <param name="Search">Matched against the order number and the customer's reference.</param>
 /// <param name="OutstandingOnly">Only orders with goods still owed.</param>
+/// <param name="Kind">Orders or quotations.</param>
 public sealed record SalesOrderFilter(
     DateOnly? From = null,
     DateOnly? To = null,
     SalesOrderStatus? Status = null,
     LedgerId? CustomerLedgerId = null,
     string? Search = null,
-    bool OutstandingOnly = false);
+    bool OutstandingOnly = false,
+    SalesOrderKind Kind = SalesOrderKind.Order);
 
 /// <summary>Reads sales orders for a list.</summary>
 public interface ISalesOrderReader

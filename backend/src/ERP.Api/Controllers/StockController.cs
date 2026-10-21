@@ -516,7 +516,35 @@ public sealed class StockController : ApiControllerBase
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
+
+    /// <summary>Sets what one stock unit of a batch sells at.</summary>
+    /// <param name="id">The batch.</param>
+    /// <param name="request">The rate, or none for the product's own rates.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing.</returns>
+    /// <response code="204">Set.</response>
+    /// <response code="404">No such batch in the selected firm.</response>
+    [HttpPut("batches/{id:guid}/selling-rate")]
+    [RequiresPermission("inventory", "stock-adjustment", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetBatchSellingRateAsync(
+        Guid id,
+        [FromBody] SetBatchSellingRateRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new SetBatchSellingRateCommand(id, request.SellingRate), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }
+
+/// <summary>What one stock unit of a batch sells at.</summary>
+/// <param name="SellingRate">The rate, or null for the product's own rates.</param>
+public sealed record SetBatchSellingRateRequest(decimal? SellingRate = null);
 
 /// <summary>One line of a stock document being entered.</summary>
 /// <param name="ProductId">The product moving.</param>

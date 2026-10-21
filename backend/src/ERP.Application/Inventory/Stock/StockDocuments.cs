@@ -43,6 +43,9 @@ namespace ERP.Application.Inventory.Stock;
 /// <param name="WarrantyUntil">
 /// How long the units on this line are covered for, applied to the ones it writes down.
 /// </param>
+/// <param name="SellingRate">
+/// What one stock unit of the batch is to sell at, on a document that brings goods in.
+/// </param>
 public sealed record StockDocumentLineInput(
     Guid ProductId,
     decimal Quantity,
@@ -54,7 +57,8 @@ public sealed record StockDocumentLineInput(
     DateOnly? ManufacturedOn = null,
     DateOnly? ExpiresOn = null,
     IReadOnlyList<string>? SerialNumbers = null,
-    DateOnly? WarrantyUntil = null);
+    DateOnly? WarrantyUntil = null,
+    decimal? SellingRate = null);
 
 /// <summary>Enters a stock document, and by default posts it.</summary>
 /// <param name="Type">The kind of operation.</param>

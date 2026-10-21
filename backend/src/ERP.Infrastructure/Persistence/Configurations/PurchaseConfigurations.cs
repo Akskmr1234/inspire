@@ -181,6 +181,8 @@ public sealed class PurchaseInvoiceLineConfiguration
 
         builder.Property(line => line.Rate)
             .HasPrecision(19, StockBalance.CostScale).IsRequired();
+        builder.Property(line => line.SellingRate)
+            .HasPrecision(19, StockBalance.CostScale);
         builder.Property(line => line.Discount)
             .HasPrecision(19, 4).IsRequired();
 
