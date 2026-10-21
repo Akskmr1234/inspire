@@ -157,7 +157,6 @@ export function NeedsAttention(): React.JSX.Element | null {
           <h2 className="text-sm font-semibold tracking-tight text-ink">
             {t('attention.title')}
           </h2>
-          <p className="mt-0.5 text-xs text-ink-muted">{t('attention.hint')}</p>
         </div>
       </header>
 

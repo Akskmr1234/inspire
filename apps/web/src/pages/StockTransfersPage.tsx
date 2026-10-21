@@ -305,7 +305,6 @@ export function StockTransfersPage(): React.JSX.Element {
           onClose={() => setEntering(null)}
         >
           {error && <Alert tone="error">{error}</Alert>}
-          <p className="mb-3 text-xs text-ink-muted">{t('transfers.directHint')}</p>
           <StockEntry
             warehouses={places}
             lockedType={StockDocumentType.stockTransfer}
@@ -613,9 +612,6 @@ function TransferView({
           onClose={() => setDialog(null)}
         >
           {error && <Alert tone="error">{error}</Alert>}
-          <p className="mb-3 text-xs text-ink-muted">
-            {t('transfers.dispatchHint', { to: summary.toWarehouseName })}
-          </p>
           <StockEntry
             warehouses={warehouses}
             lockedType={StockDocumentType.stockTransfer}
@@ -1022,7 +1018,6 @@ function ApproveForm({
         );
       }}
     >
-      <p className="text-xs text-ink-muted">{t('transfers.approveHint')}</p>
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
           <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
@@ -1156,7 +1151,6 @@ function ReceiveForm({
         onSubmit(date);
       }}
     >
-      <p className="text-xs text-ink-muted">{t('transfers.receiveHint')}</p>
       <label className="block">
         <span className="field-label">{t('transfers.receivedOn')}</span>
         <input

@@ -48,7 +48,6 @@ export function NumberingSettings(): React.JSX.Element {
         <h4 className="text-xs font-bold tracking-wider text-ink-muted uppercase">
           {t('numbering.title')}
         </h4>
-        <p className="mt-0.5 text-xs text-ink-muted">{t('numbering.hint')}</p>
       </div>
 
       {query.isPending && <Spinner />}

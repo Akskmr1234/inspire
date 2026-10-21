@@ -90,8 +90,6 @@ export function RolesPage(): React.JSX.Element {
         }
       />
 
-      <p className="text-sm text-ink-muted">{t('roles.hint')}</p>
-
       {notice && (
         <p className="alert-success flex items-center gap-3">
           <span>{notice}</span>
@@ -301,7 +299,6 @@ function RoleEditor({
             <span>{t('roles.allMenus')}</span>
           </label>
         </div>
-        <p className="text-xs text-ink-muted">{t('roles.menusHint')}</p>
 
         <div
           className={clsx(
@@ -324,7 +321,6 @@ function RoleEditor({
       {!everything && (
         <div className="panel space-y-3">
           <h3 className="text-sm font-semibold text-ink">{t('roles.permissions')}</h3>
-          <p className="text-xs text-ink-muted">{t('roles.permissionsHint')}</p>
 
           <div className="table-wrap">
             <table className="table min-w-[44rem] text-sm">

@@ -1056,9 +1056,6 @@ function RmaView({
 
       {awaitsOutcome && can('service:rma:approve') && (
         <Panel title={t('rma.outcomeTitle')}>
-          <p className="text-xs text-ink-muted">
-            {fromCustomer ? t('rma.outcomeHintCustomer') : t('rma.outcomeHintSupplier')}
-          </p>
           <div className="flex flex-wrap items-end gap-3">
             <button
               type="button"

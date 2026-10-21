@@ -237,7 +237,6 @@ export function PrintTemplatesPage(): React.JSX.Element {
         }
       />
 
-      <p className="text-sm text-ink-muted">{t('printing.templatesHint')}</p>
       {notice && <p className="alert-success">{notice}</p>}
       {save.isError && (
         <p className="alert-error">{save.error.detail || save.error.code}</p>

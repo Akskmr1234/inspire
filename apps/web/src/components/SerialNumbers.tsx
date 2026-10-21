@@ -193,10 +193,6 @@ export function SerialPickerDialog({
       size="form"
       onClose={onClose}
     >
-      <p className="text-xs text-ink-muted">
-        {direction === 'in' ? t('serials.hintIn') : t('serials.hintOut')}
-      </p>
-
       <div className="flex items-center gap-2">
         <input
           autoFocus

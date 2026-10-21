@@ -40,7 +40,7 @@ describe('the balance badge', () => {
     // is not balanced, so the two-way badge fell through to the unbalanced branch
     // and opened the screen with "Difference 0.00 (credit heavy)" — a statement
     // that is neither true nor actionable.
-    expect(screen.queryByText(/credit heavy|debit heavy/i)).toBeNull();
+    expect(screen.queryByText(/\((Cr|Dr)\)/)).toBeNull();
   });
 
   it('names the difference once there is one', async () => {
@@ -52,7 +52,7 @@ describe('the balance badge', () => {
 
     await user.type(screen.getAllByLabelText(/debit amount/i)[0]!, '250');
 
-    await waitFor(() => expect(screen.getByText(/debit heavy/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/\(Dr\)/)).toBeTruthy());
   });
 
   it('reports a voucher that balances', async () => {

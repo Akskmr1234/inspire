@@ -119,7 +119,6 @@ export function LoginPage(): React.JSX.Element {
                 spellCheck={false}
               />
             </div>
-            <p className="field-hint">{t('signIn.companyHint')}</p>
           </div>
 
           <div>

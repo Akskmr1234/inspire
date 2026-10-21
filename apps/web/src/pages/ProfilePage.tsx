@@ -64,7 +64,7 @@ export function ProfilePage(): React.JSX.Element {
 
   return (
     <div className="page space-y-5">
-      <PageHeading title={t('profile.title')} subtitle={t('profile.subtitle')} />
+      <PageHeading title={t('profile.title')} />
 
       {account.isPending && (
         <div className="card card-body flex items-center gap-2 text-sm text-ink-muted">
@@ -316,7 +316,6 @@ function DetailsTab({ account }: { readonly account: MyAccount }): React.JSX.Ele
               required
               onChange={(e) => setName(e.target.value)}
             />
-            <p className="field-hint">{t('profile.displayNameHint')}</p>
           </div>
           <div>
             <label htmlFor="profileEmail" className="field-label">
@@ -391,7 +390,6 @@ function DetailsTab({ account }: { readonly account: MyAccount }): React.JSX.Ele
             value={formatDate(account.createdAtUtc)}
           />
         </dl>
-        <p className="text-xs text-ink-muted">{t('profile.userNameFixed')}</p>
       </section>
     </div>
   );
@@ -890,10 +888,11 @@ function AccessTab({ account }: { readonly account: MyAccount }): React.JSX.Elem
    Pieces
    -------------------------------------------------------------------------- */
 
+/** A section heading. The hint is accepted and not shown: labels say enough. */
 function SectionTitle({
   icon,
   title,
-  hint,
+  hint: _hint,
 }: {
   readonly icon?: React.ReactNode;
   readonly title: string;
@@ -908,7 +907,6 @@ function SectionTitle({
       )}
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       </div>
     </div>
   );

@@ -54,7 +54,7 @@ export function SettingsPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <PageHeading title={t('settings.title')} subtitle={t('settings.subtitle')} />
+      <PageHeading title={t('settings.title')} />
 
       {sync === 'read-only' && (
         <p className="alert-warn text-sm">{t('settings.storedReadOnly')}</p>
@@ -79,15 +79,10 @@ export function SettingsPage(): React.JSX.Element {
       {tab === 'numbering' && <NumberingTab />}
       {tab === 'data' && <DataSettings />}
 
-      <p
-        className={sync === 'read-only' ? 'alert-warn text-xs' : 'text-xs text-ink-muted'}
-      >
-        {sync === 'firm'
-          ? t('settings.storedForFirm')
-          : sync === 'read-only'
-            ? t('settings.storedReadOnly')
-            : t('settings.storedLocally')}
-      </p>
+      {/* Only when something is out of the ordinary; read-only is said at the top. */}
+      {sync !== 'firm' && sync !== 'read-only' && (
+        <p className="alert-warn text-xs">{t('settings.storedLocally')}</p>
+      )}
     </section>
   );
 }

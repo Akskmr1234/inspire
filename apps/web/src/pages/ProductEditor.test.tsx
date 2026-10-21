@@ -104,7 +104,7 @@ describe('when it will not load', () => {
 
     // The alert on its own is a dead end: the list it replaced is gone, and the
     // only exits left would be the browser's back button and the menu.
-    await user.click(screen.getByRole('button', { name: /back to the list/i }));
+    await user.click(screen.getByRole('button', { name: /^back$/i }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 

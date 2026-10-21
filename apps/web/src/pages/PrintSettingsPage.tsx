@@ -102,9 +102,6 @@ export function PrintSettingsPage(): React.JSX.Element {
         }
       />
 
-      <p className="text-sm text-ink-muted">{t('printing.settingsHint')}</p>
-      <p className="alert-info text-xs">{t('printing.printerHint')}</p>
-
       {saved && <p className="alert-success">{t('printing.savedNotice')}</p>}
       {save.isError && (
         <p className="alert-error">{save.error.detail || save.error.code}</p>
@@ -215,12 +212,7 @@ export function PrintSettingsPage(): React.JSX.Element {
               setDraft({ ...draft, bilingual: event.target.checked });
             }}
           />
-          <span>
-            {t('printing.bilingual')}
-            <span className="block text-xs text-ink-muted">
-              {t('printing.bilingualHint')}
-            </span>
-          </span>
+          <span>{t('printing.bilingual')}</span>
         </label>
       )}
     </section>

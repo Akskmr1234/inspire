@@ -356,7 +356,7 @@ describe('the footer', () => {
       />,
     );
 
-    expect(screen.getByText(/showing 1–25 of 57/i)).toBeTruthy();
+    expect(screen.getByText(/1–25 of 57/i)).toBeTruthy();
     // The header row and its filter row are rows too, which is why this counts the
     // body rather than the table.
     expect(screen.getAllByRole('row').length).toBe(25 + 2);
@@ -376,7 +376,7 @@ describe('the footer', () => {
 
     await user.click(screen.getByRole('button', { name: /go to page 3/i }));
 
-    expect(screen.getByText(/showing 51–57 of 57/i)).toBeTruthy();
+    expect(screen.getByText(/51–57 of 57/i)).toBeTruthy();
     expect(screen.getByText('C-056')).toBeTruthy();
   });
 
@@ -398,7 +398,7 @@ describe('the footer', () => {
     // came out of is kept beside it — a filtered count on its own is a number
     // nobody can calibrate.
     await waitFor(() => expect(screen.getByText(/10 records/i)).toBeTruthy());
-    expect(screen.getByText(/filtered from 57/i)).toBeTruthy();
+    expect(screen.getByText(/\(of 57\)/i)).toBeTruthy();
   });
 
   it('takes the page back to the start when a search narrows the list', async () => {
@@ -414,12 +414,12 @@ describe('the footer', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /go to page 5/i }));
-    expect(screen.getByText(/showing 41–50 of 57/i)).toBeTruthy();
+    expect(screen.getByText(/41–50 of 57/i)).toBeTruthy();
 
     await user.type(screen.getByPlaceholderText(/search/i), 'Row 3');
 
     // Eleven match — Row 3 and Row 30 to Row 39 — which is two pages, not five.
-    await waitFor(() => expect(screen.getByText(/showing 1–10 of 11/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/1–10 of 11/i)).toBeTruthy());
   });
 
   it('withdraws its own search where the screen owns one', () => {

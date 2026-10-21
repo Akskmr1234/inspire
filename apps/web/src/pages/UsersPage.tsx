@@ -90,8 +90,6 @@ export function UsersPage(): React.JSX.Element {
         }
       />
 
-      <p className="text-sm text-ink-muted">{t('users.hint')}</p>
-
       {notice && (
         <p className="alert-success flex items-center gap-3">
           <span>{notice}</span>

@@ -17,7 +17,6 @@ import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
-  allowsNegative,
   cancelStockDocument,
   fetchStockValuation,
   carriesRate,
@@ -859,24 +858,6 @@ export function StockEntry({
           />
         </label>
       </div>
-
-      {counting && <p className="text-xs text-ink-muted">{t('stock.countHint')}</p>}
-
-      {allowsNegative(type) && (
-        <p className="text-xs text-ink-muted">{t('stock.adjustmentHint')}</p>
-      )}
-
-      {anyBatched && <p className="text-xs text-ink-muted">{t('stock.batchHint')}</p>}
-
-      {anySerialised && <p className="text-xs text-ink-muted">{t('stock.serialHint')}</p>}
-
-      {party && (
-        <p className="text-xs text-ink-muted">
-          {type === StockDocumentType.deliveryNote
-            ? t('notes.deliveryHint')
-            : t('notes.receiptHint')}
-        </p>
-      )}
 
       {problem && <Alert tone="error">{problem}</Alert>}
 

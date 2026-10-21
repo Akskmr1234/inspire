@@ -244,8 +244,6 @@ function Summary({ data }: { readonly data: TaxSummaryReport }): React.JSX.Eleme
           </tbody>
         </table>
       </div>
-
-      <p className="text-xs text-ink-muted">{t('tax.differenceHint')}</p>
     </div>
   );
 }
