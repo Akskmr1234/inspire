@@ -27,6 +27,7 @@ public sealed record GetLedgersQuery(bool ActiveOnly = true)
 /// <param name="Nature">Which side of the books the group sits on.</param>
 /// <param name="Currency">The ledger's denominating currency.</param>
 /// <param name="IsBillWise">Whether bills against it are settled individually.</param>
+/// <param name="NameArabic">The ledger's Arabic name, where it has one.</param>
 public sealed record LedgerSummary(
     Guid LedgerId,
     string Code,
@@ -36,7 +37,8 @@ public sealed record LedgerSummary(
     string GroupName,
     AccountNature Nature,
     string Currency,
-    bool IsBillWise);
+    bool IsBillWise,
+    string? NameArabic = null);
 
 /// <summary>Handles <see cref="GetLedgersQuery"/>.</summary>
 public sealed class GetLedgersQueryHandler
@@ -81,7 +83,8 @@ public sealed class GetLedgersQueryHandler
                 row.Group.Name,
                 row.Group.Nature,
                 row.Ledger.Currency.Code,
-                row.Ledger.IsBillWise)),
+                row.Ledger.IsBillWise,
+                row.Ledger.NameArabic)),
         ];
 
         return Result.Success(summaries);

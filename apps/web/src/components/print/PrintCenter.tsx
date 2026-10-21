@@ -11,6 +11,7 @@ import {
   type PrintableDocument,
 } from '@/lib/printing';
 import { FitToWidth } from '@/components/print/FitToWidth';
+import { useSettings } from '@/stores/settings';
 import { PAPER, PrintedDocument } from '@/components/print/PrintedDocument';
 
 interface Run {
@@ -39,6 +40,7 @@ export function PrintCenter({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { setup, loading } = usePrintSetup();
+  const gulfMode = useSettings((state) => state.gulfMode);
   const profile = profileFor(setup, document.type, document.mode);
 
   // A customer with print settings of their own gets them on the first run.
@@ -49,6 +51,10 @@ export function PrintCenter({
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [copies, setCopies] = useState<number | null>(null);
   const [withSecond, setWithSecond] = useState<boolean | null>(null);
+  // Arabic over English, where the firm works in Gulf mode: its default from the print
+  // settings, changeable for this one print.
+  const [bilingualChoice, setBilingualChoice] = useState<boolean | null>(null);
+  const bilingual = gulfMode && (bilingualChoice ?? setup.bilingual);
   const [run, setRun] = useState<Run | null>(null);
   const autoPrinted = useRef(false);
 
@@ -139,6 +145,17 @@ export function PrintCenter({
           </span>
         </label>
 
+        {gulfMode && (
+          <label className="field-check">
+            <input
+              type="checkbox"
+              checked={bilingual}
+              onChange={(event) => setBilingualChoice(event.target.checked)}
+            />
+            <span>{t('printing.bilingualShort')}</span>
+          </label>
+        )}
+
         <div className="ms-auto flex flex-col items-end gap-1">
           {(profile.first.printer || (second && profile.second.printer)) && (
             <span className="text-xs text-ink-muted">
@@ -158,7 +175,11 @@ export function PrintCenter({
 
       <div className="no-print min-h-0 flex-1 overflow-y-auto rounded-xl bg-slate-200 p-2 sm:p-4 dark:bg-slate-900">
         <FitToWidth>
-          <PrintedDocument document={document} template={firstTemplate} />
+          <PrintedDocument
+            document={document}
+            template={firstTemplate}
+            bilingual={bilingual}
+          />
         </FitToWidth>
       </div>
 
@@ -171,6 +192,7 @@ export function PrintCenter({
                 key={index}
                 document={document}
                 template={run.template}
+                bilingual={bilingual}
                 copyLabel={
                   setup.copyLabels && run.copies > 1
                     ? t(`printing.copy.${String(Math.min(index + 1, 4))}`)

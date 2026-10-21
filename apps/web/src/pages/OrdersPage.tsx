@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
+import { IconPrinter } from '@/components/icons';
+import { PrintCenter } from '@/components/print/PrintCenter';
+import { printableOrder } from '@/lib/printing';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
@@ -46,6 +49,7 @@ import {
   listSalesOrders,
   OrderStatus,
   SalesOrderKind,
+  type SalesOrderDetail,
   type OrderChargeDetail,
   type OrderLineDetail,
   type OrderLineInput,
@@ -105,6 +109,8 @@ interface OrderDocument {
   readonly total: number;
   readonly lines: readonly OrderLineDetail[];
   readonly charges: readonly OrderChargeDetail[];
+  /** The order as the server read it back, for printing; sales orders and quotations only. */
+  readonly sales?: SalesOrderDetail;
 }
 
 /** A line being entered on an order. */
@@ -1140,11 +1146,59 @@ function OrderDialog({
         total: found.header.total,
         lines: found.lines,
         charges: found.charges,
+        sales: found,
       };
     },
   });
 
   const order = query.data;
+  const [printing, setPrinting] = useState(false);
+
+  // What the print names: read only once somebody asks to print.
+  const customers = useQuery<readonly CustomerSummary[], ApiError>({
+    queryKey: ['customers', 'picker'],
+    queryFn: () => listCustomers('', true),
+    enabled: printing,
+  });
+  const products = useQuery<readonly ProductSummary[], ApiError>({
+    queryKey: ['products', 'picker'],
+    queryFn: () => listProducts('', '', false),
+    enabled: printing,
+  });
+  const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
+    queryKey: ['warehouses', false],
+    queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
+    enabled: printing,
+  });
+
+  if (printing && order?.sales) {
+    return (
+      <Modal title={order.number} size="full" onClose={() => setPrinting(false)}>
+        {customers.isPending || products.isPending || warehouses.isPending ? (
+          <span className="skeleton block h-24 w-full rounded-lg" />
+        ) : (
+          <PrintCenter
+            document={printableOrder(
+              order.sales,
+              quotation,
+              {
+                customers: customers.data ?? [],
+                products: products.data ?? [],
+                warehouses: warehouses.data ?? [],
+              },
+              {
+                taxable: t('printing.taxable'),
+                tax: t('printing.taxTotal'),
+                charges: t('printing.charges'),
+                roundOff: t('printing.roundOff'),
+              },
+            )}
+            onDone={() => setPrinting(false)}
+          />
+        )}
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={order?.number ?? words('document')} onClose={onClose}>
@@ -1313,7 +1367,13 @@ function OrderDialog({
         </>
       )}
 
-      <div className="flex justify-end pt-3 border-t border-line/60">
+      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
+        {order?.sales && (
+          <ModalButton onClick={() => setPrinting(true)}>
+            <IconPrinter className="size-4" />
+            {t('printing.print')}
+          </ModalButton>
+        )}
         <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
       </div>
     </Modal>

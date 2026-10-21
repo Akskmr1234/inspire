@@ -23,6 +23,8 @@ export interface LedgerSummary {
   readonly nature: number;
   readonly currency: string;
   readonly isBillWise: boolean;
+  /** The Arabic name, where the ledger has one. */
+  readonly nameArabic?: string | null;
 }
 
 /**

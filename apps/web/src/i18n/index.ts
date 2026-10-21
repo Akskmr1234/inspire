@@ -2432,6 +2432,10 @@ const en = {
     printerPlaceholder: 'e.g. Counter thermal',
     secondPrint: 'Second print',
     copyLabels: 'Mark copies as Original, Duplicate and Triplicate',
+    bilingual: 'Print in Arabic and English',
+    bilingualHint:
+      'Each line of a document prints twice: the Arabic on one line and the English on the next - invoices, quotations, purchases, receipts and every other print. Changeable for any one print.',
+    bilingualShort: 'Arabic + English',
     movedHint: 'Printing is now set up per document and tax mode, with designed layouts:',
     followSettings: 'As in print settings',
     templatesTitle: 'Print templates',
@@ -2495,6 +2499,8 @@ const en = {
     documents: {
       salesInvoice: 'Sales invoice',
       salesReturn: 'Sales return',
+      salesQuotation: 'Sales quotation',
+      salesOrder: 'Sales order',
       purchaseInvoice: 'Purchase',
       purchaseReturn: 'Purchase return',
       receipt: 'Receipt',
@@ -2526,6 +2532,8 @@ const en = {
     titles: {
       salesInvoice: { tax: 'Tax invoice', nonTax: 'Invoice' },
       salesReturn: { tax: 'Tax credit note', nonTax: 'Credit note' },
+      salesQuotation: { tax: 'Quotation', nonTax: 'Quotation' },
+      salesOrder: { tax: 'Sales order', nonTax: 'Sales order' },
       purchaseInvoice: { tax: 'Purchase invoice', nonTax: 'Purchase invoice' },
       purchaseReturn: { tax: 'Debit note', nonTax: 'Debit note' },
       receipt: { tax: 'Receipt voucher', nonTax: 'Receipt voucher' },
@@ -2535,6 +2543,8 @@ const en = {
     titlesArabic: {
       salesInvoice: { tax: 'فاتورة ضريبية', nonTax: 'فاتورة' },
       salesReturn: { tax: 'إشعار دائن ضريبي', nonTax: 'إشعار دائن' },
+      salesQuotation: { tax: 'عرض سعر', nonTax: 'عرض سعر' },
+      salesOrder: { tax: 'أمر بيع', nonTax: 'أمر بيع' },
       purchaseInvoice: { tax: 'فاتورة مشتريات', nonTax: 'فاتورة مشتريات' },
       purchaseReturn: { tax: 'إشعار مدين', nonTax: 'إشعار مدين' },
       receipt: { tax: 'سند قبض', nonTax: 'سند قبض' },
@@ -4997,6 +5007,10 @@ const ar = {
     printerPlaceholder: 'مثال: طابعة الكاشير',
     secondPrint: 'طباعة ثانية',
     copyLabels: 'وسم النسخ بأصل ونسخة ثانية وثالثة',
+    bilingual: 'الطباعة بالعربية والإنجليزية',
+    bilingualHint:
+      'يُطبع كل سطر من المستند مرتين: العربية في سطر والإنجليزية في السطر التالي - الفواتير وعروض الأسعار والمشتريات والسندات وكل مطبوع آخر. يمكن تغييره لأي طباعة.',
+    bilingualShort: 'عربي + إنجليزي',
     movedHint: 'تُضبط الطباعة الآن لكل مستند ونوع ضريبة مع قوالب مصممة:',
     followSettings: 'حسب إعدادات الطباعة',
     templatesTitle: 'قوالب الطباعة',
@@ -5060,6 +5074,8 @@ const ar = {
     documents: {
       salesInvoice: 'فاتورة مبيعات',
       salesReturn: 'مرتجع مبيعات',
+      salesQuotation: 'عرض سعر',
+      salesOrder: 'أمر بيع',
       purchaseInvoice: 'مشتريات',
       purchaseReturn: 'مرتجع مشتريات',
       receipt: 'سند قبض',
@@ -5091,6 +5107,8 @@ const ar = {
     titles: {
       salesInvoice: { tax: 'فاتورة ضريبية', nonTax: 'فاتورة' },
       salesReturn: { tax: 'إشعار دائن ضريبي', nonTax: 'إشعار دائن' },
+      salesQuotation: { tax: 'عرض سعر', nonTax: 'عرض سعر' },
+      salesOrder: { tax: 'أمر بيع', nonTax: 'أمر بيع' },
       purchaseInvoice: { tax: 'فاتورة مشتريات', nonTax: 'فاتورة مشتريات' },
       purchaseReturn: { tax: 'إشعار مدين', nonTax: 'إشعار مدين' },
       receipt: { tax: 'سند قبض', nonTax: 'سند قبض' },
@@ -5100,6 +5118,8 @@ const ar = {
     titlesArabic: {
       salesInvoice: { tax: '', nonTax: '' },
       salesReturn: { tax: '', nonTax: '' },
+      salesQuotation: { tax: '', nonTax: '' },
+      salesOrder: { tax: '', nonTax: '' },
       purchaseInvoice: { tax: '', nonTax: '' },
       purchaseReturn: { tax: '', nonTax: '' },
       receipt: { tax: '', nonTax: '' },

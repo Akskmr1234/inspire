@@ -1,8 +1,14 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { moneyAlways } from '@/lib/money';
-import { amountInWords } from '@/lib/amountInWords';
-import type { PaperSize, PrintTemplate, PrintableDocument } from '@/lib/printing';
+import { amountInWords, amountInWordsArabic } from '@/lib/amountInWords';
+import {
+  TOTAL_LABELS,
+  type PaperSize,
+  type PrintTemplate,
+  type PrintableDocument,
+} from '@/lib/printing';
 
 /** How wide each paper prints, and the margin the page rule gives it. */
 export const PAPER: Readonly<
@@ -23,6 +29,35 @@ const FONT: Readonly<Record<PrintTemplate['style']['fontScale'], string>> = {
 };
 
 /**
+ * Arabic on one line and the English beneath it.
+ *
+ * The Arabic runs right to left inside its own span, so a column aligned to the end
+ * keeps both lines under the same edge rather than flipping the Arabic to the other side.
+ */
+function Both({
+  ar,
+  en,
+  className,
+}: {
+  readonly ar: React.ReactNode;
+  readonly en: React.ReactNode;
+  readonly className?: string;
+}): React.JSX.Element {
+  return (
+    <>
+      {ar ? (
+        <div className={className}>
+          <span dir="rtl" lang="ar" className="font-sans">
+            {ar}
+          </span>
+        </div>
+      ) : null}
+      <div className={className}>{en}</div>
+    </>
+  );
+}
+
+/**
  * One document on one template.
  *
  * The same component draws the preview and the printed copies, so what is seen before
@@ -33,16 +68,46 @@ export function PrintedDocument({
   document,
   template,
   copyLabel,
+  bilingual = false,
 }: {
   readonly document: PrintableDocument;
   readonly template: PrintTemplate;
   readonly copyLabel?: string | null;
+  /**
+   * Every line in Arabic and English: the Arabic first, the English on the line beneath.
+   * The firm's Gulf-mode option; labels come from both languages whatever the screen's.
+   */
+  readonly bilingual?: boolean;
 }): React.JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const en = useMemo(() => i18n.getFixedT('en'), [i18n]);
+  const ar = useMemo(() => i18n.getFixedT('ar'), [i18n]);
+
+  /** A fixed label: in the screen's language, or in Arabic over English. */
+  const label = (key: string): React.ReactNode =>
+    bilingual ? <Both ar={ar(key)} en={en(key)} /> : t(key);
+
+  /** A label with its value: the Arabic label over the English one and the value. */
+  const labelled = (key: string, value: React.ReactNode): React.ReactNode =>
+    bilingual ? (
+      <Both
+        ar={ar(key)}
+        en={
+          <>
+            {en(key)}: {value}
+          </>
+        }
+      />
+    ) : (
+      <div>
+        {t(key)}: {value}
+      </div>
+    );
   const roll = ROLL.includes(template.paper);
   const accent = template.style.accent || '#1e293b';
   const title =
-    template.title.trim() || t(`printing.titles.${document.type}.${document.mode}`);
+    template.title.trim() ||
+    (bilingual ? en : t)(`printing.titles.${document.type}.${document.mode}`);
   const arabic = t(`printing.titlesArabic.${document.type}.${document.mode}`);
   const company = template.company;
   const goods = document.goods.length > 0;
@@ -62,8 +127,8 @@ export function PrintedDocument({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
         >
-          <span className="-rotate-30 text-6xl font-black tracking-widest text-black/10 uppercase">
-            {t(`printing.watermark.${document.watermark}`)}
+          <span className="-rotate-30 text-center text-6xl font-black tracking-widest text-black/10 uppercase">
+            {label(`printing.watermark.${document.watermark}`)}
           </span>
         </div>
       )}
@@ -94,10 +159,15 @@ export function PrintedDocument({
             />
           )}
           <div>
+            {bilingual && company.nameArabic && (
+              <div dir="rtl" className="text-[1.3em] font-black">
+                {company.nameArabic}
+              </div>
+            )}
             {company.name && (
               <div className="text-[1.5em] font-black">{company.name}</div>
             )}
-            {company.nameArabic && (
+            {!bilingual && company.nameArabic && (
               <div dir="rtl" className="font-semibold">
                 {company.nameArabic}
               </div>
@@ -108,12 +178,11 @@ export function PrintedDocument({
               .map((line) => (
                 <div key={line}>{line}</div>
               ))}
-            {company.taxNumber && (
-              <div>
-                {t('printing.taxNumber')}:{' '}
-                <span className="font-mono">{company.taxNumber}</span>
-              </div>
-            )}
+            {company.taxNumber &&
+              labelled(
+                'printing.taxNumber',
+                <span className="font-mono">{company.taxNumber}</span>,
+              )}
           </div>
         </div>
 
@@ -122,6 +191,11 @@ export function PrintedDocument({
             roll ? 'mt-2 border-y border-dashed border-black py-1' : 'text-end',
           )}
         >
+          {bilingual && (
+            <div dir="rtl" lang="ar" className="text-[1.2em] font-black">
+              {ar(`printing.titles.${document.type}.${document.mode}`)}
+            </div>
+          )}
           <div
             className={clsx(
               'font-black tracking-wide uppercase',
@@ -133,20 +207,18 @@ export function PrintedDocument({
           >
             {title}
           </div>
-          {template.show.arabicTitle && arabic && (
+          {!bilingual && template.show.arabicTitle && arabic && (
             <div dir="rtl" className="font-semibold">
               {arabic}
             </div>
           )}
           <div className={clsx(roll ? '' : 'mt-2', 'font-mono')}>
-            {t('printing.number')}: <b>{document.number}</b>
+            {labelled('printing.number', <b>{document.number}</b>)}
           </div>
-          <div className="font-mono">
-            {t('printing.date')}: {document.date}
-          </div>
+          <div className="font-mono">{labelled('printing.date', document.date)}</div>
           {template.show.reference && document.reference && (
             <div className="font-mono">
-              {t('printing.reference')}: {document.reference}
+              {labelled('printing.reference', document.reference)}
             </div>
           )}
         </div>
@@ -164,22 +236,28 @@ export function PrintedDocument({
           {document.party && document.partyLabel && (
             <div>
               <div className="text-[0.85em] font-bold tracking-wider uppercase opacity-70">
-                {t(`printing.party.${document.partyLabel}`)}
+                {label(`printing.party.${document.partyLabel}`)}
               </div>
-              <div className="font-bold">{document.party.name}</div>
+              {bilingual ? (
+                <Both
+                  className="font-bold"
+                  ar={document.party.nameArabic}
+                  en={document.party.name}
+                />
+              ) : (
+                <div className="font-bold">{document.party.name}</div>
+              )}
               {template.show.partyAddress &&
                 document.party.lines.map((line) => <div key={line}>{line}</div>)}
-              {template.show.partyTaxNumber && document.party.taxNumber && (
-                <div>
-                  {t('printing.taxNumber')}: {document.party.taxNumber}
-                </div>
-              )}
+              {template.show.partyTaxNumber &&
+                document.party.taxNumber &&
+                labelled('printing.taxNumber', document.party.taxNumber)}
             </div>
           )}
           {template.show.warehouse && document.warehouse && (
             <div className={clsx(!roll && 'text-end')}>
               <div className="text-[0.85em] font-bold tracking-wider uppercase opacity-70">
-                {t('printing.warehouse')}
+                {label('printing.warehouse')}
               </div>
               <div>{document.warehouse}</div>
             </div>
@@ -201,22 +279,22 @@ export function PrintedDocument({
               style={!roll ? { borderColor: accent } : undefined}
             >
               {!roll && <th className="w-6 py-1 text-start">#</th>}
-              <th className="py-1 text-start">{t('printing.item')}</th>
-              <th className="py-1 text-end">{t('printing.quantity')}</th>
+              <th className="py-1 text-start">{label('printing.item')}</th>
+              <th className="py-1 text-end">{label('printing.quantity')}</th>
               {cols.unit && !roll && (
-                <th className="py-1 text-start ps-1">{t('printing.unit')}</th>
+                <th className="py-1 text-start ps-1">{label('printing.unit')}</th>
               )}
-              {cols.rate && <th className="py-1 text-end">{t('printing.rate')}</th>}
+              {cols.rate && <th className="py-1 text-end">{label('printing.rate')}</th>}
               {cols.discount && !roll && (
-                <th className="py-1 text-end">{t('printing.discount')}</th>
+                <th className="py-1 text-end">{label('printing.discount')}</th>
               )}
               {cols.taxPercent && !roll && document.mode === 'tax' && (
-                <th className="py-1 text-end">{t('printing.taxPercent')}</th>
+                <th className="py-1 text-end">{label('printing.taxPercent')}</th>
               )}
               {cols.tax && document.mode === 'tax' && (
-                <th className="py-1 text-end">{t('printing.tax')}</th>
+                <th className="py-1 text-end">{label('printing.tax')}</th>
               )}
-              <th className="py-1 text-end">{t('printing.amount')}</th>
+              <th className="py-1 text-end">{label('printing.amount')}</th>
             </tr>
           </thead>
           <tbody>
@@ -230,13 +308,21 @@ export function PrintedDocument({
               >
                 {!roll && <td className="py-1">{index + 1}</td>}
                 <td className="py-1 pe-1">
-                  <div className="font-semibold">{line.description}</div>
+                  {bilingual ? (
+                    <Both
+                      className="font-semibold"
+                      ar={line.descriptionArabic}
+                      en={line.description}
+                    />
+                  ) : (
+                    <div className="font-semibold">{line.description}</div>
+                  )}
                   {template.show.productCode && line.code && (
                     <div className="font-mono text-[0.85em] opacity-70">{line.code}</div>
                   )}
                   {template.show.serials && line.serials.length > 0 && (
                     <div className="font-mono text-[0.85em]">
-                      {t('printing.serials')}: {line.serials.join(', ')}
+                      {labelled('printing.serials', line.serials.join(', '))}
                     </div>
                   )}
                 </td>
@@ -276,9 +362,9 @@ export function PrintedDocument({
               )}
               style={{ borderColor: accent }}
             >
-              <th className="py-1 text-start">{t('printing.account')}</th>
-              <th className="py-1 text-end">{t('printing.debit')}</th>
-              <th className="py-1 text-end">{t('printing.credit')}</th>
+              <th className="py-1 text-start">{label('printing.account')}</th>
+              <th className="py-1 text-end">{label('printing.debit')}</th>
+              <th className="py-1 text-end">{label('printing.credit')}</th>
             </tr>
           </thead>
           <tbody>
@@ -288,7 +374,15 @@ export function PrintedDocument({
                 className={clsx(template.style.borders && 'border-b border-black/15')}
               >
                 <td className="py-1">
-                  <div className="font-semibold">{entry.account}</div>
+                  {bilingual ? (
+                    <Both
+                      className="font-semibold"
+                      ar={entry.accountArabic}
+                      en={entry.account}
+                    />
+                  ) : (
+                    <div className="font-semibold">{entry.account}</div>
+                  )}
                   {entry.narration && (
                     <div className="text-[0.85em]">{entry.narration}</div>
                   )}
@@ -315,29 +409,73 @@ export function PrintedDocument({
         )}
       >
         <div className="min-w-0 flex-1 space-y-1">
-          {template.show.amountInWords && (
-            <div>
-              <span className="text-[0.85em] font-bold uppercase opacity-70">
-                {t('printing.inWords')}:
-              </span>{' '}
-              <i>
-                {document.currency} {amountInWords(document.grandTotal)}
-              </i>
-            </div>
-          )}
-          {template.show.narration && document.narration && (
-            <div>
-              <span className="text-[0.85em] font-bold uppercase opacity-70">
-                {t('printing.narration')}:
-              </span>{' '}
-              {document.narration}
-            </div>
-          )}
+          {template.show.amountInWords &&
+            (bilingual ? (
+              <Both
+                ar={
+                  <>
+                    <span className="text-[0.85em] font-bold opacity-70">
+                      {ar('printing.inWords')}:
+                    </span>{' '}
+                    <i>
+                      {amountInWordsArabic(document.grandTotal)} {document.currency}
+                    </i>
+                  </>
+                }
+                en={
+                  <>
+                    <span className="text-[0.85em] font-bold uppercase opacity-70">
+                      {en('printing.inWords')}:
+                    </span>{' '}
+                    <i>
+                      {document.currency} {amountInWords(document.grandTotal)}
+                    </i>
+                  </>
+                }
+              />
+            ) : (
+              <div>
+                <span className="text-[0.85em] font-bold uppercase opacity-70">
+                  {t('printing.inWords')}:
+                </span>{' '}
+                <i>
+                  {document.currency} {amountInWords(document.grandTotal)}
+                </i>
+              </div>
+            ))}
+          {template.show.narration &&
+            document.narration &&
+            (bilingual ? (
+              <Both
+                ar={
+                  <span className="text-[0.85em] font-bold opacity-70">
+                    {ar('printing.narration')}
+                  </span>
+                }
+                en={
+                  <>
+                    <span className="text-[0.85em] font-bold uppercase opacity-70">
+                      {en('printing.narration')}:
+                    </span>{' '}
+                    {document.narration}
+                  </>
+                }
+              />
+            ) : (
+              <div>
+                <span className="text-[0.85em] font-bold uppercase opacity-70">
+                  {t('printing.narration')}:
+                </span>{' '}
+                {document.narration}
+              </div>
+            ))}
         </div>
         <div className={clsx(roll ? 'w-full' : 'w-[45%]', 'space-y-0.5 font-mono')}>
           {document.totals.map((row) => (
-            <div key={row.label} className="flex justify-between gap-2">
-              <span>{row.label}</span>
+            <div key={row.label} className="flex items-end justify-between gap-2">
+              <span>
+                {bilingual && row.key ? label(TOTAL_LABELS[row.key]) : row.label}
+              </span>
               <span>{moneyAlways(row.amount)}</span>
             </div>
           ))}
@@ -348,7 +486,7 @@ export function PrintedDocument({
             )}
             style={{ borderColor: accent }}
           >
-            <span className="font-sans uppercase">{t('printing.total')}</span>
+            <span className="font-sans uppercase">{label('printing.total')}</span>
             <span>
               {moneyAlways(document.grandTotal)} {roll ? '' : document.currency}
             </span>
@@ -359,7 +497,7 @@ export function PrintedDocument({
       {/* Terms, note and signatures */}
       {template.footer.terms.trim() !== '' && (
         <section className="mt-3 text-[0.9em] whitespace-pre-line">
-          <div className="font-bold uppercase opacity-70">{t('printing.terms')}</div>
+          <div className="font-bold uppercase opacity-70">{label('printing.terms')}</div>
           {template.footer.terms}
         </section>
       )}

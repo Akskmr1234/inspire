@@ -7,6 +7,7 @@ import type { WarehouseSummary } from '@/lib/inventory';
 import type { LedgerSummary } from '@/lib/ledgers';
 import type { SalesInvoiceDetail } from '@/lib/sales';
 import type { PurchaseInvoiceDetail } from '@/lib/purchase';
+import type { SalesOrderDetail } from '@/lib/orders';
 
 /** The paper a template is laid out for. The two narrow ones are till rolls. */
 export type PaperSize = 'A4' | 'A5' | '80mm' | '58mm';
@@ -15,6 +16,8 @@ export type PaperSize = 'A4' | 'A5' | '80mm' | '58mm';
 export const PRINT_DOCUMENTS = [
   'salesInvoice',
   'salesReturn',
+  'salesQuotation',
+  'salesOrder',
   'purchaseInvoice',
   'purchaseReturn',
   'receipt',
@@ -130,6 +133,11 @@ export interface PrintSetup {
   readonly customerPrint: Readonly<Record<string, CustomerPrint>>;
   /** Mark copies Original, Duplicate, Triplicate. */
   readonly copyLabels: boolean;
+  /**
+   * Print every line in Arabic and English, the Arabic first and the English beneath
+   * it. Offered in Gulf mode only, and applied there only.
+   */
+  readonly bilingual: boolean;
 }
 
 const BLANK_COMPANY = { name: '', nameArabic: '', details: '', taxNumber: '', logo: '' };
@@ -230,6 +238,7 @@ export const EMPTY_SETUP: PrintSetup = {
   profiles: {},
   customerPrint: {},
   copyLabels: true,
+  bilingual: false,
 };
 
 /** The profile a document prints with, falling back to the defaults. */
@@ -277,6 +286,7 @@ export function parseSetup(raw: string | null | undefined): PrintSetup {
         ...stored.customerPrint,
       },
       copyLabels: stored.copyLabels ?? true,
+      bilingual: stored.bilingual ?? false,
     };
   } catch {
     return EMPTY_SETUP;
@@ -333,6 +343,8 @@ export function savePrintSetup(setup: PrintSetup): Promise<void> {
 
 export interface PrintParty {
   readonly name: string;
+  /** Printed above the name when the document prints in Arabic and English. */
+  readonly nameArabic?: string | null;
   readonly code: string | null;
   readonly lines: readonly string[];
   readonly taxNumber: string | null;
@@ -340,6 +352,8 @@ export interface PrintParty {
 
 export interface PrintGoodsLine {
   readonly description: string;
+  /** Printed above the description when the document prints in Arabic and English. */
+  readonly descriptionArabic?: string | null;
   readonly code: string | null;
   readonly serials: readonly string[];
   readonly quantity: number;
@@ -353,6 +367,8 @@ export interface PrintGoodsLine {
 
 export interface PrintEntryLine {
   readonly account: string;
+  /** Printed above the account when the document prints in Arabic and English. */
+  readonly accountArabic?: string | null;
   readonly narration: string | null;
   readonly debit: number;
   readonly credit: number;
@@ -371,7 +387,12 @@ export interface PrintableDocument {
   readonly warehouse: string | null;
   readonly goods: readonly PrintGoodsLine[];
   readonly entries: readonly PrintEntryLine[];
-  readonly totals: readonly { readonly label: string; readonly amount: number }[];
+  readonly totals: readonly {
+    readonly label: string;
+    /** Which total it is, so a bilingual print can name it in both languages. */
+    readonly key?: TotalKey;
+    readonly amount: number;
+  }[];
   readonly grandTotal: number;
   /** Draft or cancelled, printed across the page so a copy is never mistaken for the real one. */
   readonly watermark: 'draft' | 'cancelled' | null;
@@ -391,6 +412,7 @@ function partyOf(
 
   return {
     name: party.name,
+    nameArabic: party.nameArabic ?? null,
     code: party.code,
     lines: [
       [contact.addressLine1, contact.addressLine2].filter(Boolean).join(', '),
@@ -404,6 +426,101 @@ function watermarkOf(status: number): PrintableDocument['watermark'] {
   return status === 1 ? 'draft' : status === 3 ? 'cancelled' : null;
 }
 
+/** The totals a document may list above its grand total. */
+export type TotalKey = 'taxable' | 'tax' | 'charges' | 'roundOff';
+
+/** The wording key of each total, under `printing`. */
+export const TOTAL_LABELS: Readonly<Record<TotalKey, string>> = {
+  taxable: 'printing.taxable',
+  tax: 'printing.taxTotal',
+  charges: 'printing.charges',
+  roundOff: 'printing.roundOff',
+};
+
+/** The figures under a document's lines, leaving out the ones that come to nothing. */
+function totalsOf(
+  header: {
+    readonly taxable: number;
+    readonly tax: number;
+    readonly chargeTotal: number;
+    readonly roundingDifference: number;
+  },
+  labels: Readonly<Record<TotalKey, string>>,
+): PrintableDocument['totals'] {
+  return [
+    { label: labels.taxable, key: 'taxable', amount: header.taxable },
+    ...(header.tax !== 0
+      ? [{ label: labels.tax, key: 'tax' as const, amount: header.tax }]
+      : []),
+    ...(header.chargeTotal !== 0
+      ? [{ label: labels.charges, key: 'charges' as const, amount: header.chargeTotal }]
+      : []),
+    ...(header.roundingDifference !== 0
+      ? [
+          {
+            label: labels.roundOff,
+            key: 'roundOff' as const,
+            amount: header.roundingDifference,
+          },
+        ]
+      : []),
+  ];
+}
+
+/** A sales quotation or order, as it prints. */
+export function printableOrder(
+  order: SalesOrderDetail,
+  quotation: boolean,
+  lookups: {
+    readonly customers: readonly CustomerSummary[];
+    readonly products: readonly ProductSummary[];
+    readonly warehouses: readonly WarehouseSummary[];
+  },
+  labels: Readonly<Record<TotalKey, string>>,
+): PrintableDocument {
+  const products = new Map(lookups.products.map((product) => [product.id, product]));
+  const customer = lookups.customers.find((c) => c.customerId === order.customerLedgerId);
+  const warehouse = lookups.warehouses.find((w) => w.id === order.warehouseId);
+
+  return {
+    type: quotation ? 'salesQuotation' : 'salesOrder',
+    mode: order.mode === TAX_MODE_NON_TAX ? 'nonTax' : 'tax',
+    number: order.header.number,
+    date: order.date,
+    reference: order.referenceNumber,
+    narration: order.narration,
+    currency: order.currency,
+    partyLabel: 'billTo',
+    party: partyOf(customer, '—'),
+    warehouse: warehouse ? warehouse.name : null,
+    goods: order.lines.map((line) => {
+      const product = products.get(line.productId);
+
+      return {
+        description: product?.description ?? '—',
+        descriptionArabic: product?.descriptionArabic ?? null,
+        code: product?.code ?? null,
+        serials: [],
+        quantity: line.quantity,
+        unit: product?.stockUnitCode ?? null,
+        rate: line.rate,
+        discount: line.discount,
+        taxPercent:
+          line.taxable > 0 ? Math.round((line.tax / line.taxable) * 10000) / 100 : 0,
+        tax: line.tax,
+        total: line.taxable + line.tax,
+      };
+    }),
+    entries: [],
+    totals: totalsOf(order.header, labels),
+    grandTotal: order.header.total,
+    // An order has no posted state to mark: a draft is still being agreed, and a
+    // closed one prints as it was.
+    watermark: null,
+    customerId: order.customerLedgerId,
+  };
+}
+
 /** A sales invoice or return, as it prints. */
 export function printableSale(
   invoice: SalesInvoiceDetail,
@@ -412,7 +529,7 @@ export function printableSale(
     readonly products: readonly ProductSummary[];
     readonly warehouses: readonly WarehouseSummary[];
   },
-  labels: Readonly<Record<'taxable' | 'tax' | 'charges' | 'roundOff', string>>,
+  labels: Readonly<Record<TotalKey, string>>,
 ): PrintableDocument {
   const products = new Map(lookups.products.map((product) => [product.id, product]));
   const customer = lookups.customers.find(
@@ -436,6 +553,7 @@ export function printableSale(
 
       return {
         description: product?.description ?? '—',
+        descriptionArabic: product?.descriptionArabic ?? null,
         code: product?.code ?? null,
         serials: line.serialNumbers ?? [],
         quantity: line.quantity,
@@ -448,18 +566,7 @@ export function printableSale(
       };
     }),
     entries: [],
-    totals: [
-      { label: labels.taxable, amount: invoice.header.taxable },
-      ...(invoice.header.tax !== 0
-        ? [{ label: labels.tax, amount: invoice.header.tax }]
-        : []),
-      ...(invoice.header.chargeTotal !== 0
-        ? [{ label: labels.charges, amount: invoice.header.chargeTotal }]
-        : []),
-      ...(invoice.header.roundingDifference !== 0
-        ? [{ label: labels.roundOff, amount: invoice.header.roundingDifference }]
-        : []),
-    ],
+    totals: totalsOf(invoice.header, labels),
     grandTotal: invoice.header.total,
     watermark: watermarkOf(invoice.header.status),
     customerId: invoice.customerLedgerId,
@@ -474,7 +581,7 @@ export function printablePurchase(
     readonly products: readonly ProductSummary[];
     readonly warehouses: readonly WarehouseSummary[];
   },
-  labels: Readonly<Record<'taxable' | 'tax' | 'charges' | 'roundOff', string>>,
+  labels: Readonly<Record<TotalKey, string>>,
 ): PrintableDocument {
   const products = new Map(lookups.products.map((product) => [product.id, product]));
   const supplier = lookups.suppliers.find(
@@ -498,6 +605,7 @@ export function printablePurchase(
 
       return {
         description: product?.description ?? '—',
+        descriptionArabic: product?.descriptionArabic ?? null,
         code: product?.code ?? null,
         serials: line.serialNumbers,
         quantity: line.quantity,
@@ -510,18 +618,7 @@ export function printablePurchase(
       };
     }),
     entries: [],
-    totals: [
-      { label: labels.taxable, amount: invoice.header.taxable },
-      ...(invoice.header.tax !== 0
-        ? [{ label: labels.tax, amount: invoice.header.tax }]
-        : []),
-      ...(invoice.header.chargeTotal !== 0
-        ? [{ label: labels.charges, amount: invoice.header.chargeTotal }]
-        : []),
-      ...(invoice.header.roundingDifference !== 0
-        ? [{ label: labels.roundOff, amount: invoice.header.roundingDifference }]
-        : []),
-    ],
+    totals: totalsOf(invoice.header, labels),
     grandTotal: invoice.header.total,
     watermark: watermarkOf(invoice.header.status),
     customerId: null,
@@ -574,12 +671,19 @@ export function printableVoucher(
     currency: voucher.currency,
     partyLabel: isReceipt ? 'receivedFrom' : isPayment ? 'paidTo' : null,
     party: party
-      ? { name: party.name, code: party.code, lines: [], taxNumber: null }
+      ? {
+          name: party.name,
+          nameArabic: party.nameArabic || null,
+          code: party.code,
+          lines: [],
+          taxNumber: null,
+        }
       : null,
     warehouse: null,
     goods: [],
     entries: voucher.lines.map((line) => ({
       account: names.get(line.ledgerId)?.name ?? '—',
+      accountArabic: names.get(line.ledgerId)?.nameArabic || null,
       narration: line.narration,
       debit: line.debitAmount,
       credit: line.creditAmount,

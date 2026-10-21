@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useSettings } from '@/stores/settings';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
 import type { ApiError } from '@/lib/api';
@@ -22,6 +23,8 @@ import {
 const MODES_FOR: Readonly<Record<PrintDocumentType, readonly PrintMode[]>> = {
   salesInvoice: PRINT_MODES,
   salesReturn: PRINT_MODES,
+  salesQuotation: PRINT_MODES,
+  salesOrder: PRINT_MODES,
   purchaseInvoice: PRINT_MODES,
   purchaseReturn: PRINT_MODES,
   receipt: ['tax'],
@@ -39,6 +42,7 @@ const MODES_FOR: Readonly<Record<PrintDocumentType, readonly PrintMode[]>> = {
  */
 export function PrintSettingsPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const gulfMode = useSettings((state) => state.gulfMode);
   const queryClient = useQueryClient();
   const { setup, loading, error } = usePrintSetup();
   const [draft, setDraft] = useState<PrintSetup | null>(null);
@@ -199,6 +203,26 @@ export function PrintSettingsPage(): React.JSX.Element {
         />
         <span>{t('printing.copyLabels')}</span>
       </label>
+
+      {/* Offered where the firm works in Gulf mode, and applied only there. */}
+      {gulfMode && (
+        <label className="field-check text-sm">
+          <input
+            type="checkbox"
+            checked={draft.bilingual}
+            onChange={(event) => {
+              setSaved(false);
+              setDraft({ ...draft, bilingual: event.target.checked });
+            }}
+          />
+          <span>
+            {t('printing.bilingual')}
+            <span className="block text-xs text-ink-muted">
+              {t('printing.bilingualHint')}
+            </span>
+          </span>
+        </label>
+      )}
     </section>
   );
 }
