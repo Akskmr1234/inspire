@@ -90,12 +90,7 @@ export function ImportPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <PageHeading title={t('importData.title')} subtitle={t('importData.subtitle')} />
-
-      <div className="alert-info space-y-1">
-        <p>{t('importData.intro')}</p>
-        <p className="text-xs">{t('importData.again')}</p>
-      </div>
+      <PageHeading title={t('importData.title')} />
 
       {data ? (
         <ImportRun data={data} onChangeSource={() => setData(null)} />
@@ -278,8 +273,6 @@ function DatabaseSource({
         if (ready) read.mutate();
       }}
     >
-      <p className="text-sm text-ink-muted">{t('importData.databaseHint')}</p>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="field">
           <span className="field-label">{t('importData.server')}</span>
@@ -617,7 +610,6 @@ function ImportRun({
             {t('importData.optionStock', { date: data.asAt })}
           </label>
         </div>
-        <p className="text-xs text-ink-muted">{t('importData.optionsHint')}</p>
 
         <div className="flex flex-wrap justify-end gap-2">
           {running ? (

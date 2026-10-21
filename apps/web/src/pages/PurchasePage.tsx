@@ -940,15 +940,7 @@ function EntryDialog({
       mode === PurchaseTaxMode.tax &&
       draft.supplierInvoiceNumber.trim() === '' ? (
         <p className="alert-warn text-xs">{t('purchase.supplierInvoiceMissing')}</p>
-      ) : (
-        /* Said plainly rather than left to be discovered: reclaiming input tax needs
-           the supplier's own tax invoice, and the same number twice is refused. */
-        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
-          {t('purchase.supplierInvoiceHint')}
-        </p>
-      )}
-
-      {isReturn && <p className="alert-warn text-xs">{t('purchase.returnHint')}</p>}
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink">{t('purchase.linesTitle')}</h3>
@@ -1488,12 +1480,6 @@ function DocumentDialog({
               currency={document.currency}
             />
           </div>
-
-          {/* What posting produced. A purchase leaves two documents on purpose, so the
-              receipt is named rather than left for somebody to find in the stock ledger. */}
-          {document.stockDocumentId && (
-            <p className="text-xs text-ink-muted">{t('purchase.postedProduced')}</p>
-          )}
 
           {document.header.status === PurchaseInvoiceStatus.draft && (
             <>

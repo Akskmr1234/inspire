@@ -122,7 +122,7 @@ describe('the palette', () => {
     await user.keyboard('payroll');
 
     expect(screen.queryAllByRole('option')).toHaveLength(0);
-    expect(screen.getByText(/no screen matches/i)).toBeTruthy();
+    expect(screen.getByText(/no matches/i)).toBeTruthy();
   });
 });
 

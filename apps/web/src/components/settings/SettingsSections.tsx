@@ -67,15 +67,20 @@ const CHARGEABLE = [
   'PurchaseOrder',
 ] as const;
 
-/** A card on the settings screen: a heading, a line on what it is for, and its controls. */
+/**
+ * A card on the settings screen: a heading and its controls.
+ *
+ * The hint is accepted and not shown: the firm asked for short labels and no
+ * descriptions, so a card's title and its fields' labels say what it is for.
+ */
 export function SettingsCard({
   title,
-  hint,
+  hint: _hint,
   wide = false,
   children,
 }: {
   readonly title: string;
-  readonly hint: string;
+  readonly hint?: string;
   /** Spans both columns, for a card whose controls are a table or a grid of their own. */
   readonly wide?: boolean;
   readonly children: React.ReactNode;
@@ -84,7 +89,6 @@ export function SettingsCard({
     <section className={clsx('card card-body space-y-4', wide && 'lg:col-span-2')}>
       <header className="border-b border-line pb-3">
         <h2 className="text-sm font-semibold tracking-tight text-ink">{title}</h2>
-        <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>
       </header>
 
       <div className="space-y-3">{children}</div>
@@ -140,7 +144,6 @@ export function GeneralSettings(): React.JSX.Element {
           checked={settings.gulfMode}
           onChange={(gulfMode) => settings.update({ gulfMode })}
         />
-        <p className="-mt-2 text-xs text-ink-muted">{t('prefs.gulfModeHint')}</p>
 
         <Field label={t('prefs.theme')} hint={t('prefs.themeHint')}>
           <div className="flex flex-wrap gap-2">

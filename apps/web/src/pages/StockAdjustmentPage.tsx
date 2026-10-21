@@ -420,10 +420,6 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
         />
       </div>
 
-      <p className="text-xs text-ink-muted">
-        {t('adjustment.subtitle')} {t('adjustment.hint')}
-      </p>
-
       {problem && <Alert tone="error">{problem}</Alert>}
       {upload && (
         <Alert tone={upload.unmatched.length > 0 ? 'muted' : 'ok'}>

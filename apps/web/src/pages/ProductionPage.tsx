@@ -327,8 +327,6 @@ function BomForm({
         </label>
       </div>
 
-      <p className="text-xs text-ink-muted">{t('boms.hint')}</p>
-
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
           <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
@@ -629,7 +627,6 @@ function ProductionEntry({
 
       <RunLines
         title={t('production.made')}
-        hint={t('production.madeHint')}
         lines={made}
         options={options}
         batched={batched}
@@ -656,7 +653,6 @@ function ProductionEntry({
 
       <RunLines
         title={t('production.used')}
-        hint={t('production.usedHint')}
         lines={used}
         options={options}
         batched={batched}
@@ -682,7 +678,6 @@ function ProductionEntry({
 
 function RunLines({
   title,
-  hint,
   lines,
   options,
   batched,
@@ -692,7 +687,6 @@ function RunLines({
   onChange,
 }: {
   readonly title: string;
-  readonly hint: string;
   readonly lines: readonly RunLine[];
   readonly options: ReturnType<typeof productOption>[];
   readonly batched: (productId: string) => boolean;
@@ -711,7 +705,6 @@ function RunLines({
     <section className="space-y-2">
       <div>
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        <p className="text-xs text-ink-muted">{hint}</p>
       </div>
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">

@@ -100,9 +100,6 @@ export function PolicySettings({
             disabled={disabled}
             onChange={(transfersRequireApproval) => change({ transfersRequireApproval })}
           />
-          <p className="-mt-2 text-xs text-ink-muted">
-            {t('policies.transfersRequireApprovalHint')}
-          </p>
         </>
       )}
 
@@ -114,9 +111,6 @@ export function PolicySettings({
             disabled={disabled}
             onChange={(editsRequireApproval) => change({ editsRequireApproval })}
           />
-          <p className="-mt-2 text-xs text-ink-muted">
-            {t('policies.editsRequireApprovalHint')}
-          </p>
         </>
       )}
       {shows('purchasesUpdateProductRates') && (
@@ -129,9 +123,6 @@ export function PolicySettings({
               change({ purchasesUpdateProductRates })
             }
           />
-          <p className="-mt-2 text-xs text-ink-muted">
-            {t('policies.purchasesUpdateProductRatesHint')}
-          </p>
         </>
       )}
     </div>

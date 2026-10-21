@@ -1235,17 +1235,6 @@ function OrderDialog({
             </p>
           )}
 
-          {/*
-            Said on the screen rather than left to be worked out from a trial
-            balance that does not mention it. An order is a commitment, not a
-            transaction: it writes no voucher, so it moves no account and appears in
-            no statement. What reaches the books is the purchase or the invoice a
-            conversion produces, and only once that is posted.
-          */}
-          <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
-            {t('orders.booksHint')}
-          </p>
-
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <table className="line-table sm:min-w-[34rem]">
               <thead className="text-xs text-ink-muted">

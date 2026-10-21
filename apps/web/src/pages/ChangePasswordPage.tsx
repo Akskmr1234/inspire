@@ -86,7 +86,6 @@ export function ChangePasswordPage(): React.JSX.Element {
               <h1 className="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">
                 {displayName ?? t('profile.anonymous')}
               </h1>
-              <p className="text-sm text-ink-muted">{t('profile.subtitle')}</p>
             </div>
           </div>
 
@@ -120,7 +119,6 @@ export function ChangePasswordPage(): React.JSX.Element {
               <h2 className="text-base font-semibold tracking-tight text-ink">
                 {t('changePassword.title')}
               </h2>
-              <p className="text-sm text-ink-muted">{t('changePassword.subtitle')}</p>
             </div>
           </div>
         </div>

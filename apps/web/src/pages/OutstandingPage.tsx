@@ -311,7 +311,6 @@ function BillWise({
           );
         })}
       </ul>
-      <p className="text-xs text-ink-muted">{t('outstanding.billWiseHint')}</p>
     </div>
   );
 }
@@ -400,7 +399,6 @@ function AgeWise({ data }: { readonly data: AgingAnalysis }): React.JSX.Element 
           </tfoot>
         </table>
       </div>
-      <p className="text-xs text-ink-muted">{t('outstanding.billWiseHint')}</p>
     </div>
   );
 }

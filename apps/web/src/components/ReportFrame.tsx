@@ -242,10 +242,10 @@ export function ReportSkeleton({
   );
 }
 
-/** Says plainly that a query succeeded and matched nothing. */
+/** Says plainly that a query succeeded and matched nothing. The hint is not shown. */
 export function EmptyState({
   message,
-  hint,
+  hint: _hint,
 }: {
   readonly message: string;
   readonly hint?: string;
@@ -268,7 +268,6 @@ export function EmptyState({
         </svg>
       </div>
       <p className="text-sm font-semibold text-ink">{message}</p>
-      {hint && <p className="max-w-sm text-xs text-ink-muted">{hint}</p>}
     </div>
   );
 }

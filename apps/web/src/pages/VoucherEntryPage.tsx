@@ -301,7 +301,6 @@ export function VoucherEntryPage(): React.JSX.Element {
 
         <LinesFrame
           title={t('vouchers.journalDetails')}
-          hint={t('vouchers.journalDetailsHint')}
           addLabel={t('vouchers.addLedger')}
           onAdd={() => setLines((current) => [...current, emptyJournalLine()])}
         >
@@ -410,8 +409,6 @@ export function VoucherEntryPage(): React.JSX.Element {
             {post.isPending ? t('vouchers.posting') : t('vouchers.post')}
           </button>
         </div>
-
-        <p className="text-xs text-ink-muted">{t('vouchers.entryHint')}</p>
       </form>
     </section>
   );
@@ -468,13 +465,11 @@ function BalanceBadge({
 /** The bordered block a grid of ledgers sits in, with its heading and Add button. */
 function LinesFrame({
   title,
-  hint,
   addLabel,
   onAdd,
   children,
 }: {
   readonly title: string;
-  readonly hint: string;
   readonly addLabel: string;
   readonly onAdd: () => void;
   readonly children: React.ReactNode;
@@ -486,7 +481,6 @@ function LinesFrame({
           <span className="text-xs font-bold tracking-wider text-ink uppercase">
             {title}
           </span>
-          <p className="text-xs text-ink-muted">{hint}</p>
         </div>
         <button
           type="button"
@@ -1046,9 +1040,6 @@ function MoneyEntry({
             ? t('vouchers.receiptTitle')
             : t('vouchers.paymentTitle')
         }
-        subtitle={
-          direction === 'receipt' ? t('vouchers.receiptHint') : t('vouchers.paymentHint')
-        }
       />
 
       {post.isError && (
@@ -1185,11 +1176,6 @@ function MoneyEntry({
               ? t('vouchers.paymentDetails')
               : t('vouchers.receiptDetails')
           }
-          hint={
-            direction === 'payment'
-              ? t('vouchers.paymentDetailsHint')
-              : t('vouchers.receiptDetailsHint')
-          }
           addLabel={t('vouchers.addLedger')}
           onAdd={() => setLines((current) => [...current, emptyMoneyLine()])}
         >
@@ -1275,12 +1261,6 @@ function MoneyEntry({
         />
 
         {problem && <p className="alert-error text-xs">{problem}</p>}
-
-        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-muted">
-          {t(
-            direction === 'receipt' ? 'vouchers.receiptEffect' : 'vouchers.paymentEffect',
-          )}
-        </p>
 
         <div className="form-actions">
           <button type="submit" disabled={post.isPending} className="btn-primary">

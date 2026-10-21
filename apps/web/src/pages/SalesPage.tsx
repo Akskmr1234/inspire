@@ -797,8 +797,6 @@ function ChargeSetupDialog({
           <p className="alert-error">{save.error.detail || save.error.code}</p>
         )}
 
-        <p className="text-xs text-ink-muted">{t('sales.setUpChargeHint')}</p>
-
         <FormField label={t('sales.ledger')} required>
           <SearchSelect
             value={ledgerId}
@@ -1813,9 +1811,6 @@ function EntryDialog({
               />
             </div>
           </div>
-          <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-            {t('sales.returnHint')}
-          </p>
         </div>
       )}
 
@@ -2925,12 +2920,6 @@ function DocumentDialog({
                   currency={document.currency}
                 />
               </div>
-
-              {/* What posting produced. A sale leaves two documents on purpose, so the issue
-                  is named rather than left for somebody to find in the stock ledger. */}
-              {document.stockDocumentId && (
-                <p className="text-xs text-ink-muted">{t('sales.postedProduced')}</p>
-              )}
 
               <div className="flex flex-wrap items-end justify-between gap-3 pt-4 border-t border-line max-sm:justify-start max-sm:gap-2">
                 <div className="flex items-center gap-2">

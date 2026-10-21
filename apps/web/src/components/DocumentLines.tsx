@@ -484,7 +484,6 @@ export function ChargesPanel({
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-ink">{t('documents.charges')}</h3>
-          <p className="mt-0.5 text-xs text-ink-muted">{t('documents.chargesHint')}</p>
         </div>
 
         <span className="font-mono text-sm tabular-nums text-ink">
