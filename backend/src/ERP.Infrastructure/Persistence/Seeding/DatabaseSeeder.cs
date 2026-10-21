@@ -173,45 +173,6 @@ public sealed partial class DatabaseSeeder
         return Result.Success(summary);
     }
 
-    /// <summary>Gives every firm the menu entries the catalogue has and it does not.</summary>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>How many entries were added, across every firm.</returns>
-    /// <remarks>
-    /// <para>
-    /// Run on every start, whether seeding is enabled or not. The sidebar is built from
-    /// these rows, so a screen shipped in a release is invisible until its entry exists -
-    /// and seeding reaches only the one firm it created, and only where it is switched
-    /// on. A deployment with seeding off, or a firm created any other way, would carry
-    /// the new screens in its code and never show them.
-    /// </para>
-    /// <para>
-    /// The same rule as seeding: what is missing is added, and an entry an
-    /// administrator renamed, moved or hid is left exactly as they left it.
-    /// </para>
-    /// </remarks>
-    public async Task<int> SyncMenusAsync(CancellationToken cancellationToken = default)
-    {
-        List<TenantId> tenants = await _context.Tenants
-            .Select(tenant => tenant.Id)
-            .ToListAsync(cancellationToken);
-
-        int added = 0;
-
-        foreach (TenantId tenantId in tenants)
-        {
-            using IDisposable scope = _tenantContext.BeginScope(tenantId);
-
-            List<Firm> firms = await _context.Firms.ToListAsync(cancellationToken);
-
-            foreach (Firm firm in firms)
-            {
-                added += await EnsureMenuAsync(firm, cancellationToken);
-            }
-        }
-
-        return added;
-    }
-
     /// <summary>Adds any catalogue permissions not already present.</summary>
     private async Task<int> SeedPermissionsAsync(CancellationToken cancellationToken)
     {

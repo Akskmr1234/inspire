@@ -106,33 +106,13 @@ public static partial class DatabaseInitializer
         SeedOptions options = scope.ServiceProvider
             .GetRequiredService<IOptions<SeedOptions>>().Value;
 
-        DatabaseSeeder seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
-
-        if (options.Enabled)
-        {
-            await SeedAsync(seeder, logger, cancellationToken);
-        }
-        else
+        if (!options.Enabled)
         {
             LogSeedingDisabled(logger, SeedOptions.SectionName);
+            return;
         }
 
-        // Whatever seeding is set to: a release's new screens reach every firm's
-        // sidebar on the first start after it is deployed.
-        int menuEntries = await seeder.SyncMenusAsync(cancellationToken);
-
-        if (menuEntries > 0)
-        {
-            LogMenusSynchronised(logger, menuEntries);
-        }
-    }
-
-    /// <summary>Runs the seeder and reports what it created.</summary>
-    private static async Task SeedAsync(
-        DatabaseSeeder seeder,
-        ILogger logger,
-        CancellationToken cancellationToken)
-    {
+        DatabaseSeeder seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
         Result<SeedSummary> result = await seeder.SeedAsync(cancellationToken);
 
         if (result.IsFailure)
@@ -345,12 +325,6 @@ public static partial class DatabaseInitializer
         Message = "Seeding is disabled. Enable it with {Section}:Enabled to create the " +
                   "permission catalogue, roles, and an administrator.")]
     private static partial void LogSeedingDisabled(ILogger logger, string section);
-
-    [LoggerMessage(
-        EventId = 1007,
-        Level = LogLevel.Information,
-        Message = "Added {Count} new menu entries to the firms' menus")]
-    private static partial void LogMenusSynchronised(ILogger logger, int count);
 
     [LoggerMessage(
         EventId = 1002,
