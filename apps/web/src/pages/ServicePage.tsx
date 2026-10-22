@@ -11,6 +11,7 @@ import { Panel } from '@/components/Panel';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { DateField, SelectField, TextAreaField, TextField } from '@/components/Form';
 import { productOption } from '@/components/DocumentLines';
+import { MobileSearch } from '@/components/MobileSearch';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
@@ -18,14 +19,12 @@ import {
   billJobCard,
   cancelJobCard,
   createJobCard,
-  findJobCardCustomers,
   getJobCard,
   JOB_CARD_STAGES,
   JobCardStatus,
   listJobCards,
   markJobCardStage,
   updateJobCard,
-  type JobCardCustomerMatch,
   type JobCardDetail,
   type JobCardInput,
   type JobCardStages,
@@ -1152,78 +1151,5 @@ function JobCardForm({
         </button>
       </div>
     </form>
-  );
-}
-
-/**
- * The mobile number, which is how the counter finds a returning customer: three digits
- * in, it offers the people who gave a number like it before.
- */
-function MobileSearch({
-  value,
-  onChange,
-  onPick,
-}: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly onPick: (match: JobCardCustomerMatch) => void;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-  const [typed, setTyped] = useState('');
-  const [open, setOpen] = useState(false);
-
-  // Waits for the typing to pause rather than asking on every key.
-  useEffect(() => {
-    const timer = window.setTimeout(() => setTyped(value.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [value]);
-
-  const matches = useQuery<readonly JobCardCustomerMatch[], ApiError>({
-    queryKey: ['job-card-customers', typed],
-    queryFn: () => findJobCardCustomers(typed),
-    enabled: open && typed.length >= 3,
-  });
-
-  const found = matches.data ?? [];
-
-  return (
-    <div className="relative">
-      <TextField
-        label={t('service.mobile')}
-        type="tel"
-        value={value}
-        onChange={(next) => {
-          onChange(next);
-          setOpen(true);
-        }}
-        hint={t('service.mobileHint')}
-      />
-      {open && found.length > 0 && (
-        <ul className="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-line bg-surface shadow-card">
-          {found.map((match) => (
-            <li key={`${match.customerLedgerId ?? ''}-${match.customer.mobile ?? ''}`}>
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(match);
-                  setOpen(false);
-                }}
-                className="block w-full px-3 py-2 text-start text-sm hover:bg-surface-3"
-              >
-                <span className="font-medium">{match.customer.name}</span>{' '}
-                <span className="font-mono text-xs text-ink-muted">
-                  {match.customer.mobile}
-                </span>
-                {match.customer.addressLine1 && (
-                  <span className="block text-xs text-ink-muted">
-                    {match.customer.addressLine1}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }

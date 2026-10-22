@@ -94,6 +94,8 @@ export interface JobCardSummary {
   readonly salesInvoiceId: string | null;
   readonly salesInvoiceNumber: string | null;
   readonly salesInvoiceStatus: number | null;
+  /** What the additional ledgers move the bill by, net. */
+  readonly chargeTotal: number;
 }
 
 /** A part or labour line. */
@@ -129,6 +131,17 @@ export interface JobCardDetail {
   readonly stages: JobCardStages;
   readonly cancellationReason: string | null;
   readonly lines: readonly JobCardLineDetail[];
+  /** The tax mode it is billed in, or null for the firm's own. */
+  readonly mode: number | null;
+  readonly charges: readonly JobCardChargeDetail[] | null;
+}
+
+/** An additional ledger on a job's bill: a service charge, a discount. */
+export interface JobCardChargeDetail {
+  readonly ledgerId: string;
+  readonly ledgerName: string;
+  readonly amount: number;
+  readonly isAddition: boolean;
 }
 
 /** A job card as entered. Date and godown are read only when it is created. */
@@ -150,6 +163,9 @@ export interface JobCardInput {
     readonly remarks: string | null;
     readonly batchId: string | null;
   }[];
+  /** The tax mode to bill in; the firm's own when null. */
+  readonly mode?: number | null;
+  readonly charges?: readonly { readonly ledgerId: string; readonly amount: number }[];
 }
 
 /** A customer found by mobile number. */
@@ -227,9 +243,19 @@ export function cancelJobCard(id: string, reason: string): Promise<void> {
 export function billJobCard(
   id: string,
   customerLedgerId: string | null,
-): Promise<{ readonly salesInvoiceId: string; readonly number: string }> {
+  payment: {
+    readonly paidInFull?: boolean;
+    readonly amountReceived?: number;
+    readonly receivedIntoLedgerId?: string | null;
+    readonly paymentReference?: string | null;
+  } = {},
+): Promise<{
+  readonly salesInvoiceId: string;
+  readonly number: string;
+  readonly total: number;
+}> {
   return request(`${CARDS}/${id}/sales-invoice`, {
     method: 'POST',
-    body: { customerLedgerId },
+    body: { customerLedgerId, ...payment },
   });
 }

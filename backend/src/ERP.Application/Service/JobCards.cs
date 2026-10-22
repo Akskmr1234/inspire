@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Sales;
+using ERP.Domain.Accounting;
 using ERP.Domain.Sales;
 using ERP.Domain.Service;
 using ERP.SharedKernel.Tenancy;
@@ -30,6 +31,8 @@ public sealed record JobCardLineInput(
 /// <param name="SalesmanLedgerId">Who took the job in.</param>
 /// <param name="TechnicianLedgerId">Who is doing the work.</param>
 /// <param name="Lines">The parts and labour, whole.</param>
+/// <param name="Mode">The tax mode the job is billed in; the firm's own when omitted.</param>
+/// <param name="Charges">The additional ledgers on the bill, whole: a service charge, a discount.</param>
 public sealed record JobCardInput(
     Guid? CustomerLedgerId,
     JobCardCustomer Customer,
@@ -39,7 +42,14 @@ public sealed record JobCardInput(
     JobCardWork Work,
     Guid? SalesmanLedgerId,
     Guid? TechnicianLedgerId,
-    IReadOnlyList<JobCardLineInput> Lines);
+    IReadOnlyList<JobCardLineInput> Lines,
+    TaxMode? Mode = null,
+    IReadOnlyList<JobCardChargeInput>? Charges = null);
+
+/// <summary>An additional ledger on a job card's bill.</summary>
+/// <param name="LedgerId">The ledger, as set up for a sale in Settings.</param>
+/// <param name="Amount">What it comes to; the setup decides whether it adds or deducts.</param>
+public sealed record JobCardChargeInput(Guid LedgerId, decimal Amount);
 
 /// <summary>Takes a device in for service.</summary>
 /// <param name="Date">The day it was taken in.</param>
@@ -72,7 +82,18 @@ public sealed record CancelJobCardCommand(Guid JobCardId, string Reason) : IComm
 /// firm's cash customer.
 /// </param>
 /// <param name="Date">The invoice date; today where none is given.</param>
-public sealed record BillJobCardCommand(Guid JobCardId, Guid? CustomerLedgerId = null, DateOnly? Date = null)
+/// <param name="PaidInFull">Whether the customer paid the whole bill at the counter.</param>
+/// <param name="AmountReceived">What they paid, where not the whole bill.</param>
+/// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
+/// <param name="PaymentReference">The card slip's approval code or an online payment's ID.</param>
+public sealed record BillJobCardCommand(
+    Guid JobCardId,
+    Guid? CustomerLedgerId = null,
+    DateOnly? Date = null,
+    bool PaidInFull = false,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null)
     : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>Lists job cards.</summary>
@@ -113,6 +134,7 @@ public sealed record FindJobCardCustomersQuery(string Mobile) : IQuery<IReadOnly
 /// <param name="SalesInvoiceId">The invoice that billed it.</param>
 /// <param name="SalesInvoiceNumber">That invoice's number.</param>
 /// <param name="SalesInvoiceStatus">That invoice's status.</param>
+/// <param name="ChargeTotal">What the additional ledgers move the bill by, net.</param>
 public sealed record JobCardSummary(
     Guid Id,
     string Number,
@@ -131,7 +153,8 @@ public sealed record JobCardSummary(
     JobCardStatus Status,
     Guid? SalesInvoiceId,
     string? SalesInvoiceNumber,
-    SalesInvoiceStatus? SalesInvoiceStatus);
+    SalesInvoiceStatus? SalesInvoiceStatus,
+    decimal ChargeTotal = 0m);
 
 /// <summary>The day each stage of a job was reached.</summary>
 /// <param name="Processing">Work started.</param>
@@ -191,6 +214,8 @@ public sealed record JobCardLineDetail(
 /// <param name="Stages">The day each stage was reached.</param>
 /// <param name="CancellationReason">Why it was cancelled.</param>
 /// <param name="Lines">The parts and labour.</param>
+/// <param name="Mode">The tax mode it is billed in, or null for the firm's own.</param>
+/// <param name="Charges">The additional ledgers on the bill.</param>
 public sealed record JobCardDetail(
     JobCardSummary Summary,
     Guid WarehouseId,
@@ -206,7 +231,16 @@ public sealed record JobCardDetail(
     Guid? TechnicianLedgerId,
     JobCardStages Stages,
     string? CancellationReason,
-    IReadOnlyList<JobCardLineDetail> Lines);
+    IReadOnlyList<JobCardLineDetail> Lines,
+    TaxMode? Mode = null,
+    IReadOnlyList<JobCardChargeDetail>? Charges = null);
+
+/// <summary>An additional ledger on a job card's bill, as read back.</summary>
+/// <param name="LedgerId">The ledger.</param>
+/// <param name="LedgerName">Its name.</param>
+/// <param name="Amount">What it comes to, always positive.</param>
+/// <param name="IsAddition">Whether it adds to the bill; otherwise it comes off.</param>
+public sealed record JobCardChargeDetail(Guid LedgerId, string LedgerName, decimal Amount, bool IsAddition);
 
 /// <summary>A customer found by their mobile number.</summary>
 /// <param name="CustomerLedgerId">Their account, where they have one.</param>
@@ -265,6 +299,12 @@ public sealed class JobCardInputValidator : AbstractValidator<JobCardInput>
             line.RuleFor(l => l.Quantity).GreaterThan(0m);
             line.RuleFor(l => l.Rate).GreaterThanOrEqualTo(0m);
             line.RuleFor(l => l.Remarks).MaximumLength(JobCard.MaximumLongLength);
+        });
+        RuleFor(c => c.Mode!.Value).IsInEnum().When(c => c.Mode.HasValue);
+        RuleForEach(c => c.Charges).ChildRules(charge =>
+        {
+            charge.RuleFor(c => c.LedgerId).NotEqual(Guid.Empty);
+            charge.RuleFor(c => c.Amount).GreaterThan(0m);
         });
     }
 }

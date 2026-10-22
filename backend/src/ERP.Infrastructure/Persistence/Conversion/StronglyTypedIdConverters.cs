@@ -592,6 +592,16 @@ public sealed class JobCardIdConverter : ValueConverter<JobCardId, Guid>
     }
 }
 
+/// <summary>Converts <see cref="JobCardChargeId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class JobCardChargeIdConverter : ValueConverter<JobCardChargeId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="JobCardChargeIdConverter"/> class.</summary>
+    public JobCardChargeIdConverter()
+        : base(id => id.Value, value => JobCardChargeId.From(value))
+    {
+    }
+}
+
 /// <summary>Converts <see cref="JobCardLineId"/> to and from <see cref="Guid"/>.</summary>
 public sealed class JobCardLineIdConverter : ValueConverter<JobCardLineId, Guid>
 {

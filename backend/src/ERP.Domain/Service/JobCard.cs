@@ -37,6 +37,20 @@ public readonly record struct JobCardLineId(Guid Value) : IStronglyTypedId<JobCa
     public override string ToString() => Value.ToString();
 }
 
+/// <summary>Identifies an additional ledger on a job card.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct JobCardChargeId(Guid Value) : IStronglyTypedId<JobCardChargeId>
+{
+    /// <inheritdoc />
+    public static JobCardChargeId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static JobCardChargeId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}
+
 /// <summary>Where a job stands, read from the stages ticked on it.</summary>
 public enum JobCardStatus
 {
@@ -160,6 +174,7 @@ public sealed class JobCard : AggregateRoot<JobCardId>, IFirmScoped, IAuditable
     public const int MaximumLongLength = 1000;
 
     private readonly List<JobCardLine> _lines = [];
+    private readonly List<JobCardCharge> _charges = [];
 
     private JobCard(
         JobCardId id,
@@ -312,6 +327,15 @@ public sealed class JobCard : AggregateRoot<JobCardId>, IFirmScoped, IAuditable
 
     /// <summary>Gets the parts and labour.</summary>
     public IReadOnlyList<JobCardLine> Lines => _lines.AsReadOnly();
+
+    /// <summary>
+    /// Gets the tax mode the job is billed in, or null for the firm's own - a service
+    /// sale can be billed without tax, as any other sale can.
+    /// </summary>
+    public TaxMode? Mode { get; private set; }
+
+    /// <summary>Gets the additional ledgers - a service charge, a discount - the bill carries.</summary>
+    public IReadOnlyList<JobCardCharge> Charges => _charges.AsReadOnly();
 
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -524,6 +548,76 @@ public sealed class JobCard : AggregateRoot<JobCardId>, IFirmScoped, IAuditable
         return Result.Success(line);
     }
 
+    /// <summary>Sets the tax mode the job is billed in.</summary>
+    /// <param name="mode">The mode, or null for the firm's own.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result SetMode(TaxMode? mode)
+    {
+        if (mode is { } chosen && !Enum.IsDefined(chosen))
+        {
+            return Result.Failure(Error.Validation("JobCard.ModeInvalid", "No such tax mode."));
+        }
+
+        if (!IsBillable)
+        {
+            return Mode == mode ? Result.Success() : Result.Failure(Locked());
+        }
+
+        Mode = mode;
+        return Result.Success();
+    }
+
+    /// <summary>Takes every additional ledger off, so they can be put back as they now stand.</summary>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result ClearCharges()
+    {
+        if (!IsBillable)
+        {
+            return _charges.Count == 0 ? Result.Success() : Result.Failure(Locked());
+        }
+
+        _charges.Clear();
+        return Result.Success();
+    }
+
+    /// <summary>Puts an additional ledger - a service charge, a discount - on the bill.</summary>
+    /// <param name="charge">The ledger as the firm set it up for a sale.</param>
+    /// <param name="amount">What it comes to. Always positive; the setup decides the sign.</param>
+    /// <returns>The charge, or the reason it was refused.</returns>
+    public Result<JobCardCharge> AddCharge(AdditionalLedger charge, decimal amount)
+    {
+        ArgumentNullException.ThrowIfNull(charge);
+
+        if (!IsBillable)
+        {
+            return Result.Failure<JobCardCharge>(Locked());
+        }
+
+        if (charge.FirmId != FirmId || charge.Document != ChargeableDocument.Sales || !charge.IsActive)
+        {
+            return Result.Failure<JobCardCharge>(Error.Validation(
+                "JobCard.ChargeNotSetUp", "That ledger is not set up as an additional ledger on a sale."));
+        }
+
+        if (amount <= 0m)
+        {
+            return Result.Failure<JobCardCharge>(Error.Validation(
+                "JobCard.ChargeInvalid", "An additional ledger needs an amount above zero."));
+        }
+
+        if (_charges.Exists(existing => existing.LedgerId == charge.LedgerId))
+        {
+            return Result.Failure<JobCardCharge>(Error.Validation(
+                "JobCard.ChargeTwice", "The same additional ledger is entered twice."));
+        }
+
+        JobCardCharge added = new(
+            JobCardChargeId.NewId(), TenantId, Id, charge.LedgerId, amount, charge.IsAddition, _charges.Count + 1);
+
+        _charges.Add(added);
+        return Result.Success(added);
+    }
+
     /// <summary>Ticks a stage on the given day, or clears it.</summary>
     /// <param name="stage">The stage.</param>
     /// <param name="on">The day it happened, or null to clear it.</param>
@@ -697,4 +791,52 @@ public sealed class JobCardLine : Entity<JobCardLineId>, ITenantScoped
 
     /// <summary>Gets the batch the part comes out of, where one has been named.</summary>
     public BatchId? BatchId { get; private set; }
+}
+
+/// <summary>An additional ledger on a job card's bill: a service charge, a discount.</summary>
+public sealed class JobCardCharge : Entity<JobCardChargeId>, ITenantScoped
+{
+    internal JobCardCharge(
+        JobCardChargeId id,
+        TenantId tenantId,
+        JobCardId jobCardId,
+        LedgerId ledgerId,
+        decimal amount,
+        bool isAddition,
+        int lineNumber)
+        : base(id)
+    {
+        TenantId = tenantId;
+        JobCardId = jobCardId;
+        LedgerId = ledgerId;
+        Amount = amount;
+        IsAddition = isAddition;
+        LineNumber = lineNumber;
+    }
+
+    /// <summary>Constructor for EF Core materialisation.</summary>
+    private JobCardCharge()
+    {
+    }
+
+    /// <inheritdoc />
+    public TenantId TenantId { get; private set; }
+
+    /// <summary>Gets the card.</summary>
+    public JobCardId JobCardId { get; private set; }
+
+    /// <summary>Gets the ledger it posts to.</summary>
+    public LedgerId LedgerId { get; private set; }
+
+    /// <summary>Gets what it comes to, always positive.</summary>
+    public decimal Amount { get; private set; }
+
+    /// <summary>Gets whether it adds to the bill; otherwise it comes off.</summary>
+    public bool IsAddition { get; private set; }
+
+    /// <summary>Gets the position on the card, from one.</summary>
+    public int LineNumber { get; private set; }
+
+    /// <summary>Gets what it moves the bill by: positive when it adds, negative when it deducts.</summary>
+    public decimal SignedAmount => IsAddition ? Amount : -Amount;
 }

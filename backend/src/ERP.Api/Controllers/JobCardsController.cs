@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Sales;
 using ERP.Application.Service;
+using ERP.Domain.Accounting;
 using ERP.Domain.Sales;
 using ERP.Domain.Service;
 using ERP.Identity.Authorization;
@@ -185,7 +186,15 @@ public sealed class JobCardsController : ApiControllerBase
         CancellationToken cancellationToken)
     {
         Result<SalesInvoiceResponse> result = await _sender.Send(
-            new BillJobCardCommand(id, request?.CustomerLedgerId, request?.Date), cancellationToken);
+            new BillJobCardCommand(
+                id,
+                request?.CustomerLedgerId,
+                request?.Date,
+                request?.PaidInFull ?? false,
+                request?.AmountReceived ?? 0m,
+                request?.ReceivedIntoLedgerId,
+                request?.PaymentReference),
+            cancellationToken);
 
         return result.IsSuccess
             ? Created($"/api/v1/sales/invoices/{result.Value.SalesInvoiceId}", result.Value)
@@ -205,6 +214,8 @@ public sealed class JobCardsController : ApiControllerBase
 /// <param name="SalesmanLedgerId">Who took the job in.</param>
 /// <param name="TechnicianLedgerId">Who is doing the work.</param>
 /// <param name="Lines">The parts and labour.</param>
+/// <param name="Mode">The tax mode the job is billed in; the firm's own when omitted.</param>
+/// <param name="Charges">The additional ledgers on the bill: a service charge, a discount.</param>
 public sealed record JobCardRequest(
     DateOnly? Date,
     Guid? WarehouseId,
@@ -216,7 +227,9 @@ public sealed record JobCardRequest(
     JobCardWork? Work,
     Guid? SalesmanLedgerId,
     Guid? TechnicianLedgerId,
-    IReadOnlyList<JobCardLineInput>? Lines)
+    IReadOnlyList<JobCardLineInput>? Lines,
+    TaxMode? Mode = null,
+    IReadOnlyList<JobCardChargeInput>? Charges = null)
 {
     /// <summary>Converts the request to what the commands take.</summary>
     /// <returns>The card's content.</returns>
@@ -229,7 +242,9 @@ public sealed record JobCardRequest(
         Work ?? new JobCardWork(),
         SalesmanLedgerId,
         TechnicianLedgerId,
-        Lines ?? []);
+        Lines ?? [],
+        Mode,
+        Charges);
 }
 
 /// <summary>A stage and the day it was reached.</summary>
@@ -244,4 +259,14 @@ public sealed record JobCardCancelRequest([property: JsonRequired] string Reason
 /// <summary>How a job is billed.</summary>
 /// <param name="CustomerLedgerId">The account to bill where the card names none.</param>
 /// <param name="Date">The invoice date, if not today.</param>
-public sealed record JobCardBillRequest(Guid? CustomerLedgerId = null, DateOnly? Date = null);
+/// <param name="PaidInFull">Whether the customer paid the whole bill at the counter.</param>
+/// <param name="AmountReceived">What they paid, where not the whole bill.</param>
+/// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
+/// <param name="PaymentReference">The card slip's approval code or an online payment's ID.</param>
+public sealed record JobCardBillRequest(
+    Guid? CustomerLedgerId = null,
+    DateOnly? Date = null,
+    bool PaidInFull = false,
+    decimal AmountReceived = 0m,
+    Guid? ReceivedIntoLedgerId = null,
+    string? PaymentReference = null);

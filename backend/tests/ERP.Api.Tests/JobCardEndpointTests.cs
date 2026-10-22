@@ -162,6 +162,81 @@ public sealed class JobCardEndpointTests
             .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
     }
 
+    [Fact]
+    public async Task A_service_sale_carries_its_tax_mode_and_additional_ledgers_onto_a_paid_bill()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+        string mobile = $"05{Random.Shared.Next(10_000_000, 99_999_999)}";
+        await ReceiveAsync(client, masters, 5m);
+
+        List<ChargeSetup> setup = (await client.GetFromJsonAsync<List<ChargeSetup>>(
+            "/api/v1/accounting/charges?document=Sales"))!;
+        Guid freight = setup.Single(charge => charge.Code == "FREIGHT").LedgerId;
+        Guid discount = setup.Single(charge => charge.Code == "DISC-ALLOWED").LedgerId;
+
+        // Billed without tax, with a service charge of 10 and 4 off.
+        HttpResponseMessage created = await client.PostAsJsonAsync(Cards, Sale(masters, mobile, new[]
+        {
+            new { LedgerId = freight, Amount = 10m },
+            new { LedgerId = discount, Amount = 4m },
+        }));
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        Guid id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        JobCardDetail card = (await client.GetFromJsonAsync<JobCardDetail>($"{Cards}/{id}"))!;
+        card.Mode.ShouldBe(TaxMode.NonTax);
+        card.Charges.ShouldNotBeNull().Count.ShouldBe(2);
+        card.Charges.Single(charge => charge.LedgerId == discount).IsAddition.ShouldBeFalse();
+        card.Summary.Amount.ShouldBe(30m);
+        card.Summary.ChargeTotal.ShouldBe(6m);
+
+        // A ledger that is not set up for a sale is refused by name.
+        HttpResponseMessage stray = await client.PutAsJsonAsync($"{Cards}/{id}", Sale(masters, mobile, new[]
+        {
+            new { LedgerId = masters.CustomerId, Amount = 1m },
+        }));
+        stray.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await stray.Content.ReadAsStringAsync()).ShouldContain("JobCard.ChargeNotSetUp");
+
+        // Billed and paid in full in cash: 30 of parts, no tax, +10 -4.
+        Guid cash = (await client.GetFromJsonAsync<List<LedgerSummary>>("/api/v1/accounting/ledgers"))!
+            .First(ledger => ledger.Kind == LedgerKind.Cash).LedgerId;
+
+        HttpResponseMessage billed = await client.PostAsJsonAsync($"{Cards}/{id}/sales-invoice", new
+        {
+            PaidInFull = true,
+            ReceivedIntoLedgerId = cash,
+        });
+        billed.StatusCode.ShouldBe(HttpStatusCode.Created, await billed.Content.ReadAsStringAsync());
+        SalesInvoiceResponse invoice = (await billed.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!;
+        invoice.Tax.ShouldBe(0m);
+        invoice.ChargeTotal.ShouldBe(6m);
+        invoice.Total.ShouldBe(36m);
+
+        SalesInvoiceDetail detail = (await client.GetFromJsonAsync<SalesInvoiceDetail>(
+            $"/api/v1/sales/invoices/{invoice.SalesInvoiceId}"))!;
+        detail.Mode.ShouldBe(TaxMode.NonTax);
+        detail.AmountReceived.ShouldBe(36m);
+
+        (await client.PostAsync($"/api/v1/sales/invoices/{invoice.SalesInvoiceId}/post", null))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    private static object Sale(TestMasters masters, string mobile, object charges) => new
+    {
+        Date = Today,
+        masters.WarehouseId,
+        CustomerLedgerId = masters.CustomerId,
+        Customer = new { Name = "Counter customer", Mobile = mobile },
+        PaymentMode = SalesPaymentMode.Cash,
+        Device = new { ItemName = "Laptop" },
+        Work = new { ServiceType = "Repair", Fault = "No power" },
+        Lines = new[] { new { masters.ProductId, Quantity = 1m, Rate = 30m } },
+        Mode = TaxMode.NonTax,
+        Charges = charges,
+    };
+
     private static object Card(
         TestMasters masters,
         string mobile,

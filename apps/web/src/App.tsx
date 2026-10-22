@@ -147,6 +147,14 @@ const TaxReturnsPage = lazyScreen(
 );
 const BomsPage = lazyScreen(() => import('@/pages/ProductionPage'), 'BomsPage');
 const JobCardsPage = lazyScreen(() => import('@/pages/ServicePage'), 'JobCardsPage');
+const ServiceSalesPage = lazyScreen(
+  () => import('@/pages/ServiceSalesPage'),
+  'ServiceSalesPage',
+);
+const ServiceSaleEntryPage = lazyScreen(
+  () => import('@/pages/ServiceSalesPage'),
+  'ServiceSaleEntryPage',
+);
 const RmasPage = lazyScreen(() => import('@/pages/RmaPage'), 'RmasPage');
 const AuditLogPage = lazyScreen(() => import('@/pages/AuditLogPage'), 'AuditLogPage');
 const ApprovalsPage = lazyScreen(() => import('@/pages/ApprovalsPage'), 'ApprovalsPage');
@@ -398,6 +406,12 @@ export function App(): React.JSX.Element {
               <Route path="/sales/delivery-notes" element={<DeliveryNotesPage />} />
               <Route path="/inventory/boms" element={<BomsPage />} />
               <Route path="/inventory/production" element={<ProductionPage />} />
+              <Route path="/service/sales" element={<ServiceSalesPage />} />
+              <Route path="/service/sales/new" element={<ServiceSaleEntryPage />} />
+              <Route
+                path="/service/sales/:jobCardId"
+                element={<ServiceSaleEntryPage />}
+              />
               <Route path="/service/job-cards" element={<JobCardsPage />} />
               <Route path="/service/rmas" element={<RmasPage />} />
               <Route path="/settings/audit-log" element={<AuditLogPage />} />

@@ -104,7 +104,50 @@ public sealed class JobCardConfiguration : IEntityTypeConfiguration<JobCard>
             .UsePropertyAccessMode(PropertyAccessMode.Field)
             .HasField("_lines");
 
+        // Null is the firm's own mode, chosen when the job is billed.
+        builder.Property(card => card.Mode).HasConversion<int?>();
+
+        builder.HasMany(card => card.Charges)
+            .WithOne()
+            .HasForeignKey(charge => charge.JobCardId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(card => card.Charges)
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasField("_charges");
+
         ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}
+
+/// <summary>Maps <see cref="JobCardCharge"/> to the <c>job_card_charges</c> table.</summary>
+public sealed class JobCardChargeConfiguration : IEntityTypeConfiguration<JobCardCharge>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<JobCardCharge> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("job_card_charges");
+        builder.HasKey(charge => charge.Id);
+        builder.Property(charge => charge.Id).ValueGeneratedNever();
+
+        builder.Property(charge => charge.Amount).HasPrecision(19, 4).IsRequired();
+        builder.Property(charge => charge.IsAddition).IsRequired();
+        builder.Property(charge => charge.LineNumber).IsRequired();
+        builder.Ignore(charge => charge.SignedAmount);
+
+        builder.HasOne<Ledger>()
+            .WithMany()
+            .HasForeignKey(charge => charge.LedgerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(charge => new { charge.JobCardId, charge.LineNumber })
+            .HasDatabaseName("ix_job_card_charges_card");
+        builder.HasIndex(charge => charge.LedgerId).HasDatabaseName("ix_job_card_charges_ledger");
+        builder.HasIndex(charge => charge.TenantId).HasDatabaseName("ix_job_card_charges_tenant");
+
+        ConfigurationConventions.ApplyAuditConventions(builder);
     }
 }
 

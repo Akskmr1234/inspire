@@ -60,6 +60,8 @@ public sealed class JobCardReader : IJobCardReader
 
         List<JobCard> rows = await cards
             .Include(card => card.Lines)
+            .Include(card => card.Charges)
+            .AsSplitQuery()
             .OrderByDescending(card => card.Date)
             .ThenByDescending(card => card.Number)
             .Take(ListLimit)
@@ -79,6 +81,8 @@ public sealed class JobCardReader : IJobCardReader
     {
         JobCard? card = await _context.JobCards
             .Include(row => row.Lines)
+            .Include(row => row.Charges)
+            .AsSplitQuery()
             .AsNoTracking()
             .FirstOrDefaultAsync(row => row.Id == id && row.FirmId == firmId, cancellationToken);
 
@@ -88,6 +92,13 @@ public sealed class JobCardReader : IJobCardReader
         }
 
         Lookups lookups = await LookupsAsync([card], cancellationToken);
+
+        List<LedgerId> chargeLedgers = [.. card.Charges.Select(charge => charge.LedgerId).Distinct()];
+        Dictionary<LedgerId, string> chargeNames = chargeLedgers.Count == 0
+            ? []
+            : await _context.Ledgers
+                .Where(ledger => chargeLedgers.Contains(ledger.Id))
+                .ToDictionaryAsync(ledger => ledger.Id, ledger => ledger.Name, cancellationToken);
 
         List<ProductId> productIds = [.. card.Lines.Select(line => line.ProductId).Distinct()];
 
@@ -164,6 +175,14 @@ public sealed class JobCardReader : IJobCardReader
                         line.BatchId?.Value,
                         line.BatchId is { } batch ? batches.GetValueOrDefault(batch) : null);
                 }),
+            ],
+            card.Mode,
+            [
+                .. card.Charges.OrderBy(charge => charge.LineNumber).Select(charge => new JobCardChargeDetail(
+                    charge.LedgerId.Value,
+                    chargeNames.GetValueOrDefault(charge.LedgerId, string.Empty),
+                    charge.Amount,
+                    charge.IsAddition)),
             ]);
     }
 
@@ -269,7 +288,8 @@ public sealed class JobCardReader : IJobCardReader
             card.Status,
             card.SalesInvoiceId?.Value,
             invoice?.Number,
-            invoice?.Status);
+            invoice?.Status,
+            decimal.Round(card.Charges.Sum(charge => charge.SignedAmount), 4));
     }
 
     private async Task<Lookups> LookupsAsync(List<JobCard> cards, CancellationToken cancellationToken)
