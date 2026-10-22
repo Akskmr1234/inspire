@@ -5,6 +5,9 @@ import { Modal } from '@/components/Modal';
 import { Field, NumberField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { Spinner } from '@/components/ReportFrame';
+import { PhotoSlots } from '@/components/PhotoSlots';
+import { getLedgerPhotos, setLedgerPhoto } from '@/lib/photos';
+import { useSession } from '@/stores/session';
 import type { ApiError } from '@/lib/api';
 import {
   createAccountGroup,
@@ -68,6 +71,7 @@ export function LedgerEditor({
   readonly kind?: number;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const can = useSession((state) => state.can);
   const existing = useQuery<LedgerDetail, ApiError>({
     queryKey: ['ledger', ledgerId],
     queryFn: () => getLedger(ledgerId ?? ''),
@@ -92,13 +96,47 @@ export function LedgerEditor({
       ) : existing.isError ? (
         <p className="alert-error">{existing.error.detail}</p>
       ) : (
-        <LedgerForm
-          existing={existing.data ?? null}
-          onClose={onClose}
-          {...(kind === undefined ? {} : { fixedKind: kind })}
-        />
+        <>
+          <LedgerForm
+            existing={existing.data ?? null}
+            onClose={onClose}
+            {...(kind === undefined ? {} : { fixedKind: kind })}
+          />
+          {/* An employee's photographs, once the employee exists to hang them on. */}
+          {existing.data?.kind === LedgerKind.employee && (
+            <EmployeePhotos
+              ledgerId={existing.data.ledgerId}
+              canEdit={can('accounting:ledger:edit')}
+            />
+          )}
+        </>
       )}
     </Modal>
+  );
+}
+
+/** An employee's photographs, beneath the form that edits the employee. */
+function EmployeePhotos({
+  ledgerId,
+  canEdit,
+}: {
+  readonly ledgerId: string;
+  readonly canEdit: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <section className="mt-4 space-y-2 border-t border-line pt-4">
+      <h3 className="text-xs font-semibold tracking-wider text-ink-muted uppercase">
+        {t('photos.title')}
+      </h3>
+      <PhotoSlots
+        queryKey={['ledger-photos', ledgerId]}
+        load={() => getLedgerPhotos(ledgerId)}
+        save={(slot, content) => setLedgerPhoto(ledgerId, slot, content)}
+        canEdit={canEdit}
+      />
+    </section>
   );
 }
 

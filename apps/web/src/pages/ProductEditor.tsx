@@ -6,6 +6,9 @@ import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { MasterPicker } from '@/components/MasterPicker';
+import { PhotoSlots } from '@/components/PhotoSlots';
+import { getProductPhotos, setProductPhoto } from '@/lib/photos';
+import { useSession } from '@/stores/session';
 import clsx from 'clsx';
 import type { ApiError } from '@/lib/api';
 import {
@@ -28,7 +31,7 @@ import {
   type StockLedgerReport,
 } from '@/lib/stock';
 
-type EditorTab = 'description' | 'details' | 'barcodes' | 'openingStock';
+type EditorTab = 'description' | 'details' | 'barcodes' | 'openingStock' | 'photos';
 
 /**
  * The product editor.
@@ -225,6 +228,7 @@ function EditorBody({
   const enableDeviceAttributes = useSettings((s) => s.enableDeviceAttributes);
   const places = currentDecimals();
 
+  const can = useSession((state) => state.can);
   const [tab, setTab] = useState<EditorTab>(initialTab);
   const [form, setForm] = useState<ProductForm>(() => formFrom(product, places));
   const [error, setError] = useState<string | null>(null);
@@ -412,6 +416,9 @@ function EditorBody({
         <Tab active={tab === 'openingStock'} onClick={() => setTab('openingStock')}>
           {t('products.tabOpeningStock')}
         </Tab>
+        <Tab active={tab === 'photos'} onClick={() => setTab('photos')}>
+          {t('photos.title')}
+        </Tab>
 
         <span className="shrink-0 pb-1.5 ps-2 sm:hidden">{status}</span>
       </nav>
@@ -491,6 +498,15 @@ function EditorBody({
       )}
 
       {tab === 'openingStock' && <OpeningStockTab product={product} units={units} />}
+
+      {tab === 'photos' && (
+        <PhotoSlots
+          queryKey={['product-photos', product.id]}
+          load={() => getProductPhotos(product.id)}
+          save={(slot, content) => setProductPhoto(product.id, slot, content)}
+          canEdit={can('inventory:product:edit')}
+        />
+      )}
     </section>
   );
 }

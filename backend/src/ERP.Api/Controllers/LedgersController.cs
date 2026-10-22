@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Accounting.Ledgers;
 using ERP.Application.Accounting.Reports;
+using ERP.Application.Parties;
 using ERP.Domain.Accounting;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
@@ -149,6 +150,52 @@ public sealed class LedgersController : ApiControllerBase
             new UpdateLedgerCommand(id, request.ToInput()), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads the photographs of an employee, customer or supplier.</summary>
+    /// <param name="id">The ledger.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Up to three pictures as data URLs, in slot order; null where a slot is empty.</returns>
+    /// <response code="200">The photographs.</response>
+    /// <response code="404">No such party in the selected firm.</response>
+    [HttpGet("{id:guid}/photos")]
+    [RequiresPermission("accounting", "ledger", "view")]
+    [ProducesResponseType(typeof(PhotoSetResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPhotosAsync(Guid id, CancellationToken cancellationToken)
+    {
+        Result<PhotoSetResponse> result = await _sender.Send(
+            new ListPartyPhotosQuery(id), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Sets or removes one of the photographs of an employee, customer or supplier.</summary>
+    /// <param name="id">The ledger.</param>
+    /// <param name="slot">Which photograph, one to three.</param>
+    /// <param name="request">The picture as a data URL; null removes it.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">Saved.</response>
+    /// <response code="400">Not a picture, too large, or no such slot.</response>
+    /// <response code="404">No such party in the selected firm.</response>
+    [HttpPut("{id:guid}/photos/{slot:int}")]
+    [RequiresPermission("accounting", "ledger", "edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetPhotoAsync(
+        Guid id,
+        int slot,
+        [FromBody] PartyPhotoResponse request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new SetPartyPhotoCommand(id, request.Content, slot), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
 
     /// <summary>Withdraws a ledger from use, or puts it back.</summary>

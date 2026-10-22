@@ -116,8 +116,11 @@ public sealed class PartyPhotoConfiguration : IEntityTypeConfiguration<PartyPhot
             .HasForeignKey(photo => photo.LedgerId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // One picture a party.
-        builder.HasIndex(photo => photo.LedgerId).IsUnique().HasDatabaseName("ix_party_photos_ledger");
+        // Each of a party's pictures in a slot of its own; the first is the one a card shows.
+        builder.Property(photo => photo.Slot).HasDefaultValue(1).IsRequired();
+        builder.HasIndex(photo => new { photo.LedgerId, photo.Slot })
+            .IsUnique()
+            .HasDatabaseName("ix_party_photos_ledger");
         builder.HasIndex(photo => photo.TenantId).HasDatabaseName("ix_party_photos_tenant");
 
         ConfigurationConventions.ApplyAggregateConventions(builder);

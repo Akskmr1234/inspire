@@ -97,8 +97,21 @@ public sealed class PlaceRepository : IPlaceRepository
     public void AddTerritory(Territory territory) => _context.Territories.Add(territory);
 
     /// <inheritdoc />
-    public Task<PartyPhoto?> FindPhotoAsync(LedgerId ledgerId, CancellationToken cancellationToken = default) =>
-        _context.PartyPhotos.FirstOrDefaultAsync(photo => photo.LedgerId == ledgerId, cancellationToken);
+    public Task<PartyPhoto?> FindPhotoAsync(
+        LedgerId ledgerId,
+        int slot = 1,
+        CancellationToken cancellationToken = default) =>
+        _context.PartyPhotos.FirstOrDefaultAsync(
+            photo => photo.LedgerId == ledgerId && photo.Slot == slot, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PartyPhoto>> ListPhotosAsync(
+        LedgerId ledgerId,
+        CancellationToken cancellationToken = default) =>
+        await _context.PartyPhotos
+            .Where(photo => photo.LedgerId == ledgerId)
+            .OrderBy(photo => photo.Slot)
+            .ToListAsync(cancellationToken);
 
     /// <inheritdoc />
     public void AddPhoto(PartyPhoto photo) => _context.PartyPhotos.Add(photo);

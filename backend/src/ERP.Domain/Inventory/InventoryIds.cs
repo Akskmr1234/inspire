@@ -105,3 +105,17 @@ public readonly record struct TaxSlabId(Guid Value) : IStronglyTypedId<TaxSlabId
     /// <inheritdoc />
     public override string ToString() => Value.ToString();
 }
+
+/// <summary>Identifies one of a product's photographs.</summary>
+/// <param name="Value">The underlying value.</param>
+public readonly record struct ProductPhotoId(Guid Value) : IStronglyTypedId<ProductPhotoId>
+{
+    /// <inheritdoc />
+    public static ProductPhotoId From(Guid value) => new(value);
+
+    /// <inheritdoc />
+    public static ProductPhotoId NewId() => new(Guid.CreateVersion7());
+
+    /// <inheritdoc />
+    public override string ToString() => Value.ToString();
+}

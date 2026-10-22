@@ -202,6 +202,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the parties' photographs.</summary>
     public DbSet<PartyPhoto> PartyPhotos => Set<PartyPhoto>();
 
+    /// <summary>Gets the products' photographs.</summary>
+    public DbSet<ProductPhoto> ProductPhotos => Set<ProductPhoto>();
+
     /// <summary>Gets the places stock is held.</summary>
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
@@ -413,6 +416,7 @@ public class ErpDbContext : DbContext
         configurationBuilder.Properties<RegionId>().HaveConversion<RegionIdConverter>();
         configurationBuilder.Properties<TerritoryId>().HaveConversion<TerritoryIdConverter>();
         configurationBuilder.Properties<PartyPhotoId>().HaveConversion<PartyPhotoIdConverter>();
+        configurationBuilder.Properties<ProductPhotoId>().HaveConversion<ProductPhotoIdConverter>();
         configurationBuilder.Properties<WarehouseId>()
             .HaveConversion<WarehouseIdConverter>();
         configurationBuilder.Properties<ProductId>().HaveConversion<ProductIdConverter>();

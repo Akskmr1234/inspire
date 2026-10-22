@@ -398,7 +398,7 @@ function JournalForm({
         title={
           existing
             ? t('vouchers.editTitle', { number: existing.number })
-            : t('vouchers.entryTitle')
+            : t('vouchers.journalTitle')
         }
       />
 
@@ -416,7 +416,22 @@ function JournalForm({
           if (canSubmit) post.mutate();
         }}
       >
-        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* As on a payment or a receipt: when and under what reference first, then
+            the ledgers, the narration under them and one button. */}
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <DateField
+            label={t('vouchers.date')}
+            required
+            value={date}
+            onChange={setDate}
+            size="sm"
+          />
+          <TextField
+            label={t('vouchers.referenceNo')}
+            value={referenceNumber}
+            onChange={setReferenceNumber}
+            size="sm"
+          />
           <SelectField
             label={t('vouchers.type')}
             required
@@ -438,25 +453,6 @@ function JournalForm({
                     { value: VoucherType.contra, label: t('voucherTypes.Contra') },
                   ]
             }
-            size="sm"
-          />
-          <DateField
-            label={t('vouchers.date')}
-            required
-            value={date}
-            onChange={setDate}
-            size="sm"
-          />
-          <TextField
-            label={t('vouchers.referenceNo')}
-            value={referenceNumber}
-            onChange={setReferenceNumber}
-            size="sm"
-          />
-          <TextField
-            label={t('vouchers.narration')}
-            value={narration}
-            onChange={setNarration}
             size="sm"
           />
         </div>
@@ -558,13 +554,20 @@ function JournalForm({
           )}
         </LinesFrame>
 
+        <TextField
+          label={t('vouchers.narration')}
+          value={narration}
+          onChange={setNarration}
+          className="w-full"
+        />
+
         {unnamed && <p className="alert-error text-xs">{t('vouchers.ledgerRequired')}</p>}
 
         {existing && (
           <ReasonField existing={existing} value={reason} onChange={setReason} />
         )}
 
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <div className="form-actions flex-wrap items-center">
           <BalanceBadge totals={totals} />
           {existing && (
             <button
@@ -585,7 +588,7 @@ function JournalForm({
               ? t('vouchers.posting')
               : existing
                 ? t('vouchers.saveChanges')
-                : t('vouchers.post')}
+                : t('vouchers.postJournal')}
           </button>
         </div>
       </form>

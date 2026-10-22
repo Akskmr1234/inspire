@@ -521,6 +521,16 @@ public sealed class TerritoryIdConverter : ValueConverter<TerritoryId, Guid>
     }
 }
 
+/// <summary>Stores a <see cref="ProductPhotoId"/> as a GUID.</summary>
+public sealed class ProductPhotoIdConverter : ValueConverter<ProductPhotoId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="ProductPhotoIdConverter"/> class.</summary>
+    public ProductPhotoIdConverter()
+        : base(id => id.Value, value => ProductPhotoId.From(value))
+    {
+    }
+}
+
 /// <summary>Stores a <see cref="PartyPhotoId"/> as a GUID.</summary>
 public sealed class PartyPhotoIdConverter : ValueConverter<PartyPhotoId, Guid>
 {

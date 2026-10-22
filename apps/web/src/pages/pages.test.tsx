@@ -101,7 +101,7 @@ const {
 const screens: readonly (readonly [string, React.ReactNode, RegExp])[] = [
   ['change password', <ChangePasswordPage />, /password/i],
   ['trial balance', <TrialBalancePage />, /trial balance/i],
-  ['voucher entry', <VoucherEntryPage />, /voucher entry/i],
+  ['journal', <VoucherEntryPage />, /^journal$/i],
   ['profit and loss', <ProfitAndLossPage />, /profit and loss/i],
   ['balance sheet', <BalanceSheetPage />, /balance sheet/i],
   ['day book', <DayBookPage />, /day book/i],
