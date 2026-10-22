@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -10,6 +10,7 @@ import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
 import { useIsNarrow } from '@/components/DataGrid';
 import { IconClose, IconPlus } from '@/components/icons';
 import { ApiError, request } from '@/lib/api';
+import { isHeldForApproval, type EditRequestSummary } from '@/lib/approvals';
 import {
   isCashOrBank,
   isParty,
@@ -19,6 +20,16 @@ import {
 } from '@/lib/ledgers';
 import { moneyAlways as money } from '@/lib/money';
 import { PAYMENT_MODES } from '@/lib/paymentModes';
+import {
+  getVoucher,
+  KIND_PATH,
+  TYPE_NAME,
+  VoucherStatus,
+  VoucherType,
+  type VoucherDetail,
+  type VoucherKind,
+  type VoucherSettlement,
+} from '@/lib/vouchers';
 import { useSettings } from '@/stores/settings';
 
 interface CreateVoucherResponse {
@@ -29,33 +40,131 @@ interface CreateVoucherResponse {
 }
 
 /**
- * Where a posted voucher sends somebody: the list it now appears on.
+ * Where a saved voucher sends somebody: the list it now appears on.
  *
- * Every entry screen here used to stay put and say "posted" in a green line, which
- * reads as an unsaved form to anybody who looks away and back — the fields are empty
- * again and the banner scrolls off. Landing on the list that now holds the document
- * is the confirmation, and the list carries the way back to enter another.
+ * Landing on the list that holds the document is the confirmation, and the list's New
+ * button is the way back to enter another. A correction held for approval says so.
  */
-function listedAt(type: number, number: string): string {
-  const params = new URLSearchParams({ type: String(type), posted: number });
+function savedAt(kind: VoucherKind, number: string, held = false): string {
+  const params = new URLSearchParams({ saved: number });
 
-  return `/accounting/voucher-report?${params.toString()}`;
+  if (held) {
+    params.set('held', '1');
+  }
+
+  return `${KIND_PATH[kind]}?${params.toString()}`;
+}
+
+/** What a save answers: the voucher, or the request a correction is held in. */
+type SaveAnswer = CreateVoucherResponse | EditRequestSummary;
+
+/** Where a save lands, by what it answered. */
+function landing(kind: VoucherKind, answer: SaveAnswer): string {
+  return isHeldForApproval(answer)
+    ? savedAt(kind, answer.documentNumber, true)
+    : savedAt(kind, answer.number);
+}
+
+/**
+ * The voucher the route names, when an entry screen is reopened to correct one.
+ *
+ * Corrections are made on the screen the voucher was entered on, so nobody has to learn
+ * a second form; the route's id is what turns the screen from New into Edit.
+ */
+function useEditing(): {
+  readonly voucherId: string | undefined;
+  readonly existing: ReturnType<typeof useQuery<VoucherDetail, ApiError>>;
+} {
+  const { voucherId } = useParams<{ voucherId: string }>();
+  const existing = useQuery<VoucherDetail, ApiError>({
+    queryKey: ['voucher', voucherId],
+    queryFn: () => getVoucher(voucherId ?? ''),
+    enabled: voucherId !== undefined,
+    // Read fresh each time it is opened: another user may have corrected it since.
+    staleTime: 0,
+  });
+
+  return { voucherId, existing };
+}
+
+/** The page shown while a voucher being corrected loads, or when it cannot be. */
+function EditGate({
+  title,
+  query,
+}: {
+  readonly title: string;
+  readonly query: ReturnType<typeof useQuery<VoucherDetail, ApiError>>;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <section className="page">
+      <PageHeading title={title} />
+      {query.isError ? (
+        <p className="alert-error">{query.error.detail || query.error.code}</p>
+      ) : (
+        <p className="flex items-center gap-2 text-sm text-ink-muted">
+          <Spinner /> {t('common.loading')}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Sends a new voucher, or a correction to an existing one. */
+function saveVoucher(
+  existing: VoucherDetail | null,
+  body: Record<string, unknown>,
+  reason: string,
+): Promise<SaveAnswer> {
+  if (existing === null) {
+    return request<CreateVoucherResponse>('/accounting/vouchers', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  return request<SaveAnswer>(`/accounting/vouchers/${existing.voucherId}`, {
+    method: 'PUT',
+    body: {
+      ...body,
+      currencyCode: existing.currency,
+      exchangeRate: existing.exchangeRate,
+      reason: reason.trim() || null,
+    },
+  });
+}
+
+/** The reason box a correction asks for, with a note when it re-posts. */
+function ReasonField({
+  existing,
+  value,
+  onChange,
+}: {
+  readonly existing: VoucherDetail;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <div className="space-y-2">
+      {existing.status === VoucherStatus.posted && (
+        <p className="alert-warn text-xs">{t('vouchers.editPostedHint')}</p>
+      )}
+      <TextField
+        label={t('vouchers.editReason')}
+        value={value}
+        onChange={onChange}
+        className="w-full"
+      />
+    </div>
+  );
 }
 
 /** Debit is 1 and Credit is 2, matching the API's EntrySide enum. */
 const DEBIT = 1;
 const CREDIT = 2;
-
-/** Voucher types, matching the API's VoucherType enum. */
-export const VoucherType = {
-  cashReceipt: 1,
-  bankReceipt: 2,
-  cashPayment: 3,
-  bankPayment: 4,
-  journal: 5,
-  contra: 6,
-  openingBalance: 7,
-} as const;
 
 /** Parses a typed amount, treating anything unparseable as zero. */
 function parseAmount(raw: string): number {
@@ -120,18 +229,49 @@ const CARDS_BELOW = '(max-width: 767px)';
  */
 export function VoucherEntryPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const { voucherId, existing } = useEditing();
+
+  if (voucherId !== undefined && !existing.data) {
+    return <EditGate title={t('vouchers.entryTitle')} query={existing} />;
+  }
+
+  return <JournalForm key={voucherId ?? 'new'} existing={existing.data ?? null} />;
+}
+
+/** A voucher's lines as the journal grid holds them. */
+function journalLinesOf(voucher: VoucherDetail): readonly JournalLine[] {
+  const lines = voucher.lines.map((line) => ({
+    key: crypto.randomUUID(),
+    ledgerId: line.ledgerId,
+    debit: line.side === DEBIT ? String(line.debitAmount) : '',
+    credit: line.side === CREDIT ? String(line.creditAmount) : '',
+    narration: line.narration ?? '',
+  }));
+
+  return lines.length >= 2 ? lines : [...lines, emptyJournalLine()];
+}
+
+function JournalForm({
+  existing,
+}: {
+  /** The voucher being corrected, or null for a new one. */
+  readonly existing: VoucherDetail | null;
+}): React.JSX.Element {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const narrow = useIsNarrow(CARDS_BELOW);
 
-  const [type, setType] = useState<number>(VoucherType.journal);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [narration, setNarration] = useState('');
-  const [referenceNumber, setReferenceNumber] = useState('');
-  const [lines, setLines] = useState<readonly JournalLine[]>([
-    emptyJournalLine(),
-    emptyJournalLine(),
-  ]);
+  const [type, setType] = useState<number>(existing?.type ?? VoucherType.journal);
+  const [date, setDate] = useState(
+    () => existing?.date ?? new Date().toISOString().slice(0, 10),
+  );
+  const [narration, setNarration] = useState(existing?.narration ?? '');
+  const [referenceNumber, setReferenceNumber] = useState(existing?.referenceNumber ?? '');
+  const [reason, setReason] = useState('');
+  const [lines, setLines] = useState<readonly JournalLine[]>(() =>
+    existing ? journalLinesOf(existing) : [emptyJournalLine(), emptyJournalLine()],
+  );
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
@@ -173,15 +313,16 @@ export function VoucherEntryPage(): React.JSX.Element {
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
-  const post = useMutation<CreateVoucherResponse, ApiError>({
+  const post = useMutation<SaveAnswer, ApiError>({
     mutationFn: () =>
-      request<CreateVoucherResponse>('/accounting/vouchers', {
-        method: 'POST',
-        body: {
+      saveVoucher(
+        existing,
+        {
           type,
           date,
           referenceNumber: referenceNumber.trim() || null,
           narration: narration.trim() || null,
+          paymentMode: existing?.paymentMode ?? null,
           postImmediately: true,
           lines: entered.map((line) => {
             const debit = parseAmount(line.debit);
@@ -193,13 +334,16 @@ export function VoucherEntryPage(): React.JSX.Element {
             };
           }),
         },
-      }),
-    onSuccess: (response) => {
+        reason,
+      ),
+    onSuccess: (answer) => {
       // The trial balance is now stale by definition.
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
       void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher-list'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher'] });
 
-      navigate(listedAt(type, response.number));
+      void navigate(landing('journal', answer));
     },
   });
 
@@ -250,7 +394,13 @@ export function VoucherEntryPage(): React.JSX.Element {
 
   return (
     <section className="page">
-      <PageHeading title={t('vouchers.entryTitle')} />
+      <PageHeading
+        title={
+          existing
+            ? t('vouchers.editTitle', { number: existing.number })
+            : t('vouchers.entryTitle')
+        }
+      />
 
       {post.isError && (
         <div role="alert" className="alert-error">
@@ -272,10 +422,22 @@ export function VoucherEntryPage(): React.JSX.Element {
             required
             value={type}
             onChange={setType}
-            options={[
-              { value: VoucherType.journal, label: t('voucherTypes.Journal') },
-              { value: VoucherType.contra, label: t('voucherTypes.Contra') },
-            ]}
+            disabled={existing !== null}
+            options={
+              existing !== null &&
+              existing.type !== VoucherType.journal &&
+              existing.type !== VoucherType.contra
+                ? [
+                    {
+                      value: existing.type,
+                      label: t(`voucherTypes.${TYPE_NAME[existing.type] ?? 'Journal'}`),
+                    },
+                  ]
+                : [
+                    { value: VoucherType.journal, label: t('voucherTypes.Journal') },
+                    { value: VoucherType.contra, label: t('voucherTypes.Contra') },
+                  ]
+            }
             size="sm"
           />
           <DateField
@@ -398,15 +560,32 @@ export function VoucherEntryPage(): React.JSX.Element {
 
         {unnamed && <p className="alert-error text-xs">{t('vouchers.ledgerRequired')}</p>}
 
+        {existing && (
+          <ReasonField existing={existing} value={reason} onChange={setReason} />
+        )}
+
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
           <BalanceBadge totals={totals} />
+          {existing && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void navigate(KIND_PATH.journal)}
+            >
+              {t('common.cancel')}
+            </button>
+          )}
           <button
             type="submit"
             disabled={!canSubmit || post.isPending}
             className="btn-primary"
           >
             {post.isPending && <Spinner />}
-            {post.isPending ? t('vouchers.posting') : t('vouchers.post')}
+            {post.isPending
+              ? t('vouchers.posting')
+              : existing
+                ? t('vouchers.saveChanges')
+                : t('vouchers.post')}
           </button>
         </div>
       </form>
@@ -558,6 +737,69 @@ export function ReceiptEntryPage(): React.JSX.Element {
   return <MoneyEntry direction="receipt" />;
 }
 
+/**
+ * A voucher as the receipt or payment screen holds it, or null when it does not fit
+ * that shape - one cash or bank line on the money side and the parties on the other -
+ * and has to be corrected as a journal instead.
+ */
+interface MoneyDraft {
+  readonly accountId: string;
+  readonly accountNarration: string | null;
+  readonly lines: readonly MoneyLine[];
+  readonly cheque: ChequeDetails;
+}
+
+function moneyDraftOf(
+  voucher: VoucherDetail,
+  direction: 'payment' | 'receipt',
+): MoneyDraft | null {
+  const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
+  const accounts = voucher.lines.filter((line) => line.side === moneySide);
+  const parties = voucher.lines.filter((line) => line.side !== moneySide);
+  const account = accounts[0];
+
+  if (accounts.length !== 1 || account === undefined || parties.length === 0) {
+    return null;
+  }
+
+  // Each bill goes back on the first line against its party, as it was settled.
+  const claimed = new Set<string>();
+  const settlements = voucher.settlements ?? [];
+  const lines = parties.map((line): MoneyLine => {
+    const allocations: Record<string, string> = {};
+
+    if (!claimed.has(line.ledgerId)) {
+      claimed.add(line.ledgerId);
+
+      for (const settled of settlements.filter((s) => s.ledgerId === line.ledgerId)) {
+        allocations[settled.billId] = String(settled.amount);
+      }
+    }
+
+    return {
+      key: crypto.randomUUID(),
+      ledgerId: line.ledgerId,
+      amount: String(line.side === DEBIT ? line.debitAmount : line.creditAmount),
+      narration: line.narration ?? '',
+      allocations,
+    };
+  });
+
+  const cheque = voucher.cheques?.[0];
+
+  return {
+    accountId: account.ledgerId,
+    accountNarration: account.narration,
+    lines,
+    cheque: {
+      number: cheque?.chequeNumber ?? '',
+      accountNumber: cheque?.accountNumber ?? '',
+      date: cheque?.instrumentDate ?? '',
+      inFavourOf: cheque?.inFavourOf ?? '',
+    },
+  };
+}
+
 /** One ledger being paid or received from. */
 interface MoneyLine {
   readonly key: string;
@@ -605,12 +847,19 @@ function PendingBills({
   ledgerId,
   billType,
   fillable,
+  reclaimed = [],
   allocations,
   onChange,
 }: {
   readonly ledgerId: string;
   readonly billType: number;
   readonly fillable: boolean;
+  /**
+   * What the voucher being corrected settled of this party's bills. Given back to the
+   * bills here, as the server gives it back on saving, so a bill this voucher paid in
+   * full is still there to keep ticked.
+   */
+  readonly reclaimed?: readonly VoucherSettlement[];
   readonly allocations: Readonly<Record<string, string>>;
   readonly onChange: (allocations: Readonly<Record<string, string>>) => void;
 }): React.JSX.Element | null {
@@ -627,7 +876,7 @@ function PendingBills({
     return <p className="text-xs text-ink-muted">{t('common.loading')}</p>;
   }
 
-  const rows = bills.data ?? [];
+  const rows = withReclaimed(bills.data ?? [], reclaimed);
 
   if (rows.length === 0) {
     return <p className="text-xs text-ink-muted">{t('vouchers.noPendingBills')}</p>;
@@ -732,6 +981,39 @@ function PendingBills({
   );
 }
 
+/** The open bills, with what the voucher being corrected settled added back. */
+function withReclaimed(
+  open: readonly OpenBill[],
+  reclaimed: readonly VoucherSettlement[],
+): readonly OpenBill[] {
+  if (reclaimed.length === 0) {
+    return open;
+  }
+
+  const back = new Map(reclaimed.map((settled) => [settled.billId, settled]));
+  const rows = open.map((bill) => {
+    const settled = back.get(bill.billId);
+    back.delete(bill.billId);
+
+    return settled
+      ? { ...bill, outstandingAmount: bill.outstandingAmount + settled.amount }
+      : bill;
+  });
+
+  for (const settled of back.values()) {
+    rows.push({
+      billId: settled.billId,
+      billNumber: settled.billNumber,
+      billDate: settled.billDate,
+      dueDate: settled.dueDate,
+      outstandingAmount: settled.outstanding + settled.amount,
+      daysOverdue: 0,
+    });
+  }
+
+  return rows;
+}
+
 interface ChequeDetails {
   number: string;
   accountNumber: string;
@@ -768,6 +1050,43 @@ function MoneyEntry({
   readonly direction: 'payment' | 'receipt';
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const { voucherId, existing } = useEditing();
+  const title =
+    direction === 'receipt' ? t('vouchers.receiptTitle') : t('vouchers.paymentTitle');
+
+  if (voucherId !== undefined && !existing.data) {
+    return <EditGate title={title} query={existing} />;
+  }
+
+  const voucher = existing.data ?? null;
+  const draft = voucher ? moneyDraftOf(voucher, direction) : null;
+
+  // A voucher that is not one account against its parties is corrected line by line.
+  if (voucher && draft === null) {
+    return <JournalForm key={voucher.voucherId} existing={voucher} />;
+  }
+
+  return (
+    <MoneyForm
+      key={voucherId ?? 'new'}
+      direction={direction}
+      existing={voucher}
+      draft={draft}
+    />
+  );
+}
+
+function MoneyForm({
+  direction,
+  existing,
+  draft,
+}: {
+  readonly direction: 'payment' | 'receipt';
+  /** The voucher being corrected, or null for a new one. */
+  readonly existing: VoucherDetail | null;
+  readonly draft: MoneyDraft | null;
+}): React.JSX.Element {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const narrow = useIsNarrow(CARDS_BELOW);
@@ -782,25 +1101,33 @@ function MoneyEntry({
   const billType = direction === 'receipt' ? 1 : 2;
 
   const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(today);
-  const [reference, setReference] = useState('');
-  const [narration, setNarration] = useState('');
-  const [accountId, setAccountId] = useState('');
+  const [date, setDate] = useState(existing?.date ?? today);
+  const [reference, setReference] = useState(existing?.referenceNumber ?? '');
+  const [narration, setNarration] = useState(existing?.narration ?? '');
+  const [reason, setReason] = useState('');
+  const [accountId, setAccountId] = useState(draft?.accountId ?? '');
   const [mode, setMode] = useState(
-    defaultPaymentMode && defaultPaymentMode !== 'Credit' ? defaultPaymentMode : 'Cash',
+    existing?.paymentMode ??
+      (defaultPaymentMode && defaultPaymentMode !== 'Credit'
+        ? defaultPaymentMode
+        : 'Cash'),
   );
-  const [cheque, setCheque] = useState<ChequeDetails>({
-    number: '',
-    accountNumber: '',
-    date: '',
-    inFavourOf: '',
-  });
+  const [cheque, setCheque] = useState<ChequeDetails>(
+    draft?.cheque ?? {
+      number: '',
+      accountNumber: '',
+      date: '',
+      inFavourOf: '',
+    },
+  );
   const [card, setCard] = useState<CardDetails>({
     type: '',
     lastDigits: '',
     approval: '',
   });
-  const [lines, setLines] = useState<readonly MoneyLine[]>([emptyMoneyLine()]);
+  const [lines, setLines] = useState<readonly MoneyLine[]>(
+    () => draft?.lines ?? [emptyMoneyLine()],
+  );
   const [problem, setProblem] = useState<string | null>(null);
 
   const ledgers = useLedgers();
@@ -810,8 +1137,9 @@ function MoneyEntry({
   const account = moneyAccounts.find((ledger) => ledger.ledgerId === accountId);
   const isBank = account?.kind === LedgerKind.bank;
 
-  // Cash for cash, a bank for everything else, until somebody chooses.
-  const [accountTouched, setAccountTouched] = useState(false);
+  // Cash for cash, a bank for everything else, until somebody chooses - or the
+  // voucher being corrected already says.
+  const [accountTouched, setAccountTouched] = useState(draft !== null);
   useEffect(() => {
     if (accountTouched || moneyAccounts.length === 0) return;
     const wantsBank = mode !== 'Cash';
@@ -893,7 +1221,7 @@ function MoneyEntry({
     return parts.length > 0 ? `${t('paymentModes.card')}: ${parts.join(' · ')}` : null;
   };
 
-  const post = useMutation<CreateVoucherResponse, ApiError>({
+  const post = useMutation<SaveAnswer, ApiError>({
     mutationFn: () => {
       const partySide = direction === 'receipt' ? CREDIT : DEBIT;
       const moneySide = direction === 'receipt' ? DEBIT : CREDIT;
@@ -942,12 +1270,14 @@ function MoneyEntry({
         ledgerId: accountId,
         side: moneySide,
         amount: Math.round(total * 100) / 100,
-        narration: cardNote(),
+        // A correction that leaves the card details blank keeps the ones it had.
+        narration:
+          cardNote() ?? (mode === 'Card' ? (draft?.accountNarration ?? null) : null),
       };
 
-      return request<CreateVoucherResponse>('/accounting/vouchers', {
-        method: 'POST',
-        body: {
+      return saveVoucher(
+        existing,
+        {
           type,
           date,
           referenceNumber: reference.trim() || null,
@@ -959,14 +1289,18 @@ function MoneyEntry({
               ? [...partyLines, moneyLine]
               : [moneyLine, ...partyLines],
         },
-      });
+        reason,
+      );
     },
-    onSuccess: (response) => {
+    onSuccess: (answer) => {
       void queryClient.invalidateQueries({ queryKey: ['trial-balance'] });
       void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher-list'] });
+      void queryClient.invalidateQueries({ queryKey: ['voucher'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-bills'] });
       void queryClient.invalidateQueries({ queryKey: ['cheques'] });
 
-      navigate(listedAt(type, response.number));
+      void navigate(landing(direction, answer));
     },
   });
 
@@ -1000,6 +1334,9 @@ function MoneyEntry({
         ledgerId={party.ledgerId}
         billType={billType}
         fillable={fillBills}
+        reclaimed={(existing?.settlements ?? []).filter(
+          (s) => s.ledgerId === party.ledgerId,
+        )}
         allocations={line.allocations}
         onChange={(allocations) => {
           const next = { ...line, allocations };
@@ -1036,9 +1373,11 @@ function MoneyEntry({
     <section className="page">
       <PageHeading
         title={
-          direction === 'receipt'
-            ? t('vouchers.receiptTitle')
-            : t('vouchers.paymentTitle')
+          existing
+            ? t('vouchers.editTitle', { number: existing.number })
+            : direction === 'receipt'
+              ? t('vouchers.receiptTitle')
+              : t('vouchers.paymentTitle')
         }
       />
 
@@ -1260,16 +1599,31 @@ function MoneyEntry({
           className="w-full"
         />
 
+        {existing && (
+          <ReasonField existing={existing} value={reason} onChange={setReason} />
+        )}
+
         {problem && <p className="alert-error text-xs">{problem}</p>}
 
         <div className="form-actions">
+          {existing && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void navigate(KIND_PATH[direction])}
+            >
+              {t('common.cancel')}
+            </button>
+          )}
           <button type="submit" disabled={post.isPending} className="btn-primary">
             {post.isPending && <Spinner />}
             {post.isPending
               ? t('vouchers.posting')
-              : direction === 'receipt'
-                ? t('vouchers.postReceipt')
-                : t('vouchers.postPayment')}
+              : existing
+                ? t('vouchers.saveChanges')
+                : direction === 'receipt'
+                  ? t('vouchers.postReceipt')
+                  : t('vouchers.postPayment')}
           </button>
         </div>
       </form>

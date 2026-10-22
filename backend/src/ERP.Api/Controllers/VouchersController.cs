@@ -99,6 +99,36 @@ public sealed class VouchersController : ApiControllerBase
             : Problem(result.Error);
     }
 
+    /// <summary>Lists the vouchers of some kinds over a period: the receipts, payments or journals list.</summary>
+    /// <param name="from">The first date included, inclusive.</param>
+    /// <param name="to">The last date included, inclusive.</param>
+    /// <param name="types">The kinds to list; every kind when omitted.</param>
+    /// <param name="status">One status, or every status when omitted.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per voucher, most recent first, with the ledgers on each side.</returns>
+    /// <remarks>
+    /// The voucher report, behind the permission to view vouchers rather than reports:
+    /// the clerk who enters receipts opens the list of them first.
+    /// </remarks>
+    /// <response code="200">The vouchers.</response>
+    /// <response code="400">The date range is invalid, or spans more than a year.</response>
+    [HttpGet]
+    [RequiresPermission("accounting", "voucher", "view")]
+    [ProducesResponseType(typeof(VoucherReportResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ListAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] VoucherType[]? types,
+        [FromQuery] VoucherStatus? status,
+        CancellationToken cancellationToken)
+    {
+        Result<VoucherReportResponse> result = await _sender.Send(
+            new GetVoucherReportQuery(from, to, Status: status, Types: types), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Fetches a voucher and its lines.</summary>
     /// <param name="id">The voucher identifier.</param>
     /// <param name="cancellationToken">A cancellation token.</param>

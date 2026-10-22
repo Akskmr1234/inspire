@@ -104,7 +104,10 @@ public sealed class GetVoucherReportTests
             From, To, VoucherType.Journal, VoucherStatus.Cancelled));
 
         await fixture.Reader.Received(1).ReadAsync(
-            fixture.Firm.Id, From, To, VoucherType.Journal, VoucherStatus.Cancelled,
+            fixture.Firm.Id, From, To,
+            Arg.Is<IReadOnlyCollection<VoucherType>?>(types =>
+                types != null && types.SequenceEqual(new[] { VoucherType.Journal })),
+            VoucherStatus.Cancelled,
             Arg.Any<CancellationToken>());
     }
 
@@ -135,7 +138,7 @@ public sealed class GetVoucherReportTests
             Reader
                 .ReadAsync(
                     Arg.Any<FirmId>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(),
-                    Arg.Any<VoucherType?>(), Arg.Any<VoucherStatus?>(),
+                    Arg.Any<IReadOnlyCollection<VoucherType>?>(), Arg.Any<VoucherStatus?>(),
                     Arg.Any<CancellationToken>())
                 .Returns(_ => _rows);
 

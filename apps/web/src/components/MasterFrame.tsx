@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -93,6 +94,29 @@ export function MasterFrame<TRow>({
     queryKey: [queryKey, includeInactive, ...queryArgs],
     queryFn: () => fetchRows(includeInactive),
   });
+
+  // `?edit=<id>` opens that record's form once the list is in, so another screen -
+  // the ledger list - can send somebody straight to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editParam = searchParams.get('edit');
+
+  useEffect(() => {
+    const row = editParam
+      ? query.data?.find((candidate) => rowKey(candidate) === editParam)
+      : undefined;
+
+    if (row) {
+      setEditing(row);
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('edit');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [editParam, query.data, rowKey, setSearchParams]);
 
   const mutation = useMutation<void, ApiError, () => Promise<void>>({
     mutationFn: (action) => action(),

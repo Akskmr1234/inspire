@@ -21,6 +21,7 @@ import {
   IconMenu,
   IconMoon,
   IconSun,
+  headingIconFor,
   iconFor,
 } from '@/components/icons';
 
@@ -32,6 +33,42 @@ const WIDE = '(min-width: 1280px)';
 
 /** Where this browser remembers whether the sidebar was folded to its icons. */
 const SIDEBAR_KEY = 'erp.sidebar.collapsed';
+
+/** Where this browser remembers which menu sections were left open. */
+const OPEN_GROUPS_KEY = 'erp.sidebar.open';
+
+function readOpenGroups(): ReadonlySet<string> {
+  try {
+    const stored = localStorage.getItem(OPEN_GROUPS_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((c) => typeof c === 'string') : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeOpenGroups(open: ReadonlySet<string>): void {
+  try {
+    localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...open]));
+  } catch {
+    // Storage switched off: the sections simply start closed next time.
+  }
+}
+
+/** Whether the entry, or anything beneath it, is the screen on show. */
+function holdsRoute(entry: MenuEntry, pathname: string): boolean {
+  if (
+    entry.route &&
+    (pathname === entry.route || pathname.startsWith(`${entry.route}/`))
+  ) {
+    return true;
+  }
+
+  return entry.children.some((child) => holdsRoute(child, pathname));
+}
 
 /**
  * Whether the sidebar starts as a rail of icons.
@@ -745,6 +782,32 @@ function Navigation({
   readonly onNavigate: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(readOpenGroups);
+
+  // The section holding the screen on show opens with it, so arriving from a link
+  // or the palette never leaves the active entry folded out of sight.
+  const activeGroup = menu.data?.items.find((entry) => holdsRoute(entry, pathname))?.code;
+
+  useEffect(() => {
+    if (activeGroup) {
+      setOpen((current) =>
+        current.has(activeGroup) ? current : new Set([...current, activeGroup]),
+      );
+    }
+  }, [activeGroup]);
+
+  const toggle = (code: string): void =>
+    setOpen((current) => {
+      const next = new Set(current);
+
+      if (!next.delete(code)) {
+        next.add(code);
+      }
+
+      writeOpenGroups(next);
+      return next;
+    });
 
   return (
     <nav className="flex-1 space-y-0.5 overflow-y-auto overscroll-contain p-2">
@@ -771,16 +834,88 @@ function Navigation({
         </p>
       )}
 
-      {menu.data?.items.map((entry) => (
-        <SidebarEntry
-          key={entry.id}
-          entry={entry}
-          language={language}
-          collapsed={collapsed}
-          onNavigate={onNavigate}
-        />
-      ))}
+      {menu.data?.items.map((entry) =>
+        !collapsed && !entry.route ? (
+          <SidebarGroup
+            key={entry.id}
+            entry={entry}
+            language={language}
+            open={open.has(entry.code)}
+            active={entry.code === activeGroup}
+            onToggle={() => toggle(entry.code)}
+            onNavigate={onNavigate}
+          />
+        ) : (
+          <SidebarEntry
+            key={entry.id}
+            entry={entry}
+            language={language}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ),
+      )}
     </nav>
+  );
+}
+
+/**
+ * A top-level section of the menu - Masters, Sales, Reports - folded to one line
+ * until it is opened.
+ *
+ * Every screen in the firm sits under one of a handful of sections, and listing all
+ * of them at once made a column longer than any screen it sat beside. Folded, the
+ * sections read as a table of contents; each remembers being opened in this browser.
+ */
+function SidebarGroup({
+  entry,
+  language,
+  open,
+  active,
+  onToggle,
+  onNavigate,
+}: {
+  readonly entry: MenuEntry;
+  readonly language: string;
+  readonly open: boolean;
+  readonly active: boolean;
+  readonly onToggle: () => void;
+  readonly onNavigate: () => void;
+}): React.JSX.Element {
+  const Icon = headingIconFor(entry.icon, entry.code);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={clsx('nav-group', active && 'nav-group-active')}
+      >
+        <Icon />
+        <span className="flex-1 truncate text-start">{labelFor(entry, language)}</span>
+        <IconChevron
+          className={clsx(
+            'size-3.5 shrink-0 transition-transform duration-150 rtl:-scale-x-100',
+            open && 'rotate-90 rtl:-rotate-90',
+          )}
+        />
+      </button>
+      {open && (
+        <div className="nav-group-body">
+          {entry.children.map((child) => (
+            <SidebarEntry
+              key={child.id}
+              entry={child}
+              language={language}
+              collapsed={false}
+              onNavigate={onNavigate}
+              depth={1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -817,7 +952,9 @@ function SidebarEntry({
   // undefined: the project compiles with exactOptionalPropertyTypes, which treats
   // "explicitly undefined" and "absent" as different things.
   const indent: React.CSSProperties =
-    !collapsed && depth > 1 ? { paddingInlineStart: `${0.75 + depth * 0.5}rem` } : {};
+    !collapsed && depth > 1
+      ? { paddingInlineStart: `${0.75 + (depth - 1) * 0.5}rem` }
+      : {};
 
   const children = entry.children.map((child) => (
     <SidebarEntry

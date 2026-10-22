@@ -186,6 +186,7 @@ public sealed class AccountingReportsController : ApiControllerBase
     /// which the posted-only day book cannot, is the register's reason to exist beside
     /// it.
     /// </param>
+    /// <param name="types">Several kinds at once, when <paramref name="type"/> is omitted.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>One row per voucher, most recent first, with its value.</returns>
     /// <remarks>
@@ -207,10 +208,11 @@ public sealed class AccountingReportsController : ApiControllerBase
         [FromQuery] DateOnly to,
         [FromQuery] VoucherType? type,
         [FromQuery] VoucherStatus? status,
+        [FromQuery] VoucherType[]? types,
         CancellationToken cancellationToken)
     {
         Result<VoucherReportResponse> result = await _sender.Send(
-            new GetVoucherReportQuery(from, to, type, status), cancellationToken);
+            new GetVoucherReportQuery(from, to, type, status, types), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }

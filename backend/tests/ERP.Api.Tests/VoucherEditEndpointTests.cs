@@ -69,6 +69,26 @@ public sealed class VoucherEditEndpointTests
         corrected.TotalDebit.ShouldBe(450m);
         (await OutstandingAsync(client, masters.CustomerId)).ShouldBe(550m);
 
+        // Reopened to correct again, it says what it settled, so the receipt screen can
+        // show the sale ticked.
+        VoucherDetailResponse reopened = (await client.GetFromJsonAsync<VoucherDetailResponse>(
+            $"{Vouchers}/{receipt.VoucherId}"))!;
+        VoucherSettlementResponse settled = reopened.Settlements.ShouldNotBeNull().ShouldHaveSingleItem();
+        settled.BillNumber.ShouldBe(sale.Header.Number);
+        settled.Amount.ShouldBe(450m);
+        settled.Outstanding.ShouldBe(550m);
+
+        // And the receipts list finds it among cash and bank receipts, naming both sides.
+        VoucherReportResponse receipts = (await client.GetFromJsonAsync<VoucherReportResponse>(
+            $"{Vouchers}?from={Today:yyyy-MM-dd}&to={Today:yyyy-MM-dd}"
+            + $"&types={(int)VoucherType.CashReceipt}&types={(int)VoucherType.BankReceipt}"))!;
+        VoucherReportLine listed = receipts.Vouchers.Single(row => row.VoucherId == receipt.VoucherId);
+        listed.DocumentAmount.ShouldBe(450m);
+        listed.DebitLedgers.ShouldNotBeNullOrWhiteSpace();
+        listed.CreditLedgers.ShouldNotBeNullOrWhiteSpace();
+        receipts.Vouchers.ShouldAllBe(row =>
+            row.Type == VoucherType.CashReceipt || row.Type == VoucherType.BankReceipt);
+
         // Cancelled, the customer owes the whole sale again.
         HttpResponseMessage cancelled = await client.PostAsJsonAsync(
             $"{Vouchers}/{receipt.VoucherId}/cancel", new { Reason = "Cheque never arrived" });

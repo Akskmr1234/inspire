@@ -30,8 +30,8 @@ public sealed class MenuAdministrationEndpointTests
         MenuAdministrationResponse menu =
             (await client.GetFromJsonAsync<MenuAdministrationResponse>(AdminMenu))!;
 
-        MenuAdministrationEntry reports =
-            menu.Items.Single(item => item.Code == "accounts-reports");
+        MenuAdministrationEntry reports = menu.Items.Single(item => item.Code == "reports")
+            .Children.Single(item => item.Code == "accounts-reports");
 
         reports.IsSystem.ShouldBeTrue("the seeded menu is undeletable");
         reports.IsEnabled.ShouldBeTrue();
@@ -56,7 +56,7 @@ public sealed class MenuAdministrationEndpointTests
         // Moved beneath a seeded heading, which is the "regroup" part of the claim.
         MenuAdministrationResponse menu =
             (await client.GetFromJsonAsync<MenuAdministrationResponse>(AdminMenu))!;
-        Guid reportsId = menu.Items.Single(item => item.Code == "accounts-reports").Id;
+        Guid reportsId = menu.Items.Single(item => item.Code == "reports").Id;
 
         HttpResponseMessage moved = await client.PostAsJsonAsync(
             $"{AdminMenu}/{id}/move", new { ParentId = reportsId, SortOrder = 5 });
@@ -65,7 +65,7 @@ public sealed class MenuAdministrationEndpointTests
         MenuAdministrationResponse afterMove =
             (await client.GetFromJsonAsync<MenuAdministrationResponse>(AdminMenu))!;
         MenuAdministrationEntry reports =
-            afterMove.Items.Single(item => item.Code == "accounts-reports");
+            afterMove.Items.Single(item => item.Code == "reports");
 
         MenuAdministrationEntry entry =
             reports.Children.Single(child => child.Id == id);
@@ -110,7 +110,8 @@ public sealed class MenuAdministrationEndpointTests
 
         MenuAdministrationResponse menu =
             (await client.GetFromJsonAsync<MenuAdministrationResponse>(AdminMenu))!;
-        MenuAdministrationEntry cheques = menu.Items.Single(item => item.Code == "cheques");
+        MenuAdministrationEntry cheques = menu.Items.Single(item => item.Code == "accounts")
+            .Children.Single(item => item.Code == "cheques");
 
         HttpResponseMessage deleted = await client.DeleteAsync($"{AdminMenu}/{cheques.Id}");
         deleted.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);

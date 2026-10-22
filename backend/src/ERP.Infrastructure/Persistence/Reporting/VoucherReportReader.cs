@@ -34,7 +34,7 @@ public sealed class VoucherReportReader : IVoucherReportReader
         FirmId firmId,
         DateOnly from,
         DateOnly to,
-        VoucherType? type,
+        IReadOnlyCollection<VoucherType>? types,
         VoucherStatus? status,
         CancellationToken cancellationToken = default)
     {
@@ -45,9 +45,10 @@ public sealed class VoucherReportReader : IVoucherReportReader
         IQueryable<Voucher> vouchers = _context.Vouchers
             .Where(v => v.FirmId == firmId && !v.IsDeleted && v.Date >= from && v.Date <= to);
 
-        if (type is { } voucherType)
+        if (types is { Count: > 0 })
         {
-            vouchers = vouchers.Where(v => v.Type == voucherType);
+            List<VoucherType> wanted = [.. types];
+            vouchers = vouchers.Where(v => wanted.Contains(v.Type));
         }
 
         if (status is { } voucherStatus)
@@ -96,6 +97,21 @@ public sealed class VoucherReportReader : IVoucherReportReader
                 .ToDictionaryAsync(
                     row => row.VoucherId, row => (row.Document, row.Base), cancellationToken);
 
+        // Who each voucher was with, read in one query: the ledgers on each side by
+        // name, so a list of receipts can say whom each was from without opening it.
+        var named = await _context.VoucherLines
+            .Where(line => voucherIds.Contains(line.VoucherId))
+            .Join(
+                _context.Ledgers,
+                line => line.LedgerId,
+                ledger => ledger.Id,
+                (line, ledger) => new { line.VoucherId, line.Side, line.LineNumber, ledger.Name })
+            .ToListAsync(cancellationToken);
+
+        ILookup<(VoucherId, EntrySide), string> names = named
+            .OrderBy(row => row.LineNumber)
+            .ToLookup(row => (row.VoucherId, row.Side), row => row.Name);
+
         List<VoucherReportLine> rows = new(headers.Count);
 
         foreach (var header in headers)
@@ -116,9 +132,19 @@ public sealed class VoucherReportReader : IVoucherReportReader
                 header.Currency.Code,
                 header.ExchangeRate,
                 document,
-                @base));
+                @base,
+                Join(names[(header.Id, EntrySide.Debit)]),
+                Join(names[(header.Id, EntrySide.Credit)])));
         }
 
         return rows;
+    }
+
+    /// <summary>The distinct names, in order, or null when there are none.</summary>
+    private static string? Join(IEnumerable<string> names)
+    {
+        List<string> distinct = [.. names.Distinct(StringComparer.Ordinal)];
+
+        return distinct.Count == 0 ? null : string.Join(", ", distinct);
     }
 }
