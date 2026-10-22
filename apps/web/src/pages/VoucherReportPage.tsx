@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { EmptyState, ReportFrame, Spinner, moneyAlways } from '@/components/ReportFrame';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { request, type ApiError } from '@/lib/api';
 import { SearchSelect } from '@/components/SearchSelect';
-import {
-  VoucherCancelDialog,
-  VoucherEditDialog,
-  VoucherPrintDialog,
-} from '@/components/VoucherEditDialog';
+import { VoucherCancelDialog, VoucherPrintDialog } from '@/components/VoucherEditDialog';
+import { KIND_PATH, kindOf } from '@/lib/vouchers';
 
 /** The voucher statuses, keyed by the wire value the API serialises them as. */
 const STATUS_NAME: Record<number, string> = { 1: 'Draft', 2: 'Posted', 3: 'Cancelled' };
@@ -42,8 +39,8 @@ const ENTRY_PATH: Record<number, string> = {
   2: '/accounting/receipts/new',
   3: '/accounting/payments/new',
   4: '/accounting/payments/new',
-  5: '/accounting/vouchers/new',
-  6: '/accounting/vouchers/new',
+  5: '/accounting/journals/new',
+  6: '/accounting/journals/new',
 };
 
 interface VoucherReportLine {
@@ -128,15 +125,14 @@ export function VoucherReportPage(): React.JSX.Element {
   const arrivedFrom = params.get('type') ?? '';
   const justPosted = params.get('posted');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  // A voucher being corrected or cancelled from the list, and what came of it.
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // A voucher being cancelled from the list, and what came of it.
   const [cancelling, setCancelling] = useState<VoucherReportLine | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const finished = (message: string): void => {
-    setEditingId(null);
     setCancelling(null);
     setNotice(message);
     void queryClient.invalidateQueries({ queryKey: ['voucher-report'] });
@@ -270,7 +266,7 @@ export function VoucherReportPage(): React.JSX.Element {
               <span>{t('vouchers.postedAndListed', { number: justPosted })}</span>
 
               <Link
-                to={ENTRY_PATH[Number(arrivedFrom)] ?? '/accounting/vouchers/new'}
+                to={ENTRY_PATH[Number(arrivedFrom)] ?? '/accounting/journals/new'}
                 className="font-semibold underline underline-offset-2"
               >
                 {t('vouchers.enterAnother')}
@@ -369,7 +365,11 @@ export function VoucherReportPage(): React.JSX.Element {
                             <span className="inline-flex gap-1">
                               <button
                                 type="button"
-                                onClick={() => setEditingId(voucher.voucherId)}
+                                onClick={() =>
+                                  void navigate(
+                                    `${KIND_PATH[kindOf(voucher.type)]}/${voucher.voucherId}`,
+                                  )
+                                }
                                 className="row-action row-action-neutral"
                               >
                                 {t('vouchers.edit')}
@@ -400,14 +400,6 @@ export function VoucherReportPage(): React.JSX.Element {
           )
         }
       </ReportFrame>
-
-      {editingId && (
-        <VoucherEditDialog
-          voucherId={editingId}
-          onClose={() => setEditingId(null)}
-          onSaved={finished}
-        />
-      )}
 
       {printingId && (
         <VoucherPrintDialog voucherId={printingId} onClose={() => setPrintingId(null)} />

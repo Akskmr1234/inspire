@@ -71,6 +71,7 @@ export function SearchSelect({
   id,
   label,
   className,
+  joined = false,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
@@ -87,6 +88,8 @@ export function SearchSelect({
   /** Spoken name, where no visible label is associated with the box. */
   readonly label?: string | undefined;
   readonly className?: string;
+  /** Squares the end edge, for a button joined on after it - a picker's Add. */
+  readonly joined?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const generatedId = useId();
@@ -213,6 +216,7 @@ export function SearchSelect({
             className={clsx(
               size === 'sm' ? 'field-input-sm' : 'field-input',
               'pe-8 font-medium transition-all duration-150',
+              joined && 'rounded-e-none',
               open && 'border-brand-500 ring-2 ring-brand-500/20',
               invalid && 'field-invalid',
             )}

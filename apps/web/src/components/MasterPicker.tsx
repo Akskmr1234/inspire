@@ -128,13 +128,16 @@ export function MasterPicker({
 
   return (
     <Field label={label} required={required} error={error}>
-      <div className="flex min-w-0 items-stretch gap-1.5">
+      {/* The Add button joined to the box, so the pair is one control the width of the
+          plain fields beside it rather than a shorter box and a loose square. */}
+      <div className="flex min-w-0 items-stretch">
         <div className="min-w-0 flex-1">
           <SearchSelect
             value={value}
             onChange={onChange}
             options={options}
             label={label}
+            joined
             clearable={clearable}
             invalid={error !== undefined}
             disabled={disabled}
@@ -147,7 +150,7 @@ export function MasterPicker({
           type="button"
           onClick={() => setAdding(true)}
           disabled={disabled}
-          className="btn-secondary shrink-0 px-2.5"
+          className="btn-secondary -ms-px shrink-0 rounded-s-none px-2.5"
           title={t(`masterPicker.add.${kind}`)}
           aria-label={t(`masterPicker.add.${kind}`)}
         >

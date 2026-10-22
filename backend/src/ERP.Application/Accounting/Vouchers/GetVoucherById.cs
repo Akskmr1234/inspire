@@ -45,6 +45,8 @@ public sealed record VoucherLineResponse(
 /// <param name="Narration">The voucher narration.</param>
 /// <param name="PaymentMode">The payment mode.</param>
 /// <param name="Lines">The postings.</param>
+/// <param name="Settlements">The bills the voucher settled, and by how much.</param>
+/// <param name="Cheques">The cheques the voucher recorded changing hands.</param>
 public sealed record VoucherDetailResponse(
     Guid VoucherId,
     string Number,
@@ -59,17 +61,69 @@ public sealed record VoucherDetailResponse(
     string? ReferenceNumber,
     string? Narration,
     string? PaymentMode,
-    IReadOnlyList<VoucherLineResponse> Lines);
+    IReadOnlyList<VoucherLineResponse> Lines,
+    IReadOnlyList<VoucherSettlementResponse>? Settlements = null,
+    IReadOnlyList<VoucherChequeResponse>? Cheques = null);
+
+/// <summary>A bill a voucher settled, so the voucher can be reopened with it allocated.</summary>
+/// <param name="BillId">The bill.</param>
+/// <param name="LedgerId">The party the bill is against.</param>
+/// <param name="BillNumber">The bill's number.</param>
+/// <param name="BillDate">The bill's date.</param>
+/// <param name="DueDate">When the bill falls due.</param>
+/// <param name="BillAmount">The bill's original amount.</param>
+/// <param name="Outstanding">What is still owed on it, after this voucher.</param>
+/// <param name="Amount">What this voucher settled of it.</param>
+public sealed record VoucherSettlementResponse(
+    Guid BillId,
+    Guid LedgerId,
+    string BillNumber,
+    DateOnly BillDate,
+    DateOnly DueDate,
+    decimal BillAmount,
+    decimal Outstanding,
+    decimal Amount);
+
+/// <summary>A cheque a voucher recorded, so the voucher can be reopened with it.</summary>
+/// <param name="PartyLedgerId">The party it came from or went to.</param>
+/// <param name="ChequeNumber">The cheque number.</param>
+/// <param name="InstrumentDate">The date on the cheque.</param>
+/// <param name="Amount">The cheque's amount.</param>
+/// <param name="BankLedgerId">The firm's bank it is paid into or drawn on.</param>
+/// <param name="DrawnOnBank">The bank it is drawn on, for one received.</param>
+/// <param name="AccountNumber">The account it is drawn on.</param>
+/// <param name="InFavourOf">Whom it is made out to, for one issued.</param>
+public sealed record VoucherChequeResponse(
+    Guid PartyLedgerId,
+    string ChequeNumber,
+    DateOnly InstrumentDate,
+    decimal Amount,
+    Guid? BankLedgerId,
+    string? DrawnOnBank,
+    string? AccountNumber,
+    string? InFavourOf);
 
 /// <summary>Handles <see cref="GetVoucherByIdQuery"/>.</summary>
 public sealed class GetVoucherByIdQueryHandler
     : IQueryHandler<GetVoucherByIdQuery, VoucherDetailResponse>
 {
     private readonly IVoucherRepository _vouchers;
+    private readonly IBillRepository _bills;
+    private readonly IChequeRepository _cheques;
 
     /// <summary>Initialises a new instance of the <see cref="GetVoucherByIdQueryHandler"/> class.</summary>
     /// <param name="vouchers">The voucher repository.</param>
-    public GetVoucherByIdQueryHandler(IVoucherRepository vouchers) => _vouchers = vouchers;
+    /// <param name="bills">The bills a voucher may have settled.</param>
+    /// <param name="cheques">The cheques a voucher may have recorded.</param>
+    public GetVoucherByIdQueryHandler(
+        IVoucherRepository vouchers,
+        IBillRepository bills,
+        IChequeRepository cheques)
+    {
+        _vouchers = vouchers;
+        _bills = bills;
+        _cheques = cheques;
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -93,7 +147,47 @@ public sealed class GetVoucherByIdQueryHandler
                 "Voucher.NotFound", "No such voucher."));
         }
 
-        return Result.Success(voucher.ToDetailResponse());
+        IReadOnlyList<Bill> settled = await _bills.FindAllocatedByAsync(voucher.Id, cancellationToken);
+        IReadOnlyList<Cheque> cheques = await _cheques.FindRecordedByAsync(voucher.Id, cancellationToken);
+
+        List<VoucherSettlementResponse> settlements = [];
+
+        foreach (Bill bill in settled)
+        {
+            decimal amount = bill.Allocations
+                .Where(allocation => allocation.VoucherId == voucher.Id)
+                .Sum(allocation => allocation.Amount.Amount);
+
+            if (amount > 0m)
+            {
+                settlements.Add(new VoucherSettlementResponse(
+                    bill.Id.Value,
+                    bill.LedgerId.Value,
+                    bill.BillNumber,
+                    bill.BillDate,
+                    bill.DueDate,
+                    bill.OriginalAmount.Amount,
+                    bill.OutstandingAmount.Amount,
+                    amount));
+            }
+        }
+
+        return Result.Success(voucher.ToDetailResponse() with
+        {
+            Settlements = settlements,
+            Cheques =
+            [
+                .. cheques.Select(cheque => new VoucherChequeResponse(
+                    cheque.PartyLedgerId.Value,
+                    cheque.ChequeNumber,
+                    cheque.InstrumentDate,
+                    cheque.Amount.Amount,
+                    cheque.BankLedgerId?.Value,
+                    cheque.DrawnOnBank,
+                    cheque.AccountNumber,
+                    cheque.InFavourOf)),
+            ],
+        });
     }
 }
 

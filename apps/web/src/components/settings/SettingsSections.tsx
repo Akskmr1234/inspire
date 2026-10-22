@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
@@ -32,40 +32,30 @@ import {
   type WarehouseSummary,
 } from '@/lib/inventory';
 import {
-  chargeAdds,
-  chargeLedgers,
+  AccountNature,
   LedgerKind,
   listLedgers,
   type LedgerSummary,
 } from '@/lib/ledgers';
+import {
+  chargeSetupKey,
+  mapCharge,
+  setupName,
+  useChargeSetup,
+  withdrawCharge,
+  type ChargeDocument,
+  type ChargeSetup,
+} from '@/lib/charges';
 import { useMoney } from '@/lib/money';
 import { PAYMENT_MODES } from '@/lib/paymentModes';
 import { populateSampleTransactions } from '@/lib/sampleData';
 import { statesFor, TaxRegime } from '@/lib/states';
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { setDefaultAppTheme, useSession } from '@/stores/session';
-import {
-  DECIMAL_CHOICES,
-  ratesFor,
-  useSettings,
-  type DefaultAdditionalLedgerConfig,
-} from '@/stores/settings';
+import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
 
 /** The figure the decimal places are demonstrated on. Big enough to show a grouping separator. */
 const SAMPLE = 1234.5678;
-
-/**
- * The documents a firm can give standing additional ledgers to: the six that carry
- * charges. Keyed as the document screens look them up.
- */
-const CHARGEABLE = [
-  'Sales',
-  'SalesReturn',
-  'SalesOrder',
-  'Purchase',
-  'PurchaseReturn',
-  'PurchaseOrder',
-] as const;
 
 /**
  * A card on the settings screen: a heading and its controls.
@@ -729,14 +719,31 @@ export function AccountsSettings(): React.JSX.Element {
 
 // ------------------------------------------------------------------------- additional ledgers
 
+/** The setups additional ledgers are kept in; a return shares its sale's or purchase's. */
+const CHARGE_TABS: readonly ChargeDocument[] = [
+  'sales',
+  'salesOrder',
+  'purchase',
+  'purchaseOrder',
+];
+
 /**
- * The charges each kind of document starts with: freight, packing, a standing
- * discount, set once and applied to every new document of that kind.
+ * The additional ledgers each kind of transaction carries: freight, packing, a standing
+ * discount. Set up here once, with which way each moves the total and what it starts
+ * at; every new document of that kind then shows them, waiting for an amount.
  */
 export function AdditionalLedgerSettings(): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
-  const [kind, setKind] = useState<string>('Sales');
+  const can = useSession((state) => state.can);
+  const queryClient = useQueryClient();
+  const [document, setDocument] = useState<ChargeDocument>('sales');
+  const [ledgerId, setLedgerId] = useState('');
+  const [adds, setAdds] = useState(true);
+
+  const canEdit = can('accounting:additional-ledger:create');
+  const setup = useChargeSetup(document);
+  const type = setupName(document);
 
   const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
     queryKey: ['ledgers'],
@@ -744,143 +751,204 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
     staleTime: 5 * 60 * 1000,
   });
 
-  const available = chargeLedgers(ledgers.data ?? []);
+  // Charge ledgers, and income and expense ledgers, not already on this setup: a
+  // party, cash, bank or tax account has its own place on a document already.
+  const offered = useMemo(() => {
+    const already = new Set((setup ?? []).map((charge) => charge.ledgerId));
+
+    return (ledgers.data ?? [])
+      .filter(
+        (ledger) =>
+          (ledger.kind === LedgerKind.additionalCharge ||
+            (ledger.kind === LedgerKind.general &&
+              (ledger.nature === AccountNature.income ||
+                ledger.nature === AccountNature.expense))) &&
+          !already.has(ledger.ledgerId),
+      )
+      .map((ledger) => ({
+        value: ledger.ledgerId,
+        label: `${ledger.code} — ${ledger.name}`,
+        detail: ledger.groupName,
+      }));
+  }, [ledgers.data, setup]);
+
   const all = settings.defaultAdditionalLedgers ?? [];
-  const rows = all.filter((row) => row.transactionType === kind);
+  const defaultOf = (id: string): string =>
+    all.find((row) => row.transactionType === type && row.ledgerId === id)
+      ?.defaultAmount ?? '';
 
-  const put = (next: readonly DefaultAdditionalLedgerConfig[]): void =>
-    settings.update({ defaultAdditionalLedgers: next });
+  const setDefault = (charge: ChargeSetup, amount: string): void => {
+    const exists = all.some(
+      (row) => row.transactionType === type && row.ledgerId === charge.ledgerId,
+    );
 
-  const amend = (id: string, patch: Partial<DefaultAdditionalLedgerConfig>): void =>
-    put(all.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    settings.update({
+      defaultAdditionalLedgers: exists
+        ? all.map((row) =>
+            row.transactionType === type && row.ledgerId === charge.ledgerId
+              ? { ...row, defaultAmount: amount, isDefaultActive: true }
+              : row,
+          )
+        : [
+            ...all,
+            {
+              id: crypto.randomUUID(),
+              transactionType: type,
+              ledgerId: charge.ledgerId,
+              isAddition: charge.isAddition,
+              defaultAmount: amount,
+              isDefaultActive: true,
+            },
+          ],
+    });
+  };
+
+  const refresh = (): Promise<void> =>
+    queryClient.invalidateQueries({ queryKey: chargeSetupKey(document) });
+
+  const add = useMutation<ChargeSetup, ApiError>({
+    mutationFn: () => mapCharge(document, ledgerId, adds),
+    onSuccess: async () => {
+      setLedgerId('');
+      setAdds(true);
+      await refresh();
+    },
+  });
+
+  const remove = useMutation<void, ApiError, string>({
+    mutationFn: (id) => withdrawCharge(document, id),
+    onSuccess: async (_, id) => {
+      settings.update({
+        defaultAdditionalLedgers: all.filter(
+          (row) => !(row.transactionType === type && row.ledgerId === id),
+        ),
+      });
+      await refresh();
+    },
+  });
+
+  const failure = add.error ?? remove.error;
 
   return (
     <Cards>
-      <SettingsCard
-        title={t('settings.chargesTitle')}
-        hint={t('settings.chargesHint')}
-        wide
-      >
+      <SettingsCard title={t('settings.chargesTitle')} wide>
         <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-2 p-1">
-          {CHARGEABLE.map((type) => {
-            const count = all.filter((row) => row.transactionType === type).length;
-
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setKind(type)}
-                aria-pressed={kind === type}
-                className={clsx(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition',
-                  kind === type
-                    ? 'bg-surface text-ink shadow-sm ring-1 ring-line'
-                    : 'text-ink-muted hover:bg-surface/50 hover:text-ink',
-                )}
-              >
-                {t(`prefs.documents.${type}`)}
-                {count > 0 && (
-                  <span className="rounded-full bg-brand-500/15 px-1.5 text-[10px] font-semibold text-brand-700 dark:text-brand-300">
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {CHARGE_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setDocument(tab)}
+              aria-pressed={document === tab}
+              className={clsx(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition',
+                document === tab
+                  ? 'bg-surface text-ink shadow-sm ring-1 ring-line'
+                  : 'text-ink-muted hover:bg-surface/50 hover:text-ink',
+              )}
+            >
+              {t(`settings.chargeTabs.${tab}`)}
+            </button>
+          ))}
         </div>
 
-        {available.length === 0 ? (
-          <p className="text-xs text-ink-muted">{t('documents.noChargeAccounts')}</p>
+        {failure && <p className="alert-error">{failure.detail || failure.code}</p>}
+
+        {setup === undefined ? (
+          <p className="text-xs text-ink-muted">{t('common.loading')}</p>
+        ) : setup.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-ink-muted">
+            {t('documents.noChargesSetUp')}
+          </p>
         ) : (
-          <div className="space-y-2">
-            {rows.length === 0 && (
-              <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-ink-muted">
-                {t('prefs.noCharges', { kind: t(`prefs.documents.${kind}`) })}
-              </p>
-            )}
-
-            {rows.map((row) => {
-              const ledger = available.find(
-                (candidate) => candidate.ledgerId === row.ledgerId,
-              );
-
-              return (
-                <div key={row.id} className="flex flex-wrap items-center gap-2">
-                  <div className="min-w-56 flex-1">
-                    <SearchSelect
-                      value={row.ledgerId}
-                      onChange={(ledgerId) => amend(row.id, { ledgerId })}
-                      size="sm"
-                      label={t('documents.chargeAccount')}
-                      placeholder={t('documents.chooseCharge')}
-                      options={available.map((candidate) => ({
-                        value: candidate.ledgerId,
-                        label: `${candidate.code} — ${candidate.name}`,
-                        detail: chargeAdds(candidate)
-                          ? t('documents.chargeAdds')
-                          : t('documents.chargeDeducts'),
-                      }))}
-                    />
-                  </div>
-                  {ledger && (
-                    <span className="text-xs text-ink-muted">
-                      {chargeAdds(ledger)
+          <div className="table-wrap">
+            <table className="table text-sm">
+              <thead>
+                <tr>
+                  <th className="text-start">{t('documents.chargeAccount')}</th>
+                  <th className="text-start">{t('settings.chargeEffect')}</th>
+                  <th className="text-end">{t('settings.chargeDefault')}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {setup.map((charge) => (
+                  <tr key={charge.ledgerId}>
+                    <td className="py-1.5">
+                      {charge.code} — {charge.name}
+                    </td>
+                    <td
+                      className={clsx(
+                        'py-1.5 text-xs font-medium',
+                        charge.isAddition
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400',
+                      )}
+                    >
+                      {charge.isAddition
                         ? t('documents.chargeAdds')
                         : t('documents.chargeDeducts')}
-                    </span>
-                  )}
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
-                    aria-label={t('settings.chargeAmount')}
-                    placeholder={t('settings.chargeAmountBlank')}
-                    value={row.defaultAmount}
-                    onChange={(event) =>
-                      amend(row.id, { defaultAmount: event.target.value })
-                    }
-                    className="field-input-sm w-28 text-end font-mono tabular-nums"
-                  />
-                  <label className="flex items-center gap-1 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={row.isDefaultActive}
-                      onChange={(event) =>
-                        amend(row.id, { isDefaultActive: event.target.checked })
-                      }
-                    />
-                    {t('prefs.chargeActive')}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      put(all.filter((candidate) => candidate.id !== row.id))
-                    }
-                    aria-label={t('documents.removeCharge')}
-                    className="rounded p-1 text-ink-muted transition hover:text-red-600"
-                  >
-                    <IconClose className="size-4" />
-                  </button>
-                </div>
-              );
-            })}
+                    </td>
+                    <td className="py-1.5 text-end">
+                      {!charge.isComputed && (
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          aria-label={t('settings.chargeDefault')}
+                          placeholder="0.00"
+                          value={defaultOf(charge.ledgerId)}
+                          onChange={(event) => setDefault(charge, event.target.value)}
+                          className="field-input-sm w-28 text-end font-mono tabular-nums"
+                        />
+                      )}
+                    </td>
+                    <td className="py-1.5 text-end">
+                      {canEdit && !charge.isComputed && (
+                        <button
+                          type="button"
+                          disabled={remove.isPending}
+                          onClick={() => remove.mutate(charge.ledgerId)}
+                          aria-label={t('documents.removeCharge')}
+                          title={t('documents.removeCharge')}
+                          className="rounded p-1 text-ink-muted transition hover:text-red-600"
+                        >
+                          <IconClose className="size-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
+        {canEdit && (
+          <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
+            <div className="min-w-56 flex-1">
+              <SearchSelect
+                value={ledgerId}
+                onChange={setLedgerId}
+                options={offered}
+                size="sm"
+                label={t('documents.chargeAccount')}
+                placeholder={t('documents.chooseCharge')}
+              />
+            </div>
+            <select
+              value={adds ? 'add' : 'deduct'}
+              onChange={(event) => setAdds(event.target.value === 'add')}
+              aria-label={t('settings.chargeEffect')}
+              className="field-input-sm w-auto"
+            >
+              <option value="add">{t('documents.chargeAdds')}</option>
+              <option value="deduct">{t('documents.chargeDeducts')}</option>
+            </select>
             <button
               type="button"
-              onClick={() =>
-                put([
-                  ...all,
-                  {
-                    id: crypto.randomUUID(),
-                    transactionType: kind,
-                    ledgerId: '',
-                    isAddition: true,
-                    defaultAmount: '',
-                    isDefaultActive: true,
-                  },
-                ])
-              }
+              disabled={ledgerId === '' || add.isPending}
+              onClick={() => add.mutate()}
               className="btn-secondary btn-sm flex items-center gap-1"
             >
               <IconPlus className="size-3.5" />

@@ -94,6 +94,37 @@ public sealed class TaxRateEndpointTests
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task A_percentage_another_rate_already_carries_is_refused()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+
+        // The firm starts with 5%; a second 5% is refused by name.
+        HttpResponseMessage twin = await client.PostAsJsonAsync(
+            Rates, new { Name = $"VAT again {tag}", Percentage = 5m });
+        twin.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await twin.Content.ReadAsStringAsync()).ShouldContain("TaxSlab.DuplicatePercentage");
+
+        // A rate of its own may be corrected, keeping its percentage, but not moved onto
+        // another's.
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            Rates, new { Name = $"Reduced {tag}", Percentage = 2.25m });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        Guid id = await created.Content.ReadFromJsonAsync<Guid>();
+
+        (await client.PutAsJsonAsync($"{Rates}/{id}", new { Name = $"Reduced rate {tag}", Percentage = 2.25m }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.PutAsJsonAsync($"{Rates}/{id}", new { Name = $"Reduced rate {tag}", Percentage = 5m }))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        // Withdrawn, it still holds the percentage: it is restored, not made again.
+        (await client.PostAsJsonAsync($"{Rates}/{id}/active", new { IsActive = false }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.PostAsJsonAsync(Rates, new { Name = $"Reduced again {tag}", Percentage = 2.25m }))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
     private static async Task<List<TaxSlabSummary>> ListAsync(HttpClient client) =>
         (await client.GetFromJsonAsync<List<TaxSlabSummary>>(Rates))!;
 }

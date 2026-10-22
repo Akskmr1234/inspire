@@ -438,19 +438,30 @@ public sealed class Territory : AggregateRoot<TerritoryId>, IFirmScoped, IAudita
 /// <summary>A party's photograph, kept apart from its ledger so a list of parties stays light.</summary>
 /// <remarks>
 /// Stored as a data URL of a picture the screen has already scaled down, which is all a
-/// customer card or a printed statement needs.
+/// customer card or a printed statement needs. A party may have up to
+/// <see cref="MaximumSlots"/>, each in a numbered slot; the first is the one a card shows.
 /// </remarks>
 public sealed class PartyPhoto : AggregateRoot<PartyPhotoId>, IFirmScoped
 {
     /// <summary>The largest picture accepted, as the length of its data URL.</summary>
     public const int MaximumLength = 700_000;
 
-    private PartyPhoto(PartyPhotoId id, TenantId tenantId, FirmId firmId, LedgerId ledgerId, string content)
+    /// <summary>How many photographs a party may have.</summary>
+    public const int MaximumSlots = 3;
+
+    private PartyPhoto(
+        PartyPhotoId id,
+        TenantId tenantId,
+        FirmId firmId,
+        LedgerId ledgerId,
+        int slot,
+        string content)
         : base(id)
     {
         TenantId = tenantId;
         FirmId = firmId;
         LedgerId = ledgerId;
+        Slot = slot;
         Content = content;
     }
 
@@ -465,6 +476,9 @@ public sealed class PartyPhoto : AggregateRoot<PartyPhotoId>, IFirmScoped
     /// <summary>Gets the ledger of the party pictured.</summary>
     public LedgerId LedgerId { get; private set; }
 
+    /// <summary>Gets which of the party's photographs this is, from one.</summary>
+    public int Slot { get; private set; } = 1;
+
     /// <summary>Gets the picture, as a data URL.</summary>
     public string Content { get; private set; }
 
@@ -473,10 +487,22 @@ public sealed class PartyPhoto : AggregateRoot<PartyPhotoId>, IFirmScoped
     /// <param name="firmId">The owning firm.</param>
     /// <param name="ledgerId">The party's ledger.</param>
     /// <param name="content">The picture, as a data URL.</param>
+    /// <param name="slot">Which of the party's photographs it is, from one.</param>
     /// <returns>The photograph, or the reason it was refused.</returns>
-    public static Result<PartyPhoto> Create(TenantId tenantId, FirmId firmId, LedgerId ledgerId, string content)
+    public static Result<PartyPhoto> Create(
+        TenantId tenantId,
+        FirmId firmId,
+        LedgerId ledgerId,
+        string content,
+        int slot = 1)
     {
-        PartyPhoto photo = new(PartyPhotoId.NewId(), tenantId, firmId, ledgerId, string.Empty);
+        if (slot is < 1 or > MaximumSlots)
+        {
+            return Result.Failure<PartyPhoto>(Error.Validation(
+                "PartyPhoto.SlotInvalid", $"A party has at most {MaximumSlots} photographs."));
+        }
+
+        PartyPhoto photo = new(PartyPhotoId.NewId(), tenantId, firmId, ledgerId, slot, string.Empty);
         Result replaced = photo.Replace(content);
 
         return replaced.IsFailure ? Result.Failure<PartyPhoto>(replaced.Error) : Result.Success(photo);

@@ -541,12 +541,13 @@ function EntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  const chargeSetup = useChargeSetup(isReturn ? 'purchaseReturn' : 'purchase');
   useDefaultCharges(
     isReturn ? 'purchaseReturn' : 'purchase',
-    ledgers.data ?? [],
+    editing ? [] : (ledgers.data ?? []),
     setCharges,
+    chargeSetup,
   );
-  const chargeSetup = useChargeSetup(isReturn ? 'purchaseReturn' : 'purchase');
 
   // What is on the shelf, for the product picker. One call for the whole master
   // rather than one per line, and stale for a minute: a purchase being keyed in is

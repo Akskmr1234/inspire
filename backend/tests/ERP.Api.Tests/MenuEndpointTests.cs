@@ -32,7 +32,7 @@ public sealed class MenuEndpointTests
         // Seeding created a tree, so an empty menu here means one of the steps
         // between the catalogue and the response quietly produced nothing.
         menu.Items.ShouldNotBeEmpty();
-        menu.Items.ShouldContain(item => item.Code == "accounts-reports");
+        menu.Items.ShouldContain(item => item.Code == "reports");
     }
 
     [Fact]
@@ -42,10 +42,11 @@ public sealed class MenuEndpointTests
 
         MenuResponse menu = (await client.GetFromJsonAsync<MenuResponse>("/api/v1/menu"))!;
 
-        MenuEntry reports = menu.Items.Single(item => item.Code == "accounts-reports");
+        MenuEntry reports = menu.Items.Single(item => item.Code == "reports");
 
         reports.Route.ShouldBeNull("a heading navigates nowhere itself");
-        reports.Children.ShouldContain(child => child.Route == "/accounting/trial-balance");
+        reports.Children.Single(child => child.Code == "reports.financial")
+            .Children.ShouldContain(child => child.Route == "/accounting/trial-balance");
     }
 
     [Fact]
@@ -57,8 +58,7 @@ public sealed class MenuEndpointTests
 
         MenuResponse menu = (await client.GetFromJsonAsync<MenuResponse>("/api/v1/menu"))!;
 
-        menu.Items.SelectMany(item => item.Children)
-            .ShouldContain(child => child.Route == "/accounting/cheque-register");
+        Flatten(menu.Items).ShouldContain(entry => entry.Route == "/accounting/cheque-register");
     }
 
     [Fact]
@@ -80,4 +80,7 @@ public sealed class MenuEndpointTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
+
+    private static IEnumerable<MenuEntry> Flatten(IEnumerable<MenuEntry> entries) =>
+        entries.SelectMany(entry => Flatten(entry.Children).Prepend(entry));
 }

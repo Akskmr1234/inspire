@@ -411,6 +411,9 @@ function AddProduct({
         doSubmit('save');
       }}
     >
+      {/* Code and type, then the descriptions across the full width - English over
+          the Arabic it translates - then how it is filed beside the unit and tax it
+          is counted and charged in. */}
       <div className="form-grid">
         <TextField
           label={t('masters.code')}
@@ -419,23 +422,6 @@ function AddProduct({
           onChange={setCode}
           error={errors['code']}
           placeholder={t('masters.codeAuto')}
-        />
-
-        <TextField
-          label={t('products.description')}
-          required
-          value={description}
-          onChange={setDescription}
-          error={errors['description']}
-        />
-
-        {/* Filled in from the English description where the firm has turned
-            translation on in Settings, and editable either way. */}
-        <ArabicNameField
-          label={t('products.descriptionArabic')}
-          source={description}
-          value={descriptionArabic}
-          onChange={setDescriptionArabic}
         />
 
         <SelectField
@@ -449,6 +435,27 @@ function AddProduct({
           ]}
         />
 
+        <div className="sm:col-span-2">
+          <TextField
+            label={t('products.description')}
+            required
+            value={description}
+            onChange={setDescription}
+            error={errors['description']}
+          />
+        </div>
+
+        {/* Filled in from the English description where the firm has turned
+            translation on in Settings, and editable either way. */}
+        <div className="empty:hidden sm:col-span-2">
+          <ArabicNameField
+            label={t('products.descriptionArabic')}
+            source={description}
+            value={descriptionArabic}
+            onChange={setDescriptionArabic}
+          />
+        </div>
+
         <MasterPicker
           kind="category"
           label={t('products.category')}
@@ -459,6 +466,15 @@ function AddProduct({
         />
 
         <MasterPicker
+          kind="brand"
+          label={t('products.brand')}
+          clearable
+          placeholder={t('products.noBrand')}
+          value={brandId}
+          onChange={setBrandId}
+        />
+
+        <MasterPicker
           kind="unit"
           label={t('products.stockUnit')}
           required
@@ -466,15 +482,6 @@ function AddProduct({
           onChange={setStockUnitId}
           error={errors['stockUnitId']}
           include={(row) => !(row as UnitSummary).baseUnitId}
-        />
-
-        <MasterPicker
-          kind="brand"
-          label={t('products.brand')}
-          clearable
-          placeholder={t('products.noBrand')}
-          value={brandId}
-          onChange={setBrandId}
         />
 
         <MasterPicker

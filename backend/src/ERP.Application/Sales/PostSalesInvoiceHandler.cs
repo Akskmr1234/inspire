@@ -631,6 +631,7 @@ public sealed class PostSalesInvoiceCommandHandler
         string mode = invoice.PaymentMode switch
         {
             SalesPaymentMode.Online => "Online",
+            SalesPaymentMode.Card => "Card",
             _ when into.Kind == LedgerKind.Bank => "Bank transfer",
             _ => "Cash",
         };

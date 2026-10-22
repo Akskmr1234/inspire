@@ -2,18 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
-import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
+import { Link } from 'react-router-dom';
+import { type SelectOption } from '@/components/SearchSelect';
+import { chargeAdds, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
 import {
-  chargesFor,
-  enterableCharges,
+  chargeRows,
+  setupName,
   type ChargeDocument,
   type ChargeSetup,
 } from '@/lib/charges';
 import { useSettings } from '@/stores/settings';
+import { useSession } from '@/stores/session';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -327,71 +329,53 @@ export function emptyCharge(): DraftCharge {
 }
 
 /**
- * Puts the firm's standing charges onto a document as it opens.
+ * Puts the default amounts Settings gives a document's additional ledgers onto it as it
+ * opens.
  *
- * Applied once, when the chart of accounts arrives rather than when the screen
- * mounts: the heads are picked from the chart, so seeding before it has loaded would
- * drop every row that refers to it. Once only, because a second run would put the
- * freight row back after somebody deliberately took it off.
- *
- * A head that has since left the chart is dropped rather than seeded empty — see
- * {@link chargesFor}.
+ * Applied once, when both the chart and the document's charge setup have arrived: a
+ * default for a ledger no longer set up for the document would be refused by the
+ * server, so it is left out rather than sent. A return starts with none - its sale's
+ * or purchase's freight is not charged again when the goods come back.
  */
 export function useDefaultCharges(
   document: ChargeDocument,
   ledgers: readonly LedgerSummary[],
   apply: (charges: readonly DraftCharge[]) => void,
+  setup?: readonly ChargeSetup[],
 ): void {
-  const defaults = useSettings((state) => state.defaultCharges);
-  const additionalLedgerDefaults = useSettings((state) => state.defaultAdditionalLedgers);
+  const defaults = useSettings((state) => state.defaultAdditionalLedgers);
   const seeded = useRef(false);
 
   useEffect(() => {
-    if (seeded.current || ledgers.length === 0) {
+    if (seeded.current || ledgers.length === 0 || setup === undefined) {
       return;
     }
 
     seeded.current = true;
 
-    const typeMapping: Record<ChargeDocument, string> = {
-      sales: 'Sales',
-      salesReturn: 'SalesReturn',
-      salesOrder: 'SalesOrder',
-      purchase: 'Purchase',
-      purchaseReturn: 'PurchaseReturn',
-      purchaseOrder: 'PurchaseOrder',
-    };
-    const targetType = typeMapping[document];
-    const usable = new Set(chargeLedgers(ledgers).map((ledger) => ledger.ledgerId));
-
-    const fromAdditional = (additionalLedgerDefaults ?? [])
-      .filter(
-        (l) =>
-          l.transactionType === targetType && l.isDefaultActive && usable.has(l.ledgerId),
-      )
-      .map((l) => ({
-        key: crypto.randomUUID(),
-        ledgerId: l.ledgerId,
-        amount: l.defaultAmount || '',
-      }));
-
-    if (fromAdditional.length > 0) {
-      apply(fromAdditional);
+    if (document === 'salesReturn' || document === 'purchaseReturn') {
       return;
     }
 
-    const rows = chargesFor(document, defaults, ledgers);
+    const configured = new Set(setup.map((charge) => charge.ledgerId));
+    const rows = (defaults ?? [])
+      .filter(
+        (row) =>
+          row.transactionType === setupName(document) &&
+          row.isDefaultActive &&
+          configured.has(row.ledgerId) &&
+          Number(row.defaultAmount) > 0,
+      )
+      .map((row) => ({
+        key: crypto.randomUUID(),
+        ledgerId: row.ledgerId,
+        amount: row.defaultAmount,
+      }));
 
     if (rows.length > 0) {
-      apply(
-        rows.map((row) => ({
-          key: crypto.randomUUID(),
-          ledgerId: row.ledgerId,
-          amount: row.amount,
-        })),
-      );
+      apply(rows);
     }
-  }, [document, defaults, additionalLedgerDefaults, ledgers, apply]);
+  }, [document, defaults, ledgers, setup, apply]);
 }
 
 /**
@@ -429,13 +413,12 @@ export function chargeTotal(
 }
 
 /**
- * The charges a document carries beside its goods.
+ * The additional ledgers a document carries beside its goods.
  *
- * Freight, packing, delivery, a discount off the whole document — every one of them
- * already supported by the API and by none of the screens, so a purchase with
- * carriage on it could not be entered as the supplier billed it. The accounts come
- * from the firm's own chart: whichever it has classified as additional charges, plus
- * the codes the standard chart seeds.
+ * One row for every ledger Settings set up for this kind of document, each waiting for
+ * its amount: nobody picks freight from a list on every purchase, and a ledger that
+ * is not set up cannot be chosen here and refused by the server afterwards. A blank
+ * amount is simply not charged.
  */
 export function ChargesPanel({
   charges,
@@ -449,42 +432,36 @@ export function ChargesPanel({
   readonly ledgers: readonly LedgerSummary[];
   readonly onChange: (charges: readonly DraftCharge[]) => void;
   readonly currency?: string;
-  /** The firm's charge setup for the document; offered and signed from it once it arrives. */
+  /** The firm's charge setup for the document. */
   readonly setup?: readonly ChargeSetup[] | undefined;
   readonly nonTax?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const can = useSession((state) => state.can);
 
-  const available = useMemo(
-    () =>
-      setup
-        ? enterableCharges(setup, nonTax).map((charge) => ({
-            ledgerId: charge.ledgerId,
-            label: `${charge.code} — ${charge.name}`,
-            adds: charge.isAddition,
-          }))
-        : chargeLedgers(ledgers).map((ledger) => ({
-            ledgerId: ledger.ledgerId,
-            label: `${ledger.code} — ${ledger.name}`,
-            adds: chargeAdds(ledger),
-          })),
-    [setup, nonTax, ledgers],
+  const rows = useMemo(
+    () => chargeRows(setup, nonTax, charges, ledgers),
+    [setup, nonTax, charges, ledgers],
   );
 
-  const options: readonly SelectOption[] = available.map((charge) => ({
-    value: charge.ledgerId,
-    label: charge.label,
-    detail: charge.adds ? t('documents.chargeAdds') : t('documents.chargeDeducts'),
-  }));
+  const amountOf = (ledgerId: string): string =>
+    charges.find((charge) => charge.ledgerId === ledgerId)?.amount ?? '';
+
+  const setAmount = (ledgerId: string, amount: string): void =>
+    onChange(
+      charges.some((charge) => charge.ledgerId === ledgerId)
+        ? charges.map((charge) =>
+            charge.ledgerId === ledgerId ? { ...charge, amount } : charge,
+          )
+        : [...charges, { key: crypto.randomUUID(), ledgerId, amount }],
+    );
 
   const total = chargeTotal(charges, ledgers, setup);
 
   return (
     <section className="panel space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-ink">{t('documents.charges')}</h3>
-        </div>
+        <h3 className="text-sm font-semibold text-ink">{t('documents.charges')}</h3>
 
         <span className="font-mono text-sm tabular-nums text-ink">
           {total >= 0 ? '+' : '−'}
@@ -493,65 +470,46 @@ export function ChargesPanel({
         </span>
       </header>
 
-      {available.length === 0 ? (
-        <p className="text-xs text-ink-muted">{t('documents.noChargeAccounts')}</p>
+      {rows.length === 0 ? (
+        <p className="text-xs text-ink-muted">
+          {setup === undefined ? t('common.loading') : t('documents.noChargesSetUp')}{' '}
+          {setup !== undefined && can('platform:setting:view') && (
+            <Link to="/settings?tab=charges" className="font-medium underline">
+              {t('documents.setUpCharges')}
+            </Link>
+          )}
+        </p>
       ) : (
-        <>
-          {charges.map((charge, index) => (
-            <div key={charge.key} className="flex flex-wrap items-end gap-2">
-              <div className="min-w-48 flex-1">
-                <SearchSelect
-                  value={charge.ledgerId}
-                  onChange={(ledgerId) =>
-                    onChange(
-                      charges.map((candidate, at) =>
-                        at === index ? { ...candidate, ledgerId } : candidate,
-                      ),
-                    )
-                  }
-                  options={options}
-                  size="sm"
-                  label={t('documents.chargeAccount')}
-                  placeholder={t('documents.chooseCharge')}
-                />
-              </div>
-
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((row) => (
+            <label key={row.ledgerId} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                {row.label}
+                <span
+                  className={clsx(
+                    'ms-1.5 text-[11px] font-medium',
+                    row.adds
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-red-600 dark:text-red-400',
+                  )}
+                >
+                  {row.adds ? t('documents.chargeAdds') : t('documents.chargeDeducts')}
+                </span>
+              </span>
               <input
                 type="number"
                 step="0.01"
+                min="0"
                 inputMode="decimal"
-                aria-label={t('documents.chargeAmount')}
-                value={charge.amount}
-                onChange={(event) =>
-                  onChange(
-                    charges.map((candidate, at) =>
-                      at === index
-                        ? { ...candidate, amount: event.target.value }
-                        : candidate,
-                    ),
-                  )
-                }
-                className="field-input-sm w-32 text-end font-mono tabular-nums"
+                placeholder="0.00"
+                aria-label={row.label}
+                value={amountOf(row.ledgerId)}
+                onChange={(event) => setAmount(row.ledgerId, event.target.value)}
+                className="field-input-sm w-28 shrink-0 text-end font-mono tabular-nums"
               />
-
-              <button
-                type="button"
-                onClick={() => onChange(charges.filter((_, at) => at !== index))}
-                className="row-action row-action-danger"
-              >
-                {t('documents.removeCharge')}
-              </button>
-            </div>
+            </label>
           ))}
-
-          <button
-            type="button"
-            onClick={() => onChange([...charges, emptyCharge()])}
-            className="btn-secondary btn-sm"
-          >
-            {t('documents.addCharge')}
-          </button>
-        </>
+        </div>
       )}
     </section>
   );

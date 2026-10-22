@@ -15,6 +15,10 @@ namespace ERP.Application.Accounting.Reports;
 /// <param name="From">The first date included, inclusive.</param>
 /// <param name="To">The last date included, inclusive.</param>
 /// <param name="Type">Restricts the register to one kind of voucher. Omit for all.</param>
+/// <param name="Types">
+/// Restricts the register to several kinds - cash and bank receipts together, as the
+/// receipts list shows them. Ignored when <paramref name="Type"/> is given.
+/// </param>
 /// <param name="Status">
 /// Restricts to one lifecycle status. Omit for all - the register's reason to exist
 /// beside the day book is that it can show drafts and cancelled vouchers, which the
@@ -32,7 +36,8 @@ public sealed record GetVoucherReportQuery(
     DateOnly From,
     DateOnly To,
     VoucherType? Type = null,
-    VoucherStatus? Status = null) : IQuery<VoucherReportResponse>;
+    VoucherStatus? Status = null,
+    IReadOnlyList<VoucherType>? Types = null) : IQuery<VoucherReportResponse>;
 
 /// <summary>One voucher on the register.</summary>
 /// <param name="VoucherId">The voucher, so the client can drill through to it.</param>
@@ -49,6 +54,8 @@ public sealed record GetVoucherReportQuery(
 /// credits.
 /// </param>
 /// <param name="BaseAmount">The same value converted to the firm's base currency.</param>
+/// <param name="DebitLedgers">The ledgers debited, by name, in line order.</param>
+/// <param name="CreditLedgers">The ledgers credited, by name, in line order.</param>
 public sealed record VoucherReportLine(
     Guid VoucherId,
     DateOnly Date,
@@ -60,7 +67,9 @@ public sealed record VoucherReportLine(
     string Currency,
     decimal ExchangeRate,
     decimal DocumentAmount,
-    decimal BaseAmount);
+    decimal BaseAmount,
+    string? DebitLedgers = null,
+    string? CreditLedgers = null);
 
 /// <summary>The voucher report.</summary>
 /// <param name="From">The first date included.</param>
@@ -120,6 +129,10 @@ public sealed class GetVoucherReportQueryValidator : AbstractValidator<GetVouche
             .When(q => q.Type.HasValue)
             .WithMessage("That is not a recognised voucher type.");
 
+        RuleForEach(q => q.Types)
+            .IsInEnum()
+            .WithMessage("That is not a recognised voucher type.");
+
         RuleFor(q => q.Status!.Value)
             .IsInEnum()
             .When(q => q.Status.HasValue)
@@ -140,7 +153,7 @@ public interface IVoucherReportReader
     /// <param name="firmId">The firm, so another firm's vouchers cannot be read.</param>
     /// <param name="from">The first date of the period.</param>
     /// <param name="to">The last date of the period.</param>
-    /// <param name="type">The kind to restrict to, or null for all.</param>
+    /// <param name="types">The kinds to restrict to, or null or empty for all.</param>
     /// <param name="status">The status to restrict to, or null for all.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The vouchers with their values, in no particular order.</returns>
@@ -148,7 +161,7 @@ public interface IVoucherReportReader
         FirmId firmId,
         DateOnly from,
         DateOnly to,
-        VoucherType? type,
+        IReadOnlyCollection<VoucherType>? types,
         VoucherStatus? status,
         CancellationToken cancellationToken = default);
 }
@@ -190,8 +203,10 @@ public sealed class GetVoucherReportQueryHandler
             return Result.Failure<VoucherReportResponse>(firm.Error);
         }
 
+        IReadOnlyCollection<VoucherType>? types = request.Type is { } type ? [type] : request.Types;
+
         IReadOnlyList<VoucherReportLine> rows = await _reader.ReadAsync(
-            firm.Value.Id, request.From, request.To, request.Type, request.Status,
+            firm.Value.Id, request.From, request.To, types, request.Status,
             cancellationToken);
 
         List<VoucherReportLine> vouchers = [];

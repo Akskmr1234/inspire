@@ -216,11 +216,23 @@ public interface IPlaceRepository
     /// <param name="territory">The area or route.</param>
     void AddTerritory(Territory territory);
 
-    /// <summary>Finds a party's photograph.</summary>
+    /// <summary>Finds one of a party's photographs.</summary>
     /// <param name="ledgerId">The party's ledger.</param>
+    /// <param name="slot">Which photograph, from one; the first is the one a card shows.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The photograph, or null.</returns>
-    Task<PartyPhoto?> FindPhotoAsync(LedgerId ledgerId, CancellationToken cancellationToken = default);
+    Task<PartyPhoto?> FindPhotoAsync(
+        LedgerId ledgerId,
+        int slot = 1,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Lists a party's photographs.</summary>
+    /// <param name="ledgerId">The party's ledger.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The photographs, in slot order.</returns>
+    Task<IReadOnlyList<PartyPhoto>> ListPhotosAsync(
+        LedgerId ledgerId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Adds a party's photograph.</summary>
     /// <param name="photo">The photograph.</param>

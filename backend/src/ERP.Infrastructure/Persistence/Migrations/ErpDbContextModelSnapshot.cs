@@ -2447,6 +2447,53 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("product_barcodes", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Inventory.ProductPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(700000)
+                        .HasColumnType("character varying(700000)")
+                        .HasColumnName("content");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("Slot")
+                        .HasColumnType("integer")
+                        .HasColumnName("slot");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_product_photos");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_product_photos_tenant");
+
+                    b.HasIndex("ProductId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ix_product_photos_product");
+
+                    b.ToTable("product_photos", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Inventory.SerialNumber", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3702,6 +3749,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ledger_id");
 
+                    b.Property<int>("Slot")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("slot");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -3715,12 +3768,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_party_photos");
 
-                    b.HasIndex("LedgerId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_party_photos_ledger");
-
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_party_photos_tenant");
+
+                    b.HasIndex("LedgerId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ix_party_photos_ledger");
 
                     b.ToTable("party_photos", (string)null);
                 });
@@ -7281,6 +7334,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_product_barcodes_products_product_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Inventory.ProductPhoto", b =>
+                {
+                    b.HasOne("ERP.Domain.Inventory.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_photos_products_product_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Inventory.SerialNumber", b =>

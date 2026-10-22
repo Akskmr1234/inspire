@@ -543,6 +543,10 @@ const BY_NAME: Record<string, (props: IconProps) => React.JSX.Element> = {
 const BY_ROUTE: readonly (readonly [string, (props: IconProps) => React.JSX.Element])[] =
   [
     ['/dashboard', IconGrid],
+    ['ledger-list', IconBook],
+    ['journals', IconBook],
+    ['receipts', IconCash],
+    ['payments', IconBank],
     ['cheque-calendar', IconCalendar],
     ['cheque', IconCheque],
     ['cash-flow', IconFlow],
@@ -583,6 +587,29 @@ export function IconPrinter({ className }: IconProps): React.JSX.Element {
       <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
       <rect x="6" y="14" width="12" height="8" />
     </Svg>
+  );
+}
+
+/** The picture beside each top-level heading, by the heading's catalogue code. */
+const BY_HEADING: Record<string, (props: IconProps) => React.JSX.Element> = {
+  masters: IconLayers,
+  sales: IconCart,
+  purchase: IconInbox,
+  accounts: IconBook,
+  inventory: IconBox,
+  service: IconReceipt,
+  reports: IconChart,
+  settings: IconSettings,
+  cheques: IconCheque,
+};
+
+/** The icon for a heading: its own if it names one, else the catalogue's for its code. */
+export function headingIconFor(
+  icon: string | null,
+  code: string,
+): (props: IconProps) => React.JSX.Element {
+  return (
+    (icon ? BY_NAME[icon.toLowerCase()] : undefined) ?? BY_HEADING[code] ?? IconLayers
   );
 }
 

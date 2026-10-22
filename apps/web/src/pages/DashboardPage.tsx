@@ -133,11 +133,11 @@ export function DashboardPage(): React.JSX.Element {
       {/* Quick Navigation Action Chips */}
       <div className="flex flex-wrap items-center gap-2">
         <Link
-          to="/accounting/vouchers/new"
+          to="/accounting/journals/new"
           className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-line-strong hover:bg-surface-3 hover:text-ink active:scale-95"
         >
           <span className="size-2 rounded-full bg-brand-500" />
-          {t('nav.voucherEntry')}
+          {t('voucherList.newJournal')}
         </Link>
         <Link
           to="/accounting/day-book"

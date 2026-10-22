@@ -15,14 +15,24 @@ public sealed record GetPartyPhotoQuery(Guid LedgerId) : IQuery<PartyPhotoRespon
 /// <param name="Content">The picture as a data URL, or null when there is none.</param>
 public sealed record PartyPhotoResponse(string? Content);
 
-/// <summary>Sets, replaces or removes a customer's or supplier's photograph.</summary>
+/// <summary>Sets, replaces or removes one of a customer's, supplier's or employee's photographs.</summary>
 /// <param name="LedgerId">The party's ledger.</param>
 /// <param name="Content">The picture as a data URL; null removes it.</param>
-public sealed record SetPartyPhotoCommand(Guid LedgerId, string? Content) : ICommand;
+/// <param name="Slot">Which photograph, from one; the first is the one a card shows.</param>
+public sealed record SetPartyPhotoCommand(Guid LedgerId, string? Content, int Slot = 1) : ICommand;
+
+/// <summary>Reads every photograph a party has.</summary>
+/// <param name="LedgerId">The party's ledger.</param>
+public sealed record ListPartyPhotosQuery(Guid LedgerId) : IQuery<PhotoSetResponse>;
+
+/// <summary>A record's photographs, one entry a slot.</summary>
+/// <param name="Photos">The pictures as data URLs, in slot order; null where a slot is empty.</param>
+public sealed record PhotoSetResponse(IReadOnlyList<string?> Photos);
 
 /// <summary>Handles party photographs.</summary>
 public sealed class PartyPhotoHandlers
     : IQueryHandler<GetPartyPhotoQuery, PartyPhotoResponse>,
+      IQueryHandler<ListPartyPhotosQuery, PhotoSetResponse>,
       ICommandHandler<SetPartyPhotoCommand>
 {
     private readonly ILedgerRepository _ledgers;
@@ -61,9 +71,33 @@ public sealed class PartyPhotoHandlers
             return Result.Failure<PartyPhotoResponse>(party.Error);
         }
 
-        PartyPhoto? photo = await _places.FindPhotoAsync(party.Value.Id, cancellationToken);
+        PartyPhoto? photo = await _places.FindPhotoAsync(
+            party.Value.Id, cancellationToken: cancellationToken);
 
         return Result.Success(new PartyPhotoResponse(photo?.Content));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<PhotoSetResponse>> Handle(
+        ListPartyPhotosQuery request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<Ledger> party = await FindPartyAsync(request.LedgerId, cancellationToken);
+
+        if (party.IsFailure)
+        {
+            return Result.Failure<PhotoSetResponse>(party.Error);
+        }
+
+        IReadOnlyList<PartyPhoto> photos = await _places.ListPhotosAsync(party.Value.Id, cancellationToken);
+
+        return Result.Success(new PhotoSetResponse(
+        [
+            .. Enumerable.Range(1, PartyPhoto.MaximumSlots)
+                .Select(slot => photos.FirstOrDefault(photo => photo.Slot == slot)?.Content),
+        ]));
     }
 
     /// <inheritdoc />
@@ -78,7 +112,8 @@ public sealed class PartyPhotoHandlers
             return party;
         }
 
-        PartyPhoto? photo = await _places.FindPhotoAsync(party.Value.Id, cancellationToken);
+        PartyPhoto? photo = await _places.FindPhotoAsync(
+            party.Value.Id, request.Slot, cancellationToken);
 
         if (request.Content is null)
         {
@@ -99,7 +134,7 @@ public sealed class PartyPhotoHandlers
         else
         {
             Result<PartyPhoto> created = PartyPhoto.Create(
-                party.Value.TenantId, party.Value.FirmId, party.Value.Id, request.Content);
+                party.Value.TenantId, party.Value.FirmId, party.Value.Id, request.Content, request.Slot);
 
             if (created.IsFailure)
             {

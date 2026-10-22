@@ -150,6 +150,22 @@ public sealed class SalesCounterEndpointTests
             IsAddition = true,
         });
         party.StatusCode.ShouldBe(HttpStatusCode.BadRequest, await party.Content.ReadAsStringAsync());
+
+        // Taken off the sales setup in Settings, it is no longer offered or accepted.
+        HttpResponseMessage withdrawn = await client.DeleteAsync(
+            $"/api/v1/accounting/charges/{ChargeableDocument.Sales}/{cleaning.LedgerId}");
+        withdrawn.StatusCode.ShouldBe(HttpStatusCode.NoContent, await withdrawn.Content.ReadAsStringAsync());
+        (await client.GetFromJsonAsync<List<ChargeSetup>>("/api/v1/accounting/charges?document=Sales"))!
+            .ShouldNotContain(row => row.LedgerId == cleaning.LedgerId);
+        (await client.PostAsJsonAsync(Invoices, Sale(masters, new
+        {
+            Charges = new[] { new { cleaning.LedgerId, Amount = 4m } },
+        }))).IsSuccessStatusCode.ShouldBeFalse();
+
+        // Never set up for a purchase, there is nothing there to take off.
+        (await client.DeleteAsync(
+            $"/api/v1/accounting/charges/{ChargeableDocument.Purchase}/{cleaning.LedgerId}"))
+            .StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]

@@ -13,6 +13,8 @@ export interface GridLayoutState {
   readonly sortKey?: string | null;
   readonly sortDescending?: boolean;
   readonly frozen?: number;
+  /** Widths somebody set, in pixels, by column key. A column not named sizes itself. */
+  readonly widths?: Readonly<Record<string, number>>;
 }
 
 interface GridLayoutEnvelope {

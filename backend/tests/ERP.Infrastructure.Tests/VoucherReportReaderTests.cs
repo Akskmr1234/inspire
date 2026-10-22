@@ -311,7 +311,7 @@ public sealed class VoucherReportReaderTests
             await using ErpDbContext context = CreateContext();
 
             return await new VoucherReportReader(context).ReadAsync(
-                firmId ?? _firmId, from, to, type, status,
+                firmId ?? _firmId, from, to, type is { } one ? [one] : null, status,
                 TestContext.Current.CancellationToken);
         }
 

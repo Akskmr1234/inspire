@@ -157,6 +157,7 @@ export function DataGrid<TRow>({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [order, setOrder] = useState<readonly string[]>([]);
   const [frozen, setFrozen] = useState(0);
+  const [widths, setWidths] = useState<Readonly<Record<string, number>>>({});
   const [showPicker, setShowPicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
@@ -213,6 +214,16 @@ export function DataGrid<TRow>({
 
       if (typeof state.frozen === 'number') {
         setFrozen(state.frozen);
+      }
+
+      if (state.widths) {
+        setWidths(
+          Object.fromEntries(
+            Object.entries(state.widths).filter(
+              ([key, width]) => known.has(key) && Number.isFinite(width) && width > 0,
+            ),
+          ),
+        );
       }
 
       // A layout came back, so this grid is one somebody arranged on purpose.
@@ -355,7 +366,21 @@ export function DataGrid<TRow>({
     }
   };
 
-  const toggleHidden = (key: string): void =>
+  const toggleHidden = (key: string): void => {
+    // A column hidden until asked for is shown by naming it in the order; taking it
+    // out of the hidden set alone left it hidden, so it could never be switched on.
+    const column = permitted.find((candidate) => candidate.key === key);
+
+    if (column?.hiddenByDefault && !order.includes(key)) {
+      setOrder([...visible.map((candidate) => candidate.key), key]);
+      setHidden((previous) => {
+        const next = new Set(previous);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+
     setHidden((previous) => {
       const next = new Set(previous);
 
@@ -367,6 +392,53 @@ export function DataGrid<TRow>({
 
       return next;
     });
+  };
+
+  /** Puts a column at a numbered position among those shown, counting from one. */
+  const moveTo = (key: string, position: number): void => {
+    const current = visible.map((column) => column.key).filter((other) => other !== key);
+    const target = Math.min(Math.max(Math.round(position) - 1, 0), current.length);
+
+    setOrder([...current.slice(0, target), key, ...current.slice(target)]);
+  };
+
+  /** Sets a column's width in pixels, or lets it size itself again when blank. */
+  const setWidth = (key: string, width: number | null): void =>
+    setWidths((previous) => {
+      const next = { ...previous };
+
+      if (width === null || !Number.isFinite(width) || width <= 0) {
+        delete next[key];
+      } else {
+        next[key] = Math.max(MIN_COLUMN_WIDTH, Math.round(width));
+      }
+
+      return next;
+    });
+
+  /**
+   * Drags a column's edge to widen or narrow it. Measured from where the drag began,
+   * and mirrored under Arabic, where the column's end edge is its left one.
+   */
+  const startResize = (key: string, event: React.PointerEvent<HTMLElement>): void => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const cell = event.currentTarget.closest('th');
+    const startX = event.clientX;
+    const startWidth = cell?.getBoundingClientRect().width ?? widths[key] ?? 120;
+    const direction = getComputedStyle(event.currentTarget).direction === 'rtl' ? -1 : 1;
+
+    const onMove = (moved: PointerEvent): void =>
+      setWidth(key, startWidth + (moved.clientX - startX) * direction);
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   const move = (key: string, delta: number): void => {
     const current = visible.map((column) => column.key);
@@ -392,6 +464,7 @@ export function DataGrid<TRow>({
         sortKey,
         sortDescending,
         frozen,
+        widths,
       });
     } finally {
       setSaving(false);
@@ -417,6 +490,7 @@ export function DataGrid<TRow>({
     setSortKey(null);
     setSortDescending(false);
     setFrozen(0);
+    setWidths({});
     setColumnSearch({});
     // Nothing is kept any more, so there is nothing to keep shut.
     setLocked(false);
@@ -680,8 +754,17 @@ export function DataGrid<TRow>({
 
       {showPicker && (
         <div className="panel animate-drop flex flex-wrap gap-1.5">
-          {permitted.map((column) => {
+          {/* Shown columns first, in the order they stand, each with its number;
+              then the hidden ones. Typing a number moves the column there. */}
+          {[
+            ...visible,
+            ...permitted.filter(
+              (column) => !visible.some((candidate) => candidate.key === column.key),
+            ),
+          ].map((column) => {
             const isVisible = visible.some((candidate) => candidate.key === column.key);
+            const position =
+              visible.findIndex((candidate) => candidate.key === column.key) + 1;
 
             return (
               <div
@@ -693,14 +776,49 @@ export function DataGrid<TRow>({
                     : 'border-line bg-surface text-ink-muted',
                 )}
               >
+                {isVisible && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={visible.length}
+                    value={position}
+                    onChange={(event) => {
+                      const typed = Number(event.target.value);
+                      if (Number.isFinite(typed) && typed >= 1) {
+                        moveTo(column.key, typed);
+                      }
+                    }}
+                    aria-label={`${t('grid.position')} — ${column.header || t('grid.actions')}`}
+                    title={t('grid.position')}
+                    className="w-10 rounded border border-line bg-surface px-1 py-0.5 text-center font-mono text-[11px] tabular-nums text-ink"
+                  />
+                )}
                 <label className="field-check cursor-pointer gap-1.5 text-xs">
                   <input
                     type="checkbox"
                     checked={isVisible}
                     onChange={() => toggleHidden(column.key)}
                   />
-                  {column.header}
+                  {column.header || t('grid.actions')}
                 </label>
+                {isVisible && (
+                  <input
+                    type="number"
+                    min={MIN_COLUMN_WIDTH}
+                    step={10}
+                    placeholder={t('grid.auto')}
+                    value={widths[column.key] ?? ''}
+                    onChange={(event) =>
+                      setWidth(
+                        column.key,
+                        event.target.value === '' ? null : Number(event.target.value),
+                      )
+                    }
+                    aria-label={`${t('grid.width')} — ${column.header || t('grid.actions')}`}
+                    title={t('grid.width')}
+                    className="w-14 rounded border border-line bg-surface px-1 py-0.5 text-end font-mono text-[11px] tabular-nums text-ink"
+                  />
+                )}
                 {/*
                   The labels say "earlier" and "later" rather than left and right,
                   which is right for both a table's columns and a card's fields. The
@@ -781,8 +899,14 @@ export function DataGrid<TRow>({
                           : 'ascending'
                         : undefined
                     }
+                    style={
+                      widths[column.key] === undefined
+                        ? undefined
+                        : { width: widths[column.key], minWidth: widths[column.key] }
+                    }
                     className={clsx(
-                      'select-none',
+                      'group/th select-none',
+                      index >= frozen && 'relative',
                       // Three alignments, decided by what the column holds rather
                       // than by the order it was declared in: figures end-aligned
                       // so a column of them shares a decimal point, an actions
@@ -795,7 +919,9 @@ export function DataGrid<TRow>({
                       column.numeric || column.header.trim() === ''
                         ? 'text-end'
                         : 'text-start',
-                      column.wide && 'w-[35%] min-w-64',
+                      column.wide &&
+                        widths[column.key] === undefined &&
+                        'w-[35%] min-w-64',
                       // A frozen column sticks to the logical start edge, so Arabic
                       // freezes from the right without a second rule.
                       index < frozen && 'sticky start-0 z-30 bg-surface-3',
@@ -852,6 +978,13 @@ export function DataGrid<TRow>({
                         </span>
                       </button>
                     )}
+                    {/* The edge to drag to make the column wider or narrower. */}
+                    <span
+                      aria-hidden="true"
+                      onPointerDown={(event) => startResize(column.key, event)}
+                      onDoubleClick={() => setWidth(column.key, null)}
+                      className="no-print absolute inset-y-0 end-0 z-10 w-1.5 cursor-col-resize opacity-0 transition-opacity group-hover/th:bg-brand-500/40 group-hover/th:opacity-100"
+                    />
                   </th>
                 ))}
               </tr>
@@ -949,8 +1082,14 @@ export function DataGrid<TRow>({
                     {visible.map((column, index) => (
                       <td
                         key={column.key}
+                        style={
+                          widths[column.key] === undefined
+                            ? undefined
+                            : { maxWidth: widths[column.key] }
+                        }
                         className={clsx(
                           'py-1.5',
+                          widths[column.key] !== undefined && '[overflow-wrap:anywhere]',
                           // Where a cell may break inside a word. A table sizes a
                           // column to the longest thing in it that cannot be
                           // broken, and a barcode in a description stretched it by
@@ -975,7 +1114,7 @@ export function DataGrid<TRow>({
                           // the buttons line up down the table however wide the
                           // cells before them are.
                           column.header.trim() === '' && 'text-end whitespace-nowrap',
-                          column.wide && 'min-w-64',
+                          column.wide && widths[column.key] === undefined && 'min-w-64',
                           // The frozen cell repaints its own background on hover:
                           // it sits above the row, so the row's hover colour does
                           // not show through it and the stripe would otherwise
@@ -1146,6 +1285,9 @@ function GridFooter({
 
 /** Tailwind's `sm`. Below it the grid is a list of cards rather than a table. */
 const NARROW = '(max-width: 639px)';
+
+/** The narrowest a column can be dragged or typed to, in pixels. */
+const MIN_COLUMN_WIDTH = 48;
 
 /**
  * Whether a cell's value reads as one item - a code, a date, a short name.

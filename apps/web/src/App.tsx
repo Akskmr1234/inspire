@@ -37,6 +37,22 @@ const ReceiptEntryPage = lazyScreen(
   () => import('@/pages/VoucherEntryPage'),
   'ReceiptEntryPage',
 );
+const ReceiptListPage = lazyScreen(
+  () => import('@/pages/VoucherListPage'),
+  'ReceiptListPage',
+);
+const PaymentListPage = lazyScreen(
+  () => import('@/pages/VoucherListPage'),
+  'PaymentListPage',
+);
+const JournalListPage = lazyScreen(
+  () => import('@/pages/VoucherListPage'),
+  'JournalListPage',
+);
+const LedgerListPage = lazyScreen(
+  () => import('@/pages/LedgerListPage'),
+  'LedgerListPage',
+);
 const ProfitAndLossPage = lazyScreen(
   () => import('@/pages/ProfitAndLossPage'),
   'ProfitAndLossPage',
@@ -278,16 +294,34 @@ export function App(): React.JSX.Element {
           )}
           {!mustChangePassword && (
             <>
-              <Route path="/accounting/vouchers/new" element={<VoucherEntryPage />} />
               {/*
-                Payments and receipts have routes of their own, and menu entries to
-                match. They were the journal screen with a voucher type chosen from
-                a dropdown — which is how the two commonest documents in the system
-                ended up being entered as double entries by whoever was at the
-                counter.
+                Receipts, payments and journals each open on their list, with New
+                above it; a row reopens on the screen it was entered on to be
+                corrected. The old journal address still leads to the journal.
               */}
+              <Route
+                path="/accounting/vouchers/new"
+                element={<Navigate to="/accounting/journals/new" replace />}
+              />
+              <Route path="/accounting/journals" element={<JournalListPage />} />
+              <Route path="/accounting/journals/new" element={<VoucherEntryPage />} />
+              <Route
+                path="/accounting/journals/:voucherId"
+                element={<VoucherEntryPage />}
+              />
+              <Route path="/accounting/payments" element={<PaymentListPage />} />
               <Route path="/accounting/payments/new" element={<PaymentEntryPage />} />
+              <Route
+                path="/accounting/payments/:voucherId"
+                element={<PaymentEntryPage />}
+              />
+              <Route path="/accounting/receipts" element={<ReceiptListPage />} />
               <Route path="/accounting/receipts/new" element={<ReceiptEntryPage />} />
+              <Route
+                path="/accounting/receipts/:voucherId"
+                element={<ReceiptEntryPage />}
+              />
+              <Route path="/accounting/ledger-list" element={<LedgerListPage />} />
               <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
               <Route
                 path="/accounting/account-group-summary"

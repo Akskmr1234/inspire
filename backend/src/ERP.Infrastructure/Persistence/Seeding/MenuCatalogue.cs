@@ -35,11 +35,11 @@ public sealed record MenuRelocation(string Code, string FromParentCode, string T
 /// deleted one.
 /// </para>
 /// <para>
-/// The grouping follows the structure observed in the web reference: transactions
-/// separated from the reports that read them, and cheques given their own heading
-/// because they are a lifecycle somebody works through rather than a report they run.
-/// Only screens that exist appear. A menu naming pages that are not built yet is a
-/// list of complaints waiting to be filed.
+/// Grouped by area of work - masters, sales, purchase, accounts, inventory, service,
+/// reports, settings - with every report under the one Reports heading, so the
+/// documents somebody enters and the reports that read them are never mixed. Only
+/// screens that exist appear. A menu naming pages that are not built yet is a list of
+/// complaints waiting to be filed.
 /// </para>
 /// </remarks>
 public static class MenuCatalogue
@@ -70,6 +70,13 @@ public static class MenuCatalogue
     ];
 
     /// <summary>The default menu tree, in display order.</summary>
+    /// <remarks>
+    /// One heading per area of work, each holding what is done there in the order it
+    /// is done: masters, then what is sold, bought, paid and moved, then what is read
+    /// back. Codes are stable across regroupings - roles choose menus by code - so an
+    /// entry keeps its code when it moves, which is why a few still carry the prefix of
+    /// a heading they no longer sit under.
+    /// </remarks>
     public static IReadOnlyList<MenuBlueprint> Default { get; } =
     [
         // No permission: a dashboard is assigned to roles rather than gated, and the
@@ -81,10 +88,8 @@ public static class MenuCatalogue
             "platform",
             "/dashboard"),
 
-        // Masters in two groups, the way a shop thinks of them: what it sells, and who
-        // and what its money moves between. Customers and suppliers sit with the other
-        // ledgers rather than under Sales and Purchase - they are opened and corrected
-        // as masters, and a heading holding one entry is a click spent for nothing.
+        // Masters in three groups: what a shop sells, who and what its money moves
+        // between, and the lists the rest are filed under.
         new(
             "masters",
             "Masters",
@@ -99,9 +104,6 @@ public static class MenuCatalogue
                     "inventory",
                     Children:
                     [
-                        // Inventory masters, surfaced under the shared Masters heading
-                        // rather than a module of their own. The Module field records
-                        // where each really belongs.
                         new(
                             "masters.products",
                             "Products",
@@ -130,21 +132,6 @@ public static class MenuCatalogue
                             "inventory",
                             "/inventory/units",
                             "inventory:unit:view"),
-                        // What goes into each finished good, read by a production run.
-                        new(
-                            "masters.boms",
-                            "Bills of materials",
-                            "قوائم المواد",
-                            "inventory",
-                            "/inventory/boms",
-                            "inventory:product:view"),
-                        new(
-                            "masters.warehouses",
-                            "Warehouses",
-                            "المستودعات",
-                            "inventory",
-                            "/inventory/warehouses",
-                            "inventory:warehouse:view"),
 
                         // The percentages a product can carry. Part of setting up what
                         // is sold, so behind the product permission.
@@ -154,6 +141,22 @@ public static class MenuCatalogue
                             "نسب الضريبة",
                             "inventory",
                             "/inventory/tax-rates",
+                            "inventory:product:view"),
+                        new(
+                            "masters.warehouses",
+                            "Warehouses",
+                            "المستودعات",
+                            "inventory",
+                            "/inventory/warehouses",
+                            "inventory:warehouse:view"),
+
+                        // What goes into each finished good, read by a production run.
+                        new(
+                            "masters.boms",
+                            "Bills of materials",
+                            "قوائم المواد",
+                            "inventory",
+                            "/inventory/boms",
                             "inventory:product:view"),
 
                         // The stock a firm holds on the day it starts. A job rather than
@@ -167,6 +170,8 @@ public static class MenuCatalogue
                             "inventory:stock-adjustment:view"),
                     ]),
 
+                // Customers and suppliers sit with the other ledgers rather than under
+                // Sales and Purchase - they are opened and corrected as masters.
                 new(
                     "masters.accounts",
                     "Ledger",
@@ -174,6 +179,16 @@ public static class MenuCatalogue
                     "accounting",
                     Children:
                     [
+                        // Every ledger in one list, to open, create and correct
+                        // directly. The chart below shows the same ledgers in their
+                        // groups, which is where a new group is made.
+                        new(
+                            "masters.ledger-list",
+                            "Ledgers",
+                            "قائمة الحسابات",
+                            "accounting",
+                            "/accounting/ledger-list",
+                            "accounting:ledger:view"),
                         new(
                             "masters.ledgers",
                             "Chart of accounts",
@@ -202,6 +217,15 @@ public static class MenuCatalogue
                             "accounting",
                             "/accounting/employees",
                             "accounting:ledger:view"),
+                    ]),
+
+                new(
+                    "masters.general",
+                    "General",
+                    "عام",
+                    "sales",
+                    Children:
+                    [
                         new(
                             "masters.countries",
                             "Countries & states",
@@ -219,107 +243,22 @@ public static class MenuCatalogue
                     ]),
             ]),
 
+        // In the order the work happens: an offer is made, accepted, delivered,
+        // invoiced, and sometimes sent back.
         new(
-            "transactions",
-            "Transactions",
-            "الحركات",
-            "accounting",
+            "sales",
+            "Sales",
+            "المبيعات",
+            "sales",
             Children:
             [
-                // Payments and receipts lead, and each has an entry of its own.
-                // They are the two commonest documents in the system and the least
-                // like a journal - one party, one cash or bank account, one amount -
-                // and putting them behind a voucher-type dropdown on the journal
-                // screen made a cashier build a double entry to record a customer
-                // handing over a note. The journal is still here for the entries
-                // that really are journals.
-                new(
-                    "transactions.receipts",
-                    "Receipt",
-                    "سند قبض",
-                    "accounting",
-                    "/accounting/receipts/new",
-                    "accounting:voucher:create"),
-
-                new(
-                    "transactions.payments",
-                    "Payment",
-                    "سند صرف",
-                    "accounting",
-                    "/accounting/payments/new",
-                    "accounting:voucher:create"),
-
-                new(
-                    "transactions.voucher-entry",
-                    "Voucher entry",
-                    "إدخال قيد",
-                    "accounting",
-                    "/accounting/vouchers/new",
-                    "accounting:voucher:create"),
-
-                // Under Transactions rather than under a heading of its own. A stock
-                // movement is a transaction, and somebody entering a receipt is doing
-                // the same kind of work as somebody entering a voucher.
-                new(
-                    "transactions.stock",
-                    "Stock operations",
-                    "حركات المخزون",
-                    "inventory",
-                    "/inventory/stock",
-                    "inventory:stock-adjustment:view"),
-
-                // Its own entry rather than a type on the stock screen: a transfer between
-                // branches is a conversation - asked for, agreed, sent, received - and the
-                // people at each step need to find the requests waiting on them.
-                new(
-                    "transactions.stock-transfers",
-                    "Stock transfers",
-                    "تحويلات المخزون",
-                    "inventory",
-                    "/inventory/stock-transfers",
-                    "inventory:stock-transfer:view"),
-
-                // A count against the shelf, entered by hand or from a spreadsheet,
-                // reviewed as differences before anything moves.
-                new(
-                    "transactions.stock-adjustment",
-                    "Stock adjustment",
-                    "تسوية المخزون",
-                    "inventory",
-                    "/inventory/stock-adjustment",
-                    "inventory:stock-adjustment:view"),
-
-                // Materials used up and finished goods made, by hand or from a bill.
-                new(
-                    "transactions.production",
-                    "Production",
-                    "الإنتاج",
-                    "inventory",
-                    "/inventory/production",
-                    "inventory:stock-adjustment:view"),
-
-                new(
-                    "transactions.damaged-stock",
-                    "Damaged stock",
-                    "المخزون التالف",
-                    "inventory",
-                    "/inventory/damaged-stock",
-                    "inventory:stock-adjustment:view"),
-
-                // Invoices and credit notes on one entry, because they are one kind of
-                // document: a screen showing a customer's history wants both, and two
-                // entries would suggest two places to look for the same sale.
-                // Before the invoices, because that is the order the work happens in:
-                // an order is taken, then filled.
-                // Before the orders: an offer is made, then accepted.
                 new(
                     "transactions.sales-quotations",
-                    "Sales quotations",
+                    "Quotations",
                     "عروض الأسعار",
                     "sales",
                     "/sales/quotations",
                     "sales:order:view"),
-
                 new(
                     "transactions.sales-orders",
                     "Sales orders",
@@ -337,7 +276,6 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/delivery-notes",
                     "inventory:stock-adjustment:view"),
-
                 new(
                     "transactions.sales",
                     "Sales invoices",
@@ -345,7 +283,6 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/invoices",
                     "sales:invoice:view"),
-
                 new(
                     "transactions.sales-returns",
                     "Sales returns",
@@ -353,9 +290,15 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/returns",
                     "sales:invoice:view"),
+            ]),
 
-                // Before the purchases, for the reason the sales orders come before the
-                // sales invoices: an order is placed, then filled.
+        new(
+            "purchase",
+            "Purchase",
+            "المشتريات",
+            "purchase",
+            Children:
+            [
                 new(
                     "transactions.purchase-orders",
                     "Purchase orders",
@@ -363,12 +306,6 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/orders",
                     "purchase:order:view"),
-
-                // Purchases and purchase returns on two entries rather than one.
-                // They are one kind of document running in opposite directions, which
-                // is why one screen serves both - but somebody sending goods back is
-                // doing one of the two, and a single entry meant opening a list of
-                // purchases and switching a dropdown to find the returns among them.
                 new(
                     "transactions.receipt-notes",
                     "Receipt notes",
@@ -376,7 +313,6 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/receipt-notes",
                     "inventory:stock-adjustment:view"),
-
                 new(
                     "transactions.purchase",
                     "Purchases",
@@ -384,7 +320,6 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/invoices",
                     "purchase:invoice:view"),
-
                 new(
                     "transactions.purchase-returns",
                     "Purchase returns",
@@ -392,6 +327,116 @@ public static class MenuCatalogue
                     "purchase",
                     "/purchase/returns",
                     "purchase:invoice:view"),
+            ]),
+
+        // Money in, money out, and the entries that are neither. Each opens on its
+        // list, with a button for a new one; cheques follow because they are what a
+        // receipt or payment by cheque leaves behind to be worked through.
+        new(
+            "accounts",
+            "Accounts",
+            "الحسابات",
+            "accounting",
+            Children:
+            [
+                new(
+                    "transactions.receipts",
+                    "Receipts",
+                    "سندات القبض",
+                    "accounting",
+                    "/accounting/receipts",
+                    "accounting:voucher:create"),
+                new(
+                    "transactions.payments",
+                    "Payments",
+                    "سندات الصرف",
+                    "accounting",
+                    "/accounting/payments",
+                    "accounting:voucher:create"),
+                new(
+                    "transactions.voucher-entry",
+                    "Journal",
+                    "قيود اليومية",
+                    "accounting",
+                    "/accounting/journals",
+                    "accounting:voucher:create"),
+                new(
+                    "cheques",
+                    "Cheques",
+                    "الشيكات",
+                    "accounting",
+                    Children:
+                    [
+                        new(
+                            "cheques.post-dated",
+                            "Post-dated cheques",
+                            "الشيكات المؤجلة",
+                            "accounting",
+                            "/accounting/post-dated-cheques",
+                            ViewReports),
+                        new(
+                            "cheques.calendar",
+                            "Cheque calendar",
+                            "تقويم الشيكات",
+                            "accounting",
+                            "/accounting/cheque-calendar",
+                            ViewReports),
+                        new(
+                            "cheques.register",
+                            "Cheque register",
+                            "سجل الشيكات",
+                            "accounting",
+                            "/accounting/cheque-register",
+                            ViewReports),
+                    ]),
+            ]),
+
+        new(
+            "inventory",
+            "Inventory",
+            "المخزون",
+            "inventory",
+            Children:
+            [
+                new(
+                    "transactions.stock",
+                    "Stock operations",
+                    "حركات المخزون",
+                    "inventory",
+                    "/inventory/stock",
+                    "inventory:stock-adjustment:view"),
+
+                // A transfer between branches is a conversation - asked for, agreed,
+                // sent, received - and the people at each step need to find the
+                // requests waiting on them.
+                new(
+                    "transactions.stock-transfers",
+                    "Stock transfers",
+                    "تحويلات المخزون",
+                    "inventory",
+                    "/inventory/stock-transfers",
+                    "inventory:stock-transfer:view"),
+                new(
+                    "transactions.stock-adjustment",
+                    "Stock adjustment",
+                    "تسوية المخزون",
+                    "inventory",
+                    "/inventory/stock-adjustment",
+                    "inventory:stock-adjustment:view"),
+                new(
+                    "transactions.damaged-stock",
+                    "Damaged stock",
+                    "المخزون التالف",
+                    "inventory",
+                    "/inventory/damaged-stock",
+                    "inventory:stock-adjustment:view"),
+                new(
+                    "transactions.production",
+                    "Production",
+                    "الإنتاج",
+                    "inventory",
+                    "/inventory/production",
+                    "inventory:stock-adjustment:view"),
             ]),
 
         // Devices taken in for repair, worked and handed back; their parts and labour are
@@ -410,8 +455,6 @@ public static class MenuCatalogue
                     "service",
                     "/service/job-cards",
                     "service:job-card:view"),
-
-                // Goods coming back from customers or going back to suppliers.
                 new(
                     "service.rmas",
                     "Returns (RMA)",
@@ -421,212 +464,196 @@ public static class MenuCatalogue
                     "service:rma:view"),
             ]),
 
+        // Every report under one heading, in three groups: the books, the statements
+        // drawn from them, and stock.
         new(
-            "inventory-reports",
-            "Stock reports",
-            "تقارير المخزون",
-            "inventory",
-            Children:
-            [
-                new(
-                    "inventory-reports.valuation",
-                    "Stock valuation",
-                    "تقييم المخزون",
-                    "inventory",
-                    "/inventory/valuation",
-                    ViewInventoryReports),
-                new(
-                    "inventory-reports.ledger",
-                    "Stock ledger",
-                    "دفتر المخزون",
-                    "inventory",
-                    "/inventory/stock-ledger",
-                    ViewInventoryReports),
-                new(
-                    "inventory-reports.movement",
-                    "Item movement",
-                    "حركة الأصناف",
-                    "inventory",
-                    "/inventory/item-movement",
-                    ViewInventoryReports),
-                new(
-                    "inventory-reports.batch-stock",
-                    "Batch-wise stock",
-                    "المخزون حسب التشغيلة",
-                    "inventory",
-                    "/inventory/batch-stock",
-                    ViewInventoryReports),
-                new(
-                    "inventory-reports.expiry",
-                    "Expiry report",
-                    "تقرير الصلاحية",
-                    "inventory",
-                    "/inventory/expiry",
-                    ViewInventoryReports),
-
-                // Profit on what was sold, each batch at its own cost. Behind the
-                // accounts' report permission, because it shows margins.
-                new(
-                    "inventory-reports.batch-profit",
-                    "Batch-wise profit",
-                    "الربح حسب الدفعة",
-                    "inventory",
-                    "/inventory/batch-profit",
-                    ViewReports),
-                new(
-                    "inventory-reports.serials",
-                    "Serial numbers",
-                    "الأرقام التسلسلية",
-                    "inventory",
-                    "/inventory/serials",
-                    ViewInventoryReports),
-            ]),
-
-        new(
-            "accounts-reports",
-            "Accounts reports",
-            "تقارير الحسابات",
-            "accounting",
-            Children:
-            [
-                // First, because it is the report asked for most: what one customer,
-                // supplier, bank or expense head did over a period, posting by posting.
-                new(
-                    "accounts-reports.ledger-statement",
-                    "Ledger statement",
-                    "كشف حساب",
-                    "accounting",
-                    "/accounting/ledger-statement",
-                    ViewReports),
-                new(
-                    "accounts-reports.trial-balance",
-                    "Trial balance",
-                    "ميزان المراجعة",
-                    "accounting",
-                    "/accounting/trial-balance",
-                    ViewReports),
-                new(
-                    "accounts-reports.group-summary",
-                    "Group summary",
-                    "ملخص المجموعات",
-                    "accounting",
-                    "/accounting/account-group-summary",
-                    ViewReports),
-                new(
-                    "accounts-reports.profit-and-loss",
-                    "Profit and loss",
-                    "الأرباح والخسائر",
-                    "accounting",
-                    "/accounting/profit-and-loss",
-                    ViewReports),
-                new(
-                    "accounts-reports.balance-sheet",
-                    "Balance sheet",
-                    "الميزانية العمومية",
-                    "accounting",
-                    "/accounting/balance-sheet",
-                    ViewReports),
-                new(
-                    "accounts-reports.cash-flow",
-                    "Cash flow",
-                    "التدفقات النقدية",
-                    "accounting",
-                    "/accounting/cash-flow",
-                    ViewReports),
-
-                // One entry, not one per regime. Open question 1 asked for report menus
-                // filtered by regime so a VAT firm is never shown a GST return; the
-                // report answers in whichever heads the firm actually charges, so there
-                // is nothing left to filter and no second entry to keep in step.
-                new(
-                    "accounts-reports.tax-returns",
-                    "VAT / GST returns",
-                    "الإقرارات الضريبية",
-                    "accounting",
-                    "/accounting/tax-returns",
-                    ViewReports),
-                new(
-                    "accounts-reports.day-book",
-                    "Day book",
-                    "دفتر اليومية",
-                    "accounting",
-                    "/accounting/day-book",
-                    ViewReports),
-                new(
-                    "accounts-reports.voucher-report",
-                    "Voucher report",
-                    "تقرير القيود",
-                    "accounting",
-                    "/accounting/voucher-report",
-                    ViewReports),
-                new(
-                    "accounts-reports.transaction-summary",
-                    "Transaction summary",
-                    "ملخص الحركات",
-                    "accounting",
-                    "/accounting/transaction-summary",
-                    ViewReports),
-                new(
-                    "accounts-reports.cash-book",
-                    "Cash book",
-                    "دفتر الصندوق",
-                    "accounting",
-                    "/accounting/cash-book",
-                    ViewReports),
-                new(
-                    "accounts-reports.bank-book",
-                    "Bank book",
-                    "دفتر البنك",
-                    "accounting",
-                    "/accounting/bank-book",
-                    ViewReports),
-
-                // What is owed each way, bill by bill or aged. The figures were served
-                // all along; nothing in the menu reached them.
-                new(
-                    "accounts-reports.debtors",
-                    "Debtors outstanding",
-                    "أرصدة العملاء المستحقة",
-                    "accounting",
-                    "/accounting/debtors",
-                    ViewReports),
-                new(
-                    "accounts-reports.creditors",
-                    "Creditors outstanding",
-                    "أرصدة الموردين المستحقة",
-                    "accounting",
-                    "/accounting/creditors",
-                    ViewReports),
-            ]),
-
-        new(
-            "cheques",
-            "Cheques",
-            "الشيكات",
+            "reports",
+            "Reports",
+            "التقارير",
             "accounting",
             Children:
             [
                 new(
-                    "cheques.post-dated",
-                    "Post-dated cheques",
-                    "الشيكات المؤجلة",
+                    "accounts-reports",
+                    "Accounts",
+                    "تقارير الحسابات",
                     "accounting",
-                    "/accounting/post-dated-cheques",
-                    ViewReports),
+                    Children:
+                    [
+                        // First, because it is the report asked for most: what one
+                        // customer, supplier, bank or expense head did over a period.
+                        new(
+                            "accounts-reports.ledger-statement",
+                            "Ledger statement",
+                            "كشف حساب",
+                            "accounting",
+                            "/accounting/ledger-statement",
+                            ViewReports),
+                        new(
+                            "accounts-reports.day-book",
+                            "Day book",
+                            "دفتر اليومية",
+                            "accounting",
+                            "/accounting/day-book",
+                            ViewReports),
+                        new(
+                            "accounts-reports.cash-book",
+                            "Cash book",
+                            "دفتر الصندوق",
+                            "accounting",
+                            "/accounting/cash-book",
+                            ViewReports),
+                        new(
+                            "accounts-reports.bank-book",
+                            "Bank book",
+                            "دفتر البنك",
+                            "accounting",
+                            "/accounting/bank-book",
+                            ViewReports),
+                        new(
+                            "accounts-reports.voucher-report",
+                            "Voucher report",
+                            "تقرير القيود",
+                            "accounting",
+                            "/accounting/voucher-report",
+                            ViewReports),
+                        new(
+                            "accounts-reports.transaction-summary",
+                            "Transaction summary",
+                            "ملخص الحركات",
+                            "accounting",
+                            "/accounting/transaction-summary",
+                            ViewReports),
+                        new(
+                            "accounts-reports.debtors",
+                            "Debtors outstanding",
+                            "أرصدة العملاء المستحقة",
+                            "accounting",
+                            "/accounting/debtors",
+                            ViewReports),
+                        new(
+                            "accounts-reports.creditors",
+                            "Creditors outstanding",
+                            "أرصدة الموردين المستحقة",
+                            "accounting",
+                            "/accounting/creditors",
+                            ViewReports),
+                    ]),
+
                 new(
-                    "cheques.calendar",
-                    "Cheque calendar",
-                    "تقويم الشيكات",
+                    "reports.financial",
+                    "Financial statements",
+                    "القوائم المالية",
                     "accounting",
-                    "/accounting/cheque-calendar",
-                    ViewReports),
+                    Children:
+                    [
+                        new(
+                            "accounts-reports.trial-balance",
+                            "Trial balance",
+                            "ميزان المراجعة",
+                            "accounting",
+                            "/accounting/trial-balance",
+                            ViewReports),
+                        new(
+                            "accounts-reports.group-summary",
+                            "Group summary",
+                            "ملخص المجموعات",
+                            "accounting",
+                            "/accounting/account-group-summary",
+                            ViewReports),
+                        new(
+                            "accounts-reports.profit-and-loss",
+                            "Profit and loss",
+                            "الأرباح والخسائر",
+                            "accounting",
+                            "/accounting/profit-and-loss",
+                            ViewReports),
+                        new(
+                            "accounts-reports.balance-sheet",
+                            "Balance sheet",
+                            "الميزانية العمومية",
+                            "accounting",
+                            "/accounting/balance-sheet",
+                            ViewReports),
+                        new(
+                            "accounts-reports.cash-flow",
+                            "Cash flow",
+                            "التدفقات النقدية",
+                            "accounting",
+                            "/accounting/cash-flow",
+                            ViewReports),
+
+                        // One entry, not one per regime: the report answers in
+                        // whichever heads the firm actually charges.
+                        new(
+                            "accounts-reports.tax-returns",
+                            "VAT / GST returns",
+                            "الإقرارات الضريبية",
+                            "accounting",
+                            "/accounting/tax-returns",
+                            ViewReports),
+                    ]),
+
                 new(
-                    "cheques.register",
-                    "Cheque register",
-                    "سجل الشيكات",
-                    "accounting",
-                    "/accounting/cheque-register",
-                    ViewReports),
+                    "inventory-reports",
+                    "Stock",
+                    "تقارير المخزون",
+                    "inventory",
+                    Children:
+                    [
+                        new(
+                            "inventory-reports.valuation",
+                            "Stock valuation",
+                            "تقييم المخزون",
+                            "inventory",
+                            "/inventory/valuation",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.ledger",
+                            "Stock ledger",
+                            "دفتر المخزون",
+                            "inventory",
+                            "/inventory/stock-ledger",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.movement",
+                            "Item movement",
+                            "حركة الأصناف",
+                            "inventory",
+                            "/inventory/item-movement",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.batch-stock",
+                            "Batch-wise stock",
+                            "المخزون حسب التشغيلة",
+                            "inventory",
+                            "/inventory/batch-stock",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.expiry",
+                            "Expiry report",
+                            "تقرير الصلاحية",
+                            "inventory",
+                            "/inventory/expiry",
+                            ViewInventoryReports),
+
+                        // Behind the accounts' report permission, because it shows
+                        // margins.
+                        new(
+                            "inventory-reports.batch-profit",
+                            "Batch-wise profit",
+                            "الربح حسب الدفعة",
+                            "inventory",
+                            "/inventory/batch-profit",
+                            ViewReports),
+                        new(
+                            "inventory-reports.serials",
+                            "Serial numbers",
+                            "الأرقام التسلسلية",
+                            "inventory",
+                            "/inventory/serials",
+                            ViewInventoryReports),
+                    ]),
             ]),
 
         new(
@@ -636,21 +663,17 @@ public static class MenuCatalogue
             "platform",
             Children:
             [
-                // The screen that edits this menu, reachable from the menu it edits.
-                // Behind the menu permission rather than the reports one, so holding
-                // it is a deliberate grant: rearranging what everybody else sees is
-                // an administrative act, not a consequence of being able to read.
+                // No permission: everything behind it is a preference about how this
+                // firm and browser behave, and none of it changes what a saved
+                // document means.
                 new(
-                    "settings.menu",
-                    "Menu settings",
-                    "إعدادات القائمة",
+                    "settings.preferences",
+                    "Preferences",
+                    "التفضيلات",
                     "platform",
-                    "/settings/menu",
-                    "platform:menu:view"),
+                    "/settings"),
 
-                // Who may sign in, and what each role does and sees. Behind the
-                // permissions that guard the screens' own endpoints, so the entry is
-                // never offered to somebody the screen would refuse.
+                // Who may sign in, and what each role does and sees.
                 new(
                     "settings.users",
                     "Users",
@@ -658,7 +681,6 @@ public static class MenuCatalogue
                     "platform",
                     "/settings/users",
                     "platform:user:view"),
-
                 new(
                     "settings.roles",
                     "Roles and menus",
@@ -676,7 +698,29 @@ public static class MenuCatalogue
                     "platform",
                     "/settings/approvals"),
 
-                // Who created, changed or deleted what, kept in a database of its own.
+                // The screen that edits this menu, behind the menu permission so holding
+                // it is a deliberate grant.
+                new(
+                    "settings.menu",
+                    "Menu settings",
+                    "إعدادات القائمة",
+                    "platform",
+                    "/settings/menu",
+                    "platform:menu:view"),
+                new(
+                    "settings.printing",
+                    "Print settings",
+                    "إعدادات الطباعة",
+                    "platform",
+                    "/settings/printing",
+                    "platform:setting:view"),
+                new(
+                    "settings.print-templates",
+                    "Print templates",
+                    "قوالب الطباعة",
+                    "printing",
+                    "/settings/print-templates",
+                    "printing:template:view"),
                 new(
                     "settings.audit-log",
                     "Audit log",
@@ -685,38 +729,8 @@ public static class MenuCatalogue
                     "/settings/audit-log",
                     "platform:audit-log:view"),
 
-                // How each document prints - preview, layout, printer, copies, and a
-                // second run - and the layouts themselves. Readable by anybody who may
-                // read settings; the designer behind the print-template permission.
-                new(
-                    "settings.printing",
-                    "Print settings",
-                    "إعدادات الطباعة",
-                    "platform",
-                    "/settings/printing",
-                    "platform:setting:view"),
-
-                new(
-                    "settings.print-templates",
-                    "Print templates",
-                    "قوالب الطباعة",
-                    "printing",
-                    "/settings/print-templates",
-                    "printing:template:view"),
-
-                // Clearing a firm's data to hand it over or to test from nothing. Behind
-                // the permission to delete the firm, the nearest grant to what it does.
-                new(
-                    "settings.data",
-                    "Clear data",
-                    "مسح البيانات",
-                    "platform",
-                    "/settings/data",
-                    "platform:firm:delete"),
-
-                // Bringing a firm across from EasyRetail. Behind the permission to edit
-                // the firm, which the import's own endpoints ask for: it writes the
-                // firm's chart, parties, products, balances and stock wholesale.
+                // Bringing a firm across from EasyRetail, behind the permission the
+                // import's own endpoints ask for.
                 new(
                     "settings.import",
                     "Import data",
@@ -725,16 +739,15 @@ public static class MenuCatalogue
                     "/settings/import",
                     "platform:firm:edit"),
 
-                // No permission: everything behind it is a preference about how this
-                // browser behaves - the tax rates a picker offers, whether Arabic
-                // names are translated, how many rows a page holds - and none of it
-                // changes what a saved document means.
+                // Last, and behind the permission to delete the firm: the nearest grant
+                // to what it does.
                 new(
-                    "settings.preferences",
-                    "Preferences",
-                    "التفضيلات",
+                    "settings.data",
+                    "Clear data",
+                    "مسح البيانات",
                     "platform",
-                    "/settings"),
+                    "/settings/data",
+                    "platform:firm:delete"),
             ]),
     ];
 }

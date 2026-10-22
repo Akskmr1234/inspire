@@ -1212,6 +1212,21 @@
     @apply absolute inset-y-1.5 start-0 w-1 rounded-full bg-brand-600 content-[''] dark:bg-brand-400;
   }
 
+  /* A top-level section that folds: a row like a link, quieter until opened. */
+  .nav-group {
+    @apply flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-semibold
+           text-ink transition duration-150 hover:bg-surface-3;
+  }
+
+  .nav-group-active {
+    @apply text-brand-700 dark:text-brand-200;
+  }
+
+  /* The entries of an open section, set in under a hairline on the start edge. */
+  .nav-group-body {
+    @apply ms-[1.15rem] mb-1 space-y-0.5 border-s border-line ps-1.5;
+  }
+
   .nav-heading {
     @apply px-3 pt-4 pb-1 text-[0.6875rem] font-semibold tracking-widest text-ink-subtle uppercase;
   }
