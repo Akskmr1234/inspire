@@ -448,6 +448,16 @@ public static class MenuCatalogue
             "service",
             Children:
             [
+                // Taking a device in and billing it on one screen: the job, its parts and
+                // charges, and what was paid. The job cards below are the same jobs, as
+                // the workshop works through them.
+                new(
+                    "service.sales",
+                    "Service sales",
+                    "مبيعات الصيانة",
+                    "service",
+                    "/service/sales",
+                    "service:job-card:view"),
                 new(
                     "service.job-cards",
                     "Job cards",

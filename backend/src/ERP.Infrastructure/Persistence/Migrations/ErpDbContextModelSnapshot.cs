@@ -6152,6 +6152,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("mobile");
 
+                    b.Property<int?>("Mode")
+                        .HasColumnType("integer")
+                        .HasColumnName("mode");
+
                     b.Property<string>("ModelNumber")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
@@ -6280,6 +6284,52 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_job_cards_number");
 
                     b.ToTable("job_cards", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Service.JobCardCharge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<bool>("IsAddition")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_addition");
+
+                    b.Property<Guid>("JobCardId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_card_id");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_id");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_number");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job_card_charges");
+
+                    b.HasIndex("LedgerId")
+                        .HasDatabaseName("ix_job_card_charges_ledger");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_job_card_charges_tenant");
+
+                    b.HasIndex("JobCardId", "LineNumber")
+                        .HasDatabaseName("ix_job_card_charges_card");
+
+                    b.ToTable("job_card_charges", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Service.JobCardLine", b =>
@@ -8137,6 +8187,23 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_job_cards_warehouses_warehouse_id");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Service.JobCardCharge", b =>
+                {
+                    b.HasOne("ERP.Domain.Service.JobCard", null)
+                        .WithMany("Charges")
+                        .HasForeignKey("JobCardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_card_charges_job_cards_job_card_id");
+
+                    b.HasOne("ERP.Domain.Accounting.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("LedgerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_card_charges_ledgers_ledger_id");
+                });
+
             modelBuilder.Entity("ERP.Domain.Service.JobCardLine", b =>
                 {
                     b.HasOne("ERP.Domain.Inventory.Batch", null)
@@ -8387,6 +8454,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ERP.Domain.Service.JobCard", b =>
                 {
+                    b.Navigation("Charges");
+
                     b.Navigation("Lines");
                 });
 

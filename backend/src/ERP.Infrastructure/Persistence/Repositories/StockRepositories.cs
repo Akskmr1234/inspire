@@ -72,6 +72,8 @@ public sealed class JobCardRepository : IJobCardRepository
     public Task<JobCard?> FindAsync(JobCardId id, CancellationToken cancellationToken = default) =>
         _context.JobCards
             .Include(card => card.Lines)
+            .Include(card => card.Charges)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(card => card.Id == id, cancellationToken);
 
     /// <inheritdoc />

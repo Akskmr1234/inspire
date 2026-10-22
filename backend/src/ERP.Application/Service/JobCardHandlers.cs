@@ -37,6 +37,7 @@ public sealed class JobCardHandlers
     private readonly IInventoryMasterRepository _masters;
     private readonly INumberingSeriesRepository _numbering;
     private readonly IFinancialYearRepository _financialYears;
+    private readonly IAdditionalLedgerRepository _charges;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -50,6 +51,7 @@ public sealed class JobCardHandlers
     /// <param name="masters">The inventory master repository.</param>
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
+    /// <param name="charges">The additional ledgers set up for a sale.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public JobCardHandlers(
@@ -62,11 +64,13 @@ public sealed class JobCardHandlers
         IInventoryMasterRepository masters,
         INumberingSeriesRepository numbering,
         IFinancialYearRepository financialYears,
+        IAdditionalLedgerRepository charges,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _cards = cards;
         _reader = reader;
+        _charges = charges;
         _invoices = invoices;
         _products = products;
         _batches = batches;
@@ -335,9 +339,67 @@ public sealed class JobCardHandlers
 
         // Once billed, the parts and labour are the invoice's; the rest of the card can
         // still be brought up to date - the diagnosis, the stages, a note.
-        return card.IsBillable ? await ReplaceLinesAsync(card, input.Lines, cancellationToken) : Result.Success();
+        if (!card.IsBillable)
+        {
+            return Result.Success();
+        }
+
+        Result lines = await ReplaceLinesAsync(card, input.Lines, cancellationToken);
+
+        return lines.IsFailure ? lines : await ReplaceChargesAsync(card, input, cancellationToken);
 
         Ledger? Ledger(LedgerId? id) => id is { } known ? ledgers[known] : null;
+    }
+
+    /// <summary>Puts the bill's tax mode and additional ledgers on, as the screen now has them.</summary>
+    private async Task<Result> ReplaceChargesAsync(
+        JobCard card,
+        JobCardInput input,
+        CancellationToken cancellationToken)
+    {
+        Result mode = card.SetMode(input.Mode);
+
+        if (mode.IsFailure)
+        {
+            return mode;
+        }
+
+        Result cleared = card.ClearCharges();
+
+        if (cleared.IsFailure)
+        {
+            return cleared;
+        }
+
+        if (input.Charges is not { Count: > 0 } charges)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlyList<AdditionalLedger> setup = await _charges.ListForDocumentAsync(
+            card.FirmId, ChargeableDocument.Sales, cancellationToken);
+
+        foreach (JobCardChargeInput charge in charges)
+        {
+            AdditionalLedger? mapping = setup.FirstOrDefault(
+                candidate => candidate.LedgerId == LedgerId.From(charge.LedgerId) && candidate.IsActive);
+
+            if (mapping is null)
+            {
+                return Result.Failure(Error.NotFound(
+                    "JobCard.ChargeNotSetUp",
+                    "That ledger is not set up as an additional ledger on a sale. Set it up in Settings."));
+            }
+
+            Result<JobCardCharge> added = card.AddCharge(mapping, charge.Amount);
+
+            if (added.IsFailure)
+            {
+                return added;
+            }
+        }
+
+        return Result.Success();
     }
 
     private async Task<Result> ReplaceLinesAsync(
@@ -416,6 +478,7 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
     private readonly INumberingSeriesRepository _numbering;
     private readonly IFinancialYearRepository _financialYears;
     private readonly IFirmRepository _firms;
+    private readonly IAdditionalLedgerRepository _charges;
     private readonly ITenantContext _tenantContext;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
@@ -431,6 +494,7 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
     /// <param name="numbering">The numbering-series repository.</param>
     /// <param name="financialYears">The financial-year repository.</param>
     /// <param name="firms">The firm repository.</param>
+    /// <param name="charges">The additional ledgers set up for a sale.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="unitOfWork">The unit of work.</param>
@@ -445,12 +509,14 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
         INumberingSeriesRepository numbering,
         IFinancialYearRepository financialYears,
         IFirmRepository firms,
+        IAdditionalLedgerRepository charges,
         ITenantContext tenantContext,
         IClock clock,
         IUnitOfWork unitOfWork)
     {
         _cards = cards;
         _invoices = invoices;
+        _charges = charges;
         _masters = masters;
         _products = products;
         _batches = batches;
@@ -552,7 +618,9 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
             return Result.Failure<SalesInvoiceResponse>(number.Error);
         }
 
-        TaxMode mode = firm.TaxRegime == TaxRegime.None ? TaxMode.NonTax : TaxMode.Tax;
+        // The card's own mode where it chose one - a service sale billed without tax - and
+        // the firm's otherwise.
+        TaxMode mode = card.Mode ?? (firm.TaxRegime == TaxRegime.None ? TaxMode.NonTax : TaxMode.Tax);
 
         Result<SalesInvoice> draft = SalesInvoice.CreateDraft(
             _tenantContext.TenantId, firmId, branchId, year, number.Value, date, customer, warehouse,
@@ -597,6 +665,13 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
             }
         }
 
+        Result charged = await AddChargesAsync(card, invoice, firmId, cancellationToken);
+
+        if (charged.IsFailure)
+        {
+            return Result.Failure<SalesInvoiceResponse>(charged.Error);
+        }
+
         Result terms = invoice.SetSaleTerms(
             card.PaymentMode,
             card.SalesmanLedgerId is { } salesman ? ledgers.GetValueOrDefault(salesman) : null,
@@ -605,6 +680,29 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
         if (terms.IsFailure)
         {
             return Result.Failure<SalesInvoiceResponse>(terms.Error);
+        }
+
+        // What was paid at the counter when the job was billed, and where it went.
+        if (request.PaidInFull || request.AmountReceived > 0m)
+        {
+            Ledger? into = request.ReceivedIntoLedgerId is { } intoId
+                ? await _ledgers.FindAsync(LedgerId.From(intoId), cancellationToken)
+                : null;
+
+            if (into is null || into.FirmId != firmId)
+            {
+                return Result.Failure<SalesInvoiceResponse>(Error.NotFound(
+                    "SalesInvoice.ReceivedIntoNotFound",
+                    "That cash or bank account does not exist in the selected firm."));
+            }
+
+            decimal received = request.PaidInFull ? Math.Max(invoice.Total.Amount, 0m) : request.AmountReceived;
+            Result paid = invoice.SetCounterPayment(received, into, request.PaymentReference);
+
+            if (paid.IsFailure)
+            {
+                return Result.Failure<SalesInvoiceResponse>(paid.Error);
+            }
         }
 
         Result details = invoice.SetDetails(card.Number, Narration(card));
@@ -628,6 +726,43 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
     }
 
     private static LedgerId? Id(Guid? value) => value is { } id ? LedgerId.From(id) : null;
+
+    /// <summary>Carries the card's additional ledgers onto the invoice, each as the firm set it up.</summary>
+    private async Task<Result> AddChargesAsync(
+        JobCard card,
+        SalesInvoice invoice,
+        FirmId firmId,
+        CancellationToken cancellationToken)
+    {
+        if (card.Charges.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        IReadOnlyList<AdditionalLedger> setup = await _charges.ListForDocumentAsync(
+            firmId, ChargeableDocument.Sales, cancellationToken);
+
+        foreach (JobCardCharge charge in card.Charges.OrderBy(charge => charge.LineNumber))
+        {
+            AdditionalLedger? mapping = setup.FirstOrDefault(candidate => candidate.LedgerId == charge.LedgerId);
+
+            if (mapping is null)
+            {
+                return Result.Failure(Error.NotFound(
+                    "SalesInvoice.ChargeNotMapped",
+                    "An additional ledger on the job is no longer set up for a sale."));
+            }
+
+            Result<SalesInvoiceCharge> added = invoice.AddCharge(mapping, charge.Amount);
+
+            if (added.IsFailure)
+            {
+                return Result.Failure(added.Error);
+            }
+        }
+
+        return Result.Success();
+    }
 
     /// <summary>What the invoice says the job was: the device, then the fault.</summary>
     private static string Narration(JobCard card)

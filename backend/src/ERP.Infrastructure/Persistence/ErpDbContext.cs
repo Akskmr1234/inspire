@@ -438,6 +438,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<JobCardIdConverter>();
         configurationBuilder.Properties<JobCardLineId>()
             .HaveConversion<JobCardLineIdConverter>();
+        configurationBuilder.Properties<JobCardChargeId>()
+            .HaveConversion<JobCardChargeIdConverter>();
         configurationBuilder.Properties<RmaId>()
             .HaveConversion<RmaIdConverter>();
         configurationBuilder.Properties<RmaLineId>()
