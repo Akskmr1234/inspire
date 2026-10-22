@@ -696,6 +696,7 @@ function JobCardForm({
               { value: SalesPaymentMode.cash, label: t('service.cash') },
               { value: SalesPaymentMode.credit, label: t('service.credit') },
               { value: SalesPaymentMode.online, label: t('service.online') },
+              { value: SalesPaymentMode.card, label: t('paymentModes.card') },
             ]}
           />
           <SelectField<string>

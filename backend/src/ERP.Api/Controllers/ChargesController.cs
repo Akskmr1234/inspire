@@ -63,4 +63,26 @@ public sealed class ChargesController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Takes a ledger off the charges one kind of document carries.</summary>
+    /// <param name="document">The kind of document.</param>
+    /// <param name="ledgerId">The ledger.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Nothing, on success.</returns>
+    /// <response code="204">Withdrawn; documents already carrying it keep it.</response>
+    /// <response code="404">The ledger is not set up for that kind of document.</response>
+    [HttpDelete("{document}/{ledgerId:guid}")]
+    [RequiresPermission("accounting", "additional-ledger", "create")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> WithdrawAsync(
+        ChargeableDocument document,
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        Result result = await _sender.Send(
+            new WithdrawChargeCommand(document, ledgerId), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
 }

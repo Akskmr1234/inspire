@@ -183,6 +183,14 @@ public sealed class TaxSlabHandlers
             return Result.Failure<Guid>(firm.Error);
         }
 
+        Result taken = await EnsurePercentageFreeAsync(
+            firm.Value, request.Percentage, except: null, cancellationToken);
+
+        if (taken.IsFailure)
+        {
+            return Result.Failure<Guid>(taken.Error);
+        }
+
         Result<string> code = await MasterContext.ReserveCodeAsync(
             _masters, InventoryMasterKind.TaxSlab, firm.Value, request.Code,
             request.Name, TaxSlab.MaximumCodeLength, cancellationToken);
@@ -229,6 +237,15 @@ public sealed class TaxSlabHandlers
         }
 
         TaxSlab slab = found.Value;
+
+        Result taken = await EnsurePercentageFreeAsync(
+            slab.FirmId, request.Percentage, slab.Id, cancellationToken);
+
+        if (taken.IsFailure)
+        {
+            return taken;
+        }
+
         Result changed = slab.Change(request.Name, request.Percentage);
 
         if (changed.IsFailure)
@@ -296,6 +313,41 @@ public sealed class TaxSlabHandlers
     }
 
     /// <summary>Makes one rate the default, taking it from whichever had it.</summary>
+    /// <summary>Refuses a percentage another of the firm's tax rates already carries.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="percentage">The percentage wanted.</param>
+    /// <param name="except">The rate being changed, which may keep its own percentage.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Success, or a conflict naming the rate that has it.</returns>
+    /// <remarks>
+    /// Withdrawn rates count: two rates of the same percentage are two entries in every
+    /// product's picker and two lines on the tax return for one tax, and the way back to
+    /// a withdrawn one is to restore it rather than to make another.
+    /// </remarks>
+    private async Task<Result> EnsurePercentageFreeAsync(
+        FirmId firmId,
+        decimal percentage,
+        TaxSlabId? except,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TaxSlab> slabs = await _slabs.ListAsync(
+            firmId, includeInactive: true, cancellationToken);
+
+        TaxSlab? holder = slabs.FirstOrDefault(slab =>
+            slab.Percentage == percentage && (except is null || slab.Id != except));
+
+        if (holder is null)
+        {
+            return Result.Success();
+        }
+
+        string withdrawn = holder.IsActive ? string.Empty : " (withdrawn - restore it instead)";
+
+        return Result.Failure(Error.Conflict(
+            "TaxSlab.DuplicatePercentage",
+            $"A tax rate of {percentage:0.##}% already exists: {holder.Name}{withdrawn}."));
+    }
+
     private async Task MakeDefaultAsync(TaxSlab slab, FirmId firmId, CancellationToken cancellationToken)
     {
         TaxSlab? previous = await _slabs.FindDefaultAsync(firmId, cancellationToken);

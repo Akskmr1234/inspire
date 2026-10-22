@@ -8,10 +8,13 @@ import { collect, maxLength, numeric, required, useValidation } from '@/lib/vali
 /** Adds a rate, or corrects one. Also used from the product editor to add one in place. */
 export function TaxRateForm({
   record,
+  rates = [],
   run,
   busy,
 }: {
   readonly record?: TaxRate;
+  /** The firm's other rates, so a percentage one already carries is refused here. */
+  readonly rates?: readonly TaxRate[];
   readonly run: (action: () => Promise<void>) => void;
   readonly busy: boolean;
 }): React.JSX.Element {
@@ -24,6 +27,14 @@ export function TaxRateForm({
   );
   const [isDefault, setIsDefault] = useState(record?.isDefault ?? false);
 
+  // The rate already carrying a percentage, named, or null.
+  const duplicateOf = (value: string): string | null => {
+    const twin = rates.find(
+      (rate) => rate.id !== record?.id && rate.percentage === Number(value),
+    );
+    return twin ? t('taxRates.duplicate', { name: twin.name }) : null;
+  };
+
   const { errors, submit } = useValidation<{ name: string; percentage: string }>(
     (values) =>
       collect({
@@ -35,7 +46,8 @@ export function TaxRateForm({
           numeric(values.percentage, t('taxRates.percentageInvalid'), {
             min: 0,
             max: 100,
-          }),
+          }) ??
+          duplicateOf(values.percentage),
       }),
   );
 

@@ -562,19 +562,8 @@ function DescriptionFields({
           />
         </Field>
 
-        {/* With the translate button where the firm has turned translation on, as on
-            every other master's Arabic name. Four and two, the first row the other way
-            round, so both rows break on the thirds every section below them uses; at
-            three and three this row split down the middle and lined up with nothing. */}
-        <div className="lg:col-span-4">
-          <ArabicNameField
-            label={t('products.descriptionArabic')}
-            source={form.description}
-            value={form.descriptionArabic}
-            onChange={(value) => set({ descriptionArabic: value })}
-          />
-        </div>
-
+        {/* Two and four again, so both rows break at the same third and the Arabic
+            description sits under the English one it translates. */}
         <Field label={t('products.shortDescription')} span={2}>
           <input
             value={form.shortDescription}
@@ -582,6 +571,15 @@ function DescriptionFields({
             className="field-input"
           />
         </Field>
+
+        <div className="sm:col-span-2 lg:col-span-4">
+          <ArabicNameField
+            label={t('products.descriptionArabic')}
+            source={form.description}
+            value={form.descriptionArabic}
+            onChange={(value) => set({ descriptionArabic: value })}
+          />
+        </div>
       </Section>
 
       <Section title={t('products.units')}>
@@ -640,7 +638,8 @@ function DescriptionFields({
         />
       </Section>
 
-      <Section title={`${t('products.rates')} · ${product.currency}`}>
+      {/* Two rows of four: how it is costed, then what it sells for. */}
+      <Section title={`${t('products.rates')} · ${product.currency}`} columns={4}>
         <Field label={t('products.costingMethod')}>
           <SearchSelect
             value={form.costingMethod}
@@ -653,8 +652,8 @@ function DescriptionFields({
           />
         </Field>
         {money('cost')}
-        {percent('profitPercentage')}
         {percent('corPercentage')}
+        {percent('profitPercentage')}
         {money('retailRate')}
         {money('wholesaleRate')}
         {money('otherRate')}
@@ -985,7 +984,7 @@ function Section({
   children,
 }: {
   readonly title: string;
-  readonly columns?: 3 | 6;
+  readonly columns?: 3 | 4 | 6;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -995,7 +994,9 @@ function Section({
       <div
         className={clsx(
           'grid gap-4 sm:grid-cols-2',
-          columns === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-3',
+          columns === 6 && 'lg:grid-cols-6',
+          columns === 4 && 'lg:grid-cols-4',
+          columns === 3 && 'lg:grid-cols-3',
         )}
       >
         {children}

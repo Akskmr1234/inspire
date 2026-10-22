@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
 import { isHeldForApproval } from '@/lib/approvals';
 import clsx from 'clsx';
@@ -11,7 +11,7 @@ import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
-import { IconBarcode, IconClose, IconPrinter } from '@/components/icons';
+import { IconBarcode, IconPrinter } from '@/components/icons';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printableSale } from '@/lib/printing';
 import {
@@ -24,24 +24,12 @@ import {
   useLineColumns,
   type LineColumn,
 } from '@/components/DocumentLines';
-import {
-  AccountNature,
-  LedgerKind,
-  listLedgers,
-  type LedgerSummary,
-} from '@/lib/ledgers';
+import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useSettings, type SalesRateType } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
-import {
-  chargeSetupKey,
-  enterableCharges,
-  mapCharge,
-  useChargeSetup,
-  type ChargeDocument,
-  type ChargeSetup,
-} from '@/lib/charges';
+import { chargeRows, useChargeSetup, type ChargeSetup } from '@/lib/charges';
 import { useSession } from '@/stores/session';
 import {
   SerialLineSummary,
@@ -73,6 +61,7 @@ import {
   SalesDocumentKind,
   SalesInvoiceStatus,
   SalesPaymentMode,
+  paidThroughBank,
   TaxMode,
   updateSalesInvoice,
   type CustomerAccount,
@@ -292,7 +281,7 @@ export function SalesPage({
           tone={
             row.paymentMode === SalesPaymentMode.cash
               ? 'success'
-              : row.paymentMode === SalesPaymentMode.online
+              : paidThroughBank(row.paymentMode)
                 ? 'info'
                 : 'neutral'
           }
@@ -555,44 +544,41 @@ interface AdditionalLedgerItem {
 function AdditionalLedgersSection({
   rows,
   ledgers,
-  document,
   setup,
   nonTax,
   onChange,
 }: {
   readonly rows: readonly AdditionalLedgerItem[];
   readonly ledgers: readonly LedgerSummary[];
-  /** The document the charges are set up for, when a new one is added from here. */
-  readonly document: ChargeDocument;
-  /** The firm's charges for a sale; offered and signed from it once it arrives. */
+  /** The firm's additional ledgers for a sale, as Settings set them up. */
   readonly setup: readonly ChargeSetup[] | undefined;
   readonly nonTax: boolean;
   readonly onChange: (rows: readonly AdditionalLedgerItem[]) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const can = useSession((state) => state.can);
-  const [settingUp, setSettingUp] = useState(false);
 
-  // Only the charges the firm set up for a sale in this mode can be saved on one; the
-  // whole chart used to be offered and the server refused all the rest.
-  const options = setup
-    ? enterableCharges(setup, nonTax).map((charge) => ({
-        value: charge.ledgerId,
-        label: `${charge.code} — ${charge.name}`,
-      }))
-    : ledgers.map((l) => ({ value: l.ledgerId, label: `${l.code} — ${l.name}` }));
+  // Every ledger set up for a sale in this tax mode, each waiting for its amount, then
+  // any this invoice already carries that has since been taken off the setup.
+  const shown = chargeRows(setup, nonTax, rows, ledgers);
 
-  const adds = (row: AdditionalLedgerItem): boolean =>
-    setup?.find((charge) => charge.ledgerId === row.ledgerId)?.isAddition ??
-    row.isAddition;
+  const amountOf = (ledgerId: string): string =>
+    rows.find((row) => row.ledgerId === ledgerId)?.amount ?? '';
 
-  const removeRow = (id: string): void => {
-    onChange(rows.filter((r) => r.id !== id));
-  };
-
-  const updateRow = (id: string, patch: Partial<AdditionalLedgerItem>): void => {
-    onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  };
+  const setAmount = (ledgerId: string, adds: boolean, amount: string): void =>
+    onChange(
+      rows.some((row) => row.ledgerId === ledgerId)
+        ? rows.map((row) => (row.ledgerId === ledgerId ? { ...row, amount } : row))
+        : [
+            ...rows,
+            {
+              id: Math.random().toString(36).slice(2, 9),
+              ledgerId,
+              isAddition: adds,
+              amount,
+            },
+          ],
+    );
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
@@ -600,235 +586,47 @@ function AdditionalLedgersSection({
         <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
           {t('sales.additionalLedgers')}
         </span>
-        <div className="flex items-center gap-1">
-          {/* Any expense or income ledger can be carried on a sale; the first time it
-              is, it is set up here - with which way it moves the total - rather than
-              the invoice being abandoned for a settings screen. */}
-          {can('accounting:additional-ledger:create') && (
-            <button
-              type="button"
-              onClick={() => setSettingUp(true)}
-              className="btn-ghost btn-xs"
-            >
-              {t('sales.setUpCharge')}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() =>
-              onChange([
-                ...rows,
-                {
-                  id: Math.random().toString(36).slice(2, 9),
-                  ledgerId: '',
-                  isAddition: true,
-                  amount: '',
-                },
-              ])
-            }
-            className="btn-ghost btn-xs"
-          >
-            {t('sales.addCharge')}
-          </button>
-        </div>
       </div>
 
-      {settingUp && (
-        <ChargeSetupDialog
-          document={document}
-          ledgers={ledgers}
-          setup={setup ?? []}
-          onClose={() => setSettingUp(false)}
-          onDone={(charge) => {
-            setSettingUp(false);
-            // Onto the first empty row, or a new one, ready for its amount.
-            const empty = rows.find((row) => row.ledgerId === '');
-            const chosen = {
-              ledgerId: charge.ledgerId,
-              isAddition: charge.isAddition,
-            };
-            onChange(
-              empty
-                ? rows.map((row) => (row.id === empty.id ? { ...row, ...chosen } : row))
-                : [
-                    ...rows,
-                    { id: Math.random().toString(36).slice(2, 9), amount: '', ...chosen },
-                  ],
-            );
-          }}
-        />
-      )}
-
-      {rows.length === 0 ? (
+      {shown.length === 0 ? (
         <p className="py-2 text-center text-xs text-ink-muted">
-          {t('sales.noAdditionalLedgers')}
+          {setup === undefined ? t('common.loading') : t('documents.noChargesSetUp')}{' '}
+          {setup !== undefined && can('platform:setting:view') && (
+            <Link to="/settings?tab=charges" className="font-medium underline">
+              {t('documents.setUpCharges')}
+            </Link>
+          )}
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-ink-muted">
-                <th className="pb-1 text-start">{t('sales.ledger')}</th>
-                <th className="w-24 pb-1 text-center">{t('sales.taxTreatment')}</th>
-                <th className="w-24 pb-1 text-end">{t('sales.amount')}</th>
-                <th className="w-7" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line/60">
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="pe-2 py-1">
-                    <SearchSelect
-                      value={row.ledgerId}
-                      onChange={(ledgerId) =>
-                        updateRow(row.id, {
-                          ledgerId,
-                          isAddition:
-                            setup?.find((charge) => charge.ledgerId === ledgerId)
-                              ?.isAddition ?? row.isAddition,
-                        })
-                      }
-                      options={options}
-                      size="sm"
-                      label={t('sales.chooseLedger')}
-                      placeholder={t('sales.chooseLedger')}
-                    />
-                  </td>
-                  {/* Which way it moves the total is the charge's own, set up once for
-                      the firm - the server posts it that way whatever a row says, so
-                      the screen shows it rather than asking. */}
-                  <td className="px-1 py-1 text-center text-xs font-medium whitespace-nowrap">
-                    {row.ledgerId === '' ? (
-                      ''
-                    ) : adds(row) ? (
-                      <span className="text-emerald-700 dark:text-emerald-400">
-                        {t('sales.addition')}
-                      </span>
-                    ) : (
-                      <span className="text-red-600">{t('sales.deduction')}</span>
-                    )}
-                  </td>
-                  <td className="px-1 py-1 text-end">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={row.amount}
-                      onChange={(e) => updateRow(row.id, { amount: e.target.value })}
-                      className="field-input-sm w-20 text-end font-mono tabular-nums"
-                    />
-                  </td>
-                  <td className="ps-1 py-1 text-end">
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row.id)}
-                      className="rounded p-1 text-ink-muted transition hover:text-red-600"
-                      aria-label={t('sales.removeLine')}
-                    >
-                      <IconClose className="size-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-1.5">
+          {shown.map((row) => (
+            <label key={row.ledgerId} className="flex items-center gap-2 text-xs">
+              <span className="min-w-0 flex-1 truncate text-ink">{row.label}</span>
+              <span
+                className={clsx(
+                  'shrink-0 font-medium',
+                  row.adds
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400',
+                )}
+              >
+                {row.adds ? t('sales.addition') : t('sales.deduction')}
+              </span>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                placeholder="0.00"
+                aria-label={row.label}
+                value={amountOf(row.ledgerId)}
+                onChange={(e) => setAmount(row.ledgerId, row.adds, e.target.value)}
+                className="field-input-sm w-24 shrink-0 text-end font-mono tabular-nums"
+              />
+            </label>
+          ))}
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Sets a ledger up as an additional ledger on this kind of document.
- *
- * Offers the firm's charge ledgers and its income and expense ledgers that are not set
- * up yet - a party, cash, bank or tax account already has its own place on a document -
- * and asks only which way it moves the total, which is the one thing the server cannot
- * guess.
- */
-function ChargeSetupDialog({
-  document,
-  ledgers,
-  setup,
-  onClose,
-  onDone,
-}: {
-  readonly document: ChargeDocument;
-  readonly ledgers: readonly LedgerSummary[];
-  readonly setup: readonly ChargeSetup[];
-  readonly onClose: () => void;
-  readonly onDone: (charge: ChargeSetup) => void;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [ledgerId, setLedgerId] = useState('');
-  const [isAddition, setIsAddition] = useState(true);
-
-  const offered = useMemo(() => {
-    const already = new Set(setup.map((charge) => charge.ledgerId));
-
-    return ledgers
-      .filter(
-        (ledger) =>
-          (ledger.kind === LedgerKind.additionalCharge ||
-            (ledger.kind === LedgerKind.general &&
-              (ledger.nature === AccountNature.income ||
-                ledger.nature === AccountNature.expense))) &&
-          !already.has(ledger.ledgerId),
-      )
-      .map((ledger) => ({
-        value: ledger.ledgerId,
-        label: `${ledger.code} — ${ledger.name}`,
-        detail: ledger.groupName,
-      }));
-  }, [ledgers, setup]);
-
-  const save = useMutation<ChargeSetup, ApiError>({
-    mutationFn: () => mapCharge(document, ledgerId, isAddition),
-    onSuccess: async (charge) => {
-      await queryClient.invalidateQueries({ queryKey: chargeSetupKey(document) });
-      onDone(charge);
-    },
-  });
-
-  return (
-    <Modal title={t('sales.setUpCharge')} size="form" onClose={onClose}>
-      <div className="space-y-4">
-        {save.isError && (
-          <p className="alert-error">{save.error.detail || save.error.code}</p>
-        )}
-
-        <FormField label={t('sales.ledger')} required>
-          <SearchSelect
-            value={ledgerId}
-            onChange={setLedgerId}
-            options={offered}
-            label={t('sales.ledger')}
-            placeholder={t('sales.chooseLedger')}
-          />
-        </FormField>
-
-        <SelectField<string>
-          label={t('sales.taxTreatment')}
-          value={isAddition ? 'add' : 'deduct'}
-          onChange={(value) => setIsAddition(value === 'add')}
-          options={[
-            { value: 'add', label: t('sales.addition') },
-            { value: 'deduct', label: t('sales.deduction') },
-          ]}
-        />
-
-        <div className="flex justify-end gap-2 border-t border-line pt-3">
-          <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
-          <ModalButton
-            primary
-            disabled={ledgerId === '' || save.isPending}
-            onClick={() => save.mutate()}
-          >
-            {save.isPending ? t('common.saving') : t('sales.setUp')}
-          </ModalButton>
-        </div>
-      </div>
-    </Modal>
   );
 }
 
@@ -938,14 +736,21 @@ function EntryDialog({
       }));
     }
 
-    const targetType = isReturn(initialKind) ? 'SalesReturn' : 'Sales';
+    // A return starts with none; a sale with the amounts Settings gives its additional
+    // ledgers. One no longer set up for a sale is dropped when the setup arrives.
+    if (isReturn(initialKind)) return [];
     return (settings.defaultAdditionalLedgers ?? [])
-      .filter((l) => l.transactionType === targetType && l.isDefaultActive)
+      .filter(
+        (l) =>
+          l.transactionType === 'Sales' &&
+          l.isDefaultActive &&
+          Number(l.defaultAmount) > 0,
+      )
       .map((l) => ({
         id: Math.random().toString(36).slice(2, 9),
         ledgerId: l.ledgerId,
         isAddition: l.isAddition,
-        amount: l.defaultAmount || '0.00',
+        amount: l.defaultAmount,
       }));
   });
   const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>(
@@ -1021,7 +826,8 @@ function EntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
-  // Where a payment goes: the cash in the drawer, or the bank an online payment lands in.
+  // Where a payment goes: the cash in the drawer, or the bank a card or online payment
+  // lands in.
   const cashAccounts = useMemo(
     () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.cash),
     [ledgers.data],
@@ -1030,12 +836,11 @@ function EntryDialog({
     () => (ledgers.data ?? []).filter((ledger) => ledger.kind === LedgerKind.bank),
     [ledgers.data],
   );
-  const receivingAccounts =
-    paymentMode === SalesPaymentMode.online
-      ? bankAccounts
-      : paymentMode === SalesPaymentMode.cash
-        ? cashAccounts
-        : [...cashAccounts, ...bankAccounts];
+  const receivingAccounts = paidThroughBank(paymentMode)
+    ? bankAccounts
+    : paymentMode === SalesPaymentMode.cash
+      ? cashAccounts
+      : [...cashAccounts, ...bankAccounts];
   // The account chosen, or the firm's default for the mode, or the first there is.
   const receivingAccountId = receivingAccounts.some(
     (ledger) => ledger.ledgerId === receivedInto,
@@ -1044,7 +849,7 @@ function EntryDialog({
     : (receivingAccounts.find(
         (ledger) =>
           ledger.ledgerId ===
-          (paymentMode === SalesPaymentMode.online
+          (paidThroughBank(paymentMode)
             ? settings.defaultBankLedgerId
             : settings.defaultCashLedgerId),
       )?.ledgerId ??
@@ -1139,6 +944,19 @@ function EntryDialog({
   });
 
   const chargeSetup = useChargeSetup(isReturn(kind) ? 'salesReturn' : 'sales');
+
+  // A default for a ledger since taken off the sales setup would be refused on saving,
+  // so a new invoice drops it once the setup arrives. One being corrected keeps what
+  // it carries.
+  useEffect(() => {
+    if (editing || chargeSetup === undefined) return;
+    const configured = new Set(chargeSetup.map((charge) => charge.ledgerId));
+    setAdditionalLedgers((current) =>
+      current.every((row) => configured.has(row.ledgerId))
+        ? current
+        : current.filter((row) => configured.has(row.ledgerId)),
+    );
+  }, [editing, chargeSetup]);
 
   const additionalLedgersTotal = useMemo(() => {
     return additionalLedgers.reduce((acc, row) => {
@@ -1652,6 +1470,7 @@ function EntryDialog({
             onChange={(val) => setPaymentMode(Number(val))}
             options={[
               { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
+              { value: SalesPaymentMode.card, label: t('paymentModes.card') },
               { value: SalesPaymentMode.online, label: t('paymentModes.online') },
               { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
             ]}
@@ -2006,7 +1825,6 @@ function EntryDialog({
           <AdditionalLedgersSection
             rows={additionalLedgers}
             ledgers={ledgers.data ?? []}
-            document={isReturn(kind) ? 'salesReturn' : 'sales'}
             setup={chargeSetup}
             nonTax={taxMode === 'NT'}
             onChange={setAdditionalLedgers}
@@ -2032,6 +1850,25 @@ function EntryDialog({
             <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
               {t('sales.billSection')}
             </h3>
+            {/* Each figure the total is built from, in the order it is built: the
+                goods, what came off them, what is taxed, the tax, then each
+                additional ledger by name. */}
+            {totals.discount > 0 && (
+              <>
+                <div className="flex justify-between text-ink-muted">
+                  <span>{t('sales.itemsTotal')}</span>
+                  <span className="font-mono tabular-nums">
+                    {moneyAlways(totals.gross)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-ink-muted">
+                  <span>{t('sales.discount')}</span>
+                  <span className="font-mono tabular-nums">
+                    −{moneyAlways(totals.discount)}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-ink-muted">
               <span>{t('sales.taxable')}</span>
               <span className="font-mono tabular-nums">
@@ -2046,15 +1883,33 @@ function EntryDialog({
                 <span className="font-mono tabular-nums">{moneyAlways(totals.tax)}</span>
               </div>
             )}
-            {additionalLedgersTotal !== 0 && (
-              <div className="flex justify-between text-ink-muted">
-                <span>{t('sales.additionalLedgersTotal')}</span>
-                <span className="font-mono tabular-nums">
-                  {additionalLedgersTotal >= 0 ? '+' : ''}
-                  {moneyAlways(additionalLedgersTotal)}
-                </span>
-              </div>
-            )}
+            {chargeRows(
+              chargeSetup,
+              taxMode === 'NT',
+              additionalLedgers,
+              ledgers.data ?? [],
+            )
+              .filter(
+                (row) =>
+                  Number(
+                    additionalLedgers.find((item) => item.ledgerId === row.ledgerId)
+                      ?.amount,
+                  ) > 0,
+              )
+              .map((row) => (
+                <div key={row.ledgerId} className="flex justify-between text-ink-muted">
+                  <span className="truncate pe-2">{row.label}</span>
+                  <span className="font-mono tabular-nums">
+                    {row.adds ? '+' : '−'}
+                    {moneyAlways(
+                      Number(
+                        additionalLedgers.find((item) => item.ledgerId === row.ledgerId)
+                          ?.amount,
+                      ),
+                    )}
+                  </span>
+                </div>
+              ))}
             <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
               <span>
                 {isReturn(kind) ? t('sales.returnTotal') : t('sales.billTotal')}
@@ -2113,16 +1968,22 @@ function EntryDialog({
                   </select>
                 </label>
 
-                {paymentMode === SalesPaymentMode.online && (
+                {paidThroughBank(paymentMode) && (
                   <label className="col-span-2 block">
                     <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                      {t('sales.transactionId')}
+                      {paymentMode === SalesPaymentMode.card
+                        ? t('sales.cardApproval')
+                        : t('sales.transactionId')}
                     </span>
                     <input
                       value={paymentReference}
                       maxLength={60}
                       onChange={(e) => setPaymentReference(e.target.value)}
-                      placeholder={t('sales.transactionIdPlaceholder')}
+                      placeholder={
+                        paymentMode === SalesPaymentMode.card
+                          ? t('sales.cardApprovalPlaceholder')
+                          : t('sales.transactionIdPlaceholder')
+                      }
                       className="field-input-sm w-full font-mono"
                     />
                   </label>
@@ -2154,6 +2015,21 @@ function EntryDialog({
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* What of this bill is left unpaid - distinct from the customer's whole
+                  balance below, which the two used to be confused with. */}
+              <div className="flex justify-between border-t border-line/60 pt-1.5 font-semibold text-ink">
+                <span>{t('sales.billDue')}</span>
+                <span
+                  className={clsx(
+                    'font-mono tabular-nums',
+                    grandTotal - effectivePaid > 0.004 &&
+                      'text-red-600 dark:text-red-400',
+                  )}
+                >
+                  {moneyAlways(Math.max(0, grandTotal - effectivePaid))}
+                </span>
               </div>
             </section>
           )}
@@ -2991,11 +2867,11 @@ function timeOfSale(createdAtUtc: string): string {
 }
 
 function paymentModeLabel(mode: number, t: (key: string) => string): string {
-  return mode === SalesPaymentMode.cash
-    ? t('paymentModes.cash')
-    : mode === SalesPaymentMode.online
-      ? t('paymentModes.online')
-      : t('paymentModes.credit');
+  if (mode === SalesPaymentMode.cash) return t('paymentModes.cash');
+  if (mode === SalesPaymentMode.card) return t('paymentModes.card');
+  if (mode === SalesPaymentMode.online) return t('paymentModes.online');
+
+  return t('paymentModes.credit');
 }
 
 function statusLabel(status: number, t: (key: string) => string): string {

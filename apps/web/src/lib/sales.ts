@@ -17,7 +17,12 @@ export const SalesInvoiceStatus = { draft: 1, posted: 2, cancelled: 3 } as const
  * How a sale was settled at the counter. Online is a UPI or card transfer - Google Pay
  * and the like - into one of the firm's bank accounts, with its transaction ID kept.
  */
-export const SalesPaymentMode = { credit: 1, cash: 2, online: 3 } as const;
+export const SalesPaymentMode = { credit: 1, cash: 2, online: 3, card: 4 } as const;
+
+/** Whether a sale's payment lands in a bank - online or by card - rather than the drawer. */
+export function paidThroughBank(mode: number): boolean {
+  return mode === SalesPaymentMode.online || mode === SalesPaymentMode.card;
+}
 
 /** How a document treats tax. */
 export const TaxMode = { nonTax: 1, tax: 2, cst: 3 } as const;

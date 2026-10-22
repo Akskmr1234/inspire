@@ -205,3 +205,64 @@ public sealed class MapChargeCommandHandler : ICommandHandler<MapChargeCommand, 
         return Result.Success(ListChargesQueryHandler.Describe(created.Value, ledger));
     }
 }
+
+/// <summary>Takes a ledger off the charges one kind of document carries.</summary>
+/// <param name="Document">The kind of document.</param>
+/// <param name="LedgerId">The account the charge posts to.</param>
+/// <remarks>
+/// Withdrawn rather than deleted: documents already carrying it still name it, and
+/// setting it up again restores it with the direction it had.
+/// </remarks>
+public sealed record WithdrawChargeCommand(ChargeableDocument Document, Guid LedgerId)
+    : ICommand, ITransactional;
+
+/// <summary>Handles <see cref="WithdrawChargeCommand"/>.</summary>
+public sealed class WithdrawChargeCommandHandler : ICommandHandler<WithdrawChargeCommand>
+{
+    private readonly IAdditionalLedgerRepository _charges;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="WithdrawChargeCommandHandler"/> class.</summary>
+    /// <param name="charges">The charge setup.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public WithdrawChargeCommandHandler(
+        IAdditionalLedgerRepository charges,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _charges = charges;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> Handle(WithdrawChargeCommand request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure(Error.Forbidden(
+                "Charges.NoFirmSelected", "A firm must be selected to set up its charges."));
+        }
+
+        IReadOnlyList<AdditionalLedger> mapped = await _charges.ListForDocumentAsync(
+            firmId, request.Document, cancellationToken);
+
+        AdditionalLedger? charge = mapped.FirstOrDefault(
+            candidate => candidate.LedgerId == LedgerId.From(request.LedgerId));
+
+        if (charge is null)
+        {
+            return Result.Failure(Error.NotFound(
+                "Charges.NotSetUp", "That ledger is not set up for this kind of document."));
+        }
+
+        charge.Withdraw();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+}

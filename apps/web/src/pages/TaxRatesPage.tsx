@@ -93,8 +93,10 @@ export function TaxRatesPage(): React.JSX.Element {
       fetchRows={(includeInactive) => listTaxRates(includeInactive)}
       columns={columns}
       rowKey={(row) => row.id}
-      addForm={(run, busy) => <TaxRateForm run={run} busy={busy} />}
-      editForm={(row, run, busy) => <TaxRateForm record={row} run={run} busy={busy} />}
+      addForm={(run, busy, rows) => <TaxRateForm rates={rows} run={run} busy={busy} />}
+      editForm={(row, run, busy, rows) => (
+        <TaxRateForm record={row} rates={rows} run={run} busy={busy} />
+      )}
     />
   );
 }

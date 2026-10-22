@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { request, type ApiError } from '@/lib/api';
-import { chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
+import { chargeAdds, chargeLedgers, type LedgerSummary } from '@/lib/ledgers';
 
 /**
  * The document kinds a default charge can be set against.
@@ -148,4 +148,74 @@ export function enterableCharges(
     (charge) =>
       !charge.isComputed && (nonTax ? charge.appliesUnderNonTax : charge.appliesUnderTax),
   );
+}
+
+/** Takes a ledger off the charges a kind of document carries. */
+export function withdrawCharge(
+  document: ChargeDocument,
+  ledgerId: string,
+): Promise<void> {
+  return request<void>(`/accounting/charges/${SETUP_FOR[document]}/${ledgerId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * The name a document's setup goes by, which is also the key its default amounts are
+ * kept under in Settings. A return shares its sale's or purchase's.
+ */
+export function setupName(document: ChargeDocument): string {
+  return SETUP_FOR[document];
+}
+
+/** One row of a document's additional ledgers: a ledger and which way it moves the total. */
+export interface ChargeRow {
+  readonly ledgerId: string;
+  readonly label: string;
+  readonly adds: boolean;
+}
+
+/**
+ * The rows a document's additional ledgers show.
+ *
+ * Every ledger Settings set up for the document under its tax mode, so nobody picks
+ * them one by one on each invoice; then any the document already carries that has
+ * since been taken off the setup, so a saved figure is never hidden.
+ */
+export function chargeRows(
+  setup: readonly ChargeSetup[] | undefined,
+  nonTax: boolean,
+  carried: readonly { readonly ledgerId: string; readonly amount: string }[],
+  ledgers: readonly LedgerSummary[],
+): readonly ChargeRow[] {
+  const rows: ChargeRow[] = (setup ? enterableCharges(setup, nonTax) : []).map(
+    (charge) => ({
+      ledgerId: charge.ledgerId,
+      label: `${charge.code} — ${charge.name}`,
+      adds: charge.isAddition,
+    }),
+  );
+  const seen = new Set(rows.map((row) => row.ledgerId));
+
+  for (const charge of carried) {
+    if (
+      charge.ledgerId === '' ||
+      seen.has(charge.ledgerId) ||
+      !(Number(charge.amount) > 0)
+    ) {
+      continue;
+    }
+
+    const ledger = ledgers.find((candidate) => candidate.ledgerId === charge.ledgerId);
+    const set = setup?.find((candidate) => candidate.ledgerId === charge.ledgerId);
+
+    rows.push({
+      ledgerId: charge.ledgerId,
+      label: ledger ? `${ledger.code} — ${ledger.name}` : (set?.name ?? charge.ledgerId),
+      adds: set?.isAddition ?? (ledger ? chargeAdds(ledger) : true),
+    });
+    seen.add(charge.ledgerId);
+  }
+
+  return rows;
 }

@@ -607,13 +607,14 @@ function OrderEntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  const chargeSetup = useChargeSetup(
+    kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
+  );
   useDefaultCharges(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
     ledgers.data ?? [],
     setCharges,
-  );
-  const chargeSetup = useChargeSetup(
-    kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
+    chargeSetup,
   );
 
   const valuation = useQuery<StockValuationReport, ApiError>({

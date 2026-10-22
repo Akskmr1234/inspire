@@ -55,6 +55,12 @@ public enum SalesPaymentMode
     /// accounts, with the transaction's own reference kept as the proof of it.
     /// </summary>
     Online = 3,
+
+    /// <summary>
+    /// Paid by debit or credit card at the counter, into the bank account the card
+    /// machine settles to, with the slip's approval code kept as the proof of it.
+    /// </summary>
+    Card = 4,
 }
 
 /// <summary>Where a sales invoice stands in its lifecycle.</summary>
@@ -752,7 +758,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
         {
             return Result.Failure(Error.Validation(
                 "SalesInvoice.PaymentModeInvalid",
-                "A sale is paid in cash, online or on credit."));
+                "A sale is paid in cash, by card, online or on credit."));
         }
 
         Ledger? stranger = new[] { salesman, billingMan }.FirstOrDefault(person =>

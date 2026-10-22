@@ -153,6 +153,35 @@ public sealed class SalesPaymentEndpointTests
     }
 
     [Fact]
+    public async Task A_card_payment_goes_to_the_bank_with_its_approval_code()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+        await BuyAsync(client, masters);
+        Guid bank = await LedgerOfKindAsync(client, LedgerKind.Bank);
+
+        HttpResponseMessage sold = await client.PostAsJsonAsync(Invoices, Sale(masters, new
+        {
+            PaymentMode = SalesPaymentMode.Card,
+            AmountReceived = 15m,
+            ReceivedIntoLedgerId = bank,
+            PaymentReference = "APPR-0091",
+            Post = true,
+        }));
+        sold.StatusCode.ShouldBe(HttpStatusCode.Created, await sold.Content.ReadAsStringAsync());
+        Guid id = (await sold.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!.SalesInvoiceId;
+
+        SalesInvoiceDetail detail = (await client.GetFromJsonAsync<SalesInvoiceDetail>($"{Invoices}/{id}"))!;
+        detail.PaymentMode.ShouldBe(SalesPaymentMode.Card);
+
+        VoucherDetailResponse receipt = (await client.GetFromJsonAsync<VoucherDetailResponse>(
+            $"{Vouchers}/{detail.ReceiptVoucherId}"))!;
+        receipt.Type.ShouldBe(VoucherType.BankReceipt);
+        receipt.ReferenceNumber.ShouldBe("APPR-0091");
+        receipt.PaymentMode.ShouldBe("Card");
+    }
+
+    [Fact]
     public async Task A_payment_must_fit_the_bill_and_go_into_a_cash_or_bank_account()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

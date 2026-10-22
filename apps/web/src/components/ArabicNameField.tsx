@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import { Field } from '@/components/Form';
 import { translate } from '@/lib/translate';
 import { useSettings } from '@/stores/settings';
@@ -100,7 +101,7 @@ export function ArabicNameField({
       error={error}
       {...(failed ? { hint: t('settings.translateFailed') } : {})}
     >
-      <div className="flex items-stretch gap-2">
+      <div className="flex items-stretch">
         <input
           dir="rtl"
           value={value}
@@ -110,7 +111,7 @@ export function ArabicNameField({
             touched.current = true;
             onChange(event.target.value);
           }}
-          className={error ? 'field-input field-invalid' : 'field-input'}
+          className={clsx('field-input rounded-e-none', error && 'field-invalid')}
         />
 
         {/*
@@ -122,7 +123,7 @@ export function ArabicNameField({
           type="button"
           disabled={busy || source.trim() === ''}
           onClick={() => void run(source)}
-          className="btn-secondary btn-sm shrink-0"
+          className="btn-secondary btn-sm -ms-px h-auto shrink-0 rounded-s-none"
           title={t('settings.translateNow')}
         >
           {busy ? t('settings.translating') : t('settings.translateNow')}
