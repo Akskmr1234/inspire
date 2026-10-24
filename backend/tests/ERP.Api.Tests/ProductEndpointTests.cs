@@ -89,6 +89,82 @@ public sealed class ProductEndpointTests
     }
 
     [Fact]
+    public async Task A_name_another_product_has_is_refused_but_a_product_keeps_its_own()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        Fixtures fixtures = await Fixtures.CreateAsync(client);
+
+        Guid first = await CreateProductAsync(client, fixtures, $"Red widget {fixtures.Suffix}");
+        Guid second = await CreateProductAsync(client, fixtures, $"Green widget {fixtures.Suffix}");
+
+        // The same name again, whatever its case or spacing, is refused by name.
+        HttpResponseMessage again = await PostProductAsync(
+            client, fixtures, $"  red WIDGET {fixtures.Suffix} ");
+        again.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await again.Content.ReadAsStringAsync()).ShouldContain("Product.NameTaken");
+
+        // Renaming one onto the other is refused too.
+        (await client.PutAsJsonAsync(
+            $"{Products}/{second}/description",
+            new { Description = $"Red widget {fixtures.Suffix}" }))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        // Saving a product under the name it already has is not a clash.
+        (await client.PutAsJsonAsync(
+            $"{Products}/{first}/description",
+            new { Description = $"Red widget {fixtures.Suffix}", Rack = "R9" }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task A_new_product_can_start_with_its_costing_method_and_rates()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        Fixtures fixtures = await Fixtures.CreateAsync(client);
+
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            Products,
+            new
+            {
+                Description = $"Priced widget {fixtures.Suffix}",
+                CategoryId = fixtures.CategoryId,
+                StockUnitId = fixtures.EachId,
+                Rates = new
+                {
+                    CostingMethod = 2,
+                    Cost = 6m,
+                    RetailRate = 10m,
+                    WholesaleRate = 9m,
+                    OtherRate = 8m,
+                    MaximumRetailPrice = 12m,
+                },
+            });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+
+        ProductDetail product = await ReadAsync(client, await created.Content.ReadFromJsonAsync<Guid>());
+        ((int)product.CostingMethod).ShouldBe(2);
+        product.Cost.ShouldBe(6m);
+        product.RetailRate.ShouldBe(10m);
+        product.WholesaleRate.ShouldBe(9m);
+        product.OtherRate.ShouldBe(8m);
+        product.MaximumRetailPrice.ShouldBe(12m);
+
+        // A retail rate above the MRP is refused here exactly as on the rates tab, and
+        // nothing is created.
+        HttpResponseMessage refused = await client.PostAsJsonAsync(
+            Products,
+            new
+            {
+                Description = $"Overpriced widget {fixtures.Suffix}",
+                CategoryId = fixtures.CategoryId,
+                StockUnitId = fixtures.EachId,
+                Rates = new { CostingMethod = 1, RetailRate = 20m, MaximumRetailPrice = 12m },
+            });
+        refused.IsSuccessStatusCode.ShouldBeFalse();
+        (await ListAsync(client, $"Overpriced widget {fixtures.Suffix}")).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_category_from_another_firm_is_not_found()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
@@ -442,20 +518,20 @@ public sealed class ProductEndpointTests
                 new { Code = $"CAT{suffix}", Name = $"Widgets {suffix}" });
 
             Guid eachId = await PostAsync(
-                client, "units", new { Code = $"EA{suffix}", Name = "Each" });
+                client, "units", new { Code = $"EA{suffix}", Name = $"Each {suffix}" });
 
             Guid boxId = await PostAsync(
                 client, "units",
                 new
                 {
                     Code = $"BX{suffix}",
-                    Name = "Box of 24",
+                    Name = $"Box of 24 {suffix}",
                     BaseUnitId = eachId,
                     ConversionFactor = 24m,
                 });
 
             Guid kilogramId = await PostAsync(
-                client, "units", new { Code = $"KG{suffix}", Name = "Kilogram" });
+                client, "units", new { Code = $"KG{suffix}", Name = $"Kilogram {suffix}" });
 
             return new Fixtures(suffix, categoryId, eachId, boxId, kilogramId);
         }

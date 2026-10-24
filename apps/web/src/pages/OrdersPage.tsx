@@ -55,7 +55,7 @@ import {
   type OrderLineInput,
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
@@ -294,7 +294,8 @@ function OrdersPage({
       setPage(1);
     };
 
-  const columns: readonly GridColumn<OrderRow>[] = [
+  const taxOn = useTaxOn();
+  const allColumns: readonly GridColumn<OrderRow>[] = [
     {
       key: 'number',
       header: words('number'),
@@ -385,6 +386,9 @@ function OrdersPage({
       ),
     },
   ];
+  const columns = taxOn
+    ? allColumns
+    : allColumns.filter((column) => column.key !== 'taxable' && column.key !== 'tax');
 
   const controls = (
     <div className="filter-grid">
@@ -556,8 +560,12 @@ function OrderEntryDialog({
   const { t } = useTranslation();
   const words = useOrderWords(quotation);
   const { taxRates, defaultTaxRate, preferredWarehouseId } = useSettings();
+  const taxOn = useTaxOn();
 
-  const [mode, setMode] = useState<number>(PurchaseTaxMode.tax);
+  // A firm that charges no tax enters every order without it.
+  const [mode, setMode] = useState<number>(
+    taxOn ? PurchaseTaxMode.tax : PurchaseTaxMode.nonTax,
+  );
   const [draft, setDraft] = useState<OrderHeaderDraft>({
     date: new Date().toISOString().slice(0, 10),
     expectedOn: '',
@@ -675,8 +683,11 @@ function OrderEntryDialog({
     { key: 'quantity', label: t('orders.quantity'), defaultOn: true, fixed: true },
     { key: 'rate', label: t('orders.rate'), defaultOn: true, fixed: true },
     { key: 'discount', label: t('orders.discount'), defaultOn: true },
-    { key: 'taxPercent', label: t('orders.taxPercent'), defaultOn: true },
+    ...(taxOn
+      ? [{ key: 'taxPercent', label: t('orders.taxPercent'), defaultOn: true }]
+      : []),
     { key: 'net', label: t('orders.net'), defaultOn: true, fixed: true },
+    { key: 'lineTotal', label: t('sales.lineTotal'), defaultOn: true },
   ];
 
   const columns = useLineColumns(`orders-${kind}`, lineColumns);
@@ -696,7 +707,7 @@ function OrderEntryDialog({
         // value, which is skipped below, subtracting back would invent a figure.
         gross += Number(line.quantity) * Number(line.rate);
         discount += Number(line.discount || 0);
-        tax += (net * Number(line.taxPercentage || 0)) / 100;
+        tax += taxOn ? (net * Number(line.taxPercentage || 0)) / 100 : 0;
       }
     }
 
@@ -709,7 +720,7 @@ function OrderEntryDialog({
       taxable:
         (Number.isFinite(gross) ? gross : 0) - (Number.isFinite(discount) ? discount : 0),
     };
-  }, [lines]);
+  }, [lines, taxOn]);
 
   const { errors, submit } = useValidation<OrderHeaderDraft>((values) =>
     collect({
@@ -762,7 +773,7 @@ function OrderEntryDialog({
           productId: line.productId,
           quantity: Number(line.quantity),
           rate: Number(line.rate || 0),
-          taxPercentage: Number(line.taxPercentage || 0),
+          taxPercentage: taxOn ? Number(line.taxPercentage || 0) : 0,
           discount: Number(line.discount || 0),
         }));
 
@@ -872,16 +883,18 @@ function OrderEntryDialog({
           />
         </Field>
 
-        <SelectField
-          label={t('purchase.taxMode')}
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-            { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-            { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-          ]}
-        />
+        {taxOn && (
+          <SelectField
+            label={t('purchase.taxMode')}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+              { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+              { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+            ]}
+          />
+        )}
 
         <TextField
           label={t('orders.reference')}
@@ -919,6 +932,9 @@ function OrderEntryDialog({
                 <th className="px-2 py-1 text-end">{t('orders.taxPercent')}</th>
               )}
               <th className="px-2 py-1 text-end">{t('orders.net')}</th>
+              {columns.shows('lineTotal') && (
+                <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
+              )}
               <th className="line-action-column" />
             </tr>
           </thead>
@@ -1025,6 +1041,18 @@ function OrderEntryDialog({
                   >
                     {moneyAlways(lineNet(line))}
                   </td>
+
+                  {columns.shows('lineTotal') && (
+                    <td
+                      data-label={t('sales.lineTotal')}
+                      className="px-2 py-1 text-end font-mono font-semibold tabular-nums"
+                    >
+                      {moneyAlways(
+                        lineNet(line) *
+                          (1 + (taxOn ? Number(line.taxPercentage || 0) : 0) / 100),
+                      )}
+                    </td>
+                  )}
 
                   <td className="px-2 py-1 text-end">
                     {lines.length > 1 && (

@@ -69,7 +69,17 @@ public sealed record CreateCountryCommand(
     string Name,
     string? NameArabic = null,
     string? CurrencyCode = null,
-    string? CurrencyName = null) : ICommand<Guid>;
+    string? CurrencyName = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Country;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Corrects a country. Its code stays as it is: parties record it.</summary>
 /// <param name="Id">The country.</param>
@@ -82,7 +92,17 @@ public sealed record UpdateCountryCommand(
     string Name,
     string? NameArabic = null,
     string? CurrencyCode = null,
-    string? CurrencyName = null) : ICommand;
+    string? CurrencyName = null) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Country;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => Id;
+}
 
 /// <summary>Withdraws a country from use, or puts it back.</summary>
 /// <param name="Id">The country.</param>
@@ -104,7 +124,20 @@ public sealed record CreateStateCommand(
     Guid CountryId,
     string Code,
     string Name,
-    string? NameArabic = null) : ICommand<Guid>;
+    string? NameArabic = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Region;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.NameScopeId => CountryId;
+}
 
 /// <summary>Corrects a state, or moves it to another country. Its code stays as it is.</summary>
 /// <param name="Id">The state.</param>
@@ -115,7 +148,20 @@ public sealed record UpdateStateCommand(
     Guid Id,
     Guid CountryId,
     string Name,
-    string? NameArabic = null) : ICommand;
+    string? NameArabic = null) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Region;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => Id;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.NameScopeId => CountryId;
+}
 
 /// <summary>Withdraws a state from use, or puts it back.</summary>
 /// <param name="Id">The state.</param>

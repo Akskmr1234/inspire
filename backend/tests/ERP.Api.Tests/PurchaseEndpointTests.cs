@@ -69,7 +69,7 @@ public sealed class PurchaseEndpointTests
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
 
         string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-        object body = new { Code = $"DUP{suffix}", Name = "Twice" };
+        object body = new { Code = $"DUP{suffix}", Name = $"Twice {suffix}" };
 
         (await client.PostAsJsonAsync(Suppliers, body))
             .StatusCode.ShouldBe(HttpStatusCode.Created);
@@ -579,17 +579,17 @@ public sealed class PurchaseEndpointTests
             client, "categories", new { Code = $"PCAT{suffix}", Name = $"Purchase {suffix}" });
 
         Guid unitId = await CreateMasterAsync(
-            client, "units", new { Code = $"PEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"PEA{suffix}", Name = $"Each {suffix}" });
 
         Guid warehouseId = await CreateMasterAsync(
-            client, "warehouses", new { Code = $"PWH{suffix}", Name = "Purchase store" });
+            client, "warehouses", new { Code = $"PWH{suffix}", Name = $"Purchase store {suffix}" });
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
             new
             {
                 Code = $"PUR{suffix}",
-                Description = "A thing to buy",
+                Description = $"A thing to buy {suffix}",
                 CategoryId = categoryId,
                 StockUnitId = unitId,
                 ItemType = 1,

@@ -170,12 +170,32 @@ public sealed record CreateUnitCommand(
     Guid? BaseUnitId = null,
     decimal ConversionFactor = 1m,
     string? Symbol = null,
-    int DecimalPlaces = 0) : ICommand<Guid>;
+    int DecimalPlaces = 0) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Unit;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Renames a unit of measurement.</summary>
 /// <param name="UnitId">The unit.</param>
 /// <param name="Name">The new name.</param>
-public sealed record RenameUnitCommand(Guid UnitId, string Name) : ICommand;
+public sealed record RenameUnitCommand(Guid UnitId, string Name) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Unit;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => UnitId;
+}
 
 /// <summary>Changes a unit of measurement.</summary>
 /// <param name="UnitId">The unit.</param>
@@ -192,7 +212,17 @@ public sealed record ReviseUnitCommand(
     string Name,
     string? Symbol,
     int DecimalPlaces,
-    decimal ConversionFactor) : ICommand;
+    decimal ConversionFactor) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Unit;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => UnitId;
+}
 
 /// <summary>Adds a category, optionally beneath an existing one.</summary>
 /// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
@@ -203,7 +233,17 @@ public sealed record CreateCategoryCommand(
     string? Code,
     string Name,
     Guid? ParentId = null,
-    string? NameArabic = null) : ICommand<Guid>;
+    string? NameArabic = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Category;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Adds a brand.</summary>
 /// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
@@ -212,7 +252,17 @@ public sealed record CreateCategoryCommand(
 public sealed record CreateBrandCommand(
     string? Code,
     string Name,
-    string? NameArabic = null) : ICommand<Guid>;
+    string? NameArabic = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Brand;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Adds a warehouse.</summary>
 /// <param name="Code">The code, unique within the firm; made from the name when left blank.</param>
@@ -225,7 +275,17 @@ public sealed record CreateWarehouseCommand(
     string Name,
     Guid? BranchId = null,
     string? NameArabic = null,
-    string? Address = null) : ICommand<Guid>;
+    string? Address = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Warehouse;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Makes one warehouse the one new documents default to.</summary>
 /// <param name="WarehouseId">The warehouse.</param>
@@ -250,7 +310,23 @@ public sealed record UpdateMasterCommand(
     string Name,
     string? NameArabic = null,
     string? Address = null,
-    Guid? ParentId = null) : ICommand;
+    Guid? ParentId = null) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => Kind switch
+    {
+        InventoryMasterKind.UnitOfMeasure => NamedMaster.Unit,
+        InventoryMasterKind.Category => NamedMaster.Category,
+        InventoryMasterKind.Brand => NamedMaster.Brand,
+        _ => NamedMaster.Warehouse,
+    };
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => Id;
+}
 
 /// <summary>Withdraws an inventory master from use, or returns it.</summary>
 /// <param name="Kind">Which master.</param>

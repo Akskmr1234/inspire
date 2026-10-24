@@ -32,7 +32,7 @@ import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { useChargeSetup } from '@/lib/charges';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -57,6 +57,8 @@ import {
   type PurchaseInvoiceSummary,
   type PurchaseLineInput,
 } from '@/lib/purchase';
+import { getPurchaseOrder, listPurchaseOrders } from '@/lib/orders';
+import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
 
 /** A line as the screen holds it, before it is worth sending. */
@@ -226,7 +228,8 @@ export function PurchasePage({
       setPage(1);
     };
 
-  const columns: readonly GridColumn<PurchaseInvoiceSummary>[] = [
+  const taxOn = useTaxOn();
+  const allColumns: readonly GridColumn<PurchaseInvoiceSummary>[] = [
     {
       key: 'number',
       header: t('purchase.number'),
@@ -320,6 +323,9 @@ export function PurchasePage({
       ),
     },
   ];
+  const columns = taxOn
+    ? allColumns
+    : allColumns.filter((column) => column.key !== 'taxable' && column.key !== 'tax');
 
   const controls = (
     <div className="filter-grid">
@@ -482,12 +488,18 @@ function EntryDialog({
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const { taxRates, defaultTaxRate, preferredWarehouseId } = useSettings();
+  const { taxRates, defaultTaxRate, preferredWarehouseId, allowSaveDraft } =
+    useSettings();
+  const taxOn = useTaxOn();
+  const allowDrafts = allowSaveDraft !== false;
 
   const isReturn = isPurchaseReturn(kind);
   const today = new Date().toISOString().slice(0, 10);
 
-  const [mode, setMode] = useState<number>(editing?.mode ?? PurchaseTaxMode.tax);
+  // A firm that charges no tax enters every purchase without it.
+  const [mode, setMode] = useState<number>(
+    editing?.mode ?? (taxOn ? PurchaseTaxMode.tax : PurchaseTaxMode.nonTax),
+  );
   const [draft, setDraft] = useState<HeaderDraft>({
     date: editing?.date ?? today,
     supplierId: editing?.supplierLedgerId ?? '',
@@ -620,9 +632,14 @@ function EntryDialog({
     { key: 'quantity', label: t('purchase.quantity'), defaultOn: true, fixed: true },
     { key: 'rate', label: t('purchase.rate'), defaultOn: true, fixed: true },
     { key: 'discount', label: t('purchase.discount'), defaultOn: true },
-    { key: 'taxPercent', label: t('purchase.taxPercent'), defaultOn: true },
-    { key: 'taxAmount', label: t('purchase.taxAmount'), defaultOn: false },
+    ...(taxOn
+      ? [
+          { key: 'taxPercent', label: t('purchase.taxPercent'), defaultOn: true },
+          { key: 'taxAmount', label: t('purchase.taxAmount'), defaultOn: false },
+        ]
+      : []),
     { key: 'net', label: t('purchase.net'), defaultOn: true, fixed: true },
+    { key: 'lineTotal', label: t('sales.lineTotal'), defaultOn: true },
   ];
 
   const columns = useLineColumns('purchase', lineColumns);
@@ -642,7 +659,7 @@ function EntryDialog({
         // value, which is skipped below, subtracting back would invent a figure.
         gross += Number(line.quantity) * Number(line.rate);
         discount += Number(line.discount || 0);
-        tax += (net * Number(line.taxPercentage || 0)) / 100;
+        tax += taxOn ? (net * Number(line.taxPercentage || 0)) / 100 : 0;
       }
     }
 
@@ -655,7 +672,7 @@ function EntryDialog({
       taxable:
         (Number.isFinite(gross) ? gross : 0) - (Number.isFinite(discount) ? discount : 0),
     };
-  }, [lines]);
+  }, [lines, taxOn]);
 
   const chargesTotal = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
 
@@ -669,15 +686,10 @@ function EntryDialog({
       date: required(values.date, t('purchase.dateRequired')),
       supplierId: required(values.supplierId, t('purchase.supplierRequired')),
       warehouseId: required(values.warehouseId, t('purchase.warehouseRequired')),
-      /*
-        Not required to save a draft, on purpose.
-
-        Input tax is only reclaimable against the supplier's own tax invoice, so
-        this number does have to be here eventually — but a draft is precisely the
-        state for a delivery that has arrived before its paperwork, and refusing to
-        record it until the invoice turns up means it does not get recorded at all.
-        The screen says what is still needed, and posting is where it is enforced.
-      */
+      // Every purchase names the supplier's own invoice; a return is against one.
+      supplierInvoiceNumber: isReturn
+        ? null
+        : required(values.supplierInvoiceNumber, t('purchase.supplierInvoiceMissing')),
       supplierInvoiceDate:
         values.supplierInvoiceDate !== '' && values.supplierInvoiceNumber.trim() === ''
           ? t('purchase.invoiceDateNeedsNumber')
@@ -708,7 +720,8 @@ function EntryDialog({
     [lines, t],
   );
 
-  const save = async (): Promise<void> => {
+  /** Saves the document; with `post`, posts it straight after. */
+  const save = async (post = false): Promise<void> => {
     if (!submit(draft) || lineErrors.some((line) => Object.keys(line).length > 0)) {
       return;
     }
@@ -722,7 +735,7 @@ function EntryDialog({
           productId: line.productId,
           quantity: Number(line.quantity),
           rate: Number(line.rate || 0),
-          taxPercentage: Number(line.taxPercentage || 0),
+          taxPercentage: taxOn ? Number(line.taxPercentage || 0) : 0,
           discount: Number(line.discount || 0),
           batchNumber: line.batchNumber.trim() || null,
           expiresOn: line.expiresOn || null,
@@ -773,6 +786,29 @@ function EntryDialog({
 
       const header = await createPurchaseInvoice(input);
 
+      if (post) {
+        try {
+          const posted = await postPurchaseInvoice(header.purchaseInvoiceId);
+          onSaved(
+            t('purchase.postedNotice', {
+              number: posted.number,
+              stock: posted.stockDocumentNumber,
+              total: moneyAlways(posted.total),
+            }),
+          );
+        } catch (failure) {
+          // The draft stands; the reason posting refused it is what puts it right.
+          const api = failure as ApiError;
+          onError(
+            t('purchase.savedNotPosted', {
+              number: header.number,
+              reason: api.detail || api.code,
+            }),
+          );
+        }
+        return;
+      }
+
       onSaved(t('purchase.savedNotice', { number: header.number }));
     } catch (failure) {
       const api = failure as ApiError;
@@ -780,6 +816,84 @@ function EntryDialog({
     } finally {
       setBusy(false);
     }
+  };
+
+  // ---- Loading from another document, found by its number.
+  const referenceSources: readonly ReferenceSource[] = isReturn
+    ? [
+        {
+          key: 'purchaseInvoice',
+          label: t('references.purchaseInvoice'),
+          list: async () =>
+            (
+              await listPurchaseInvoices(
+                {
+                  kind: PurchaseDocumentKind.invoice,
+                  status: PurchaseInvoiceStatus.posted,
+                },
+                1,
+                100,
+              )
+            ).items.map((row) => ({
+              id: row.purchaseInvoiceId,
+              number: row.number,
+              date: row.date,
+              party: row.supplierName,
+              total: row.total,
+            })),
+        },
+      ]
+    : [
+        {
+          key: 'purchaseOrder',
+          label: t('references.purchaseOrder'),
+          list: async () =>
+            (await listPurchaseOrders({}, 1, 100)).items.map((row) => ({
+              id: row.purchaseOrderId,
+              number: row.number,
+              date: row.date,
+              party: row.supplierName,
+              total: row.total,
+            })),
+        },
+      ];
+
+  const loadReference = async (sourceKey: string, id: string): Promise<void> => {
+    if (sourceKey === 'purchaseInvoice') {
+      const invoice = await getPurchaseInvoice(id);
+      setDraft((current) => ({
+        ...current,
+        supplierId: invoice.supplierLedgerId,
+        warehouseId: invoice.warehouseId,
+        returnsInvoiceId: id,
+      }));
+      setLines(invoice.lines.map(lineFrom));
+      return;
+    }
+
+    const order = await getPurchaseOrder(id);
+    setDraft((current) => ({
+      ...current,
+      supplierId: order.supplierLedgerId,
+      warehouseId: order.warehouseId,
+      narration: current.narration || order.header.number,
+    }));
+    setLines(
+      order.lines.map((line) => ({
+        ...emptyLine(0),
+        productId: line.productId,
+        quantity: String(
+          line.outstandingQuantity > 0 ? line.outstandingQuantity : line.quantity,
+        ),
+        rate: String(line.rate),
+        discount: String(line.discount),
+        taxPercentage: String(
+          taxOn && line.taxable > 0
+            ? Math.round((line.tax / line.taxable) * 10000) / 100
+            : 0,
+        ),
+      })),
+    );
   };
 
   const set = <TField extends keyof HeaderDraft>(
@@ -875,24 +989,22 @@ function EntryDialog({
           stated — but a purchase from an unregistered supplier is a real and
           frequent case, and the screen had no way to say so.
         */}
-        <SelectField
-          label={t('purchase.taxMode')}
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-            { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-            { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-          ]}
-        />
+        {taxOn && (
+          <SelectField
+            label={t('purchase.taxMode')}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+              { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+              { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+            ]}
+          />
+        )}
 
-        {/*
-          Not marked mandatory, because the draft saves without it. A red marker on
-          a field the form accepts as empty is how a marker stops meaning anything;
-          the notice below says what it is for and posting is where it is needed.
-        */}
         <TextField
           label={t('purchase.supplierInvoice')}
+          required={!isReturn}
           value={draft.supplierInvoiceNumber}
           onChange={(value) => set('supplierInvoiceNumber', value)}
           error={errors['supplierInvoiceNumber']}
@@ -931,17 +1043,9 @@ function EntryDialog({
         />
       </div>
 
-      {/*
-        A notice rather than a refusal, and beside the field it is about rather than
-        at the foot of the dialog. The draft saves without the number; posting is
-        where it is needed, and saying so at the point of entry is what stops it
-        being a surprise then.
-      */}
-      {!isReturn &&
-      mode === PurchaseTaxMode.tax &&
-      draft.supplierInvoiceNumber.trim() === '' ? (
-        <p className="alert-warn text-xs">{t('purchase.supplierInvoiceMissing')}</p>
-      ) : null}
+      {/* A new purchase can start from its order; a new return from the purchase it
+          sends goods back against. */}
+      {!editing && <ReferenceLoader sources={referenceSources} onLoad={loadReference} />}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink">{t('purchase.linesTitle')}</h3>
@@ -971,6 +1075,9 @@ function EntryDialog({
                 <th className="px-2 py-1 text-end">{t('purchase.taxAmount')}</th>
               )}
               <th className="px-2 py-1 text-end">{t('purchase.net')}</th>
+              {columns.shows('lineTotal') && (
+                <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
+              )}
               <th className="line-action-column" />
             </tr>
           </thead>
@@ -1025,9 +1132,20 @@ function EntryDialog({
 
       <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
-        <ModalButton primary disabled={busy} onClick={() => void save()}>
-          {busy ? t('common.saving') : t('purchase.saveDraft')}
-        </ModalButton>
+        {(allowDrafts || editing) && (
+          <ModalButton
+            primary={editing !== undefined}
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {busy ? t('common.saving') : t('purchase.saveDraft')}
+          </ModalButton>
+        )}
+        {!editing && (
+          <ModalButton primary disabled={busy} onClick={() => void save(true)}>
+            {busy ? t('common.saving') : t('purchase.saveAndPost')}
+          </ModalButton>
+        )}
       </div>
     </Modal>
   );
@@ -1069,6 +1187,7 @@ function LineRow({
 }): React.JSX.Element {
   const { t } = useTranslation();
 
+  const taxOn = useTaxOn();
   const product = products.find((candidate) => candidate.id === line.productId);
   const net = lineNet(line);
   const tax = (net * Number(line.taxPercentage || 0)) / 100;
@@ -1097,6 +1216,7 @@ function LineRow({
       'discount',
       'taxPercent',
       'taxAmount',
+      'lineTotal',
     ].filter((key) => columns.shows(key)).length;
 
   return (
@@ -1215,6 +1335,15 @@ function LineRow({
         >
           {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
+
+        {columns.shows('lineTotal') && (
+          <td
+            data-label={t('sales.lineTotal')}
+            className="px-2 py-1 text-end font-mono font-semibold tabular-nums"
+          >
+            {Number.isFinite(net) ? moneyAlways(net + (taxOn ? tax : 0)) : '—'}
+          </td>
+        )}
 
         <td className="px-2 py-1 text-end">
           {removable && (

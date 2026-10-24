@@ -295,6 +295,16 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
             }
         }
 
+        if (request.Rates is { } starting)
+        {
+            Result priced = Price(product, starting);
+
+            if (priced.IsFailure)
+            {
+                return Result.Failure<Guid>(priced.Error);
+            }
+        }
+
         _products.Add(product);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -320,6 +330,40 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
             ? Result.Failure<UnitOfMeasure>(Error.NotFound(
                 "Product.UnitNotFound", "No such unit in the selected firm."))
             : Result.Success(unit);
+    }
+
+    /// <summary>Gives a new product the costing method and rates it was created with.</summary>
+    /// <param name="product">The new product.</param>
+    /// <param name="starting">What the new-product form gave.</param>
+    /// <returns>Success, or why the rates were refused.</returns>
+    private static Result Price(Product product, ProductStartingRates starting)
+    {
+        Result method = product.SetCostingMethod(starting.CostingMethod);
+
+        if (method.IsFailure)
+        {
+            return method;
+        }
+
+        // The same rate block the rates tab saves through, so a retail rate above the
+        // MRP is refused here exactly as it is there.
+        Result<ProductRates> rates = ProductRates.Create(
+            starting.Cost,
+            0m,
+            0m,
+            starting.RetailRate,
+            starting.WholesaleRate,
+            starting.OtherRate,
+            starting.MaximumRetailPrice);
+
+        if (rates.IsFailure)
+        {
+            return Result.Failure(rates.Error);
+        }
+
+        product.SetRates(rates.Value);
+
+        return Result.Success();
     }
 }
 

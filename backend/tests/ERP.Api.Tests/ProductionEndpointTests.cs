@@ -147,13 +147,13 @@ public sealed class ProductionEndpointTests
             string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
             Guid category = await CreateAsync(client, "categories", new { Code = $"KC{suffix}", Name = $"Kitchen {suffix}" });
-            Guid each = await CreateAsync(client, "units", new { Code = $"KE{suffix}", Name = "Each" });
+            Guid each = await CreateAsync(client, "units", new { Code = $"KE{suffix}", Name = $"Each {suffix}" });
             Guid warehouse = await CreateAsync(client, "warehouses", new { Code = $"KW{suffix}", Name = $"Kitchen {suffix}" });
 
             Task<Guid> Product(string code) => CreateAsync(client, "products", new
             {
                 Code = $"{code}{suffix}",
-                Description = code,
+                Description = $"{code} {suffix}",
                 CategoryId = category,
                 StockUnitId = each,
                 ItemType = 1,

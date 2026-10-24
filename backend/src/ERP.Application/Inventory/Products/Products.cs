@@ -1,4 +1,5 @@
 using ERP.Application.Abstractions.Messaging;
+using ERP.Application.Abstractions.Persistence;
 using ERP.Domain.Inventory;
 using ERP.SharedKernel.Tenancy;
 using FluentValidation;
@@ -227,6 +228,10 @@ public interface IProductReader
 /// <param name="ShortDescription">The short form, for receipts.</param>
 /// <param name="ItemName">The manufacturer's own name for it.</param>
 /// <param name="TaxSlabId">The tax rate it carries, if any.</param>
+/// <param name="Rates">
+/// What it costs and sells for, where the new-product form gave them; otherwise the
+/// rates start at nothing and the costing method at the default.
+/// </param>
 public sealed record CreateProductCommand(
     string Description,
     Guid CategoryId,
@@ -239,7 +244,33 @@ public sealed record CreateProductCommand(
     string? DescriptionArabic = null,
     string? ShortDescription = null,
     string? ItemName = null,
-    Guid? TaxSlabId = null) : ICommand<Guid>;
+    Guid? TaxSlabId = null,
+    ProductStartingRates? Rates = null) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Product;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Description;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
+
+/// <summary>The rates a product is created with.</summary>
+/// <param name="CostingMethod">How its cost is worked out.</param>
+/// <param name="Cost">What one stock unit costs.</param>
+/// <param name="RetailRate">The retail sales rate.</param>
+/// <param name="WholesaleRate">The wholesale rate.</param>
+/// <param name="OtherRate">The other sales rate.</param>
+/// <param name="MaximumRetailPrice">The MRP, or zero where there is none.</param>
+public sealed record ProductStartingRates(
+    CostingMethod CostingMethod,
+    decimal Cost = 0m,
+    decimal RetailRate = 0m,
+    decimal WholesaleRate = 0m,
+    decimal OtherRate = 0m,
+    decimal MaximumRetailPrice = 0m);
 
 /// <summary>Changes a product's descriptive fields.</summary>
 /// <param name="ProductId">The product.</param>
@@ -264,7 +295,17 @@ public sealed record DescribeProductCommand(
     string? Size = null,
     string? Origin = null,
     string? Rack = null,
-    string? Bin = null) : ICommand;
+    string? Bin = null) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Product;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Description;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => ProductId;
+}
 
 /// <summary>Sets what a product costs and what it sells for.</summary>
 /// <param name="ProductId">The product.</param>

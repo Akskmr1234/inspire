@@ -41,7 +41,17 @@ public sealed record CreateTaxSlabCommand(
     string Name,
     decimal Percentage,
     string? NameArabic = null,
-    bool IsDefault = false) : ICommand<Guid>;
+    bool IsDefault = false) : ICommand<Guid>, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.TaxSlab;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Corrects a tax rate.</summary>
 /// <param name="Id">The rate.</param>
@@ -54,7 +64,17 @@ public sealed record UpdateTaxSlabCommand(
     string Name,
     decimal Percentage,
     string? NameArabic = null,
-    bool IsDefault = false) : ICommand;
+    bool IsDefault = false) : ICommand, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.TaxSlab;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => Id;
+}
 
 /// <summary>Withdraws a tax rate from use, or returns it.</summary>
 /// <param name="Id">The rate.</param>

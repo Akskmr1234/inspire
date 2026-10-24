@@ -23,7 +23,7 @@ import {
   required,
   useValidation,
 } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 
 /**
  * The supplier master. A peer of the customer master of §12.1, which is what it is
@@ -42,7 +42,7 @@ export function SuppliersPage(): React.JSX.Element {
   const navigate = useNavigate();
   const regime = useSettings((state) => state.taxRegime);
 
-  const columns = (
+  const allColumns = (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
     edit: (row: SupplierSummary) => void,
@@ -125,6 +125,16 @@ export function SuppliersPage(): React.JSX.Element {
       ),
     },
   ];
+  const taxOn = useTaxOn();
+  // Without tax, a registration number means nothing on the list.
+  const columns = (
+    run: (action: () => Promise<void>) => void,
+    busy: boolean,
+    edit: (row: SupplierSummary) => void,
+  ): readonly GridColumn<SupplierSummary>[] =>
+    allColumns(run, busy, edit).filter(
+      (column) => taxOn || !['registration'].includes(column.key),
+    );
 
   return (
     <MasterFrame<SupplierSummary>
@@ -195,6 +205,7 @@ function SupplierForm({
   readonly existing?: SupplierSummary;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const taxOn = useTaxOn();
   const regime = useSettings((state) => state.taxRegime);
 
   // The next code in the firm's own sequence. Offered, editable, and recomputed at
@@ -373,11 +384,15 @@ function SupplierForm({
           onChange={(value) => set('address2', value)}
         />
 
-        <TextField
-          label={t('suppliers.registration')}
-          value={draft.registration}
-          onChange={(value) => set('registration', value)}
-        />
+        {taxOn && (
+          <>
+            <TextField
+              label={t('suppliers.registration')}
+              value={draft.registration}
+              onChange={(value) => set('registration', value)}
+            />
+          </>
+        )}
 
         <Field
           label={t('customers.state')}

@@ -33,7 +33,7 @@ public sealed class LedgerMasterEndpointTests
         AccountGroupSummary expenses = groups.Single(group => group.Code == "5900");
         AccountGroupSummary cashAndBank = groups.Single(group => group.Code == "1110");
 
-        // No code given: one is made from the name, and a second of the same name gets -2.
+        // No code given: one is made from the name, and a second whose name makes the same code gets -2.
         LedgerDetail rent = await CreateAsync(client, new
         {
             Name = $"Office rent {tag}",
@@ -49,9 +49,17 @@ public sealed class LedgerMasterEndpointTests
         rent.OpeningBalance.ShouldBe(1500m);
         rent.IsEditable.ShouldBeTrue();
 
+        // The same name again is refused; a name that only makes the same code is not.
+        (await client.PostAsJsonAsync(Ledgers, new
+        {
+            Name = $"OFFICE RENT {tag}",
+            AccountGroupId = expenses.AccountGroupId,
+            Kind = LedgerKind.General,
+        })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
         LedgerDetail twin = await CreateAsync(client, new
         {
-            Name = $"Office rent {tag}",
+            Name = $"Office-rent {tag}",
             AccountGroupId = expenses.AccountGroupId,
             Kind = LedgerKind.General,
         });
@@ -162,7 +170,7 @@ public sealed class LedgerMasterEndpointTests
         string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
         HttpResponseMessage category = await client.PostAsJsonAsync(
-            "/api/v1/inventory/categories", new { Code = $"C{tag}", Name = "Phnes" });
+            "/api/v1/inventory/categories", new { Code = $"C{tag}", Name = $"Phnes {tag}" });
         category.StatusCode.ShouldBe(HttpStatusCode.Created);
         Guid categoryId = await category.Content.ReadFromJsonAsync<Guid>();
 
@@ -179,7 +187,7 @@ public sealed class LedgerMasterEndpointTests
         corrected.Code.ShouldBe($"C{tag}");
 
         HttpResponseMessage warehouse = await client.PostAsJsonAsync(
-            "/api/v1/inventory/warehouses", new { Code = $"W{tag}", Name = "Back store" });
+            "/api/v1/inventory/warehouses", new { Code = $"W{tag}", Name = $"Back store {tag}" });
         warehouse.StatusCode.ShouldBe(HttpStatusCode.Created);
         Guid warehouseId = await warehouse.Content.ReadFromJsonAsync<Guid>();
 

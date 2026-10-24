@@ -266,3 +266,74 @@ public sealed class WithdrawChargeCommandHandler : ICommandHandler<WithdrawCharg
         return Result.Success();
     }
 }
+
+/// <summary>Marks a charge as one every new document of its kind starts with, or not.</summary>
+/// <param name="Document">The kind of document.</param>
+/// <param name="LedgerId">The account the charge posts to.</param>
+/// <param name="IsDefault">
+/// Whether it appears on every new document by itself; otherwise it is picked on the
+/// document when it is wanted.
+/// </param>
+public sealed record SetChargeDefaultCommand(ChargeableDocument Document, Guid LedgerId, bool IsDefault)
+    : ICommand<ChargeSetup>, ITransactional;
+
+/// <summary>Handles <see cref="SetChargeDefaultCommand"/>.</summary>
+public sealed class SetChargeDefaultCommandHandler : ICommandHandler<SetChargeDefaultCommand, ChargeSetup>
+{
+    private readonly IAdditionalLedgerRepository _charges;
+    private readonly ILedgerRepository _ledgers;
+    private readonly ITenantContext _tenantContext;
+    private readonly IUnitOfWork _unitOfWork;
+
+    /// <summary>Initialises a new instance of the <see cref="SetChargeDefaultCommandHandler"/> class.</summary>
+    /// <param name="charges">The charge setup.</param>
+    /// <param name="ledgers">The ledgers the charges post to.</param>
+    /// <param name="tenantContext">The ambient tenant scope.</param>
+    /// <param name="unitOfWork">The unit of work.</param>
+    public SetChargeDefaultCommandHandler(
+        IAdditionalLedgerRepository charges,
+        ILedgerRepository ledgers,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
+    {
+        _charges = charges;
+        _ledgers = ledgers;
+        _tenantContext = tenantContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<ChargeSetup>> Handle(
+        SetChargeDefaultCommand request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<ChargeSetup>(Error.Forbidden(
+                "Charges.NoFirmSelected", "A firm must be selected to set up its charges."));
+        }
+
+        IReadOnlyList<AdditionalLedger> mapped = await _charges.ListForDocumentAsync(
+            firmId, request.Document, cancellationToken);
+
+        AdditionalLedger? charge = mapped.FirstOrDefault(
+            candidate => candidate.LedgerId == LedgerId.From(request.LedgerId));
+
+        Ledger? ledger = charge is null
+            ? null
+            : await _ledgers.FindAsync(charge.LedgerId, cancellationToken);
+
+        if (charge is null || ledger is null)
+        {
+            return Result.Failure<ChargeSetup>(Error.NotFound(
+                "Charges.NotSetUp", "That ledger is not set up for this kind of document."));
+        }
+
+        charge.SetDefault(request.IsDefault);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(ListChargesQueryHandler.Describe(charge, ledger));
+    }
+}

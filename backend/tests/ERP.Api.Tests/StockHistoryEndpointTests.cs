@@ -88,12 +88,12 @@ public sealed class StockHistoryEndpointTests
         string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
         Guid category = await CreateAsync(client, "categories", new { Code = $"HC{suffix}", Name = $"History {suffix}" });
-        Guid each = await CreateAsync(client, "units", new { Code = $"HE{suffix}", Name = "Each" });
+        Guid each = await CreateAsync(client, "units", new { Code = $"HE{suffix}", Name = $"Each {suffix}" });
         Guid warehouse = await CreateAsync(client, "warehouses", new { Code = $"HW{suffix}", Name = $"Counted {suffix}" });
         Guid product = await CreateAsync(client, "products", new
         {
             Code = $"HP{suffix}",
-            Description = "Counted thing",
+            Description = $"Counted thing {suffix}",
             CategoryId = category,
             StockUnitId = each,
             ItemType = 1,

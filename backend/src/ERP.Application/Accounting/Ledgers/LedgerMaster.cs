@@ -40,13 +40,33 @@ public sealed record LedgerInput(
 /// charge setup. This is for every other account a firm posts to.
 /// </remarks>
 public sealed record CreateLedgerCommand(string? Code, LedgerInput Ledger)
-    : ICommand<LedgerDetail>, ITransactional;
+    : ICommand<LedgerDetail>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Ledger.Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Corrects a ledger. Its code stays as it is.</summary>
 /// <param name="LedgerId">The ledger.</param>
 /// <param name="Ledger">The ledger as it should be.</param>
 public sealed record UpdateLedgerCommand(Guid LedgerId, LedgerInput Ledger)
-    : ICommand<LedgerDetail>, ITransactional;
+    : ICommand<LedgerDetail>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Ledger.Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => LedgerId;
+}
 
 /// <summary>Withdraws a ledger from use, or puts it back.</summary>
 /// <param name="LedgerId">The ledger.</param>
@@ -125,7 +145,17 @@ public sealed record CreateAccountGroupCommand(
     string? Code,
     string Name,
     string? NameArabic,
-    Guid ParentId) : ICommand<AccountGroupSummary>, ITransactional;
+    Guid ParentId) : ICommand<AccountGroupSummary>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.AccountGroup;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Renames a group.</summary>
 /// <param name="AccountGroupId">The group.</param>
@@ -134,7 +164,17 @@ public sealed record CreateAccountGroupCommand(
 public sealed record UpdateAccountGroupCommand(
     Guid AccountGroupId,
     string Name,
-    string? NameArabic) : ICommand<AccountGroupSummary>, ITransactional;
+    string? NameArabic) : ICommand<AccountGroupSummary>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.AccountGroup;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => AccountGroupId;
+}
 
 /// <summary>Validates <see cref="CreateLedgerCommand"/>.</summary>
 public sealed class CreateLedgerCommandValidator : AbstractValidator<CreateLedgerCommand>

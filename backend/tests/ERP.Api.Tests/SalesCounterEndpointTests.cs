@@ -199,7 +199,7 @@ public sealed class SalesCounterEndpointTests
         // unit's is one in any case.
         HttpResponseMessage baseFactor = await client.PutAsJsonAsync(
             $"/api/v1/inventory/units/{masters.UnitId}",
-            new { Name = "Each", DecimalPlaces = 2, ConversionFactor = 1m });
+            new { Name = $"Each {masters.UnitId:N}", DecimalPlaces = 2, ConversionFactor = 1m });
         baseFactor.StatusCode.ShouldBe(HttpStatusCode.NoContent, await baseFactor.Content.ReadAsStringAsync());
 
         // Bought in boxes: now the box is in use and its factor is fixed, while its name

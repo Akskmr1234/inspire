@@ -42,7 +42,7 @@ import {
   required,
   useValidation,
 } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 import {
   savePrintSetup,
   usePrintSetup,
@@ -88,7 +88,7 @@ export function CustomersPage(): React.JSX.Element {
     from: readonly { id: string; name: string }[],
   ) => (id ? (from.find((row) => row.id === id)?.name ?? '') : '');
 
-  const columns = (
+  const allColumns = (
     run: (action: () => Promise<void>) => void,
     busy: boolean,
     edit: (row: CustomerSummary) => void,
@@ -244,6 +244,16 @@ export function CustomersPage(): React.JSX.Element {
       ),
     },
   ];
+  const taxOn = useTaxOn();
+  // Without tax, a registration number means nothing on the list.
+  const columns = (
+    run: (action: () => Promise<void>) => void,
+    busy: boolean,
+    edit: (row: CustomerSummary) => void,
+  ): readonly GridColumn<CustomerSummary>[] =>
+    allColumns(run, busy, edit).filter(
+      (column) => taxOn || !['registration', 'gst'].includes(column.key),
+    );
 
   return (
     <MasterFrame<CustomerSummary>
@@ -401,6 +411,7 @@ function CustomerForm({
   readonly existing?: CustomerSummary;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const taxOn = useTaxOn();
   const settings = useSettings();
   const regime = settings.taxRegime;
   const queryClient = useQueryClient();
@@ -799,31 +810,35 @@ function CustomerForm({
           />
         </Field>
 
-        <Section title={t('customers.sectionTax')} />
+        {taxOn && (
+          <>
+            <Section title={t('customers.sectionTax')} />
 
-        <TextField
-          label={t('customers.registrationNumber')}
-          value={draft.registrationNumber}
-          onChange={(value) => set('registrationNumber', value)}
-        />
+            <TextField
+              label={t('customers.registrationNumber')}
+              value={draft.registrationNumber}
+              onChange={(value) => set('registrationNumber', value)}
+            />
 
-        <TextField
-          label={t('customers.gstNumber')}
-          value={draft.gstNumber}
-          onChange={(value) => set('gstNumber', value)}
-        />
+            <TextField
+              label={t('customers.gstNumber')}
+              value={draft.gstNumber}
+              onChange={(value) => set('gstNumber', value)}
+            />
 
-        <TextField
-          label={t('customers.tinNumber')}
-          value={draft.tinNumber}
-          onChange={(value) => set('tinNumber', value)}
-        />
+            <TextField
+              label={t('customers.tinNumber')}
+              value={draft.tinNumber}
+              onChange={(value) => set('tinNumber', value)}
+            />
 
-        <TextField
-          label={t('customers.cstNumber')}
-          value={draft.cstNumber}
-          onChange={(value) => set('cstNumber', value)}
-        />
+            <TextField
+              label={t('customers.cstNumber')}
+              value={draft.cstNumber}
+              onChange={(value) => set('cstNumber', value)}
+            />
+          </>
+        )}
 
         <Section title={t('customers.sectionTerms')} />
 

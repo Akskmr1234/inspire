@@ -35,7 +35,7 @@ internal sealed record TestMasters(
         Guid categoryId = await CreateAsync(
             client, "categories", new { Code = $"TCAT{suffix}", Name = $"Test {suffix}" });
         Guid unitId = await CreateAsync(
-            client, "units", new { Code = $"TEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"TEA{suffix}", Name = $"Each {suffix}" });
         Guid warehouseId = await CreateAsync(
             client, "warehouses", new { Code = $"TWH{suffix}", Name = $"Store {suffix}" });
 
@@ -43,7 +43,7 @@ internal sealed record TestMasters(
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
-            new { Code = code, Description = "A test product", CategoryId = categoryId, StockUnitId = unitId, ItemType = 1 });
+            new { Code = code, Description = $"A test product {suffix}", CategoryId = categoryId, StockUnitId = unitId, ItemType = 1 });
 
         product.StatusCode.ShouldBe(HttpStatusCode.Created, await product.Content.ReadAsStringAsync());
         Guid productId = await product.Content.ReadFromJsonAsync<Guid>();

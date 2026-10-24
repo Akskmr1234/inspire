@@ -25,6 +25,32 @@ public sealed class ChargeCalculationEndpointTests
     public ChargeCalculationEndpointTests(ApiFactory factory) => _factory = factory;
 
     [Fact]
+    public async Task A_charge_is_marked_as_a_default_and_unmarked_again()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        const string Setup = "/api/v1/accounting/charges";
+
+        IReadOnlyList<ChargeSetup> sales = (await client.GetFromJsonAsync<IReadOnlyList<ChargeSetup>>(
+            $"{Setup}?document=PurchaseOrder"))!;
+        ChargeSetup freight = sales.Single(charge => charge.Code == "FREIGHT");
+
+        foreach (bool isDefault in new[] { true, false })
+        {
+            HttpResponseMessage marked = await client.PutAsJsonAsync(
+                $"{Setup}/PurchaseOrder/{freight.LedgerId}/default", new { IsDefault = isDefault });
+            marked.StatusCode.ShouldBe(HttpStatusCode.OK, await marked.Content.ReadAsStringAsync());
+            (await marked.Content.ReadFromJsonAsync<ChargeSetup>())!.IsDefault.ShouldBe(isDefault);
+
+            (await client.GetFromJsonAsync<IReadOnlyList<ChargeSetup>>($"{Setup}?document=PurchaseOrder"))!
+                .Single(charge => charge.LedgerId == freight.LedgerId).IsDefault.ShouldBe(isDefault);
+        }
+
+        // A ledger that is not set up for the document cannot be made one of its defaults.
+        (await client.PutAsJsonAsync($"{Setup}/PurchaseOrder/{Guid.NewGuid()}/default", new { IsDefault = true }))
+            .StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task Charges_add_or_deduct_after_tax_and_are_never_taxed()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

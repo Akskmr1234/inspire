@@ -40,6 +40,7 @@ import {
 import {
   chargeSetupKey,
   mapCharge,
+  setChargeDefault,
   setupName,
   useChargeSetup,
   withdrawCharge,
@@ -166,6 +167,11 @@ export function GeneralSettings(): React.JSX.Element {
       </SettingsCard>
 
       <SettingsCard title={t('settings.taxTitle')} hint={t('settings.taxHint')}>
+        <CheckField
+          label={t('settings.taxEnabled')}
+          checked={settings.taxEnabled !== false}
+          onChange={(taxEnabled) => settings.update({ taxEnabled })}
+        />
         <SelectField
           label={t('settings.regime')}
           value={settings.taxRegime}
@@ -565,6 +571,11 @@ export function SalesSettings(): React.JSX.Element {
       </SettingsCard>
 
       <SettingsCard title={t('prefs.salesEntryTitle')} hint={t('prefs.salesEntryHint')}>
+        <CheckField
+          label={t('settings.allowSaveDraft')}
+          checked={settings.allowSaveDraft !== false}
+          onChange={(allowSaveDraft) => settings.update({ allowSaveDraft })}
+        />
         <SelectField
           label={t('settings.defaultTaxMode')}
           value={settings.defaultTaxMode}
@@ -827,7 +838,17 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
     },
   });
 
-  const failure = add.error ?? remove.error;
+  const flag = useMutation<
+    ChargeSetup,
+    ApiError,
+    { ledgerId: string; isDefault: boolean }
+  >({
+    mutationFn: ({ ledgerId: id, isDefault }) =>
+      setChargeDefault(document, id, isDefault),
+    onSuccess: refresh,
+  });
+
+  const failure = add.error ?? remove.error ?? flag.error;
 
   return (
     <Cards>
@@ -866,6 +887,7 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
                 <tr>
                   <th className="text-start">{t('documents.chargeAccount')}</th>
                   <th className="text-start">{t('settings.chargeEffect')}</th>
+                  <th className="text-center">{t('settings.chargeIsDefault')}</th>
                   <th className="text-end">{t('settings.chargeDefault')}</th>
                   <th />
                 </tr>
@@ -887,6 +909,22 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
                       {charge.isAddition
                         ? t('documents.chargeAdds')
                         : t('documents.chargeDeducts')}
+                    </td>
+                    <td className="py-1.5 text-center">
+                      {!charge.isComputed && (
+                        <input
+                          type="checkbox"
+                          aria-label={`${t('settings.chargeIsDefault')}: ${charge.name}`}
+                          checked={charge.isDefault}
+                          disabled={!canEdit || flag.isPending}
+                          onChange={(event) =>
+                            flag.mutate({
+                              ledgerId: charge.ledgerId,
+                              isDefault: event.target.checked,
+                            })
+                          }
+                        />
+                      )}
                     </td>
                     <td className="py-1.5 text-end">
                       {!charge.isComputed && (

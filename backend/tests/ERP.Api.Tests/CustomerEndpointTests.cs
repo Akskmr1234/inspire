@@ -30,7 +30,7 @@ public sealed class CustomerEndpointTests
             new
             {
                 Code = code,
-                Name = "Al Mansoor Trading",
+                Name = $"Al Mansoor Trading {code}",
                 NameArabic = "المنصور للتجارة",
                 Contact = new { MobileNumber = "55512345", AddressLine1 = "Salwa Road" },
                 Terms = new { CreditLimit = 50_000m, CreditDays = 30, IsBillWise = true },
@@ -47,7 +47,7 @@ public sealed class CustomerEndpointTests
             $"{Customers}/{customer.CustomerId}"))!;
 
         read.Code.ShouldBe(code);
-        read.Name.ShouldBe("Al Mansoor Trading");
+        read.Name.ShouldBe($"Al Mansoor Trading {code}");
         read.Contact.MobileNumber.ShouldBe("55512345");
         read.Terms.CreditDays.ShouldBe(30);
         read.TaxDetails.StateCode.ShouldBe("DOH");
@@ -120,7 +120,7 @@ public sealed class CustomerEndpointTests
             $"{Customers}/{customerId}",
             new
             {
-                Name = "Al Mansoor Trading LLC",
+                Name = $"Al Mansoor Trading LLC {customerId:N}",
                 Contact = new { AddressLine1 = "Al Sadd" },
             });
 
@@ -129,7 +129,7 @@ public sealed class CustomerEndpointTests
         CustomerResponse read = (await client.GetFromJsonAsync<CustomerResponse>(
             $"{Customers}/{customerId}"))!;
 
-        read.Name.ShouldBe("Al Mansoor Trading LLC");
+        read.Name.ShouldBe($"Al Mansoor Trading LLC {customerId:N}");
         read.Contact.AddressLine1.ShouldBe("Al Sadd");
         read.Terms.CreditDays.ShouldBe(30);
     }
@@ -160,12 +160,13 @@ public sealed class CustomerEndpointTests
         string? mobile = null,
         string? stateCode = null)
     {
+        string suffix = Suffix();
         HttpResponseMessage created = await client.PostAsJsonAsync(
             Customers,
             new
             {
-                Code = $"CUST{Suffix()}",
-                Name = "Al Mansoor Trading",
+                Code = $"CUST{suffix}",
+                Name = $"Al Mansoor Trading {suffix}",
                 Contact = new { MobileNumber = mobile },
                 Terms = new { CreditDays = 30, IsBillWise = true },
                 TaxDetails = new { StateCode = stateCode },

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Accounting.Ledgers;
 using ERP.Domain.Accounting;
@@ -85,4 +86,34 @@ public sealed class ChargesController : ApiControllerBase
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
+
+    /// <summary>Marks a charge as one every new document of its kind starts with, or not.</summary>
+    /// <param name="document">The kind of document.</param>
+    /// <param name="ledgerId">The ledger.</param>
+    /// <param name="request">Whether it is a default.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The charge as the entry screens read it.</returns>
+    /// <response code="200">The charge, with its new setting.</response>
+    /// <response code="404">The ledger is not set up for that kind of document.</response>
+    [HttpPut("{document}/{ledgerId:guid}/default")]
+    [RequiresPermission("accounting", "additional-ledger", "create")]
+    [ProducesResponseType(typeof(ChargeSetup), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetDefaultAsync(
+        ChargeableDocument document,
+        Guid ledgerId,
+        [FromBody] ChargeDefaultRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<ChargeSetup> result = await _sender.Send(
+            new SetChargeDefaultCommand(document, ledgerId, request.IsDefault), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
 }
+
+/// <summary>Whether a charge is one every new document starts with.</summary>
+/// <param name="IsDefault">Whether it appears by itself.</param>
+public sealed record ChargeDefaultRequest([property: JsonRequired] bool IsDefault);

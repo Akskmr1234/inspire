@@ -1,21 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { Link } from 'react-router-dom';
 import { type SelectOption } from '@/components/SearchSelect';
+import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { chargeAdds, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
-import {
-  chargeRows,
-  setupName,
-  type ChargeDocument,
-  type ChargeSetup,
-} from '@/lib/charges';
-import { useSettings } from '@/stores/settings';
-import { useSession } from '@/stores/session';
+import { setupName, type ChargeDocument, type ChargeSetup } from '@/lib/charges';
+import { useSettings, useTaxOn } from '@/stores/settings';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -142,7 +136,9 @@ export function useLineColumns(
     (key: string): boolean => {
       const column = columns.find((candidate) => candidate.key === key);
 
-      return column?.fixed === true || !hidden.has(key);
+      // A column the screen did not offer - tax, where the firm charges none - is not
+      // shown, whatever this browser remembers about it.
+      return column !== undefined && (column.fixed === true || !hidden.has(key));
     },
     [columns, hidden],
   );
@@ -437,15 +433,6 @@ export function ChargesPanel({
   readonly nonTax?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const can = useSession((state) => state.can);
-
-  const rows = useMemo(
-    () => chargeRows(setup, nonTax, charges, ledgers),
-    [setup, nonTax, charges, ledgers],
-  );
-
-  const amountOf = (ledgerId: string): string =>
-    charges.find((charge) => charge.ledgerId === ledgerId)?.amount ?? '';
 
   const setAmount = (ledgerId: string, amount: string): void =>
     onChange(
@@ -470,47 +457,16 @@ export function ChargesPanel({
         </span>
       </header>
 
-      {rows.length === 0 ? (
-        <p className="text-xs text-ink-muted">
-          {setup === undefined ? t('common.loading') : t('documents.noChargesSetUp')}{' '}
-          {setup !== undefined && can('platform:setting:view') && (
-            <Link to="/settings?tab=charges" className="font-medium underline">
-              {t('documents.setUpCharges')}
-            </Link>
-          )}
-        </p>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map((row) => (
-            <label key={row.ledgerId} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-ink">
-                {row.label}
-                <span
-                  className={clsx(
-                    'ms-1.5 text-[11px] font-medium',
-                    row.adds
-                      ? 'text-emerald-700 dark:text-emerald-400'
-                      : 'text-red-600 dark:text-red-400',
-                  )}
-                >
-                  {row.adds ? t('documents.chargeAdds') : t('documents.chargeDeducts')}
-                </span>
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                inputMode="decimal"
-                placeholder="0.00"
-                aria-label={row.label}
-                value={amountOf(row.ledgerId)}
-                onChange={(event) => setAmount(row.ledgerId, event.target.value)}
-                className="field-input-sm w-28 shrink-0 text-end font-mono tabular-nums"
-              />
-            </label>
-          ))}
-        </div>
-      )}
+      <AdditionalLedgerList
+        carried={charges}
+        setup={setup}
+        nonTax={nonTax}
+        ledgers={ledgers}
+        onAmount={setAmount}
+        onRemove={(ledgerId) =>
+          onChange(charges.filter((charge) => charge.ledgerId !== ledgerId))
+        }
+      />
     </section>
   );
 }
@@ -536,6 +492,7 @@ export function DocumentTotals({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { moneyAlways } = useMoney();
+  const taxOn = useTaxOn();
 
   const net = gross - discount;
   const total = net + tax + charges + rounding;
@@ -572,7 +529,9 @@ export function DocumentTotals({
       */}
       <Line label={t('documents.net')} value={moneyAlways(net)} ruled={discount !== 0} />
 
-      <Line label={t('documents.tax')} value={moneyAlways(tax)} />
+      {(taxOn || tax !== 0) && (
+        <Line label={t('documents.tax')} value={moneyAlways(tax)} />
+      )}
 
       {charges !== 0 && (
         <Line label={t('documents.chargesShort')} value={moneyAlways(charges)} />

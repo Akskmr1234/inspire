@@ -1,4 +1,5 @@
 using ERP.Application.Abstractions.Messaging;
+using ERP.Application.Abstractions.Persistence;
 using FluentValidation;
 
 namespace ERP.Application.Purchase;
@@ -58,7 +59,17 @@ public sealed record CreateSupplierCommand(
     SupplierTerms? Terms = null,
     SupplierTaxDetails? TaxDetails = null,
     Guid? AccountGroupId = null,
-    decimal OpeningBalance = 0m) : ICommand<SupplierResponse>, ITransactional;
+    decimal OpeningBalance = 0m) : ICommand<SupplierResponse>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Changes a supplier's details.</summary>
 /// <param name="SupplierId">The supplier.</param>
@@ -77,7 +88,17 @@ public sealed record UpdateSupplierCommand(
     string? NameArabic = null,
     SupplierContact? Contact = null,
     SupplierTerms? Terms = null,
-    SupplierTaxDetails? TaxDetails = null) : ICommand<SupplierResponse>, ITransactional;
+    SupplierTaxDetails? TaxDetails = null) : ICommand<SupplierResponse>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => SupplierId;
+}
 
 /// <summary>Withdraws a supplier from use, or puts them back.</summary>
 /// <param name="SupplierId">The supplier.</param>

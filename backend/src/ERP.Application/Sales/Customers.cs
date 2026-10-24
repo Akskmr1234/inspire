@@ -1,4 +1,5 @@
 using ERP.Application.Abstractions.Messaging;
+using ERP.Application.Abstractions.Persistence;
 using FluentValidation;
 
 namespace ERP.Application.Sales;
@@ -89,7 +90,17 @@ public sealed record CreateCustomerCommand(
     CustomerTaxDetails? TaxDetails = null,
     Guid? AccountGroupId = null,
     decimal OpeningBalance = 0m,
-    CustomerProfile? Profile = null) : ICommand<CustomerResponse>, ITransactional;
+    CustomerProfile? Profile = null) : ICommand<CustomerResponse>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => null;
+}
 
 /// <summary>Changes a customer's details.</summary>
 /// <param name="CustomerId">The customer.</param>
@@ -114,7 +125,17 @@ public sealed record UpdateCustomerCommand(
     CustomerTerms? Terms = null,
     CustomerTaxDetails? TaxDetails = null,
     CustomerProfile? Profile = null,
-    decimal? OpeningBalance = null) : ICommand<CustomerResponse>, ITransactional;
+    decimal? OpeningBalance = null) : ICommand<CustomerResponse>, ITransactional, INamesMaster
+{
+    /// <inheritdoc />
+    NamedMaster INamesMaster.Master => NamedMaster.Ledger;
+
+    /// <inheritdoc />
+    string INamesMaster.NameGiven => Name;
+
+    /// <inheritdoc />
+    Guid? INamesMaster.RenamedId => CustomerId;
+}
 
 /// <summary>Withdraws a customer from use, or puts them back.</summary>
 /// <param name="CustomerId">The customer.</param>

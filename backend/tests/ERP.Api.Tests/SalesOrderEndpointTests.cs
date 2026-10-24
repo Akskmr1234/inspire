@@ -373,17 +373,17 @@ public sealed class SalesOrderEndpointTests
             client, "categories", new { Code = $"OCAT{suffix}", Name = $"Order {suffix}" });
 
         Guid unitId = await CreateAsync(
-            client, "units", new { Code = $"OEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"OEA{suffix}", Name = $"Each {suffix}" });
 
         Guid warehouseId = await CreateAsync(
-            client, "warehouses", new { Code = $"OWH{suffix}", Name = "Order store" });
+            client, "warehouses", new { Code = $"OWH{suffix}", Name = $"Order store {suffix}" });
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
             new
             {
                 Code = $"ORD{suffix}",
-                Description = "A thing to order",
+                Description = $"A thing to order {suffix}",
                 CategoryId = categoryId,
                 StockUnitId = unitId,
                 ItemType = 1,

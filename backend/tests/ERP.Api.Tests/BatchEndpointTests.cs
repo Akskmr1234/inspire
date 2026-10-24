@@ -487,20 +487,20 @@ public sealed class BatchEndpointTests
                 new { Code = $"BCAT{suffix}", Name = $"Batched {suffix}" });
 
             Guid eachId = await CreateMasterAsync(
-                client, "units", new { Code = $"BEA{suffix}", Name = "Each" });
+                client, "units", new { Code = $"BEA{suffix}", Name = $"Each {suffix}" });
 
             Guid mainId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"BMAIN{suffix}", Name = "Main store" });
+                client, "warehouses", new { Code = $"BMAIN{suffix}", Name = $"Main store {suffix}" });
 
             Guid shopId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"BSHOP{suffix}", Name = "Shop floor" });
+                client, "warehouses", new { Code = $"BSHOP{suffix}", Name = $"Shop floor {suffix}" });
 
             HttpResponseMessage created = await client.PostAsJsonAsync(
                 $"{Inventory}/products",
                 new
                 {
                     Code = $"BTC{suffix}",
-                    Description = "Batched thing",
+                    Description = $"Batched thing {suffix}",
                     CategoryId = categoryId,
                     StockUnitId = eachId,
                     ItemType = 1,
