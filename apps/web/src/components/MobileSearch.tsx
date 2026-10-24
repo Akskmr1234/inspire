@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { TextField } from '@/components/Form';
+import { Field } from '@/components/Form';
+import { IconSearch } from '@/components/icons';
+import { SuggestList, suggestKeys, type Suggestion } from '@/components/SuggestInput';
 import type { ApiError } from '@/lib/api';
 import { findJobCardCustomers, type JobCardCustomerMatch } from '@/lib/jobCards';
 
 /**
  * The mobile number, which is how the counter finds a returning customer: three digits
- * in, it offers the people who gave a number like it before.
+ * in, it offers the people who gave a number like it before - on an earlier job, or on
+ * their account. The search button looks the number up at once, and fills the details
+ * straight in when only one customer has it.
  */
 export function MobileSearch({
   value,
@@ -24,8 +28,11 @@ export function MobileSearch({
   readonly size?: 'default' | 'sm';
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const id = useId();
   const [typed, setTyped] = useState('');
   const [open, setOpen] = useState(false);
+  const [asked, setAsked] = useState(false);
+  const [active, setActive] = useState(0);
 
   // Waits for the typing to pause rather than asking on every key.
   useEffect(() => {
@@ -40,46 +47,98 @@ export function MobileSearch({
   });
 
   const found = matches.data ?? [];
+  const items: Suggestion[] = found.map((match, index) => ({
+    value: String(index),
+    label: match.customer.name,
+    detail: [match.customer.mobile, match.customer.addressLine1]
+      .filter(Boolean)
+      .join(' · '),
+  }));
+
+  const pick = (match: JobCardCustomerMatch | undefined): void => {
+    if (!match) return;
+    onPick(match);
+    setOpen(false);
+    setAsked(false);
+  };
+
+  /** Looks the number up now, filling the details in when only one customer has it. */
+  const search = async (): Promise<void> => {
+    const number = value.trim();
+    if (number.length < 3) return;
+
+    setTyped(number);
+    setOpen(true);
+    setAsked(true);
+
+    try {
+      const result = await findJobCardCustomers(number);
+      if (result.length === 1) pick(result[0]);
+    } catch {
+      // The list under the field says what the lookup found, failure included.
+    }
+  };
 
   return (
-    <div className="relative">
-      <TextField
-        label={label ?? t('service.mobile')}
-        type="tel"
-        value={value}
-        onChange={(next) => {
-          onChange(next);
-          setOpen(true);
-        }}
-        hint={t('service.mobileHint')}
-        {...(size ? { size } : {})}
-      />
-      {open && found.length > 0 && (
-        <ul className="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-line bg-surface shadow-card">
-          {found.map((match) => (
-            <li key={`${match.customerLedgerId ?? ''}-${match.customer.mobile ?? ''}`}>
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(match);
-                  setOpen(false);
-                }}
-                className="block w-full px-3 py-2 text-start text-sm hover:bg-surface-3"
-              >
-                <span className="font-medium">{match.customer.name}</span>{' '}
-                <span className="font-mono text-xs text-ink-muted">
-                  {match.customer.mobile}
-                </span>
-                {match.customer.addressLine1 && (
-                  <span className="block text-xs text-ink-muted">
-                    {match.customer.addressLine1}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Field label={label ?? t('service.mobile')} htmlFor={id}>
+      <div className="relative">
+        <input
+          id={id}
+          type="tel"
+          value={value}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open && items.length > 0}
+          aria-controls={`${id}-list`}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setActive(0);
+            setAsked(false);
+            setOpen(true);
+          }}
+          onBlur={() => setOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !(open && items.length > 0)) {
+              event.preventDefault();
+              void search();
+              return;
+            }
+            if (!open) return;
+            suggestKeys(
+              event,
+              items.length,
+              active,
+              setActive,
+              () => pick(found[active]),
+              () => setOpen(false),
+            );
+          }}
+          className={size === 'sm' ? 'field-input-sm pe-9' : 'field-input pe-10'}
+        />
+        <button
+          type="button"
+          aria-label={t('service.findMobile')}
+          title={t('service.findMobile')}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => void search()}
+          className="absolute inset-y-0 end-0 flex w-9 items-center justify-center rounded-e-lg text-ink-subtle hover:text-brand-600"
+        >
+          <IconSearch className="size-4" />
+        </button>
+        {open && (
+          <SuggestList
+            id={`${id}-list`}
+            items={items}
+            active={active}
+            onPick={(item) => pick(found[Number(item.value)])}
+            empty={
+              asked && !matches.isFetching && typed.length >= 3
+                ? t('service.noPreviousEntry')
+                : undefined
+            }
+          />
+        )}
+      </div>
+    </Field>
   );
 }

@@ -25,13 +25,18 @@ public sealed class MasterCodeEndpointTests
         string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
         await CreateAsync(client, "brands", new { Name = $"Galaxy {tag}" });
-        await CreateAsync(client, "brands", new { Name = $"Galaxy {tag}" });
+        await CreateAsync(client, "brands", new { Name = $"Galaxy-{tag}" });
+
+        // The same name twice is refused, whatever its case; only the code stem repeats.
+        (await client.PostAsJsonAsync($"{Inventory}/brands", new { Name = $"galaxy {tag}" }))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
         await CreateAsync(client, "brands", new { Name = "سامسونج" });
 
         List<BrandSummary> brands = (await client.GetFromJsonAsync<List<BrandSummary>>(
             $"{Inventory}/brands?includeInactive=true"))!;
 
-        brands.Where(brand => brand.Name == $"Galaxy {tag}").Select(brand => brand.Code)
+        brands.Where(brand => brand.Name == $"Galaxy {tag}" || brand.Name == $"Galaxy-{tag}")
+            .Select(brand => brand.Code)
             .ShouldBe([$"GALAXY-{tag}", $"GALAXY-{tag}-2"], ignoreOrder: true);
 
         // A name with no Latin letters gets the kind's prefix and a number.

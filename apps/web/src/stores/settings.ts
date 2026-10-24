@@ -171,6 +171,14 @@ export interface AppSettings {
    * fields stay out of the way unless one already holds something.
    */
   readonly gulfMode: boolean;
+  /**
+   * Whether the firm charges tax at all. Off, every tax field and column - the tax
+   * mode, the rate on a line, the tax on a bill, the tax rate on a product - stays out
+   * of sight, and documents are entered without tax.
+   */
+  readonly taxEnabled: boolean;
+  /** Whether sales and purchases offer Save draft beside posting; off, they only post. */
+  readonly allowSaveDraft: boolean;
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -195,6 +203,8 @@ const DEFAULTS: AppSettings = {
   autoTranslateArabic: false,
   translationApiKey: '',
   taxRegime: TaxRegime.gccVat,
+  taxEnabled: true,
+  allowSaveDraft: true,
   firmStateCode: '',
   taxRates: VAT_RATES,
   defaultTaxRate: 5,
@@ -474,4 +484,11 @@ export const useSettings = create<SettingsState>((set, get) => ({
 /** The rates that suit a regime, for the screen that resets them. */
 export function ratesFor(regime: number): readonly number[] {
   return regime === TaxRegime.indiaGst ? GST_RATES : VAT_RATES;
+}
+
+/** Whether tax is shown and charged: switched on in Settings, under a regime that has it. */
+export function useTaxOn(): boolean {
+  return useSettings(
+    (state) => state.taxEnabled !== false && state.taxRegime !== TaxRegime.none,
+  );
 }

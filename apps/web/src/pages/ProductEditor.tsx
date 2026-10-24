@@ -22,7 +22,7 @@ import {
 import { listMaster, type UnitSummary, type WarehouseSummary } from '@/lib/inventory';
 import { currentDecimals, moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import {
   createStockDocument,
@@ -528,6 +528,7 @@ function DescriptionFields({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const places = currentDecimals();
+  const taxOn = useTaxOn();
 
   // The units that convert to this product's stock unit. Offering the rest would let
   // somebody buy in kilograms what is stocked in litres, and the server would refuse
@@ -644,14 +645,16 @@ function DescriptionFields({
           value={form.brandId}
           onChange={(value) => set({ brandId: value })}
         />
-        <MasterPicker
-          kind="taxRate"
-          label={t('products.taxRate')}
-          clearable
-          placeholder={t('taxRates.none')}
-          value={form.taxSlabId}
-          onChange={(value) => set({ taxSlabId: value })}
-        />
+        {taxOn && (
+          <MasterPicker
+            kind="taxRate"
+            label={t('products.taxRate')}
+            clearable
+            placeholder={t('taxRates.none')}
+            value={form.taxSlabId}
+            onChange={(value) => set({ taxSlabId: value })}
+          />
+        )}
       </Section>
 
       {/* Two rows of four: how it is costed, then what it sells for. */}

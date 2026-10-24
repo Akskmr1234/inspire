@@ -383,7 +383,7 @@ public sealed class SalesEndpointTests
         page.TotalPages.ShouldBe(2);
         page.HasMore.ShouldBeTrue();
 
-        page.Items[0].CustomerName.ShouldBe("Al Mansoor Trading");
+        page.Items[0].CustomerName.ShouldStartWith("Al Mansoor Trading");
         page.Items[0].Total.ShouldBe(105m);
 
         PagedResult<SalesInvoiceSummary> second =
@@ -503,17 +503,17 @@ public sealed class SalesEndpointTests
             client, "categories", new { Code = $"SCAT{suffix}", Name = $"Sales {suffix}" });
 
         Guid unitId = await CreateMasterAsync(
-            client, "units", new { Code = $"SEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"SEA{suffix}", Name = $"Each {suffix}" });
 
         Guid warehouseId = await CreateMasterAsync(
-            client, "warehouses", new { Code = $"SWH{suffix}", Name = "Sales store" });
+            client, "warehouses", new { Code = $"SWH{suffix}", Name = $"Sales store {suffix}" });
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
             new
             {
                 Code = $"SLS{suffix}",
-                Description = "A thing to sell",
+                Description = $"A thing to sell {suffix}",
                 CategoryId = categoryId,
                 StockUnitId = unitId,
                 ItemType = 1,

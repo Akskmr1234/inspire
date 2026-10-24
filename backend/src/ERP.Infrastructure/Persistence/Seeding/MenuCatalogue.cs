@@ -483,6 +483,38 @@ public static class MenuCatalogue
             "accounting",
             Children:
             [
+                // What was sold and bought, and what was made on it, by month, day,
+                // bill, item and more.
+                new(
+                    "reports.transactions",
+                    "Sales & purchase",
+                    "المبيعات والمشتريات",
+                    "accounting",
+                    Children:
+                    [
+                        new(
+                            "reports.sales",
+                            "Sales report",
+                            "تقرير المبيعات",
+                            "accounting",
+                            "/reports/sales",
+                            ViewReports),
+                        new(
+                            "reports.purchases",
+                            "Purchase report",
+                            "تقرير المشتريات",
+                            "accounting",
+                            "/reports/purchases",
+                            ViewReports),
+                        new(
+                            "reports.profit",
+                            "Profit report",
+                            "تقرير الأرباح",
+                            "accounting",
+                            "/reports/profit",
+                            ViewReports),
+                    ]),
+
                 new(
                     "accounts-reports",
                     "Accounts",
@@ -542,11 +574,25 @@ public static class MenuCatalogue
                             "/accounting/debtors",
                             ViewReports),
                         new(
+                            "accounts-reports.receivables",
+                            "Receivables",
+                            "المبالغ المستحقة لنا",
+                            "accounting",
+                            "/accounting/receivables",
+                            ViewReports),
+                        new(
                             "accounts-reports.creditors",
                             "Creditors outstanding",
                             "أرصدة الموردين المستحقة",
                             "accounting",
                             "/accounting/creditors",
+                            ViewReports),
+                        new(
+                            "accounts-reports.payables",
+                            "Payables",
+                            "المبالغ المستحقة علينا",
+                            "accounting",
+                            "/accounting/payables",
                             ViewReports),
                     ]),
 
@@ -619,11 +665,25 @@ public static class MenuCatalogue
                             "/inventory/valuation",
                             ViewInventoryReports),
                         new(
+                            "inventory-reports.register",
+                            "Stock register",
+                            "سجل المخزون",
+                            "inventory",
+                            "/inventory/stock-register",
+                            ViewInventoryReports),
+                        new(
                             "inventory-reports.ledger",
                             "Stock ledger",
                             "دفتر المخزون",
                             "inventory",
                             "/inventory/stock-ledger",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.product-history",
+                            "Product history",
+                            "سجل المنتج",
+                            "inventory",
+                            "/inventory/product-history",
                             ViewInventoryReports),
                         new(
                             "inventory-reports.movement",

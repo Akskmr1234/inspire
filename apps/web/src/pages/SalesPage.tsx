@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
 import { isHeldForApproval } from '@/lib/approvals';
 import clsx from 'clsx';
@@ -10,6 +10,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { IconBarcode, IconPrinter } from '@/components/icons';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -27,10 +28,9 @@ import {
 import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings, type SalesRateType } from '@/stores/settings';
+import { useSettings, useTaxOn, type SalesRateType } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { chargeRows, useChargeSetup, type ChargeSetup } from '@/lib/charges';
-import { useSession } from '@/stores/session';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -72,6 +72,13 @@ import {
   type SalesLineInput,
   type SalesChargeInput,
 } from '@/lib/sales';
+import { getSalesOrder, listSalesOrders, SalesOrderKind } from '@/lib/orders';
+import {
+  getPurchaseInvoice,
+  listPurchaseInvoices,
+  PurchaseDocumentKind,
+} from '@/lib/purchase';
+import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
 
 const PAGE_SIZE = 25;
@@ -258,7 +265,8 @@ export function SalesPage({
       setPage(1);
     };
 
-  const columns: readonly GridColumn<SalesInvoiceSummary>[] = [
+  const taxOn = useTaxOn();
+  const allColumns: readonly GridColumn<SalesInvoiceSummary>[] = [
     { key: 'number', header: t('sales.number'), value: (row) => row.number },
     {
       key: 'reference',
@@ -385,7 +393,11 @@ export function SalesPage({
         </div>
       ),
     },
-  ];
+  ]; // Without tax, the taxable and tax columns would only ever read the same as the
+  // total and nothing.
+  const columns = taxOn
+    ? allColumns
+    : allColumns.filter((column) => column.key !== 'taxable' && column.key !== 'tax');
 
   const controls = (
     <div className="filter-grid flex flex-wrap items-end gap-3 w-full">
@@ -556,16 +568,8 @@ function AdditionalLedgersSection({
   readonly onChange: (rows: readonly AdditionalLedgerItem[]) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const can = useSession((state) => state.can);
 
-  // Every ledger set up for a sale in this tax mode, each waiting for its amount, then
-  // any this invoice already carries that has since been taken off the setup.
-  const shown = chargeRows(setup, nonTax, rows, ledgers);
-
-  const amountOf = (ledgerId: string): string =>
-    rows.find((row) => row.ledgerId === ledgerId)?.amount ?? '';
-
-  const setAmount = (ledgerId: string, adds: boolean, amount: string): void =>
+  const setAmount = (ledgerId: string, amount: string, adds: boolean): void =>
     onChange(
       rows.some((row) => row.ledgerId === ledgerId)
         ? rows.map((row) => (row.ledgerId === ledgerId ? { ...row, amount } : row))
@@ -588,44 +592,14 @@ function AdditionalLedgersSection({
         </span>
       </div>
 
-      {shown.length === 0 ? (
-        <p className="py-2 text-center text-xs text-ink-muted">
-          {setup === undefined ? t('common.loading') : t('documents.noChargesSetUp')}{' '}
-          {setup !== undefined && can('platform:setting:view') && (
-            <Link to="/settings?tab=charges" className="font-medium underline">
-              {t('documents.setUpCharges')}
-            </Link>
-          )}
-        </p>
-      ) : (
-        <div className="space-y-1.5">
-          {shown.map((row) => (
-            <label key={row.ledgerId} className="flex items-center gap-2 text-xs">
-              <span className="min-w-0 flex-1 truncate text-ink">{row.label}</span>
-              <span
-                className={clsx(
-                  'shrink-0 font-medium',
-                  row.adds
-                    ? 'text-emerald-700 dark:text-emerald-400'
-                    : 'text-red-600 dark:text-red-400',
-                )}
-              >
-                {row.adds ? t('sales.addition') : t('sales.deduction')}
-              </span>
-              <input
-                type="number"
-                min="0"
-                inputMode="decimal"
-                placeholder="0.00"
-                aria-label={row.label}
-                value={amountOf(row.ledgerId)}
-                onChange={(e) => setAmount(row.ledgerId, row.adds, e.target.value)}
-                className="field-input-sm w-24 shrink-0 text-end font-mono tabular-nums"
-              />
-            </label>
-          ))}
-        </div>
-      )}
+      <AdditionalLedgerList
+        carried={rows}
+        setup={setup}
+        nonTax={nonTax}
+        ledgers={ledgers}
+        onAmount={setAmount}
+        onRemove={(ledgerId) => onChange(rows.filter((row) => row.ledgerId !== ledgerId))}
+      />
     </div>
   );
 }
@@ -648,6 +622,7 @@ function EntryDialog({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
+  const taxOn = useTaxOn();
   const preferredWarehouseId = settings.preferredWarehouseId;
 
   const today = new Date().toISOString().slice(0, 10);
@@ -695,6 +670,8 @@ function EntryDialog({
   const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(() => {
     const fallback = (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX';
 
+    // A firm that charges no tax enters every sale without it.
+    if (!taxOn) return 'NT';
     if (!editing) return fallback;
 
     return editing.mode === TaxMode.nonTax ? 'NT' : fallback === 'NT' ? 'TAX' : fallback;
@@ -888,9 +865,14 @@ function EntryDialog({
     ...(enableDiscount
       ? [{ key: 'discount', label: t('sales.itemDiscount'), defaultOn: true }]
       : []),
-    { key: 'taxPercent', label: t('sales.taxPercent'), defaultOn: true },
-    { key: 'taxAmount', label: t('sales.taxAmount'), defaultOn: false },
+    ...(taxOn
+      ? [
+          { key: 'taxPercent', label: t('sales.taxPercent'), defaultOn: true },
+          { key: 'taxAmount', label: t('sales.taxAmount'), defaultOn: false },
+        ]
+      : []),
     { key: 'net', label: t('sales.net'), defaultOn: true, fixed: true },
+    { key: 'lineTotal', label: t('sales.lineTotal'), defaultOn: true },
   ];
   const lineColumns = useLineColumns(
     isReturn(kind) ? 'sales-return' : 'sales',
@@ -1070,6 +1052,133 @@ function EntryDialog({
     if (!Number.isFinite(tendered) || tendered <= 0) return 0;
     return Math.max(0, tendered - effectivePaid);
   }, [cashGiven, typedPaid, grandTotal, effectivePaid]);
+
+  // ---- Loading from another document, found by its number.
+  const referenceSources: readonly ReferenceSource[] = isReturn(kind)
+    ? [
+        {
+          key: 'salesInvoice',
+          label: t('references.salesInvoice'),
+          list: async () =>
+            (
+              await listSalesInvoices(
+                { kind: SalesDocumentKind.invoice, status: SalesInvoiceStatus.posted },
+                1,
+                100,
+              )
+            ).items.map((row) => ({
+              id: row.salesInvoiceId,
+              number: row.number,
+              date: row.date,
+              party: row.customerName,
+              total: row.total,
+            })),
+        },
+      ]
+    : [
+        ...[
+          {
+            key: 'quotation',
+            kind: SalesOrderKind.quotation,
+            label: t('references.quotation'),
+          },
+          {
+            key: 'salesOrder',
+            kind: SalesOrderKind.order,
+            label: t('references.salesOrder'),
+          },
+        ].map((source): ReferenceSource => ({
+          key: source.key,
+          label: source.label,
+          list: async () =>
+            (await listSalesOrders({}, 1, 100, source.kind)).items.map((row) => ({
+              id: row.salesOrderId,
+              number: row.number,
+              date: row.date,
+              party: row.customerName,
+              total: row.total,
+            })),
+        })),
+        {
+          key: 'purchase',
+          label: t('references.purchase'),
+          list: async () =>
+            (
+              await listPurchaseInvoices({ kind: PurchaseDocumentKind.invoice }, 1, 100)
+            ).items.map((row) => ({
+              id: row.purchaseInvoiceId,
+              number: row.number,
+              date: row.date,
+              party: row.supplierName,
+              total: row.total,
+            })),
+        },
+      ];
+
+  /** The rate a loaded line was taxed at, or nothing where the firm charges no tax. */
+  const loadedTax = (tax: number, taxable: number): number =>
+    taxOn && taxMode !== 'NT' && taxable > 0
+      ? Math.round((tax / taxable) * 10000) / 100
+      : 0;
+
+  const loadReference = async (sourceKey: string, id: string): Promise<void> => {
+    if (sourceKey === 'salesInvoice') {
+      const invoice = await getSalesInvoice(id);
+      setCustomerId(invoice.customerLedgerId);
+      setWarehouseId(invoice.warehouseId);
+      setReturnsInvoiceId(id);
+      setReference(invoice.header.number);
+      setLines(invoice.lines.map(linesFrom));
+      return;
+    }
+
+    if (sourceKey === 'purchase') {
+      // What was bought, at what it sells for rather than at what it cost.
+      const purchase = await getPurchaseInvoice(id);
+      setReference(purchase.header.number);
+      setLines(
+        purchase.lines.map((line) => {
+          const product = (products.data ?? []).find(
+            (candidate) => candidate.id === line.productId,
+          );
+          const rate = product ? masterRate(product, rateType) : line.rate;
+          const tax = taxOn ? lineTaxRate(taxMode, product, settings.defaultTaxRate) : 0;
+
+          return {
+            ...emptyLine,
+            productId: line.productId,
+            quantity: String(line.quantity),
+            rate: String(rate),
+            inclusiveRate: (rate * (1 + tax / 100)).toFixed(2),
+            taxPercentage: String(tax),
+          };
+        }),
+      );
+      return;
+    }
+
+    const order = await getSalesOrder(id);
+    setCustomerId(order.customerLedgerId);
+    setWarehouseId(order.warehouseId);
+    setReference(order.header.number);
+    setLines(
+      order.lines.map((line) => {
+        const tax = loadedTax(line.tax, line.taxable);
+        const quantity =
+          line.outstandingQuantity > 0 ? line.outstandingQuantity : line.quantity;
+
+        return {
+          ...emptyLine,
+          productId: line.productId,
+          quantity: String(quantity),
+          rate: String(line.rate),
+          inclusiveRate: (line.rate * (1 + tax / 100)).toFixed(2),
+          taxPercentage: String(tax),
+          discount: String(line.discount),
+        };
+      }),
+    );
+  };
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -1555,17 +1664,19 @@ function EntryDialog({
               error={errors['date']}
               size="sm"
             />
-            <SelectField<'NT' | 'TAX' | 'GST'>
-              label={t('sales.taxMode')}
-              value={taxMode}
-              onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
-              options={[
-                { value: 'NT', label: 'NT (0%)' },
-                { value: 'TAX', label: 'TAX (5%)' },
-                { value: 'GST', label: 'GST (18%)' },
-              ]}
-              size="sm"
-            />
+            {taxOn && (
+              <SelectField<'NT' | 'TAX' | 'GST'>
+                label={t('sales.taxMode')}
+                value={taxMode}
+                onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
+                options={[
+                  { value: 'NT', label: 'NT (0%)' },
+                  { value: 'TAX', label: 'TAX (5%)' },
+                  { value: 'GST', label: 'GST (18%)' },
+                ]}
+                size="sm"
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1605,6 +1716,10 @@ function EntryDialog({
           </div>
         </div>
       </div>
+
+      {/* A new sale can start from a quotation, an order or a purchase; a new return
+          from the invoice it sends goods back against. */}
+      {!editing && <ReferenceLoader sources={referenceSources} onLoad={loadReference} />}
 
       {/* Sales Return against invoice selector */}
       {isReturn(kind) && (
@@ -1663,6 +1778,9 @@ function EntryDialog({
                 <th className="px-2 py-1 text-end">{t('sales.taxAmount')}</th>
               )}
               <th className="px-2 py-1 text-end">{t('sales.net')}</th>
+              {lineColumns.shows('lineTotal') && (
+                <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
+              )}
               <th className="line-action-column" />
             </tr>
           </thead>
@@ -1870,7 +1988,7 @@ function EntryDialog({
               </>
             )}
             <div className="flex justify-between text-ink-muted">
-              <span>{t('sales.taxable')}</span>
+              <span>{taxOn ? t('sales.taxable') : t('sales.net')}</span>
               <span className="font-mono tabular-nums">
                 {moneyAlways(totals.taxable)}
               </span>
@@ -2095,11 +2213,14 @@ function EntryDialog({
           other thing a counter does with nearly every sale. */}
       <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
-        {editing?.header.status !== SalesInvoiceStatus.posted && (
-          <ModalButton disabled={busy} onClick={() => void save(false)}>
-            {t('sales.saveDraft')}
-          </ModalButton>
-        )}
+        {/* Off in Settings for a counter that only ever posts; a draft being
+            corrected can still be saved as one. */}
+        {editing?.header.status !== SalesInvoiceStatus.posted &&
+          (settings.allowSaveDraft !== false || editing !== undefined) && (
+            <ModalButton disabled={busy} onClick={() => void save(false)}>
+              {t('sales.saveDraft')}
+            </ModalButton>
+          )}
         <ModalButton disabled={busy} onClick={() => void save(true, true)}>
           {t('sales.saveAndPrint')}
         </ModalButton>
@@ -2438,6 +2559,18 @@ function LineRow({
         <td data-label={t('sales.net')} className="px-2 py-1 text-end font-mono">
           {Number.isFinite(net) ? moneyAlways(net) : '—'}
         </td>
+        {shows('lineTotal') && (
+          <td
+            data-label={t('sales.lineTotal')}
+            className="px-2 py-1 text-end font-mono font-semibold"
+          >
+            {Number.isFinite(net)
+              ? moneyAlways(
+                  net + roundMoney((net * Number(line.taxPercentage || 0)) / 100),
+                )
+              : '—'}
+          </td>
+        )}
         <td className="px-2 py-1 text-end">
           {removable && (
             <button

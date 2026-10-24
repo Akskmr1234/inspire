@@ -16,7 +16,9 @@ import {
   TextField,
 } from '@/components/Form';
 import { productOption } from '@/components/DocumentLines';
+import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { MobileSearch } from '@/components/MobileSearch';
+import { SuggestInput } from '@/components/SuggestInput';
 import { IconBarcode, IconClose, IconPlus } from '@/components/icons';
 import { ApiError } from '@/lib/api';
 import { chargeRows, useChargeSetup } from '@/lib/charges';
@@ -40,7 +42,7 @@ import { moneyAlways as money } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { postSalesInvoice, SalesPaymentMode, TaxMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 
 const LIST = '/service/sales';
 
@@ -314,7 +316,11 @@ function ServiceSaleForm({
   const [account, setAccount] = useState(
     card?.customerLedgerId ?? settings.defaultCustomerId ?? '',
   );
-  const [mode, setMode] = useState<number>(card?.mode ?? TaxMode.tax);
+  const taxOn = useTaxOn();
+  // A firm that charges no tax bills every job without it.
+  const [mode, setMode] = useState<number>(
+    card?.mode ?? (taxOn ? TaxMode.tax : TaxMode.nonTax),
+  );
   const [salesman, setSalesman] = useState(card?.salesmanLedgerId ?? '');
   const [receivedInto, setReceivedInto] = useState('');
 
@@ -429,6 +435,45 @@ function ServiceSaleForm({
     () => new Map((products.data ?? []).map((product) => [product.id, product])),
     [products.data],
   );
+  // The device, picked from the product list or typed when the list does not carry it.
+  const itemOptions = useMemo(
+    () =>
+      (products.data ?? []).map((product) => ({
+        value: product.id,
+        label: product.description,
+        detail: [product.code, product.brandName].filter(Boolean).join(' · '),
+      })),
+    [products.data],
+  );
+
+  /** Fills the customer's details from their account in the customer list. */
+  const pickCustomer = (customerId: string): void => {
+    const chosen = customers.data?.find((row) => row.customerId === customerId);
+    if (!chosen) return;
+
+    setAccount(chosen.customerId);
+    setCustomer({
+      name: chosen.name,
+      mobile: chosen.contact.mobileNumber ?? chosen.contact.phone ?? customer.mobile,
+      alternateMobile: chosen.contact.mobileNumber ? (chosen.contact.phone ?? '') : '',
+      email: chosen.contact.email ?? '',
+      addressLine1: chosen.contact.addressLine1 ?? '',
+      addressLine2: chosen.contact.addressLine2 ?? '',
+    });
+  };
+
+  /** Takes the device's name, and its brand when none was typed, from the product. */
+  const pickItem = (productId: string): void => {
+    const chosen = productById.get(productId);
+    if (!chosen) return;
+
+    setDevice({
+      ...device,
+      itemName: chosen.description,
+      brandName: device.brandName || (chosen.brandName ?? ''),
+    });
+  };
+
   const productOptions = useMemo(
     () => (products.data ?? []).map((product) => productOption(product, undefined)),
     [products.data],
@@ -793,18 +838,20 @@ function ServiceSaleForm({
               <option value={SalesPaymentMode.credit}>{t('paymentModes.credit')}</option>
             </select>
           </Field>
-          <Field label={t('serviceSales.mode')}>
-            <select
-              aria-label={t('serviceSales.mode')}
-              value={mode}
-              disabled={locked}
-              onChange={(event) => setMode(Number(event.target.value))}
-              className="field-input-sm"
-            >
-              <option value={TaxMode.tax}>{t('serviceSales.tax')}</option>
-              <option value={TaxMode.nonTax}>{t('serviceSales.nonTax')}</option>
-            </select>
-          </Field>
+          {taxOn && (
+            <Field label={t('serviceSales.mode')}>
+              <select
+                aria-label={t('serviceSales.mode')}
+                value={mode}
+                disabled={locked}
+                onChange={(event) => setMode(Number(event.target.value))}
+                className="field-input-sm"
+              >
+                <option value={TaxMode.tax}>{t('serviceSales.tax')}</option>
+                <option value={TaxMode.nonTax}>{t('serviceSales.nonTax')}</option>
+              </select>
+            </Field>
+          )}
           <Field label={t('sales.receivedInto')}>
             <select
               aria-label={t('sales.receivedInto')}
@@ -843,153 +890,151 @@ function ServiceSaleForm({
           />
         </div>
 
-        {/* The customer and the device on the left; what is wrong on the right. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-8">
-            <MobileSearch
-              label={t('serviceSales.mobile1')}
+        {/* Who brought it in and what, four to a row: the customer and the device, then
+            the job and what is wrong with it. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MobileSearch
+            label={t('serviceSales.mobile1')}
+            size="sm"
+            value={customer.mobile}
+            onChange={(mobile) => setCustomer({ ...customer, mobile })}
+            onPick={(match) => {
+              setCustomer({
+                name: match.customer.name,
+                mobile: match.customer.mobile ?? '',
+                alternateMobile: match.customer.alternateMobile ?? '',
+                email: match.customer.email ?? '',
+                addressLine1: match.customer.addressLine1 ?? '',
+                addressLine2: match.customer.addressLine2 ?? '',
+              });
+              if (match.customerLedgerId) setAccount(match.customerLedgerId);
+            }}
+          />
+          <TextField
+            label={t('serviceSales.mobile2')}
+            type="tel"
+            value={customer.alternateMobile}
+            onChange={(alternateMobile) => setCustomer({ ...customer, alternateMobile })}
+            size="sm"
+          />
+          <SuggestInput
+            label={t('service.customer')}
+            required
+            value={customer.name}
+            onChange={(name) => setCustomer({ ...customer, name })}
+            options={customerOptions}
+            onPick={(option) => pickCustomer(option.value)}
+            size="sm"
+          />
+          <TextField
+            label={t('serviceSales.mailId')}
+            type="email"
+            value={customer.email}
+            onChange={(email) => setCustomer({ ...customer, email })}
+            size="sm"
+          />
+          <SuggestInput
+            label={t('serviceSales.item')}
+            required
+            value={device.itemName}
+            onChange={(itemName) => setDevice({ ...device, itemName })}
+            options={itemOptions}
+            onPick={(option) => pickItem(option.value)}
+            size="sm"
+          />
+          <TextField
+            label={t('service.brand')}
+            value={device.brandName}
+            onChange={(brandName) => setDevice({ ...device, brandName })}
+            size="sm"
+          />
+          <TextField
+            label={t('service.model')}
+            value={device.modelNumber}
+            onChange={(modelNumber) => setDevice({ ...device, modelNumber })}
+            size="sm"
+          />
+          <TextField
+            label={t('service.colour')}
+            value={device.colour}
+            onChange={(colour) => setDevice({ ...device, colour })}
+            size="sm"
+          />
+          <TextField
+            label={t('serviceSales.serialNo')}
+            value={device.serialNumber}
+            onChange={(serialNumber) => setDevice({ ...device, serialNumber })}
+            size="sm"
+          />
+          <Field label={t('service.technician')}>
+            <SearchSelect
+              value={technician}
+              onChange={setTechnician}
+              options={employees}
+              clearable
               size="sm"
-              value={customer.mobile}
-              onChange={(mobile) => setCustomer({ ...customer, mobile })}
-              onPick={(match) => {
-                setCustomer({
-                  name: match.customer.name,
-                  mobile: match.customer.mobile ?? '',
-                  alternateMobile: match.customer.alternateMobile ?? '',
-                  email: match.customer.email ?? '',
-                  addressLine1: match.customer.addressLine1 ?? '',
-                  addressLine2: match.customer.addressLine2 ?? '',
-                });
-                if (match.customerLedgerId) setAccount(match.customerLedgerId);
-              }}
+              label={t('service.technician')}
             />
-            <TextField
-              label={t('serviceSales.mobile2')}
-              type="tel"
-              value={customer.alternateMobile}
-              onChange={(alternateMobile) =>
-                setCustomer({ ...customer, alternateMobile })
-              }
-              size="sm"
-            />
-            <TextField
-              label={t('service.customer')}
-              required
-              value={customer.name}
-              onChange={(name) => setCustomer({ ...customer, name })}
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.mailId')}
-              type="email"
-              value={customer.email}
-              onChange={(email) => setCustomer({ ...customer, email })}
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.item')}
-              required
-              value={device.itemName}
-              onChange={(itemName) => setDevice({ ...device, itemName })}
-              size="sm"
-            />
-            <TextField
-              label={t('service.brand')}
-              value={device.brandName}
-              onChange={(brandName) => setDevice({ ...device, brandName })}
-              size="sm"
-            />
-            <TextField
-              label={t('service.model')}
-              value={device.modelNumber}
-              onChange={(modelNumber) => setDevice({ ...device, modelNumber })}
-              size="sm"
-            />
-            <TextField
-              label={t('service.colour')}
-              value={device.colour}
-              onChange={(colour) => setDevice({ ...device, colour })}
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.serialNo')}
-              value={device.serialNumber}
-              onChange={(serialNumber) => setDevice({ ...device, serialNumber })}
-              size="sm"
-            />
-            <Field label={t('service.technician')}>
-              <SearchSelect
-                value={technician}
-                onChange={setTechnician}
-                options={employees}
-                clearable
-                size="sm"
-                label={t('service.technician')}
-              />
-            </Field>
-            <TextField
-              label={t('service.serviceType')}
-              value={work.serviceType}
-              onChange={(serviceType) => setWork({ ...work, serviceType })}
-              size="sm"
-            />
-            <DateField
-              label={t('serviceSales.eDate')}
-              value={work.estimatedOn}
-              onChange={(estimatedOn) => setWork({ ...work, estimatedOn })}
-              size="sm"
-            />
-            <NumberField
-              label={t('serviceSales.eRate')}
-              value={work.estimatedCharge}
-              onChange={(estimatedCharge) => setWork({ ...work, estimatedCharge })}
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.eTime')}
-              value={work.estimatedTime}
-              onChange={(estimatedTime) => setWork({ ...work, estimatedTime })}
-              placeholder="10:30"
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.accessories')}
-              value={device.accessories}
-              onChange={(accessories) => setDevice({ ...device, accessories })}
-              className="sm:col-span-2"
-              size="sm"
-            />
-          </div>
-
-          <div className="space-y-3 lg:col-span-4">
-            <TextAreaField
-              label={t('serviceSales.fault')}
-              value={work.fault}
-              onChange={(fault) => setWork({ ...work, fault })}
-              rows={2}
-              size="sm"
-            />
-            <TextAreaField
-              label={t('service.remarks')}
-              value={work.remarks}
-              onChange={(remarks) => setWork({ ...work, remarks })}
-              rows={2}
-              size="sm"
-            />
-            <TextAreaField
-              label={t('serviceSales.notes')}
-              value={work.notes}
-              onChange={(notes) => setWork({ ...work, notes })}
-              rows={2}
-              size="sm"
-            />
-            <TextField
-              label={t('serviceSales.problem')}
-              value={work.problem}
-              onChange={(problemFound) => setWork({ ...work, problem: problemFound })}
-              size="sm"
-            />
-          </div>
+          </Field>
+          <TextField
+            label={t('service.serviceType')}
+            value={work.serviceType}
+            onChange={(serviceType) => setWork({ ...work, serviceType })}
+            size="sm"
+          />
+          <TextField
+            label={t('serviceSales.accessories')}
+            value={device.accessories}
+            onChange={(accessories) => setDevice({ ...device, accessories })}
+            size="sm"
+          />
+          <DateField
+            label={t('serviceSales.eDate')}
+            value={work.estimatedOn}
+            onChange={(estimatedOn) => setWork({ ...work, estimatedOn })}
+            size="sm"
+          />
+          <NumberField
+            label={t('serviceSales.eRate')}
+            value={work.estimatedCharge}
+            onChange={(estimatedCharge) => setWork({ ...work, estimatedCharge })}
+            size="sm"
+          />
+          <TextField
+            label={t('serviceSales.eTime')}
+            value={work.estimatedTime}
+            onChange={(estimatedTime) => setWork({ ...work, estimatedTime })}
+            placeholder="10:30"
+            size="sm"
+          />
+          <TextField
+            label={t('serviceSales.problem')}
+            value={work.problem}
+            onChange={(problemFound) => setWork({ ...work, problem: problemFound })}
+            size="sm"
+          />
+          <TextAreaField
+            label={t('serviceSales.fault')}
+            value={work.fault}
+            onChange={(fault) => setWork({ ...work, fault })}
+            rows={2}
+            size="sm"
+            className="sm:col-span-2"
+          />
+          <TextAreaField
+            label={t('service.remarks')}
+            value={work.remarks}
+            onChange={(remarks) => setWork({ ...work, remarks })}
+            rows={2}
+            size="sm"
+          />
+          <TextAreaField
+            label={t('serviceSales.notes')}
+            value={work.notes}
+            onChange={(notes) => setWork({ ...work, notes })}
+            rows={2}
+            size="sm"
+          />
         </div>
 
         {/* Where the job stands: each stage ticked with the day it was reached. */}
@@ -1018,16 +1063,17 @@ function ServiceSaleForm({
                   />
                   {key === 'dead' ? t('serviceSales.isDead') : t(`service.stage.${key}`)}
                 </label>
-                <input
-                  type="date"
-                  aria-label={`${t(`service.stage.${key}`)} · ${t('service.date')}`}
-                  value={on ?? ''}
-                  disabled={on === null}
-                  onChange={(event) =>
-                    setStages({ ...stages, [key]: event.target.value || null })
-                  }
-                  className="field-input-sm w-full"
-                />
+                {on !== null && (
+                  <input
+                    type="date"
+                    aria-label={`${t(`service.stage.${key}`)} · ${t('service.date')}`}
+                    value={on}
+                    onChange={(event) =>
+                      setStages({ ...stages, [key]: event.target.value || null })
+                    }
+                    className="field-input-sm w-full"
+                  />
+                )}
               </div>
             );
           })}
@@ -1195,47 +1241,27 @@ function ServiceSaleForm({
               </div>
             )}
 
-            {totals.shown.map((row) => (
-              <label key={row.ledgerId} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">{row.label}</span>
-                <span
-                  className={clsx(
-                    'text-[11px] font-medium',
-                    row.adds ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600',
-                  )}
-                >
-                  {row.adds ? '+' : '−'}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  aria-label={row.label}
-                  value={
-                    charges.find((charge) => charge.ledgerId === row.ledgerId)?.amount ??
-                    ''
-                  }
-                  disabled={locked}
-                  onChange={(event) => {
-                    const amount = event.target.value;
-                    setCharges((current) =>
-                      current.some((charge) => charge.ledgerId === row.ledgerId)
-                        ? current.map((charge) =>
-                            charge.ledgerId === row.ledgerId
-                              ? { ...charge, amount }
-                              : charge,
-                          )
-                        : [...current, { ledgerId: row.ledgerId, amount }],
-                    );
-                  }}
-                  className="field-input-sm w-24 text-end font-mono tabular-nums"
-                />
-              </label>
-            ))}
-            {chargeSetup !== undefined && totals.shown.length === 0 && (
-              <p className="text-xs text-ink-muted">{t('documents.noChargesSetUp')}</p>
-            )}
+            <AdditionalLedgerList
+              carried={charges}
+              setup={chargeSetup}
+              nonTax={nonTax}
+              ledgers={ledgers.data ?? []}
+              disabled={locked}
+              onAmount={(ledgerId, amount) =>
+                setCharges((current) =>
+                  current.some((charge) => charge.ledgerId === ledgerId)
+                    ? current.map((charge) =>
+                        charge.ledgerId === ledgerId ? { ...charge, amount } : charge,
+                      )
+                    : [...current, { ledgerId, amount }],
+                )
+              }
+              onRemove={(ledgerId) =>
+                setCharges((current) =>
+                  current.filter((charge) => charge.ledgerId !== ledgerId),
+                )
+              }
+            />
 
             <div className="flex items-center justify-between border-t border-line pt-2 text-base font-bold text-ink">
               <span>{t('serviceSales.gTotal')}</span>

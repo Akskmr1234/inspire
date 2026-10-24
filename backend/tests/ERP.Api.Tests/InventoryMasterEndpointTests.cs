@@ -78,7 +78,7 @@ public sealed class InventoryMasterEndpointTests
         await CreateUnitAsync(client, $"DUP{suffix}", "First");
 
         HttpResponseMessage response = await client.PostAsJsonAsync(
-            $"{Inventory}/units", new { Code = $"DUP{suffix}", Name = "Second" });
+            $"{Inventory}/units", new { Code = $"DUP{suffix}", Name = $"Second {suffix}" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
@@ -137,7 +137,7 @@ public sealed class InventoryMasterEndpointTests
 
         HttpResponseMessage created = await client.PostAsJsonAsync(
             $"{Inventory}/brands",
-            new { Code = $"SAM{suffix}", Name = "Samsung", NameArabic = "سامسونج" });
+            new { Code = $"SAM{suffix}", Name = $"Samsung {suffix}", NameArabic = "سامسونج" });
 
         created.StatusCode.ShouldBe(HttpStatusCode.Created);
 

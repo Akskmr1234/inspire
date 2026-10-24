@@ -146,6 +146,26 @@ const TaxReturnsPage = lazyScreen(
   'TaxReturnsPage',
 );
 const BomsPage = lazyScreen(() => import('@/pages/ProductionPage'), 'BomsPage');
+const StockRegisterPage = lazyScreen(
+  () => import('@/pages/StockReportPages'),
+  'StockRegisterPage',
+);
+const ProductHistoryPage = lazyScreen(
+  () => import('@/pages/StockReportPages'),
+  'ProductHistoryPage',
+);
+const SalesReportPage = lazyScreen(
+  () => import('@/pages/TransactionReportPage'),
+  'SalesReportPage',
+);
+const PurchaseReportPage = lazyScreen(
+  () => import('@/pages/TransactionReportPage'),
+  'PurchaseReportPage',
+);
+const ProfitReportPage = lazyScreen(
+  () => import('@/pages/TransactionReportPage'),
+  'ProfitReportPage',
+);
 const JobCardsPage = lazyScreen(() => import('@/pages/ServicePage'), 'JobCardsPage');
 const ServiceSalesPage = lazyScreen(
   () => import('@/pages/ServiceSalesPage'),
@@ -358,11 +378,35 @@ export function App(): React.JSX.Element {
               />
               <Route
                 path="/accounting/debtors"
-                element={<OutstandingPage key="debtors" side="debtors" />}
+                element={
+                  <OutstandingPage key="debtors" side="debtors" initialView="aging" />
+                }
               />
               <Route
                 path="/accounting/creditors"
-                element={<OutstandingPage key="creditors" side="creditors" />}
+                element={
+                  <OutstandingPage key="creditors" side="creditors" initialView="aging" />
+                }
+              />
+              <Route
+                path="/accounting/receivables"
+                element={
+                  <OutstandingPage
+                    key="receivables"
+                    side="debtors"
+                    headingKey="nav.receivables"
+                  />
+                }
+              />
+              <Route
+                path="/accounting/payables"
+                element={
+                  <OutstandingPage
+                    key="payables"
+                    side="creditors"
+                    headingKey="nav.payables"
+                  />
+                }
               />
               <Route path="/accounting/tax-returns" element={<TaxReturnsPage />} />
               <Route path="/settings/menu" element={<MenuAdministrationPage />} />
@@ -406,6 +450,11 @@ export function App(): React.JSX.Element {
               <Route path="/sales/delivery-notes" element={<DeliveryNotesPage />} />
               <Route path="/inventory/boms" element={<BomsPage />} />
               <Route path="/inventory/production" element={<ProductionPage />} />
+              <Route path="/inventory/stock-register" element={<StockRegisterPage />} />
+              <Route path="/inventory/product-history" element={<ProductHistoryPage />} />
+              <Route path="/reports/sales" element={<SalesReportPage />} />
+              <Route path="/reports/purchases" element={<PurchaseReportPage />} />
+              <Route path="/reports/profit" element={<ProfitReportPage />} />
               <Route path="/service/sales" element={<ServiceSalesPage />} />
               <Route path="/service/sales/new" element={<ServiceSaleEntryPage />} />
               <Route

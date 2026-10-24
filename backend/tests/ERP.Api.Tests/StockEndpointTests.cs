@@ -575,33 +575,33 @@ public sealed class StockEndpointTests
                 new { Code = $"CAT{suffix}", Name = $"Stocked {suffix}" });
 
             Guid eachId = await CreateMasterAsync(
-                client, "units", new { Code = $"EA{suffix}", Name = "Each" });
+                client, "units", new { Code = $"EA{suffix}", Name = $"Each {suffix}" });
 
             Guid boxId = await CreateMasterAsync(
                 client, "units",
                 new
                 {
                     Code = $"BX{suffix}",
-                    Name = "Box of 24",
+                    Name = $"Box of 24 {suffix}",
                     BaseUnitId = eachId,
                     ConversionFactor = 24m,
                 });
 
             Guid kilogramId = await CreateMasterAsync(
-                client, "units", new { Code = $"KG{suffix}", Name = "Kilogram" });
+                client, "units", new { Code = $"KG{suffix}", Name = $"Kilogram {suffix}" });
 
             Guid mainId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"MAIN{suffix}", Name = "Main store" });
+                client, "warehouses", new { Code = $"MAIN{suffix}", Name = $"Main store {suffix}" });
 
             Guid shopId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"SHOP{suffix}", Name = "Shop floor" });
+                client, "warehouses", new { Code = $"SHOP{suffix}", Name = $"Shop floor {suffix}" });
 
             Fixtures fixtures = new(
                 suffix, categoryId, eachId, boxId, kilogramId, mainId, shopId,
                 Guid.Empty, string.Empty);
 
             string code = $"STK{suffix}";
-            Guid productId = await CreateProductAsync(client, fixtures, code, "Stocked thing");
+            Guid productId = await CreateProductAsync(client, fixtures, code, $"Stocked thing {suffix}");
 
             return fixtures with { ProductId = productId, ProductCode = code };
         }

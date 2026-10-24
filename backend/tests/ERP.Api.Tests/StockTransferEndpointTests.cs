@@ -278,7 +278,7 @@ public sealed class StockTransferEndpointTests
 
             Guid category = await CreateAsync(
                 client, "categories", new { Code = $"TRC{suffix}", Name = $"Transfers {suffix}" });
-            Guid each = await CreateAsync(client, "units", new { Code = $"TRE{suffix}", Name = "Each" });
+            Guid each = await CreateAsync(client, "units", new { Code = $"TRE{suffix}", Name = $"Each {suffix}" });
             Guid main = await CreateAsync(
                 client, "warehouses", new { Code = $"TRM{suffix}", Name = $"Main {suffix}" });
             Guid shop = await CreateAsync(
@@ -287,7 +287,7 @@ public sealed class StockTransferEndpointTests
             HttpResponseMessage product = await client.PostAsJsonAsync($"{Inventory}/products", new
             {
                 Code = $"TRP{suffix}",
-                Description = "Travelling thing",
+                Description = $"Travelling thing {suffix}",
                 CategoryId = category,
                 StockUnitId = each,
                 ItemType = 1,

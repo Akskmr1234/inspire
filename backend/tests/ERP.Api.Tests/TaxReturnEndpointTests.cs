@@ -188,17 +188,17 @@ public sealed class TaxReturnEndpointTests
             client, "categories", new { Code = $"TCAT{suffix}", Name = $"Tax {suffix}" });
 
         Guid unitId = await CreateAsync(
-            client, "units", new { Code = $"TEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"TEA{suffix}", Name = $"Each {suffix}" });
 
         Guid warehouseId = await CreateAsync(
-            client, "warehouses", new { Code = $"TWH{suffix}", Name = "Tax store" });
+            client, "warehouses", new { Code = $"TWH{suffix}", Name = $"Tax store {suffix}" });
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
             new
             {
                 Code = $"TAX{suffix}",
-                Description = "A thing",
+                Description = $"A thing {suffix}",
                 CategoryId = categoryId,
                 StockUnitId = unitId,
                 ItemType = 1,
@@ -273,17 +273,17 @@ public sealed class TaxReturnEndpointTests
             client, "categories", new { Code = $"ICAT{suffix}", Name = $"Input {suffix}" });
 
         Guid unitId = await CreateAsync(
-            client, "units", new { Code = $"IEA{suffix}", Name = "Each" });
+            client, "units", new { Code = $"IEA{suffix}", Name = $"Each {suffix}" });
 
         Guid warehouseId = await CreateAsync(
-            client, "warehouses", new { Code = $"IWH{suffix}", Name = "Input store" });
+            client, "warehouses", new { Code = $"IWH{suffix}", Name = $"Input store {suffix}" });
 
         HttpResponseMessage product = await client.PostAsJsonAsync(
             $"{Inventory}/products",
             new
             {
                 Code = $"INP{suffix}",
-                Description = "A thing bought",
+                Description = $"A thing bought {suffix}",
                 CategoryId = categoryId,
                 StockUnitId = unitId,
                 ItemType = 1,

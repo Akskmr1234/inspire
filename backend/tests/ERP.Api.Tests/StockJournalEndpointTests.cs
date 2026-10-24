@@ -192,20 +192,20 @@ public sealed class StockJournalEndpointTests
                 client, "categories", new { Code = $"JCAT{suffix}", Name = $"Journal {suffix}" });
 
             Guid eachId = await CreateMasterAsync(
-                client, "units", new { Code = $"JEA{suffix}", Name = "Each" });
+                client, "units", new { Code = $"JEA{suffix}", Name = $"Each {suffix}" });
 
             Guid mainId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"JMAIN{suffix}", Name = "Main store" });
+                client, "warehouses", new { Code = $"JMAIN{suffix}", Name = $"Main store {suffix}" });
 
             Guid shopId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"JSHOP{suffix}", Name = "Shop floor" });
+                client, "warehouses", new { Code = $"JSHOP{suffix}", Name = $"Shop floor {suffix}" });
 
             HttpResponseMessage created = await client.PostAsJsonAsync(
                 $"{Inventory}/products",
                 new
                 {
                     Code = $"JRN{suffix}",
-                    Description = "A thing",
+                    Description = $"A thing {suffix}",
                     CategoryId = categoryId,
                     StockUnitId = eachId,
                     ItemType = 1,

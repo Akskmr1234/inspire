@@ -307,20 +307,20 @@ public sealed class SerialEndpointTests
                 new { Code = $"SCAT{suffix}", Name = $"Serialised {suffix}" });
 
             Guid eachId = await CreateMasterAsync(
-                client, "units", new { Code = $"SEA{suffix}", Name = "Each" });
+                client, "units", new { Code = $"SEA{suffix}", Name = $"Each {suffix}" });
 
             Guid mainId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"SMAIN{suffix}", Name = "Main store" });
+                client, "warehouses", new { Code = $"SMAIN{suffix}", Name = $"Main store {suffix}" });
 
             Guid shopId = await CreateMasterAsync(
-                client, "warehouses", new { Code = $"SSHOP{suffix}", Name = "Shop floor" });
+                client, "warehouses", new { Code = $"SSHOP{suffix}", Name = $"Shop floor {suffix}" });
 
             HttpResponseMessage created = await client.PostAsJsonAsync(
                 $"{Inventory}/products",
                 new
                 {
                     Code = $"SRL{suffix}",
-                    Description = "A handset",
+                    Description = $"A handset {suffix}",
                     CategoryId = categoryId,
                     StockUnitId = eachId,
                     ItemType = 1,

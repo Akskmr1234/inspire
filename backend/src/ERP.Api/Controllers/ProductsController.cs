@@ -122,7 +122,8 @@ public sealed class ProductsController : ApiControllerBase
                 request.DescriptionArabic,
                 request.ShortDescription,
                 request.ItemName,
-                request.TaxSlabId),
+                request.TaxSlabId,
+                request.Rates),
             cancellationToken);
 
         return result.IsSuccess
@@ -489,6 +490,7 @@ public sealed class ProductsController : ApiControllerBase
 /// <param name="ShortDescription">The short form, for receipts.</param>
 /// <param name="ItemName">The manufacturer's own name for it.</param>
 /// <param name="TaxSlabId">The tax rate it carries, if any.</param>
+/// <param name="Rates">The costing method and rates it starts with, if given.</param>
 public sealed record CreateProductRequest(
     [property: JsonRequired] string Description,
     [property: JsonRequired] Guid CategoryId,
@@ -501,7 +503,8 @@ public sealed record CreateProductRequest(
     string? DescriptionArabic = null,
     string? ShortDescription = null,
     string? ItemName = null,
-    Guid? TaxSlabId = null);
+    Guid? TaxSlabId = null,
+    ProductStartingRates? Rates = null);
 
 /// <summary>Changing a product's descriptive fields.</summary>
 /// <param name="Description">What it is called on a document.</param>

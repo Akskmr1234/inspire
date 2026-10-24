@@ -31,6 +31,7 @@ public static class DependencyInjection
             // runs before the transaction so a malformed request never opens one.
             configuration.AddOpenBehavior(typeof(LoggingBehaviour<,>));
             configuration.AddOpenBehavior(typeof(ValidationBehaviour<,>));
+            configuration.AddOpenBehavior(typeof(MasterNameBehaviour<,>));
             configuration.AddOpenBehavior(typeof(TransactionBehaviour<,>));
         });
 

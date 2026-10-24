@@ -72,13 +72,22 @@ function today(): string {
  */
 export function OutstandingPage({
   side,
+  initialView = 'bills',
+  headingKey,
 }: {
   readonly side: 'debtors' | 'creditors';
+  /**
+   * Which reading opens first: the parties and what each owes in total (debtors and
+   * creditors), or every bill still open (receivables and payables).
+   */
+  readonly initialView?: View;
+  /** The translation key of the menu's name for the screen, where it is not the side's own. */
+  readonly headingKey?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [asAt, setAsAt] = useState(today());
   const [applied, setApplied] = useState(today());
-  const [view, setView] = useState<View>('bills');
+  const [view, setView] = useState<View>(initialView);
   const [overdueOnly, setOverdueOnly] = useState(false);
 
   const bills = useQuery<OutstandingBills, ApiError>({
@@ -143,7 +152,7 @@ export function OutstandingPage({
     </div>
   );
 
-  const title = t(`outstanding.${side}Title`);
+  const title = headingKey ? t(headingKey) : t(`outstanding.${side}Title`);
 
   return view === 'bills' ? (
     <ReportFrame

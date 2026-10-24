@@ -5,7 +5,7 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import { ReportFrame } from '@/components/ReportFrame';
-import { SelectField, TextField } from '@/components/Form';
+import { NumberField, SelectField, TextField } from '@/components/Form';
 import { MasterPicker, useMasterRows } from '@/components/MasterPicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
@@ -20,7 +20,7 @@ import {
   type ProductSummary,
 } from '@/lib/products';
 import { collect, maxLength, required, useValidation } from '@/lib/validation';
-import { useSettings } from '@/stores/settings';
+import { useSettings, useTaxOn } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
 
 /**
@@ -322,6 +322,7 @@ function AddProduct({
 
   const { defaultCategoryId, defaultStockUnitId, defaultItemType, defaultBrandId } =
     useSettings();
+  const taxOn = useTaxOn();
 
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
@@ -333,6 +334,12 @@ function AddProduct({
   const [itemType, setItemType] = useState(String(defaultItemType ?? 1));
   const [tracksSerialNumbers, setTracksSerialNumbers] = useState(false);
   const serialsOn = useSerialNumbersEnabled();
+  const [costingMethod, setCostingMethod] = useState('1');
+  const [cost, setCost] = useState('');
+  const [retailRate, setRetailRate] = useState('');
+  const [wholesaleRate, setWholesaleRate] = useState('');
+  const [otherRate, setOtherRate] = useState('');
+  const [mrp, setMrp] = useState('');
 
   /*
     The starting choices, once the lists have arrived: the firm's own defaults from
@@ -369,7 +376,11 @@ function AddProduct({
     }
   }, [taxRates.rows, taxSlabId, taxTouched]);
 
-  const draft = { code, description, categoryId, stockUnitId };
+  const draft = { code, description, categoryId, stockUnitId, retailRate, mrp };
+  const amount = (typed: string): number => {
+    const value = Number(typed);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
 
   const { errors, submit } = useValidation<typeof draft>((values) =>
     collect({
@@ -379,6 +390,11 @@ function AddProduct({
       categoryId: required(values.categoryId, t('products.categoryRequired')),
       stockUnitId: required(values.stockUnitId, t('products.unitRequired')),
       code: maxLength(values.code, 30, t('products.codeTooLong')),
+      // The server refuses a retail rate above a stated MRP; said here, by the field.
+      retailRate:
+        amount(values.mrp) > 0 && amount(values.retailRate) > amount(values.mrp)
+          ? t('products.retailAboveMrp')
+          : undefined,
     }),
   );
 
@@ -395,8 +411,16 @@ function AddProduct({
         categoryId,
         stockUnitId,
         brandId: brandId || null,
-        taxSlabId: taxSlabId || null,
+        taxSlabId: (taxOn && taxSlabId) || null,
         itemType: Number(itemType),
+        rates: {
+          costingMethod: Number(costingMethod),
+          cost: amount(cost),
+          retailRate: amount(retailRate),
+          wholesaleRate: amount(wholesaleRate),
+          otherRate: amount(otherRate),
+          maximumRetailPrice: amount(mrp),
+        },
       },
       mode,
       tracksSerialNumbers,
@@ -484,16 +508,55 @@ function AddProduct({
           include={(row) => !(row as UnitSummary).baseUnitId}
         />
 
-        <MasterPicker
-          kind="taxRate"
-          label={t('products.taxRate')}
-          clearable
-          placeholder={t('taxRates.none')}
-          value={taxSlabId}
-          onChange={(value) => {
-            setTaxTouched(true);
-            setTaxSlabId(value);
-          }}
+        {taxOn && (
+          <MasterPicker
+            kind="taxRate"
+            label={t('products.taxRate')}
+            clearable
+            placeholder={t('taxRates.none')}
+            value={taxSlabId}
+            onChange={(value) => {
+              setTaxTouched(true);
+              setTaxSlabId(value);
+            }}
+          />
+        )}
+
+        {/* How it is costed and what it sells for, in the order the counter asks. */}
+        <SelectField
+          label={t('products.costingMethod')}
+          value={costingMethod}
+          onChange={setCostingMethod}
+          options={[
+            { value: '1', label: t('products.costingLastPurchase') },
+            { value: '2', label: t('products.costingAverage') },
+          ]}
+        />
+        <NumberField label={t('products.cost')} value={cost} onChange={setCost} min={0} />
+        <NumberField
+          label={t('products.retailRate')}
+          value={retailRate}
+          onChange={setRetailRate}
+          min={0}
+          error={errors['retailRate']}
+        />
+        <NumberField
+          label={t('products.wholesaleRate')}
+          value={wholesaleRate}
+          onChange={setWholesaleRate}
+          min={0}
+        />
+        <NumberField
+          label={t('products.otherRate')}
+          value={otherRate}
+          onChange={setOtherRate}
+          min={0}
+        />
+        <NumberField
+          label={t('products.maximumRetailPrice')}
+          value={mrp}
+          onChange={setMrp}
+          min={0}
         />
 
         {/* Offered only where the firm has switched serial numbers on in Settings. */}

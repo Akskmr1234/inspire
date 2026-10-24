@@ -168,19 +168,34 @@ export function setupName(document: ChargeDocument): string {
   return SETUP_FOR[document];
 }
 
+/** Marks a charge as one every new document of its kind shows by itself, or not. */
+export function setChargeDefault(
+  document: ChargeDocument,
+  ledgerId: string,
+  isDefault: boolean,
+): Promise<ChargeSetup> {
+  return request<ChargeSetup>(
+    `/accounting/charges/${SETUP_FOR[document]}/${ledgerId}/default`,
+    { method: 'PUT', body: { isDefault } },
+  );
+}
+
 /** One row of a document's additional ledgers: a ledger and which way it moves the total. */
 export interface ChargeRow {
   readonly ledgerId: string;
   readonly label: string;
   readonly adds: boolean;
+  /** Picked on this document rather than shown by default, so it can be taken off again. */
+  readonly removable: boolean;
 }
 
 /**
  * The rows a document's additional ledgers show.
  *
- * Every ledger Settings set up for the document under its tax mode, so nobody picks
- * them one by one on each invoice; then any the document already carries that has
- * since been taken off the setup, so a saved figure is never hidden.
+ * The ledgers Settings marked as defaults for the document under its tax mode, so
+ * nobody picks them one by one on each invoice; then every ledger the document carries
+ * besides - one picked on it, or one since taken off the setup - so a saved figure is
+ * never hidden.
  */
 export function chargeRows(
   setup: readonly ChargeSetup[] | undefined,
@@ -188,21 +203,18 @@ export function chargeRows(
   carried: readonly { readonly ledgerId: string; readonly amount: string }[],
   ledgers: readonly LedgerSummary[],
 ): readonly ChargeRow[] {
-  const rows: ChargeRow[] = (setup ? enterableCharges(setup, nonTax) : []).map(
-    (charge) => ({
+  const rows: ChargeRow[] = (setup ? enterableCharges(setup, nonTax) : [])
+    .filter((charge) => charge.isDefault)
+    .map((charge) => ({
       ledgerId: charge.ledgerId,
       label: `${charge.code} — ${charge.name}`,
       adds: charge.isAddition,
-    }),
-  );
+      removable: false,
+    }));
   const seen = new Set(rows.map((row) => row.ledgerId));
 
   for (const charge of carried) {
-    if (
-      charge.ledgerId === '' ||
-      seen.has(charge.ledgerId) ||
-      !(Number(charge.amount) > 0)
-    ) {
+    if (charge.ledgerId === '' || seen.has(charge.ledgerId)) {
       continue;
     }
 
@@ -211,11 +223,28 @@ export function chargeRows(
 
     rows.push({
       ledgerId: charge.ledgerId,
-      label: ledger ? `${ledger.code} — ${ledger.name}` : (set?.name ?? charge.ledgerId),
+      label: set
+        ? `${set.code} — ${set.name}`
+        : ledger
+          ? `${ledger.code} — ${ledger.name}`
+          : charge.ledgerId,
       adds: set?.isAddition ?? (ledger ? chargeAdds(ledger) : true),
+      removable: true,
     });
     seen.add(charge.ledgerId);
   }
 
   return rows;
+}
+
+/** The ledgers set up for a document that are not on it yet, for picking by hand. */
+export function offeredCharges(
+  setup: readonly ChargeSetup[] | undefined,
+  nonTax: boolean,
+  shown: readonly ChargeRow[],
+): readonly ChargeSetup[] {
+  const on = new Set(shown.map((row) => row.ledgerId));
+  return (setup ? enterableCharges(setup, nonTax) : []).filter(
+    (charge) => !on.has(charge.ledgerId),
+  );
 }
