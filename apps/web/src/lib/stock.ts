@@ -636,3 +636,40 @@ export function invoiceReceiptNote(
     body: { supplierInvoiceNumber },
   });
 }
+
+/** One product's line of the detailed stock register. */
+export interface StockRegisterRow {
+  readonly productId: string;
+  readonly productCode: string;
+  readonly productDescription: string;
+  readonly categoryName: string;
+  readonly stockUnitCode: string;
+  readonly opening: number;
+  readonly purchase: number;
+  readonly sales: number;
+  readonly otherIn: number;
+  readonly otherOut: number;
+  readonly closing: number;
+}
+
+/** The detailed stock register: opening, purchases, sales, other movements and closing. */
+export interface StockRegisterReport {
+  readonly from: string;
+  readonly to: string;
+  readonly rows: readonly StockRegisterRow[];
+}
+
+/** Reads the detailed stock register over a period. */
+export function fetchStockRegister(
+  from: string,
+  to: string,
+  warehouseId: string,
+  categoryId: string,
+): Promise<StockRegisterReport> {
+  const query = new URLSearchParams({ from, to });
+
+  if (warehouseId) query.set('warehouseId', warehouseId);
+  if (categoryId) query.set('categoryId', categoryId);
+
+  return request<StockRegisterReport>(`${STOCK}/register?${query.toString()}`);
+}

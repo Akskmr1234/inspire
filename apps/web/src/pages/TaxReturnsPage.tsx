@@ -16,7 +16,7 @@ import {
 } from '@/lib/taxReturns';
 
 /** Which of the three §7.3 reports is on screen. */
-type View = 'summary' | 'output' | 'input';
+type View = 'summary' | 'output' | 'input' | 'byDate' | 'byRate';
 
 function monthStart(): string {
   const now = new Date();
@@ -58,13 +58,13 @@ export function TaxReturnsPage(): React.JSX.Element {
   const output = useQuery<OutputTaxReport, ApiError>({
     queryKey: ['output-tax', range.from, range.to],
     queryFn: () => getOutputTax(range.from, range.to),
-    enabled: view === 'output',
+    enabled: view !== 'summary' && view !== 'input',
   });
 
   const input = useQuery<InputTaxReport, ApiError>({
     queryKey: ['input-tax', range.from, range.to],
     queryFn: () => getInputTax(range.from, range.to),
-    enabled: view === 'input',
+    enabled: view !== 'summary' && view !== 'output',
   });
 
   const controls = (
@@ -121,6 +121,12 @@ export function TaxReturnsPage(): React.JSX.Element {
             <ViewTab current={view} value="input" onChange={setView}>
               {t('tax.inputTax')}
             </ViewTab>
+            <ViewTab current={view} value="byDate" onChange={setView}>
+              {t('tax.byDate')}
+            </ViewTab>
+            <ViewTab current={view} value="byRate" onChange={setView}>
+              {t('tax.byRate')}
+            </ViewTab>
 
             <span className="ms-auto text-xs text-ink-muted">
               {regimeName(data.regime, t)} · {data.currency}
@@ -135,6 +141,22 @@ export function TaxReturnsPage(): React.JSX.Element {
 
           {view === 'input' && (
             <Detail query={input}>{(report) => <InputRows report={report} />}</Detail>
+          )}
+
+          {(view === 'byDate' || view === 'byRate') && (
+            <Detail query={output}>
+              {(sales) => (
+                <Detail query={input}>
+                  {(purchases) =>
+                    view === 'byDate' ? (
+                      <ByDate output={sales} input={purchases} />
+                    ) : (
+                      <ByRate output={sales} input={purchases} />
+                    )
+                  }
+                </Detail>
+              )}
+            </Detail>
           )}
         </div>
       )}
@@ -302,6 +324,199 @@ function OutputRows({ report }: { readonly report: OutputTaxReport }): React.JSX
             ))
           )}
         </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** One row of the date-wise or rate-wise summary. */
+interface SummaryRow {
+  key: string;
+  label: string;
+  outputTaxable: number;
+  outputTax: number;
+  inputTaxable: number;
+  inputTax: number;
+}
+
+/**
+ * A document's taxable value, counted once however many heads it was taxed under: a GST
+ * invoice carries the same value against its CGST and its SGST.
+ */
+function taxableByDocument(
+  rows: readonly {
+    documentId: string;
+    component: number;
+    taxableAmount: number | null;
+  }[],
+): Map<string, number> {
+  const perHead = new Map<string, number>();
+
+  for (const row of rows) {
+    const key = `${row.documentId}|${row.component}`;
+    perHead.set(key, (perHead.get(key) ?? 0) + (row.taxableAmount ?? 0));
+  }
+
+  const perDocument = new Map<string, number>();
+
+  for (const [key, value] of perHead) {
+    const document = key.split('|')[0] ?? key;
+    perDocument.set(document, Math.max(perDocument.get(document) ?? 0, value));
+  }
+
+  return perDocument;
+}
+
+/** Tax charged and paid, day by day. */
+function ByDate({
+  output,
+  input,
+}: {
+  readonly output: OutputTaxReport;
+  readonly input: InputTaxReport;
+}): React.JSX.Element {
+  const rows = new Map<string, SummaryRow>();
+  const row = (date: string): SummaryRow => {
+    const found = rows.get(date);
+    if (found) return found;
+    const created = {
+      key: date,
+      label: date,
+      outputTaxable: 0,
+      outputTax: 0,
+      inputTaxable: 0,
+      inputTax: 0,
+    };
+    rows.set(date, created);
+    return created;
+  };
+
+  const outDates = new Map(output.rows.map((line) => [line.documentId, line.date]));
+  for (const [document, taxable] of taxableByDocument(output.rows)) {
+    row(outDates.get(document) ?? '').outputTaxable += taxable;
+  }
+  for (const line of output.rows) row(line.date).outputTax += line.taxAmount;
+
+  const inDates = new Map(input.rows.map((line) => [line.documentId, line.date]));
+  for (const [document, taxable] of taxableByDocument(input.rows)) {
+    row(inDates.get(document) ?? '').inputTaxable += taxable;
+  }
+  for (const line of input.rows) row(line.date).inputTax += line.taxAmount;
+
+  return (
+    <SummaryTable rows={[...rows.values()].sort((a, b) => a.key.localeCompare(b.key))} />
+  );
+}
+
+/** Tax charged and paid at each rate, head by head. */
+function ByRate({
+  output,
+  input,
+}: {
+  readonly output: OutputTaxReport;
+  readonly input: InputTaxReport;
+}): React.JSX.Element {
+  const rows = new Map<string, SummaryRow>();
+  const row = (component: number, percentage: number): SummaryRow => {
+    const key = `${component}|${percentage}`;
+    const found = rows.get(key);
+    if (found) return found;
+    const created = {
+      key,
+      label: `${componentName(component)} ${percentage}%`,
+      outputTaxable: 0,
+      outputTax: 0,
+      inputTaxable: 0,
+      inputTax: 0,
+    };
+    rows.set(key, created);
+    return created;
+  };
+
+  for (const line of output.rows) {
+    const target = row(line.component, line.percentage);
+    target.outputTaxable += line.taxableAmount;
+    target.outputTax += line.taxAmount;
+  }
+  for (const line of input.rows) {
+    const target = row(line.component, line.percentage);
+    target.inputTaxable += line.taxableAmount ?? 0;
+    target.inputTax += line.taxAmount;
+  }
+
+  return (
+    <SummaryTable
+      rows={[...rows.values()].sort((a, b) => a.label.localeCompare(b.label))}
+    />
+  );
+}
+
+function SummaryTable({
+  rows,
+}: {
+  readonly rows: readonly SummaryRow[];
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const total = rows.reduce(
+    (sum, row) => ({
+      outputTaxable: sum.outputTaxable + row.outputTaxable,
+      outputTax: sum.outputTax + row.outputTax,
+      inputTaxable: sum.inputTaxable + row.inputTaxable,
+      inputTax: sum.inputTax + row.inputTax,
+    }),
+    { outputTaxable: 0, outputTax: 0, inputTaxable: 0, inputTax: 0 },
+  );
+  const cells = (row: Omit<SummaryRow, 'key' | 'label'>): React.JSX.Element => (
+    <>
+      <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.outputTaxable)}</td>
+      <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.outputTax)}</td>
+      <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.inputTaxable)}</td>
+      <td className="px-3 py-1.5 text-end font-mono">{moneyAlways(row.inputTax)}</td>
+      <td className="px-3 py-1.5 text-end font-mono font-semibold">
+        {moneyAlways(row.outputTax - row.inputTax)}
+      </td>
+    </>
+  );
+
+  return (
+    <div className="table-wrap table-wrap-tall">
+      <table className="table">
+        <thead className="bg-surface-3">
+          <tr>
+            <th className="px-3 py-2 text-start font-semibold" />
+            <th className="px-3 py-2 text-end font-semibold">{t('tax.salesTaxable')}</th>
+            <th className="px-3 py-2 text-end font-semibold">{t('tax.outputTax')}</th>
+            <th className="px-3 py-2 text-end font-semibold">
+              {t('tax.purchaseTaxable')}
+            </th>
+            <th className="px-3 py-2 text-end font-semibold">{t('tax.inputTax')}</th>
+            <th className="px-3 py-2 text-end font-semibold">{t('tax.netPayable')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-3 py-6 text-center text-sm text-ink-muted">
+                {t('tax.noSupplies')}
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => (
+              <tr key={row.key} className="border-t border-line">
+                <td className="px-3 py-1.5 font-medium">{row.label}</td>
+                {cells(row)}
+              </tr>
+            ))
+          )}
+        </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr className="border-t-2 border-line font-semibold">
+              <td className="px-3 py-1.5">{t('tax.total')}</td>
+              {cells(total)}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

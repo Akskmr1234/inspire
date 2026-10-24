@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -18,6 +19,9 @@ import {
   fetchItemMovement,
   fetchProductSerials,
   fetchStockLedger,
+  fetchStockRegister,
+  type StockRegisterReport,
+  type StockRegisterRow,
   fetchStockValuation,
   SerialStatus,
   type BatchStockReport,
@@ -58,6 +62,15 @@ export function StockValuationPage(): React.JSX.Element {
       key: 'description',
       header: t('products.description'),
       value: (row) => row.productDescription,
+      // Opens the item's movements, which is what explains the figure beside it.
+      render: (row) => (
+        <Link
+          to={`/inventory/product-history?productId=${row.productId}`}
+          className="font-medium text-brand-700 hover:underline dark:text-brand-300"
+        >
+          {row.productDescription}
+        </Link>
+      ),
     },
     { key: 'category', header: t('products.category'), value: (row) => row.categoryName },
     { key: 'warehouse', header: t('stock.warehouse'), value: (row) => row.warehouseName },
@@ -549,11 +562,30 @@ export function BatchProfitPage(): React.JSX.Element {
 export function StockLedgerPage(): React.JSX.Element {
   const { t } = useTranslation();
 
+  return <ProductMovements title={t('nav.stockLedger')} />;
+}
+
+/**
+ * Everything that happened to one product: purchases, sales, returns, transfers and
+ * adjustments, with the stock each left. The same screen as the stock ledger, under
+ * the name the counter looks for it by, and the one the stock report opens.
+ */
+export function ProductHistoryPage(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return <ProductMovements title={t('nav.productHistory')} />;
+}
+
+function ProductMovements({ title }: { readonly title: string }): React.JSX.Element {
+  const { t } = useTranslation();
+  const [params] = useSearchParams();
+
   const today = new Date().toISOString().slice(0, 10);
 
-  const [productId, setProductId] = useState('');
-  const [from, setFrom] = useState(`${today.slice(0, 4)}-01-01`);
-  const [to, setTo] = useState(today);
+  // Opened from another report, the product and the period come with it.
+  const [productId, setProductId] = useState(params.get('productId') ?? '');
+  const [from, setFrom] = useState(params.get('from') ?? `${today.slice(0, 4)}-01-01`);
+  const [to, setTo] = useState(params.get('to') ?? today);
   const [warehouseId, setWarehouseId] = useState('');
 
   const products = useQuery<readonly ProductSummary[], ApiError>({
@@ -601,7 +633,7 @@ export function StockLedgerPage(): React.JSX.Element {
       // filters side by side, which on a phone left the four fields a third of
       // the screen beside a two-line heading.
       <section className="page">
-        <PageHeading title={t('nav.stockLedger')} />
+        <PageHeading title={title} />
         <div className="filter-bar">{controls}</div>
         <EmptyState message={t('stock.chooseProduct')} />
       </section>
@@ -609,7 +641,7 @@ export function StockLedgerPage(): React.JSX.Element {
   }
 
   return (
-    <ReportFrame title={t('nav.stockLedger')} controls={controls} query={query}>
+    <ReportFrame title={title} controls={controls} query={query}>
       {(report) => (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3 text-sm">
@@ -981,6 +1013,101 @@ export function SerialStockPage(): React.JSX.Element {
           columns={columns}
           rowKey={(row) => row.serialNumberId}
           emptyMessage="No serial numbers found matching filters."
+        />
+      )}
+    </ReportFrame>
+  );
+}
+
+/**
+ * The detailed stock register: for each product, what it opened at, what was bought and
+ * sold, everything else that came in or went out, and what it closed at. A row opens the
+ * product's movements over the same period.
+ */
+export function StockRegisterPage(): React.JSX.Element {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
+  const [to, setTo] = useState(today);
+  const [warehouseId, setWarehouseId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+
+  const query = useQuery<StockRegisterReport, ApiError>({
+    queryKey: ['stock-register', from, to, warehouseId, categoryId],
+    queryFn: () => fetchStockRegister(from, to, warehouseId, categoryId),
+  });
+
+  const quantity = (
+    key: string,
+    header: string,
+    pick: (row: StockRegisterRow) => number,
+    strong = false,
+  ): GridColumn<StockRegisterRow> => ({
+    key,
+    header,
+    value: pick,
+    numeric: true,
+    render: (row) => (
+      <span className={clsx(strong && 'font-semibold text-ink')}>{trim(pick(row))}</span>
+    ),
+  });
+
+  const columns: readonly GridColumn<StockRegisterRow>[] = [
+    { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
+    {
+      key: 'description',
+      header: t('products.description'),
+      value: (row) => row.productDescription,
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() =>
+            void navigate(
+              `/inventory/product-history?${new URLSearchParams({ productId: row.productId, from, to }).toString()}`,
+            )
+          }
+          className="text-start font-medium text-brand-700 hover:underline dark:text-brand-300"
+        >
+          {row.productDescription}
+        </button>
+      ),
+    },
+    {
+      key: 'category',
+      header: t('products.category'),
+      value: (row) => row.categoryName,
+      hiddenByDefault: true,
+    },
+    { key: 'unit', header: t('stock.unit'), value: (row) => row.stockUnitCode },
+    quantity('opening', t('stock.opening'), (row) => row.opening),
+    quantity('purchase', t('stockRegister.purchase'), (row) => row.purchase),
+    quantity('sales', t('stockRegister.sales'), (row) => row.sales),
+    quantity('otherIn', t('stockRegister.otherIn'), (row) => row.otherIn),
+    quantity('otherOut', t('stockRegister.otherOut'), (row) => row.otherOut),
+    quantity('closing', t('stock.closing'), (row) => row.closing, true),
+  ];
+
+  const controls = (
+    <div className="toolbar">
+      <DateBox label={t('reports.from')} value={from} onChange={setFrom} />
+      <DateBox label={t('reports.to')} value={to} onChange={setTo} />
+      <WarehousePicker value={warehouseId} onChange={setWarehouseId} />
+      <CategoryPicker value={categoryId} onChange={setCategoryId} />
+    </div>
+  );
+
+  return (
+    <ReportFrame title={t('nav.stockRegister')} controls={controls} query={query}>
+      {(report) => (
+        <DataGrid
+          gridKey="stock-register"
+          rows={report.rows}
+          columns={columns}
+          rowKey={(row) => row.productId}
+          emptyMessage={t('stock.nothingMoved')}
         />
       )}
     </ReportFrame>

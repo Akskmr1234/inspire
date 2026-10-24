@@ -147,6 +147,8 @@ public static class DependencyInjection
         services.AddScoped<IJobCardReader, JobCardReader>();
         services.AddScoped<ISalesRateReader, SalesRateReader>();
         services.AddScoped<ISalesProfitReader, SalesProfitReader>();
+        services.AddScoped<ITransactionReportReader, TransactionReportReader>();
+        services.AddScoped<IStockRegisterReader, StockRegisterReader>();
         services.AddScoped<IRmaReader, RmaReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();

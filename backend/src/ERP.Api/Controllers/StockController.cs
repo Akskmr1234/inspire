@@ -348,6 +348,34 @@ public sealed class StockController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Reads the detailed stock register: opening, purchases, sales, other movements and closing.</summary>
+    /// <param name="from">The first date.</param>
+    /// <param name="to">The last date.</param>
+    /// <param name="warehouseId">One godown. Omit for every one.</param>
+    /// <param name="categoryId">One category. Omit for every one.</param>
+    /// <param name="brandId">One brand. Omit for every one.</param>
+    /// <param name="productId">One product. Omit for every one.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per product that held or moved stock.</returns>
+    /// <response code="200">The register.</response>
+    [HttpGet("register")]
+    [RequiresPermission("inventory", "report", "view")]
+    [ProducesResponseType(typeof(StockRegisterReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRegisterAsync(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] Guid? brandId,
+        [FromQuery] Guid? productId,
+        CancellationToken cancellationToken)
+    {
+        Result<StockRegisterReport> result = await _sender.Send(
+            new StockRegisterQuery(from, to, warehouseId, categoryId, brandId, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Lists the batches of one product that can be picked from.</summary>
     /// <param name="productId">The product.</param>
     /// <param name="warehouseId">One warehouse. Omit for every one.</param>
