@@ -6,14 +6,14 @@ namespace ERP.Infrastructure.Import;
 /// <remarks>
 /// <para>
 /// One list, used twice: by the server when it can reach the database itself, and
-/// written into the PowerShell script a shop runs on its own computer when it cannot.
-/// Both produce the same document because both run these.
+/// compiled into the exporter a shop runs on its own computer when it cannot. Both
+/// produce the same document because both run these.
 /// </para>
 /// <para>
 /// Every column is aliased to the property it fills and every value is made non-null in
-/// the query. Windows PowerShell writes a database null as an empty object and a date as
-/// a string it invents, so the queries hand it only text and numbers. Dates come out as
-/// <c>yyyy-MM-dd</c> for the same reason.
+/// the query, so the document holds only text and numbers - which is also what the
+/// export script it replaced could write faithfully, and files saved by that script still
+/// import. Dates come out as <c>yyyy-MM-dd</c> for the same reason.
 /// </para>
 /// <para>
 /// Read against EasyRetail 2025 (database version 248.8). Balances are as at

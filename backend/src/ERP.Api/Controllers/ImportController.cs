@@ -11,8 +11,8 @@ namespace ERP.Api.Controllers;
 /// <summary>Bringing a firm's data across from EasyRetail.</summary>
 /// <remarks>
 /// <para>
-/// The data reaches the screen one of two ways - the shop runs the export script and
-/// uploads its file, or the server reads the database itself - and the screen then sends
+/// The data reaches the screen one of two ways - the shop runs the exporter and uploads
+/// its file, or the server reads the database itself - and the screen then sends
 /// it here in four steps: masters, products in batches, balances, and stock in batches.
 /// Each is short, so none outlasts a proxy's timeout, and the screen can say how far it
 /// has got.
@@ -30,11 +30,14 @@ namespace ERP.Api.Controllers;
 [Produces("application/json")]
 public sealed class ImportController : ApiControllerBase
 {
+    /// <summary>The exporter's file name, as it is saved on the shop's computer.</summary>
+    public const string ExporterFile = "easyretail-export.exe";
+
     private readonly IEasyRetailSource _source;
     private readonly IEasyRetailImporter _importer;
 
     /// <summary>Initialises a new instance of the <see cref="ImportController"/> class.</summary>
-    /// <param name="source">Reads EasyRetail, or writes the script that does.</param>
+    /// <param name="source">Reads EasyRetail.</param>
     /// <param name="importer">Brings the data in.</param>
     public ImportController(IEasyRetailSource source, IEasyRetailImporter importer)
     {
@@ -42,26 +45,29 @@ public sealed class ImportController : ApiControllerBase
         _importer = importer;
     }
 
-    /// <summary>Downloads the PowerShell script that exports an EasyRetail database to a file.</summary>
-    /// <returns>The script.</returns>
-    /// <response code="200">The script, to run on the computer that has EasyRetail.</response>
-    [HttpGet("script")]
+    /// <summary>Downloads the Windows program that exports an EasyRetail database to a file.</summary>
+    /// <returns>The program.</returns>
+    /// <response code="200">The program, to run on the computer that has EasyRetail.</response>
+    /// <response code="404">This server was built without it; read the database directly instead.</response>
+    [HttpGet("exporter")]
     [RequiresPermission("platform", "firm", "edit")]
-    [Produces("text/plain")]
-    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-    public IActionResult Script()
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK, "application/octet-stream")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public IActionResult Exporter()
     {
-        // With a byte order mark: Windows PowerShell 5.1 reads a file without one in the
-        // machine's own code page.
-        byte[] script = [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(_source.ExportScript())];
+        string path = ExporterPath();
 
-        return File(script, "text/plain; charset=utf-8", "easyretail-export.ps1");
+        return System.IO.File.Exists(path)
+            ? PhysicalFile(path, "application/octet-stream", ExporterFile)
+            : Problem(Error.NotFound(
+                "Import.ExporterUnavailable",
+                "The exporter is not on this server. Read the database directly instead."));
     }
 
     /// <summary>Reads an EasyRetail database the server can reach.</summary>
     /// <param name="connection">Where it is and how to sign in.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The same document the export script writes.</returns>
+    /// <returns>The same document the exporter writes.</returns>
     /// <response code="200">The export.</response>
     /// <response code="422">The database could not be reached or read; the message says why.</response>
     [HttpPost("read")]
@@ -148,4 +154,8 @@ public sealed class ImportController : ApiControllerBase
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
+
+    /// <summary>Where the exporter is kept: built for Windows into the image beside the server.</summary>
+    /// <returns>The path; the file may not exist on a server built without it.</returns>
+    private static string ExporterPath() => Path.Combine(AppContext.BaseDirectory, "tools", ExporterFile);
 }

@@ -19,4 +19,7 @@
     <Project Path="tests/ERP.Identity.Tests/ERP.Identity.Tests.csproj" />
     <Project Path="tests/ERP.Infrastructure.Tests/ERP.Infrastructure.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ERP.EasyRetailExporter/ERP.EasyRetailExporter.csproj" />
+  </Folder>
 </Solution>

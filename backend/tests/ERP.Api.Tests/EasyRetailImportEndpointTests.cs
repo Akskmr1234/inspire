@@ -118,18 +118,41 @@ public sealed class EasyRetailImportEndpointTests
     }
 
     [Fact]
-    public async Task The_export_script_is_a_powershell_file_carrying_every_query()
+    public async Task The_exporter_is_downloaded_where_the_server_has_it_and_refused_where_it_does_not()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
 
-        HttpResponseMessage response = await client.GetAsync($"{Import}/script");
+        // Where the image put it: beside the server, under tools/.
+        string tools = Path.Combine(AppContext.BaseDirectory, "tools");
+        string exporter = Path.Combine(tools, "easyretail-export.exe");
 
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        response.Content.Headers.ContentDisposition!.FileName!.Trim('"').ShouldBe("easyretail-export.ps1");
-        string script = await response.Content.ReadAsStringAsync();
-        script.ShouldContain("System.Data.SqlClient.SqlConnection");
-        script.ShouldContain("FROM Voucher");
-        script.ShouldContain("$export['stock'] = $section");
+        if (File.Exists(exporter))
+        {
+            File.Delete(exporter);
+        }
+
+        // A server built without it says so, rather than failing.
+        HttpResponseMessage missing = await client.GetAsync($"{Import}/exporter");
+        missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await missing.Content.ReadAsStringAsync()).ShouldContain("Import.ExporterUnavailable");
+
+        byte[] program = [(byte)'M', (byte)'Z', 1, 2, 3];
+        Directory.CreateDirectory(tools);
+        await File.WriteAllBytesAsync(exporter, program);
+
+        try
+        {
+            HttpResponseMessage response = await client.GetAsync($"{Import}/exporter");
+
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            response.Content.Headers.ContentType!.MediaType.ShouldBe("application/octet-stream");
+            response.Content.Headers.ContentDisposition!.FileName!.Trim('"').ShouldBe("easyretail-export.exe");
+            (await response.Content.ReadAsByteArrayAsync()).ShouldBe(program);
+        }
+        finally
+        {
+            File.Delete(exporter);
+        }
     }
 
     [Fact]

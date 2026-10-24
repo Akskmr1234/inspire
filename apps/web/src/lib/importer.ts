@@ -1,4 +1,4 @@
-import { request, requestText } from '@/lib/api';
+import { request, requestBlob } from '@/lib/api';
 
 /** A ledger in an EasyRetail export, with its balance as at the export date (debit positive). */
 export interface ErLedger {
@@ -31,7 +31,7 @@ export interface ErStock {
   readonly cost: number;
 }
 
-/** What the export script writes, and what reading the database directly returns. */
+/** What the exporter writes, and what reading the database directly returns. */
 export interface EasyRetailExport {
   readonly format: string;
   readonly version: number;
@@ -90,7 +90,10 @@ const BASE = '/platform/import/easyretail';
 export const PRODUCT_BATCH = 500;
 export const STOCK_BATCH = 1000;
 
-export const downloadExportScript = (): Promise<string> => requestText(`${BASE}/script`);
+/** The Windows program that saves an EasyRetail database to an export file. */
+export const EXPORTER_FILE = 'easyretail-export.exe';
+
+export const downloadExporter = (): Promise<Blob> => requestBlob(`${BASE}/exporter`);
 
 export const readDatabase = (
   connection: EasyRetailConnection,

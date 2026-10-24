@@ -232,8 +232,8 @@ export async function request<TResponse>(
     : ((await response.json()) as TResponse);
 }
 
-/** Issues a request for a text body - a file to download - renewing the token once if needed. */
-export async function requestText(path: string): Promise<string> {
+/** Issues a request for a binary body - a program to download - renewing the token once if needed. */
+export async function requestBlob(path: string): Promise<Blob> {
   let response = await send(path, {});
 
   if (response.status === 401) {
@@ -246,7 +246,7 @@ export async function requestText(path: string): Promise<string> {
     throw await toApiError(response);
   }
 
-  return response.text();
+  return response.blob();
 }
 
 /** Signs in and records the session. */

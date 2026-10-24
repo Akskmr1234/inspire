@@ -3,7 +3,7 @@ using ERP.SharedKernel.Results;
 namespace ERP.Application.Platform.Import;
 
 // ---------------------------------------------------------------------------------------
-// The export package: what EasyRetail's database holds, in the shape the export script
+// The export package: what EasyRetail's database holds, in the shape the exporter
 // writes and the SQL Server reader returns. Every property is named as the query column
 // that fills it, so the two sources produce the same document.
 // ---------------------------------------------------------------------------------------
@@ -324,7 +324,7 @@ public sealed record EasyRetailConnection(
     DateOnly? AsAt = null,
     bool TrustServerCertificate = true);
 
-/// <summary>Reads an EasyRetail database, and writes the script that exports one.</summary>
+/// <summary>Reads an EasyRetail database the server can reach.</summary>
 public interface IEasyRetailSource
 {
     /// <summary>Reads the database into the export document.</summary>
@@ -334,10 +334,6 @@ public interface IEasyRetailSource
     Task<Result<string>> ReadAsync(
         EasyRetailConnection connection,
         CancellationToken cancellationToken = default);
-
-    /// <summary>The PowerShell script that writes the same document on the shop's own computer.</summary>
-    /// <returns>The script.</returns>
-    string ExportScript();
 }
 
 /// <summary>Brings an EasyRetail export into the selected firm.</summary>
