@@ -52,6 +52,7 @@ import {
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { useSession } from '@/stores/session';
 import { Alert, Labelled, trim } from '@/pages/StockOperationsPage';
+import { shortcutProps } from '@/lib/shortcuts';
 
 const STATUS_KEYS: Record<number, string> = {
   [RmaStatus.requested]: 'requested',
@@ -743,6 +744,7 @@ function RmaForm({
           </table>
         </div>
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={() => setLines((current) => [...current, blankLine()])}
           className="btn-secondary"

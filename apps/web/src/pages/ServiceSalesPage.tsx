@@ -43,6 +43,7 @@ import { listProducts, type ProductSummary } from '@/lib/products';
 import { postSalesInvoice, SalesPaymentMode, TaxMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
 import { useSettings, useTaxOn } from '@/stores/settings';
+import { shortcutProps } from '@/lib/shortcuts';
 
 const LIST = '/service/sales';
 
@@ -207,6 +208,7 @@ export function ServiceSalesPage(): React.JSX.Element {
         actions={
           can('service:job-card:create') && (
             <button
+              {...shortcutProps('new')}
               type="button"
               className="btn-primary btn-sm"
               onClick={() => void navigate(`${LIST}/new`)}
@@ -1219,6 +1221,7 @@ function ServiceSaleForm({
 
             {!locked && (
               <button
+                {...shortcutProps('add-line')}
                 type="button"
                 onClick={() => setLines((current) => [...current, blankLine()])}
                 className="btn-secondary btn-sm flex items-center gap-1"
@@ -1283,6 +1286,7 @@ function ServiceSaleForm({
           {can(card ? 'service:job-card:edit' : 'service:job-card:create') &&
             card?.summary.status !== JobCardStatus.cancelled && (
               <button
+                {...shortcutProps('save')}
                 type="button"
                 disabled={busy}
                 className={billed ? 'btn-primary' : 'btn-secondary'}
@@ -1294,6 +1298,7 @@ function ServiceSaleForm({
             )}
           {!locked && can('sales:invoice:create') && (
             <button
+              {...shortcutProps('bill')}
               type="button"
               disabled={busy}
               className="btn-primary"

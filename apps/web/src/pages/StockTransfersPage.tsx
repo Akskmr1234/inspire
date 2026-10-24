@@ -35,6 +35,7 @@ import {
 } from '@/lib/stockTransfers';
 import { useSession } from '@/stores/session';
 import { Alert, Labelled, StockEntry, trim } from '@/pages/StockOperationsPage';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /**
  * Transfers between branches.
@@ -959,6 +960,7 @@ function RequestForm({
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={() => setLines((current) => [...current, blankLine()])}
           className="btn-secondary"

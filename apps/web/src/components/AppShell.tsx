@@ -13,12 +13,15 @@ import { currentDisplayName, type ApiError } from '@/lib/api';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { CommandPalette, opensPalette } from '@/components/CommandPalette';
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { SHOW_SHORTCUTS_EVENT } from '@/lib/shortcuts';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import {
   IconChevron,
   IconClose,
   IconLogout,
   IconMenu,
+  IconKeyboard,
   IconMoon,
   IconSun,
   headingIconFor,
@@ -275,6 +278,8 @@ export function AppShell(): React.JSX.Element {
         <NavDrawer onClose={() => setDrawerOpen(false)}>{navigation(false)}</NavDrawer>
       )}
 
+      <KeyboardShortcuts />
+
       {paletteOpen && (
         <CommandPalette
           menu={menu.data}
@@ -379,6 +384,15 @@ export function AppShell(): React.JSX.Element {
             />
 
             <div className="hidden items-center gap-2 xl:flex">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS_EVENT))}
+                className="btn-icon"
+                aria-label={t('shortcuts.title')}
+                title={`${t('shortcuts.title')} (Alt+/)`}
+              >
+                <IconKeyboard className="size-[18px]" />
+              </button>
               <ThemeSwitch theme={theme} onChange={setTheme} />
 
               <Switch<Language>

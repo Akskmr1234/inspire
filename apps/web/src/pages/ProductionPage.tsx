@@ -34,6 +34,7 @@ import {
   trim,
   type StockEntryProps,
 } from '@/pages/StockOperationsPage';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /** Every stocked product of the firm, for the pickers. */
 function useStockedProducts(): readonly ProductSummary[] {
@@ -408,6 +409,7 @@ function BomForm({
 
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={() => setLines((current) => [...current, blankComponent()])}
           className="btn-secondary"
@@ -799,6 +801,7 @@ function RunLines({
         </table>
       </div>
       <button
+        {...shortcutProps('add-line')}
         type="button"
         onClick={() => onChange([...lines, blankRunLine()])}
         className="btn-secondary btn-sm"

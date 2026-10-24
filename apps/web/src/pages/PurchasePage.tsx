@@ -60,6 +60,7 @@ import {
 import { getPurchaseOrder, listPurchaseOrders } from '@/lib/orders';
 import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /** A line as the screen holds it, before it is worth sending. */
 interface DraftLine {
@@ -1106,6 +1107,7 @@ function EntryDialog({
       </div>
 
       <button
+        {...shortcutProps('add-line')}
         type="button"
         onClick={() => setLines((previous) => [...previous, emptyLine(defaultTaxRate)])}
         className="btn-secondary btn-sm self-start"
@@ -1137,12 +1139,18 @@ function EntryDialog({
             primary={editing !== undefined}
             disabled={busy}
             onClick={() => void save()}
+            shortcut={editing ? 'save' : 'draft'}
           >
             {busy ? t('common.saving') : t('purchase.saveDraft')}
           </ModalButton>
         )}
         {!editing && (
-          <ModalButton primary disabled={busy} onClick={() => void save(true)}>
+          <ModalButton
+            primary
+            disabled={busy}
+            onClick={() => void save(true)}
+            shortcut="save"
+          >
             {busy ? t('common.saving') : t('purchase.saveAndPost')}
           </ModalButton>
         )}

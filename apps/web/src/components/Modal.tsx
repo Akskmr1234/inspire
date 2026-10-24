@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { IconClose } from '@/components/icons';
+import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
 /**
  * A form over the screen rather than above the list.
@@ -146,17 +147,22 @@ export function ModalButton({
   children,
   primary,
   disabled,
+  shortcut,
 }: {
   readonly onClick: () => void;
   readonly children: React.ReactNode;
   readonly primary?: boolean;
   readonly disabled?: boolean;
+  /** What a keyboard shortcut presses this button for - save, a draft, print. */
+  readonly shortcut?: EntryAction;
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      {...(shortcut ? shortcutProps(shortcut) : {})}
+      {...(shortcut ? { title: shortcutFor(shortcut) } : {})}
       className={clsx('btn px-4 py-2 text-sm', primary ? 'btn-primary' : 'btn-secondary')}
     >
       {children}

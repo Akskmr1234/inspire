@@ -80,6 +80,7 @@ import {
 } from '@/lib/purchase';
 import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
+import { shortcutProps } from '@/lib/shortcuts';
 
 const PAGE_SIZE = 25;
 
@@ -1826,6 +1827,7 @@ function EntryDialog({
 
       <div className="flex flex-wrap items-center gap-4">
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={() =>
             setLines((previous) => [
@@ -2217,14 +2219,27 @@ function EntryDialog({
             corrected can still be saved as one. */}
         {editing?.header.status !== SalesInvoiceStatus.posted &&
           (settings.allowSaveDraft !== false || editing !== undefined) && (
-            <ModalButton disabled={busy} onClick={() => void save(false)}>
+            <ModalButton
+              disabled={busy}
+              onClick={() => void save(false)}
+              shortcut="draft"
+            >
               {t('sales.saveDraft')}
             </ModalButton>
           )}
-        <ModalButton disabled={busy} onClick={() => void save(true, true)}>
+        <ModalButton
+          disabled={busy}
+          onClick={() => void save(true, true)}
+          shortcut="print"
+        >
           {t('sales.saveAndPrint')}
         </ModalButton>
-        <ModalButton primary disabled={busy} onClick={() => void save(true)}>
+        <ModalButton
+          primary
+          disabled={busy}
+          onClick={() => void save(true)}
+          shortcut="save"
+        >
           {busy ? t('common.saving') : t('sales.save')}
         </ModalButton>
       </div>

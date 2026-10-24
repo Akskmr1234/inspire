@@ -9,6 +9,7 @@ import { LedgerEditor } from '@/components/LedgerEditors';
 import type { ApiError } from '@/lib/api';
 import { isPlainKind, LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { useSession } from '@/stores/session';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /** The translation key of each kind, under `ledgerKinds`. */
 const KIND_KEY: Record<number, string> = {
@@ -153,6 +154,7 @@ export function LedgerListPage(): React.JSX.Element {
         actions={
           can('accounting:ledger:create') && (
             <button
+              {...shortcutProps('new')}
               type="button"
               className="btn-primary btn-sm"
               onClick={() => setEditing('new')}
