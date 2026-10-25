@@ -37,6 +37,7 @@ import { SalesPaymentMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
 import { Alert, Labelled } from '@/pages/StockOperationsPage';
+import { shortcutProps } from '@/lib/shortcuts';
 
 const STATUS_KEYS: Record<number, string> = {
   [JobCardStatus.received]: 'received',
@@ -1059,6 +1060,7 @@ function JobCardForm({
         </div>
         {!linesLocked && editable && (
           <button
+            {...shortcutProps('add-line')}
             type="button"
             onClick={() => setLines((current) => [...current, blankLine()])}
             className="btn-secondary"

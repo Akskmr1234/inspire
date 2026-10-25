@@ -56,6 +56,34 @@ RUN dotnet publish backend/src/ERP.Api/ERP.Api.csproj \
         --output /app/publish \
         -p:ContinuousIntegrationBuild=true
 
+# ---------- exporter ----------
+# The EasyRetail exporter: a Windows program the Import data screen offers for
+# download, which a shop runs on the computer that has EasyRetail. Built here for
+# win-x64 as one self-contained file and served by the API from /app/tools. A stage
+# of its own, so it builds alongside the API rather than after it.
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS exporter
+WORKDIR /src
+
+COPY backend/Directory.Build.props backend/Directory.Packages.props backend/stylecop.json backend/
+COPY backend/tools/ERP.EasyRetailExporter/ERP.EasyRetailExporter.csproj backend/tools/ERP.EasyRetailExporter/
+
+RUN dotnet restore backend/tools/ERP.EasyRetailExporter/ERP.EasyRetailExporter.csproj --runtime win-x64
+
+COPY backend/tools/ERP.EasyRetailExporter/ backend/tools/ERP.EasyRetailExporter/
+# It compiles in the server's own queries and writer, so the two cannot drift apart.
+COPY backend/src/ERP.Infrastructure/Import/EasyRetailQueries.cs \
+     backend/src/ERP.Infrastructure/Import/EasyRetailExport.cs \
+     backend/src/ERP.Infrastructure/Import/
+COPY .editorconfig ./
+COPY backend/.editorconfig backend/
+
+RUN dotnet publish backend/tools/ERP.EasyRetailExporter/ERP.EasyRetailExporter.csproj \
+        --no-restore \
+        --configuration Release \
+        --runtime win-x64 \
+        --output /exporter \
+        -p:ContinuousIntegrationBuild=true
+
 # ---------- runtime ----------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
@@ -81,6 +109,7 @@ RUN addgroup -S erp && adduser -S -G erp erp
 USER erp
 
 COPY --from=build --chown=erp:erp /app/publish .
+COPY --from=exporter --chown=erp:erp /exporter/easyretail-export.exe ./tools/
 
 # How the platform discovers which port to publish. Keep this in step with the
 # PORT default above.

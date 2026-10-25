@@ -15,6 +15,7 @@ import {
   type ReportColumn,
 } from '@/components/HierarchicalAccountsTable';
 import { buildChartOfAccountsHierarchy } from '@/lib/hierarchicalReports';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /** The ledger kinds, keyed by the wire value the API serialises them as. */
 const KIND_NAME: Record<number, string> = {
@@ -305,6 +306,7 @@ export function LedgersPage(): React.JSX.Element {
         {t('ledgerMaster.newGroup')}
       </button>
       <button
+        {...shortcutProps('new')}
         type="button"
         className="btn-primary btn-sm"
         onClick={() => setEditing('new')}

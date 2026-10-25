@@ -10,7 +10,8 @@ import {
   PRODUCT_BATCH,
   STOCK_BATCH,
   batches,
-  downloadExportScript,
+  downloadExporter,
+  EXPORTER_FILE,
   importBalances,
   importMasters,
   importProducts,
@@ -74,8 +75,8 @@ const errorText = (error: unknown): string =>
 /**
  * Brings a firm across from EasyRetail.
  *
- * The data arrives one of two ways: the shop runs the export script on the computer that
- * has EasyRetail and uploads the file it writes, or - where this server can reach the
+ * The data arrives one of two ways: the shop runs the exporter - a Windows program - on
+ * the computer that has EasyRetail and uploads the file it writes, or - where this server can reach the
  * shop's SQL Server - the server reads the database itself. Either way the screen shows
  * what it holds and how its balances add up before anything is written, then sends it in
  * steps small enough to report progress and never outlast a proxy's timeout.
@@ -155,19 +156,17 @@ function FileSource({
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
 
-  const script = useMutation<string, ApiError>({
-    mutationFn: downloadExportScript,
-    onSuccess: (text) => {
-      // The byte order mark again: reading the response as text dropped the one the
-      // server sent, and Windows PowerShell 5.1 reads a file without one in the
-      // machine's own code page, which turns the queries' Arabic-safe text to noise.
-      const blob = new Blob([`﻿${text}`], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+  const exporter = useMutation<Blob, ApiError>({
+    mutationFn: downloadExporter,
+    onSuccess: (program) => {
+      const url = URL.createObjectURL(program);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = 'easyretail-export.ps1';
+      anchor.download = EXPORTER_FILE;
       anchor.click();
-      URL.revokeObjectURL(url);
+      // Kept a while: a browser still writing a large download out loses it if the
+      // address is revoked at once.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     },
   });
 
@@ -195,24 +194,23 @@ function FileSource({
           <span>{t('importData.fileStep1')}</span>{' '}
           <button
             type="button"
-            onClick={() => script.mutate()}
-            disabled={script.isPending}
+            onClick={() => exporter.mutate()}
+            disabled={exporter.isPending}
             className="btn-secondary btn-sm mt-1 max-sm:w-full"
           >
-            {t('importData.downloadScript')}
+            {exporter.isPending
+              ? t('importData.downloading')
+              : t('importData.downloadExporter')}
           </button>
-          {script.isError && (
-            <p className="field-message-error">{errorText(script.error)}</p>
+          {exporter.isError && (
+            <p className="field-message-error">{errorText(exporter.error)}</p>
           )}
         </li>
         <li>
           {t('importData.fileStep2')}
           <span className="mt-1 block text-xs text-ink-muted">
-            {t('importData.scriptBlocked')}
+            {t('importData.exporterWarning')}
           </span>
-          <code className="mt-1 block overflow-x-auto rounded bg-surface-2 px-2 py-1 font-mono text-xs whitespace-nowrap">
-            powershell -ExecutionPolicy Bypass -File .\easyretail-export.ps1
-          </code>
         </li>
         <li>{t('importData.fileStep3')}</li>
         <li>{t('importData.fileStep4')}</li>

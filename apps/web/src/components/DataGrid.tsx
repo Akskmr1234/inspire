@@ -16,6 +16,7 @@ import { SearchSelect } from '@/components/SearchSelect';
 import { useSession } from '@/stores/session';
 import { useSettings } from '@/stores/settings';
 import { fetchGridLayout, resetGridLayout, saveGridLayout } from '@/lib/grid';
+import { shortcutFor, shortcutProps } from '@/lib/shortcuts';
 
 /**
  * One column of a grid.
@@ -1462,6 +1463,8 @@ export function GridAction({
     <button
       type="button"
       onClick={onClick}
+      {...shortcutProps('new')}
+      title={`${label} (${shortcutFor('new')})`}
       className="btn-primary btn-sm shrink-0 max-sm:min-h-9 max-sm:px-3 max-sm:text-sm"
     >
       <IconPlus className="size-3.5" />

@@ -45,6 +45,7 @@ import { listCustomers } from '@/lib/customers';
 import { listSuppliers } from '@/lib/suppliers';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/stores/session';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /**
  * Stock operations.
@@ -1038,6 +1039,7 @@ export function StockEntry({
 
       <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-line/60">
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={() => setLines((current) => [...current, emptyLine()])}
           className="btn-secondary"

@@ -59,6 +59,7 @@ import { useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /**
  * Purchase orders and sales orders.
@@ -1075,6 +1076,7 @@ function OrderEntryDialog({
       </div>
 
       <button
+        {...shortcutProps('add-line')}
         type="button"
         onClick={() => setLines((previous) => [...previous, emptyLine(defaultTaxRate)])}
         className="btn-secondary btn-sm self-start"
@@ -1101,7 +1103,7 @@ function OrderEntryDialog({
 
       <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
-        <ModalButton primary disabled={busy} onClick={() => void save()}>
+        <ModalButton primary disabled={busy} onClick={() => void save()} shortcut="save">
           {busy ? t('common.saving') : t('orders.saveDraft')}
         </ModalButton>
       </div>

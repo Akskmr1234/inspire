@@ -590,6 +590,15 @@ export function IconPrinter({ className }: IconProps): React.JSX.Element {
   );
 }
 
+export function IconKeyboard({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M8 16h8" />
+    </Svg>
+  );
+}
+
 /** The picture beside each top-level heading, by the heading's catalogue code. */
 const BY_HEADING: Record<string, (props: IconProps) => React.JSX.Element> = {
   masters: IconLayers,

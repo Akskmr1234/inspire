@@ -31,6 +31,7 @@ import {
   type VoucherSettlement,
 } from '@/lib/vouchers';
 import { useSettings } from '@/stores/settings';
+import { shortcutProps } from '@/lib/shortcuts';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -579,6 +580,7 @@ function JournalForm({
             </button>
           )}
           <button
+            {...shortcutProps('save')}
             type="submit"
             disabled={!canSubmit || post.isPending}
             className="btn-primary"
@@ -665,6 +667,7 @@ function LinesFrame({
           </span>
         </div>
         <button
+          {...shortcutProps('add-line')}
           type="button"
           onClick={onAdd}
           className="btn-secondary btn-sm flex items-center gap-1"
@@ -1618,7 +1621,12 @@ function MoneyForm({
               {t('common.cancel')}
             </button>
           )}
-          <button type="submit" disabled={post.isPending} className="btn-primary">
+          <button
+            {...shortcutProps('save')}
+            type="submit"
+            disabled={post.isPending}
+            className="btn-primary"
+          >
             {post.isPending && <Spinner />}
             {post.isPending
               ? t('vouchers.posting')

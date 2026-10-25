@@ -19,6 +19,7 @@ import {
   type VoucherListLine,
 } from '@/lib/vouchers';
 import { useSession } from '@/stores/session';
+import { shortcutProps } from '@/lib/shortcuts';
 
 const STATUS_NAME: Record<number, string> = { 1: 'Draft', 2: 'Posted', 3: 'Cancelled' };
 const STATUS_TONES: Record<number, StatusTone> = { 1: 'warn', 2: 'success', 3: 'danger' };
@@ -267,6 +268,7 @@ function VoucherListPage({ kind }: { readonly kind: VoucherKind }): React.JSX.El
         actions={
           can('accounting:voucher:create') && (
             <button
+              {...shortcutProps('new')}
               type="button"
               className="btn-primary btn-sm"
               onClick={() => void navigate(`${KIND_PATH[kind]}/new`)}

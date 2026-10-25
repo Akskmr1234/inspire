@@ -9,6 +9,7 @@ import { LedgerEditor } from '@/components/LedgerEditors';
 import type { ApiError } from '@/lib/api';
 import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { useSession } from '@/stores/session';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /**
  * The firm's employees: the ledgers it pays salaries, advances and expenses through.
@@ -81,6 +82,7 @@ export function EmployeesPage(): React.JSX.Element {
         actions={
           can('accounting:ledger:create') && (
             <button
+              {...shortcutProps('new')}
               type="button"
               className="btn-primary btn-sm"
               onClick={() => setEditing('new')}

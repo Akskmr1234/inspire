@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The EasyRetail exporter: the Windows program a shop runs on the computer that has
+    EasyRetail, which saves its database to easyretail-export.json for
+    Settings > Import data. It compiles in the server's own queries and writer, so the
+    file it saves is the document the server reads when it reaches the database itself.
+
+    Published for Windows into the API image (see the Dockerfile) and downloaded from
+    GET /api/v1/platform/import/easyretail/exporter:
+
+      dotnet publish backend/tools/ERP.EasyRetailExporter -c Release -r win-x64
+
+    One self-contained file, so the shop's computer needs nothing installed first.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ERP.EasyRetailExporter</RootNamespace>
+    <AssemblyName>easyretail-export</AssemblyName>
+    <Product>Aider ERP EasyRetail exporter</Product>
+  </PropertyGroup>
+
+  <!-- Applies when published for a runtime; a plain build stays an ordinary console app. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <!--
+      Built on Linux for Windows, the program's icon and version cannot be written into
+      the Windows launcher; the SDK says so with NETSDK1074, which is expected here.
+    -->
+    <NoWarn>$(NoWarn);NETSDK1074</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\ERP.Infrastructure\Import\EasyRetailQueries.cs" Link="Import\EasyRetailQueries.cs" />
+    <Compile Include="..\..\src\ERP.Infrastructure\Import\EasyRetailExport.cs" Link="Import\EasyRetailExport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+</Project>
