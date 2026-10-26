@@ -238,31 +238,6 @@ public sealed class LedgerRepository : ILedgerRepository
             l => l.FirmId == firmId && l.Code == code, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<string> NextCodeAsync(
-        FirmId firmId,
-        string prefix,
-        CancellationToken cancellationToken = default)
-    {
-        List<string> issued = await _context.Ledgers
-            .Where(l => l.FirmId == firmId && l.Code.StartsWith(prefix))
-            .Select(l => l.Code)
-            .ToListAsync(cancellationToken);
-
-        // Parsed rather than counted: ledgers are withdrawn, never deleted, so a count
-        // would sooner or later hand out a code that is still taken.
-        int highest = issued
-            .Select(code => int.TryParse(
-                code.AsSpan(prefix.Length),
-                System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out int number) ? number : 0)
-            .DefaultIfEmpty(0)
-            .Max();
-
-        return prefix + (highest + 1).ToString("D4", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <inheritdoc />
     public void Add(Ledger ledger) => _context.Ledgers.Add(ledger);
 
     /// <inheritdoc />
@@ -774,6 +749,35 @@ public sealed class NumberingSeriesRepository : INumberingSeriesRepository
 
     /// <inheritdoc />
     public void Add(NumberingSeries series) => _context.NumberingSeries.Add(series);
+}
+
+/// <summary>The EF Core master code sequence repository.</summary>
+public sealed class MasterCodeSequenceRepository : IMasterCodeSequenceRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="MasterCodeSequenceRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public MasterCodeSequenceRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The change tracker first, for the reason <see cref="NumberingSeriesRepository"/>
+    /// gives: two records numbered in one unit of work, on a firm's first day, would
+    /// otherwise each start a sequence of their own and the save would fail on the
+    /// unique index.
+    /// </remarks>
+    public async Task<MasterCodeSequence?> FindAsync(
+        FirmId firmId,
+        string master,
+        CancellationToken cancellationToken = default) =>
+        _context.MasterCodeSequences.Local.FirstOrDefault(sequence =>
+            sequence.FirmId == firmId && string.Equals(sequence.Master, master, StringComparison.Ordinal))
+        ?? await _context.MasterCodeSequences.FirstOrDefaultAsync(
+            sequence => sequence.FirmId == firmId && sequence.Master == master, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(MasterCodeSequence sequence) => _context.MasterCodeSequences.Add(sequence);
 }
 
 /// <summary>Reads and writes menu entries.</summary>

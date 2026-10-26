@@ -146,9 +146,17 @@ const TaxReturnsPage = lazyScreen(
   'TaxReturnsPage',
 );
 const BomsPage = lazyScreen(() => import('@/pages/ProductionPage'), 'BomsPage');
-const StockRegisterPage = lazyScreen(
+const StockSummaryPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
+  'StockSummaryPage',
+);
+const StockRegisterPage = lazyScreen(
+  () => import('@/pages/StockPositionPages'),
   'StockRegisterPage',
+);
+const StockAgingPage = lazyScreen(
+  () => import('@/pages/StockPositionPages'),
+  'StockAgingPage',
 );
 const ProductHistoryPage = lazyScreen(
   () => import('@/pages/StockReportPages'),
@@ -451,6 +459,8 @@ export function App(): React.JSX.Element {
               <Route path="/inventory/boms" element={<BomsPage />} />
               <Route path="/inventory/production" element={<ProductionPage />} />
               <Route path="/inventory/stock-register" element={<StockRegisterPage />} />
+              <Route path="/inventory/stock-aging" element={<StockAgingPage />} />
+              <Route path="/inventory/stock-summary" element={<StockSummaryPage />} />
               <Route path="/inventory/product-history" element={<ProductHistoryPage />} />
               <Route path="/reports/sales" element={<SalesReportPage />} />
               <Route path="/reports/purchases" element={<PurchaseReportPage />} />

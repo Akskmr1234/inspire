@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -102,6 +102,7 @@ export function DataGrid<TRow>({
   paging,
   pageSize,
   hideSearch = false,
+  onVisibleColumnsChange,
 }: {
   /** Identifies the grid, so a user's arrangement is remembered against it. */
   readonly gridKey: string;
@@ -144,6 +145,13 @@ export function DataGrid<TRow>({
    * — a document's own lines — passes `0` to draw everything on one page.
    */
   readonly pageSize?: number;
+  /**
+   * Told which columns are on screen, by key, whenever that changes.
+   *
+   * For a report that adds its rows up to the columns being looked at: hide a
+   * column and the rows that differed only in it become one.
+   */
+  readonly onVisibleColumnsChange?: (keys: readonly string[]) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const { can } = useSession();
@@ -263,6 +271,15 @@ export function DataGrid<TRow>({
         !(column.hideOnNarrow && narrow),
     );
   }, [permitted, order, hidden, narrow]);
+
+  // Joined, so the screen hears of a change of columns and not of every render.
+  const visibleKeys = visible.map((column) => column.key).join('\n');
+  const announce = useRef(onVisibleColumnsChange);
+  announce.current = onVisibleColumnsChange;
+
+  useEffect(() => {
+    announce.current?.(visibleKeys === '' ? [] : visibleKeys.split('\n'));
+  }, [visibleKeys]);
 
   const shown = useMemo(() => {
     const needle = search.trim().toLowerCase();

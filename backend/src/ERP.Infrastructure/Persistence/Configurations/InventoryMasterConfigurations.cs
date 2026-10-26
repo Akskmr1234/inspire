@@ -94,6 +94,15 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
             .HasIndex(category => new { category.FirmId, category.ParentId })
             .HasDatabaseName("ix_categories_tree");
 
+        builder.Property(category => category.IsPrimary).IsRequired();
+
+        // One Primary category per firm.
+        builder
+            .HasIndex(category => category.FirmId)
+            .IsUnique()
+            .HasFilter("is_primary = true")
+            .HasDatabaseName("ix_categories_primary");
+
         builder.HasIndex(category => category.TenantId).HasDatabaseName("ix_categories_tenant");
 
         ConfigurationConventions.ApplyAggregateConventions(builder);
@@ -123,6 +132,15 @@ public sealed class BrandConfiguration : IEntityTypeConfiguration<Brand>
             .HasIndex(brand => new { brand.FirmId, brand.Code })
             .IsUnique()
             .HasDatabaseName("ix_brands_code");
+
+        builder.Property(brand => brand.IsPrimary).IsRequired();
+
+        // One Primary brand per firm.
+        builder
+            .HasIndex(brand => brand.FirmId)
+            .IsUnique()
+            .HasFilter("is_primary = true")
+            .HasDatabaseName("ix_brands_primary");
 
         builder.HasIndex(brand => brand.TenantId).HasDatabaseName("ix_brands_tenant");
 

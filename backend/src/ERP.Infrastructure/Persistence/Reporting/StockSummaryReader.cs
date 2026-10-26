@@ -5,19 +5,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Persistence.Reporting;
 
-/// <summary>Reads the stock register off the stock ledger, added up in the database.</summary>
-public sealed class StockRegisterReader : IStockRegisterReader
+/// <summary>Reads the stock summary off the stock ledger, added up in the database.</summary>
+public sealed class StockSummaryReader : IStockSummaryReader
 {
     private readonly ErpDbContext _context;
 
-    /// <summary>Initialises a new instance of the <see cref="StockRegisterReader"/> class.</summary>
+    /// <summary>Initialises a new instance of the <see cref="StockSummaryReader"/> class.</summary>
     /// <param name="context">The database context.</param>
-    public StockRegisterReader(ErpDbContext context) => _context = context;
+    public StockSummaryReader(ErpDbContext context) => _context = context;
 
     /// <inheritdoc />
-    public async Task<StockRegisterReport> ReadAsync(
+    public async Task<StockSummaryReport> ReadAsync(
         FirmId firmId,
-        StockRegisterQuery query,
+        StockSummaryQuery query,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -122,7 +122,7 @@ public sealed class StockRegisterReader : IStockRegisterReader
                 select new { product.Id, product.Code, product.Description, Category = filed.Name, Unit = unit.Code })
             .ToDictionaryAsync(row => row.Id, cancellationToken);
 
-        List<StockRegisterRow> rows =
+        List<StockSummaryRow> rows =
         [
             .. byProduct
                 .Where(pair => pair.Value.Any)
@@ -131,7 +131,7 @@ public sealed class StockRegisterReader : IStockRegisterReader
                     var name = names.GetValueOrDefault(pair.Key);
                     Totals totals = pair.Value;
 
-                    return new StockRegisterRow(
+                    return new StockSummaryRow(
                         pair.Key.Value,
                         name?.Code ?? string.Empty,
                         name?.Description ?? string.Empty,
@@ -147,7 +147,7 @@ public sealed class StockRegisterReader : IStockRegisterReader
                 .OrderBy(row => row.ProductCode, StringComparer.OrdinalIgnoreCase),
         ];
 
-        return new StockRegisterReport(query.From, query.To, rows);
+        return new StockSummaryReport(query.From, query.To, rows);
     }
 
     /// <summary>One product's quantities as they are added up.</summary>

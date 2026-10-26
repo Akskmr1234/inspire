@@ -47,6 +47,8 @@ export interface ProductSummary {
   readonly maximumRetailPrice: number;
   /** The percentage of its tax rate, when it has one. */
   readonly taxPercentage: number | null;
+  /** What is on hand now across every godown, in the stock unit. */
+  readonly stockQuantity: number;
 }
 
 /** One barcode of a product. */

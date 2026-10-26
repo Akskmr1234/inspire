@@ -36,6 +36,7 @@ public sealed class CreateCustomerCommandHandler
     private readonly IPlaceRepository _places;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateCustomerCommandHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
@@ -43,18 +44,21 @@ public sealed class CreateCustomerCommandHandler
     /// <param name="places">The areas and routes a customer may be in.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateCustomerCommandHandler(
         ILedgerRepository ledgers,
         IFirmRepository firms,
         IPlaceRepository places,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _ledgers = ledgers;
         _firms = firms;
         _places = places;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -79,9 +83,13 @@ public sealed class CreateCustomerCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        // Left blank, the next number in the customer sequence is issued.
+        // Left blank, the next number in the customer sequence is issued: 10000 first.
         string code = string.IsNullOrWhiteSpace(request.Code)
-            ? await _ledgers.NextCodeAsync(firmId, "CUS-", cancellationToken)
+            ? await _codes.NextAsync(
+                firmId,
+                CodedMaster.Customer,
+                candidate => _ledgers.IsCodeInUseAsync(firmId, candidate, cancellationToken),
+                cancellationToken)
             : request.Code.Trim().ToUpperInvariant();
 
         // Checked before the group is resolved, so the commonest mistake - re-entering a

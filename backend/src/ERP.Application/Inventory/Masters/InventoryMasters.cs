@@ -51,6 +51,10 @@ public sealed record ListCategoriesQuery(bool IncludeInactive = false)
 /// <param name="Name">Its name.</param>
 /// <param name="NameArabic">Its name in Arabic.</param>
 /// <param name="IsActive">Whether it may still be assigned.</param>
+/// <param name="IsPrimary">
+/// Whether it is the firm's Primary category: offered first in every picker and left off
+/// the category list itself.
+/// </param>
 public sealed record CategorySummary(
     Guid Id,
     Guid? ParentId,
@@ -58,7 +62,8 @@ public sealed record CategorySummary(
     string Code,
     string Name,
     string? NameArabic,
-    bool IsActive);
+    bool IsActive,
+    bool IsPrimary = false);
 
 /// <summary>Lists the brands.</summary>
 /// <param name="IncludeInactive">Whether to include brands withdrawn from use.</param>
@@ -71,12 +76,17 @@ public sealed record ListBrandsQuery(bool IncludeInactive = false)
 /// <param name="Name">Its name.</param>
 /// <param name="NameArabic">Its name in Arabic.</param>
 /// <param name="IsActive">Whether it may still be assigned.</param>
+/// <param name="IsPrimary">
+/// Whether it is the firm's Primary brand: offered first in every picker and left off the
+/// brand list itself.
+/// </param>
 public sealed record BrandSummary(
     Guid Id,
     string Code,
     string Name,
     string? NameArabic,
-    bool IsActive);
+    bool IsActive,
+    bool IsPrimary = false);
 
 /// <summary>Lists the warehouses.</summary>
 /// <param name="IncludeInactive">Whether to include warehouses withdrawn from use.</param>
@@ -409,34 +419,55 @@ internal static class MasterContext
                 "InventoryMaster.NoFirmSelected",
                 "A firm must be selected to work with inventory masters."));
 
-    /// <summary>Refuses a code another record of the same kind already uses, or makes one.</summary>
+    /// <summary>The refusal to change or withdraw a Primary record.</summary>
+    /// <param name="kind">"category" or "brand".</param>
+    /// <returns>The failure.</returns>
+    /// <remarks>
+    /// It is what every new record defaults to, so it stays exactly as it is: renamed,
+    /// it would no longer be recognisable as the default; withdrawn, the default would be
+    /// one nothing may be filed under.
+    /// </remarks>
+    internal static Result PrimaryKept(string kind) =>
+        Result.Failure(Error.BusinessRule(
+            "InventoryMaster.PrimaryKept", $"The Primary {kind} is kept as it is."));
+
+    /// <summary>Refuses a code another record of the same kind already uses, or issues one.</summary>
     /// <param name="masters">The master repository.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     /// <param name="kind">Which master.</param>
     /// <param name="firmId">The firm.</param>
-    /// <param name="code">The code being taken, or blank to have one made.</param>
-    /// <param name="name">The record's name, which a made code is drawn from.</param>
-    /// <param name="maxLength">The longest code the master holds.</param>
+    /// <param name="code">The code being taken, or blank to have one issued.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The normalised code, or the reason it was refused.</returns>
     /// <remarks>
-    /// A blank code is made from the name - "Mobile phones" becomes MOBILE-PHONES, the
-    /// next one MOBILE-PHONES-2 - so the list reads sensibly and nobody has to invent a
-    /// code to add a brand. A name with no Latin letters, an Arabic one, gets the kind's
-    /// prefix and a number instead.
+    /// A blank code is the next in the kind's own sequence - 10000, 10001 and on - so
+    /// nobody has to invent a code to add a brand, and a typed one is kept as typed.
     /// </remarks>
     internal static async Task<Result<string>> ReserveCodeAsync(
         IInventoryMasterRepository masters,
+        IMasterCodes codes,
         InventoryMasterKind kind,
         FirmId firmId,
         string? code,
-        string name,
-        int maxLength,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(code))
         {
-            return Result.Success(await MakeCodeAsync(
-                masters, kind, firmId, name, maxLength, cancellationToken));
+            string master = kind switch
+            {
+                InventoryMasterKind.Category => CodedMaster.Category,
+                InventoryMasterKind.Brand => CodedMaster.Brand,
+                InventoryMasterKind.UnitOfMeasure => CodedMaster.Unit,
+                InventoryMasterKind.Warehouse => CodedMaster.Warehouse,
+                InventoryMasterKind.TaxSlab => CodedMaster.TaxSlab,
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a coded master."),
+            };
+
+            return Result.Success(await codes.NextAsync(
+                firmId,
+                master,
+                candidate => masters.CodeExistsAsync(kind, firmId, candidate, cancellationToken),
+                cancellationToken));
         }
 
         string normalised = code.Trim().ToUpperInvariant();
@@ -446,48 +477,5 @@ internal static class MasterContext
                 "InventoryMaster.CodeTaken",
                 $"'{normalised}' is already used by another record of this kind."))
             : Result.Success(normalised);
-    }
-
-    /// <summary>Makes a code from a name that no record of the kind uses yet.</summary>
-    /// <param name="masters">The master repository.</param>
-    /// <param name="kind">Which master.</param>
-    /// <param name="firmId">The firm.</param>
-    /// <param name="name">The record's name.</param>
-    /// <param name="maxLength">The longest code the master holds.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The code.</returns>
-    internal static async Task<string> MakeCodeAsync(
-        IInventoryMasterRepository masters,
-        InventoryMasterKind kind,
-        FirmId firmId,
-        string name,
-        int maxLength,
-        CancellationToken cancellationToken)
-    {
-        string prefix = kind switch
-        {
-            InventoryMasterKind.Category => "CAT",
-            InventoryMasterKind.Brand => "BRAND",
-            InventoryMasterKind.UnitOfMeasure => "UNIT",
-            InventoryMasterKind.Warehouse => "WH",
-            InventoryMasterKind.TaxSlab => "TAX",
-            _ => "M",
-        };
-
-        // Room for a "-999" on the end, so a numbered code still fits.
-        string stem = Codes.FromName(name, maxLength - 4, prefix);
-        bool numbered = string.Equals(stem, prefix, StringComparison.Ordinal);
-
-        // MOBILE-PHONES, MOBILE-PHONES-2, ...; a prefix alone is always numbered: CAT-1.
-        int number = 1;
-        string candidate = numbered ? $"{stem}-1" : stem;
-
-        while (await masters.CodeExistsAsync(kind, firmId, candidate, cancellationToken))
-        {
-            number++;
-            candidate = string.Create(CultureInfo.InvariantCulture, $"{stem}-{number}");
-        }
-
-        return candidate;
     }
 }

@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly, includeInternalTypes: true);
 
         services.AddScoped<IFirmPolicyReader, FirmPolicyReader>();
+        services.AddScoped<IMasterCodes, MasterCodes>();
 
         return services;
     }

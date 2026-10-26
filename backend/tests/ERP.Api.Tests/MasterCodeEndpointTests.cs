@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using ERP.Application.Inventory.Masters;
@@ -6,7 +7,7 @@ using ERP.Application.Sales;
 
 namespace ERP.Api.Tests;
 
-/// <summary>Codes made for masters entered without one, and a category's parent.</summary>
+/// <summary>Codes issued for masters entered without one, and a category's parent.</summary>
 [Collection(ApiCollection.Name)]
 public sealed class MasterCodeEndpointTests
 {
@@ -19,44 +20,56 @@ public sealed class MasterCodeEndpointTests
     public MasterCodeEndpointTests(ApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task A_brand_entered_without_a_code_gets_one_from_its_name()
+    public async Task A_brand_entered_without_a_code_is_numbered_from_10000_past_any_typed_code()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
         string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
-        await CreateAsync(client, "brands", new { Name = $"Galaxy {tag}" });
-        await CreateAsync(client, "brands", new { Name = $"Galaxy-{tag}" });
+        Guid first = await CreateAsync(client, "brands", new { Name = $"Galaxy {tag}" });
+        long issued = long.Parse(await BrandCodeAsync(client, first), CultureInfo.InvariantCulture);
+        issued.ShouldBeGreaterThanOrEqualTo(10000);
 
-        // The same name twice is refused, whatever its case; only the code stem repeats.
+        // A typed code is kept as typed, and the sequence does not move for it - even when
+        // the code typed is the number the sequence would have issued next.
+        string typed = (issued + 1).ToString(CultureInfo.InvariantCulture);
+        Guid manual = await CreateAsync(client, "brands", new { Name = $"Typed {tag}", Code = typed });
+        (await BrandCodeAsync(client, manual)).ShouldBe(typed);
+
+        // So the next issued code steps over it rather than clashing with it.
+        Guid next = await CreateAsync(client, "brands", new { Name = $"Galaxy next {tag}" });
+        (await BrandCodeAsync(client, next)).ShouldBe((issued + 2).ToString(CultureInfo.InvariantCulture));
+
+        // A typed code another brand holds is refused, as is a name it holds in any case.
+        (await client.PostAsJsonAsync($"{Inventory}/brands", new { Name = $"Other {tag}", Code = typed }))
+            .StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await client.PostAsJsonAsync($"{Inventory}/brands", new { Name = $"galaxy {tag}" }))
             .StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        await CreateAsync(client, "brands", new { Name = "سامسونج" });
 
-        List<BrandSummary> brands = (await client.GetFromJsonAsync<List<BrandSummary>>(
-            $"{Inventory}/brands?includeInactive=true"))!;
-
-        brands.Where(brand => brand.Name == $"Galaxy {tag}" || brand.Name == $"Galaxy-{tag}")
-            .Select(brand => brand.Code)
-            .ShouldBe([$"GALAXY-{tag}", $"GALAXY-{tag}-2"], ignoreOrder: true);
-
-        // A name with no Latin letters gets the kind's prefix and a number.
-        brands.ShouldContain(brand => brand.Name == "سامسونج" && brand.Code.StartsWith("BRAND-", StringComparison.Ordinal));
+        // A name with no Latin letters is numbered like any other.
+        Guid arabic = await CreateAsync(client, "brands", new { Name = $"سامسونج {tag}" });
+        (await BrandCodeAsync(client, arabic)).ShouldBe((issued + 3).ToString(CultureInfo.InvariantCulture));
     }
 
     [Fact]
     public async Task Customers_and_suppliers_entered_without_a_code_are_numbered()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        string tag = Guid.NewGuid().ToString("N")[..6];
 
         HttpResponseMessage customer = await client.PostAsJsonAsync(
-            "/api/v1/sales/customers", new { Name = "Numbered customer" });
+            "/api/v1/sales/customers", new { Name = $"Numbered customer {tag}" });
         customer.StatusCode.ShouldBe(HttpStatusCode.Created, await customer.Content.ReadAsStringAsync());
-        (await customer.Content.ReadFromJsonAsync<CustomerResponse>())!.Code.ShouldStartWith("CUS-");
+        string customerCode = (await customer.Content.ReadFromJsonAsync<CustomerResponse>())!.Code;
+        long.Parse(customerCode, CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(10000);
 
         HttpResponseMessage supplier = await client.PostAsJsonAsync(
-            "/api/v1/purchase/suppliers", new { Name = "Numbered supplier" });
+            "/api/v1/purchase/suppliers", new { Name = $"Numbered supplier {tag}" });
         supplier.StatusCode.ShouldBe(HttpStatusCode.Created, await supplier.Content.ReadAsStringAsync());
-        (await supplier.Content.ReadFromJsonAsync<SupplierResponse>())!.Code.ShouldStartWith("SUP-");
+        string supplierCode = (await supplier.Content.ReadFromJsonAsync<SupplierResponse>())!.Code;
+        long.Parse(supplierCode, CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(10000);
+
+        // Customers and suppliers are both ledgers, so they never share a code.
+        supplierCode.ShouldNotBe(customerCode);
     }
 
     [Fact]
@@ -88,6 +101,10 @@ public sealed class MasterCodeEndpointTests
         (await client.GetFromJsonAsync<List<CategorySummary>>($"{Inventory}/categories?includeInactive=true"))!
             .Single(category => category.Id == watches).ParentId.ShouldBeNull();
     }
+
+    private static async Task<string> BrandCodeAsync(HttpClient client, Guid id) =>
+        (await client.GetFromJsonAsync<List<BrandSummary>>($"{Inventory}/brands?includeInactive=true"))!
+            .Single(brand => brand.Id == id).Code;
 
     private static async Task<Guid> CreateAsync(HttpClient client, string resource, object body)
     {

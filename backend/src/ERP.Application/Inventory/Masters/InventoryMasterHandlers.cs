@@ -99,19 +99,23 @@ public sealed class CreateUnitCommandHandler : ICommandHandler<CreateUnitCommand
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateUnitCommandHandler"/> class.</summary>
     /// <param name="masters">The master repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateUnitCommandHandler(
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _masters = masters;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -129,8 +133,7 @@ public sealed class CreateUnitCommandHandler : ICommandHandler<CreateUnitCommand
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.UnitOfMeasure, firm.Value, request.Code,
-            request.Name, UnitOfMeasure.MaximumCodeLength, cancellationToken);
+            _masters, _codes, InventoryMasterKind.UnitOfMeasure, firm.Value, request.Code, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -306,19 +309,23 @@ public sealed class CreateCategoryCommandHandler
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateCategoryCommandHandler"/> class.</summary>
     /// <param name="masters">The master repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateCategoryCommandHandler(
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _masters = masters;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -336,8 +343,7 @@ public sealed class CreateCategoryCommandHandler
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.Category, firm.Value, request.Code,
-            request.Name, Category.MaximumCodeLength, cancellationToken);
+            _masters, _codes, InventoryMasterKind.Category, firm.Value, request.Code, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -385,19 +391,23 @@ public sealed class CreateBrandCommandHandler : ICommandHandler<CreateBrandComma
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateBrandCommandHandler"/> class.</summary>
     /// <param name="masters">The master repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateBrandCommandHandler(
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _masters = masters;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -415,8 +425,7 @@ public sealed class CreateBrandCommandHandler : ICommandHandler<CreateBrandComma
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.Brand, firm.Value, request.Code,
-            request.Name, Brand.MaximumCodeLength, cancellationToken);
+            _masters, _codes, InventoryMasterKind.Brand, firm.Value, request.Code, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -447,19 +456,23 @@ public sealed class CreateWarehouseCommandHandler
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateWarehouseCommandHandler"/> class.</summary>
     /// <param name="masters">The master repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateWarehouseCommandHandler(
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _masters = masters;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -477,8 +490,7 @@ public sealed class CreateWarehouseCommandHandler
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.Warehouse, firm.Value, request.Code,
-            request.Name, Warehouse.MaximumCodeLength, cancellationToken);
+            _masters, _codes, InventoryMasterKind.Warehouse, firm.Value, request.Code, cancellationToken);
 
         if (code.IsFailure)
         {
@@ -689,6 +701,11 @@ public sealed class SetMasterActiveCommandHandler : ICommandHandler<SetMasterAct
             return NotFound("category");
         }
 
+        if (category.IsPrimary && !request.IsActive)
+        {
+            return MasterContext.PrimaryKept("category");
+        }
+
         if (request.IsActive)
         {
             category.Activate();
@@ -712,6 +729,11 @@ public sealed class SetMasterActiveCommandHandler : ICommandHandler<SetMasterAct
         if (brand is null || brand.FirmId != firmId)
         {
             return NotFound("brand");
+        }
+
+        if (brand.IsPrimary && !request.IsActive)
+        {
+            return MasterContext.PrimaryKept("brand");
         }
 
         if (request.IsActive)
@@ -828,6 +850,11 @@ public sealed class UpdateMasterCommandHandler : ICommandHandler<UpdateMasterCom
             return NotFound("category");
         }
 
+        if (category.IsPrimary)
+        {
+            return MasterContext.PrimaryKept("category");
+        }
+
         Result renamed = category.Rename(request.Name);
 
         if (renamed.IsFailure)
@@ -898,6 +925,11 @@ public sealed class UpdateMasterCommandHandler : ICommandHandler<UpdateMasterCom
         if (brand is null || brand.FirmId != firmId)
         {
             return NotFound("brand");
+        }
+
+        if (brand.IsPrimary)
+        {
+            return MasterContext.PrimaryKept("brand");
         }
 
         Result renamed = brand.Rename(request.Name);

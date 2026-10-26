@@ -71,8 +71,9 @@ public sealed class DataReset : IDataReset
         "DELETE FROM bills_of_materials WHERE firm_id = @firm",
         "DELETE FROM products WHERE firm_id = @firm",
         "UPDATE categories SET parent_id = NULL WHERE firm_id = @firm",
-        "DELETE FROM categories WHERE firm_id = @firm",
-        "DELETE FROM brands WHERE firm_id = @firm",
+        // The Primary category and brand stay: new records are filed under them.
+        "DELETE FROM categories WHERE firm_id = @firm AND NOT is_primary",
+        "DELETE FROM brands WHERE firm_id = @firm AND NOT is_primary",
         "UPDATE units_of_measure SET base_unit_id = NULL WHERE firm_id = @firm",
         "DELETE FROM units_of_measure WHERE firm_id = @firm",
         "DELETE FROM warehouses WHERE firm_id = @firm",
@@ -90,6 +91,9 @@ public sealed class DataReset : IDataReset
         """,
         "DELETE FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept))",
         "UPDATE ledgers SET opening_balance = 0 WHERE firm_id = @firm",
+        // The masters start again from nothing, so their automatic codes start again
+        // from 10000; a code still held by a kept record is stepped over as ever.
+        "DELETE FROM master_code_sequences WHERE firm_id = @firm",
     ];
 
     private readonly ErpDbContext _context;

@@ -43,7 +43,8 @@ public sealed class LedgerMasterEndpointTests
             OpeningSide = EntrySide.Debit,
         });
 
-        rent.Code.ShouldBe($"OFFICE-RENT-{tag}");
+        // Left blank, the code is the next in the firm's sequence, 10000 at the least.
+        long.Parse(rent.Code, System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(10000);
         rent.GroupName.ShouldBe(expenses.Name);
         rent.Nature.ShouldBe(AccountNature.Expense);
         rent.OpeningBalance.ShouldBe(1500m);
@@ -64,7 +65,9 @@ public sealed class LedgerMasterEndpointTests
             Kind = LedgerKind.General,
         });
 
-        twin.Code.ShouldBe($"OFFICE-RENT-{tag}-2");
+        // The next in the sequence: a code is never made from the name any more.
+        long.Parse(twin.Code, System.Globalization.CultureInfo.InvariantCulture)
+            .ShouldBe(long.Parse(rent.Code, System.Globalization.CultureInfo.InvariantCulture) + 1);
 
         // A code somebody holds is refused by name.
         (await client.PostAsJsonAsync(Ledgers, new
@@ -136,7 +139,7 @@ public sealed class LedgerMasterEndpointTests
 
         created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
         AccountGroupSummary loans = (await created.Content.ReadFromJsonAsync<AccountGroupSummary>())!;
-        loans.Code.ShouldBe($"LOANS-{tag}");
+        long.Parse(loans.Code, System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(10000);
         loans.Nature.ShouldBe(AccountNature.Liability);
         loans.ParentId.ShouldBe(liabilities.AccountGroupId);
 

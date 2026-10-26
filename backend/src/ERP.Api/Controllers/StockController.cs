@@ -348,7 +348,7 @@ public sealed class StockController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
-    /// <summary>Reads the detailed stock register: opening, purchases, sales, other movements and closing.</summary>
+    /// <summary>Reads the stock summary: opening, purchases, sales, other movements and closing.</summary>
     /// <param name="from">The first date.</param>
     /// <param name="to">The last date.</param>
     /// <param name="warehouseId">One godown. Omit for every one.</param>
@@ -357,11 +357,11 @@ public sealed class StockController : ApiControllerBase
     /// <param name="productId">One product. Omit for every one.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>One row per product that held or moved stock.</returns>
-    /// <response code="200">The register.</response>
-    [HttpGet("register")]
+    /// <response code="200">The summary.</response>
+    [HttpGet("summary")]
     [RequiresPermission("inventory", "report", "view")]
-    [ProducesResponseType(typeof(StockRegisterReport), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetRegisterAsync(
+    [ProducesResponseType(typeof(StockSummaryReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetSummaryAsync(
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
         [FromQuery] Guid? warehouseId,
@@ -370,8 +370,76 @@ public sealed class StockController : ApiControllerBase
         [FromQuery] Guid? productId,
         CancellationToken cancellationToken)
     {
-        Result<StockRegisterReport> result = await _sender.Send(
-            new StockRegisterQuery(from, to, warehouseId, categoryId, brandId, productId), cancellationToken);
+        Result<StockSummaryReport> result = await _sender.Send(
+            new StockSummaryQuery(from, to, warehouseId, categoryId, brandId, productId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads the stock register: what is on hand by product, godown and batch, valued.</summary>
+    /// <param name="asOn">The date it is as at. Omit for today.</param>
+    /// <param name="branchId">One branch. Omit for every one.</param>
+    /// <param name="warehouseId">One godown. Omit for every one.</param>
+    /// <param name="categoryId">One category. Omit for every one.</param>
+    /// <param name="brandId">One brand. Omit for every one.</param>
+    /// <param name="productId">One product. Omit for every one.</param>
+    /// <param name="expiresFrom">Batches expiring on or after this date.</param>
+    /// <param name="expiresTo">Batches expiring on or before this date.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per product, godown and batch with stock; the screen adds them up to its columns.</returns>
+    /// <response code="200">The register.</response>
+    [HttpGet("register")]
+    [RequiresPermission("inventory", "report", "view")]
+    [ProducesResponseType(typeof(StockPositionReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetRegisterAsync(
+        [FromQuery] DateOnly? asOn,
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] Guid? brandId,
+        [FromQuery] Guid? productId,
+        [FromQuery] DateOnly? expiresFrom,
+        [FromQuery] DateOnly? expiresTo,
+        CancellationToken cancellationToken)
+    {
+        Result<StockPositionReport> result = await _sender.Send(
+            new StockPositionQuery(
+                asOn, branchId, warehouseId, categoryId, brandId, productId, expiresFrom, expiresTo),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads the stock aging report: what is on hand split by the receipt it came in on, with its age.</summary>
+    /// <param name="asOn">The date ages are counted to. Omit for today.</param>
+    /// <param name="branchId">One branch. Omit for every one.</param>
+    /// <param name="warehouseId">One godown. Omit for every one.</param>
+    /// <param name="categoryId">One category. Omit for every one.</param>
+    /// <param name="brandId">One brand. Omit for every one.</param>
+    /// <param name="productId">One product. Omit for every one.</param>
+    /// <param name="expiresFrom">Batches expiring on or after this date.</param>
+    /// <param name="expiresTo">Batches expiring on or before this date.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>One row per product, godown, batch and receipt date.</returns>
+    /// <response code="200">The aging.</response>
+    [HttpGet("aging")]
+    [RequiresPermission("inventory", "report", "view")]
+    [ProducesResponseType(typeof(StockPositionReport), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAgingAsync(
+        [FromQuery] DateOnly? asOn,
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] Guid? brandId,
+        [FromQuery] Guid? productId,
+        [FromQuery] DateOnly? expiresFrom,
+        [FromQuery] DateOnly? expiresTo,
+        CancellationToken cancellationToken)
+    {
+        Result<StockPositionReport> result = await _sender.Send(
+            new StockPositionQuery(
+                asOn, branchId, warehouseId, categoryId, brandId, productId, expiresFrom, expiresTo, ByReceipt: true),
+            cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }

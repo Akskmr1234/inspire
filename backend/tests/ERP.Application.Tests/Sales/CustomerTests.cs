@@ -257,7 +257,8 @@ public sealed class CustomerTests
             tenant.FirmId.Returns(firmSelected ? Firm.Id : null);
 
             IPlaceRepository places = Substitute.For<IPlaceRepository>();
-            _create = new CreateCustomerCommandHandler(Ledgers, firms, places, tenant, UnitOfWork);
+            _create = new CreateCustomerCommandHandler(
+                Ledgers, firms, places, tenant, UnitOfWork, Substitute.For<IMasterCodes>());
             _update = new UpdateCustomerCommandHandler(Ledgers, places, tenant, UnitOfWork);
             _setActive = new SetCustomerActiveCommandHandler(Ledgers, tenant, UnitOfWork);
             _list = new GetCustomersQueryHandler(Ledgers, tenant);

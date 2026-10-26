@@ -47,6 +47,10 @@ public sealed record ListProductsQuery(
 /// <param name="WholesaleRate">What one stock unit sells at wholesale.</param>
 /// <param name="MaximumRetailPrice">The printed price, where the goods carry one.</param>
 /// <param name="TaxPercentage">The percentage of its tax rate, when it has one.</param>
+/// <param name="StockQuantity">
+/// What is on hand now across every godown, in the stock unit: the stock positions added
+/// up, which every movement keeps current.
+/// </param>
 public sealed record ProductSummary(
     Guid Id,
     string Code,
@@ -68,7 +72,8 @@ public sealed record ProductSummary(
     int BarcodeCount,
     decimal WholesaleRate,
     decimal MaximumRetailPrice,
-    decimal? TaxPercentage = null);
+    decimal? TaxPercentage = null,
+    decimal StockQuantity = 0m);
 
 /// <summary>Reads one product in full, for the edit screen.</summary>
 /// <param name="ProductId">The product.</param>

@@ -16,6 +16,12 @@ public sealed class Brand : AggregateRoot<BrandId>, IFirmScoped, IAuditable
     /// <summary>The longest a brand code may be.</summary>
     public const int MaximumCodeLength = 30;
 
+    /// <summary>The code the Primary brand is made with.</summary>
+    public const string PrimaryCode = "PRIMARY";
+
+    /// <summary>The name the Primary brand is made with.</summary>
+    public const string PrimaryName = "Primary";
+
     /// <summary>The longest a brand name may be.</summary>
     public const int MaximumNameLength = 100;
 
@@ -53,6 +59,17 @@ public sealed class Brand : AggregateRoot<BrandId>, IFirmScoped, IAuditable
 
     /// <summary>Gets whether the brand may still be assigned to a product.</summary>
     public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is the firm's Primary brand: the one a new
+    /// record is filed under until somebody chooses another.
+    /// </summary>
+    /// <remarks>
+    /// Kept out of the brand list, never cleared by a data reset, and never renamed or
+    /// withdrawn; there is one per firm, made the first time the firm's brand list is
+    /// read. See <see cref="PrimaryCode"/>.
+    /// </remarks>
+    public bool IsPrimary { get; private set; }
 
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }
