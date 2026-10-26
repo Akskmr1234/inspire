@@ -672,6 +672,20 @@ public static class MenuCatalogue
                             "/inventory/stock-register",
                             ViewInventoryReports),
                         new(
+                            "inventory-reports.aging",
+                            "Stock aging",
+                            "أعمار المخزون",
+                            "inventory",
+                            "/inventory/stock-aging",
+                            ViewInventoryReports),
+                        new(
+                            "inventory-reports.summary",
+                            "Stock summary",
+                            "ملخص المخزون",
+                            "inventory",
+                            "/inventory/stock-summary",
+                            ViewInventoryReports),
+                        new(
                             "inventory-reports.ledger",
                             "Stock ledger",
                             "دفتر المخزون",

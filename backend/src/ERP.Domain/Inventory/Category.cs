@@ -20,6 +20,12 @@ public sealed class Category : AggregateRoot<CategoryId>, IFirmScoped, IAuditabl
     /// <summary>The longest a category code may be.</summary>
     public const int MaximumCodeLength = 30;
 
+    /// <summary>The code the Primary category is made with.</summary>
+    public const string PrimaryCode = "PRIMARY";
+
+    /// <summary>The name the Primary category is made with.</summary>
+    public const string PrimaryName = "Primary";
+
     /// <summary>The longest a category name may be.</summary>
     public const int MaximumNameLength = 100;
 
@@ -67,6 +73,17 @@ public sealed class Category : AggregateRoot<CategoryId>, IFirmScoped, IAuditabl
 
     /// <summary>Gets whether the category may still be assigned to a product.</summary>
     public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is the firm's Primary category: the one a new
+    /// record is filed under until somebody chooses another.
+    /// </summary>
+    /// <remarks>
+    /// Kept out of the category list, never cleared by a data reset, and never renamed or
+    /// withdrawn; there is one per firm, made the first time the firm's category list is
+    /// read. See <see cref="PrimaryCode"/>.
+    /// </remarks>
+    public bool IsPrimary { get; private set; }
 
     /// <inheritdoc />
     public DateTimeOffset CreatedAtUtc { get; private set; }

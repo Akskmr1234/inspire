@@ -56,43 +56,6 @@ public sealed class ProductRepository : IProductRepository
             product => product.FirmId == firmId && product.Code == code, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<string> NextCodeAsync(
-        FirmId firmId,
-        string prefix,
-        CancellationToken cancellationToken = default)
-    {
-        // Only the codes in this firm's own sequence. A firm that also uses codes of
-        // its own - a supplier's part number, say - keeps them, and they take no part
-        // in deciding the next issued number.
-        List<string> issued = await _context.Products
-            .Where(product => product.FirmId == firmId && product.Code.StartsWith(prefix))
-            .Select(product => product.Code)
-            .ToListAsync(cancellationToken);
-
-        int highest = 0;
-
-        foreach (string code in issued)
-        {
-            // Parsed rather than counted. Products are withdrawn rather than deleted,
-            // so a count would eventually reissue a code that is still in use - and the
-            // unique index would reject the save with nothing to explain why.
-            if (int.TryParse(
-                code.AsSpan(prefix.Length),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out int number)
-                && number > highest)
-            {
-                highest = number;
-            }
-        }
-
-        // Four digits, matching the reference application's PRO-1004. A firm that
-        // exceeds it simply gets a longer number rather than a wrapped one.
-        return prefix + (highest + 1).ToString("D4", CultureInfo.InvariantCulture);
-    }
-
-    /// <inheritdoc />
     public void Add(Product product) => _context.Products.Add(product);
 }
 
@@ -191,6 +154,18 @@ public sealed class ProductReader : IProductReader
             .Where(row => row.FirmId == firmId)
             .ToDictionaryAsync(row => row.Id, row => row.Percentage, cancellationToken);
 
+        // Read from the stock positions rather than kept on the product. Every movement -
+        // a sale, a purchase, a return, an adjustment, a transfer, production - already
+        // updates the position in the same transaction as the movement itself, so their
+        // sum is current by construction. A copy on the product would be a second place
+        // every one of those paths had to remember to update, and the first one that
+        // forgot would leave the list disagreeing with the stock reports.
+        Dictionary<ProductId, decimal> onHand = await _context.StockBalances
+            .Where(row => row.FirmId == firmId)
+            .GroupBy(row => row.ProductId)
+            .Select(group => new { group.Key, Quantity = group.Sum(row => row.Quantity) })
+            .ToDictionaryAsync(row => row.Key, row => row.Quantity, cancellationToken);
+
         return
         [
             .. rows.Select(row => new ProductSummary(
@@ -216,7 +191,8 @@ public sealed class ProductReader : IProductReader
                 row.MaximumRetailPrice,
                 row.TaxSlabId is { } slab && slabs.TryGetValue(slab, out decimal rate)
                     ? rate
-                    : null)),
+                    : null,
+                onHand.GetValueOrDefault(row.Id))),
         ];
     }
 

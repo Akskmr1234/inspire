@@ -79,6 +79,7 @@ export function CategoriesPage(): React.JSX.Element {
       fetchRows={(includeInactive) =>
         listMaster<CategorySummary>('categories', includeInactive)
       }
+      hideRow={(row) => row.isPrimary === true}
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy, rows) => <AddCategory run={run} busy={busy} rows={rows} />}
@@ -247,6 +248,7 @@ export function BrandsPage(): React.JSX.Element {
       editTitle={t('masters.editBrand')}
       queryKey="brands"
       fetchRows={(includeInactive) => listMaster<BrandSummary>('brands', includeInactive)}
+      hideRow={(row) => row.isPrimary === true}
       columns={columns}
       rowKey={(row) => row.id}
       addForm={(run, busy) => <AddBrand run={run} busy={busy} />}

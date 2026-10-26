@@ -54,6 +54,11 @@ export function useMasterRows<T extends Row>(
   return { rows: (query.data ?? []) as readonly T[], isPending: query.isPending };
 }
 
+/** Whether a row is its master's Primary record - the default for a new record. */
+export function isPrimary(row: Row): boolean {
+  return (row as { readonly isPrimary?: boolean }).isPrimary === true;
+}
+
 function optionFor(kind: PickerKind, row: Row): SelectOption {
   if (kind === 'taxRate') {
     const rate = row as TaxRate;
@@ -118,10 +123,12 @@ export function MasterPicker({
   const [adding, setAdding] = useState(false);
   const { rows, isPending } = useMasterRows(kind);
 
+  // The Primary record first: it is what a new record is filed under by default.
   const options = useMemo(
     () =>
       rows
         .filter((row) => row.isActive && (include ? include(row) : true))
+        .sort((a, b) => Number(isPrimary(b)) - Number(isPrimary(a)))
         .map((row) => optionFor(kind, row)),
     [rows, include, kind],
   );

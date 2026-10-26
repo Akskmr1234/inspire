@@ -11,7 +11,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
 import type { ApiError } from '@/lib/api';
-import type { CategorySummary, UnitSummary } from '@/lib/inventory';
+import type { BrandSummary, CategorySummary, UnitSummary } from '@/lib/inventory';
 import type { TaxRate } from '@/lib/taxRates';
 import {
   createProduct,
@@ -63,12 +63,24 @@ export function ProductsPage(): React.JSX.Element {
     },
     onSuccess: async ({ id, mode }) => {
       setError(null);
-      setAdding(false);
-      await queryClient.invalidateQueries({ queryKey: ['products'] });
+
       if (mode === 'detail') {
+        // Straight to the new product's details, in the same render that closes the
+        // form. The list is only marked out of date, not fetched again now - it is
+        // hidden behind the details, and waiting for it was what flashed it on
+        // screen first. It is brought up to date on the way back.
         setInitialEditorTab('description');
         setEditingId(id);
+        setAdding(false);
+        await queryClient.invalidateQueries({
+          queryKey: ['products'],
+          refetchType: 'none',
+        });
+        return;
       }
+
+      setAdding(false);
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (failure) => setError(failure.detail || failure.code),
   });
@@ -115,6 +127,21 @@ export function ProductsPage(): React.JSX.Element {
       hiddenByDefault: true,
     },
     { key: 'unit', header: t('products.stockUnit'), value: (row) => row.stockUnitCode },
+    {
+      key: 'stock',
+      header: t('products.stock'),
+      value: (row) => row.stockQuantity,
+      numeric: true,
+      // A service is never on hand; a blank says so better than a nought.
+      render: (row) =>
+        row.itemType === 1 ? (
+          <span className={row.stockQuantity < 0 ? 'text-red-600 dark:text-red-400' : ''}>
+            {row.stockQuantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+          </span>
+        ) : (
+          ''
+        ),
+    },
     {
       key: 'cost',
       header: t('products.cost'),
@@ -206,6 +233,8 @@ export function ProductsPage(): React.JSX.Element {
         onClose={() => {
           setEditingId(null);
           setInitialEditorTab(undefined);
+          // Only if something changed it meanwhile: a product added, or saved.
+          void queryClient.refetchQueries({ queryKey: ['products'], stale: true });
         }}
       />
     );
@@ -317,6 +346,7 @@ function AddProduct({
   const { t } = useTranslation();
 
   const categories = useMasterRows<CategorySummary>('category');
+  const brands = useMasterRows<BrandSummary>('brand');
   const units = useMasterRows<UnitSummary>('unit');
   const taxRates = useMasterRows<TaxRate>('taxRate');
 
@@ -351,11 +381,22 @@ function AddProduct({
       const active = categories.rows.filter((row) => row.isActive);
       const choice =
         active.find((row) => row.id === defaultCategoryId) ??
+        active.find((row) => row.isPrimary) ??
         active.find((row) => /^general$/i.test(row.name)) ??
         active[0];
       if (choice && choice.id !== categoryId) setCategoryId(choice.id);
     }
   }, [categories.rows, categoryId, defaultCategoryId]);
+
+  // The Primary brand, unless Settings name another or somebody has chosen already -
+  // "no brand" included.
+  const [brandTouched, setBrandTouched] = useState(false);
+  useEffect(() => {
+    if (!brandTouched && brandId === '') {
+      const primary = brands.rows.find((row) => row.isActive && row.isPrimary);
+      if (primary) setBrandId(primary.id);
+    }
+  }, [brands.rows, brandId, brandTouched]);
 
   useEffect(() => {
     if (stockUnitId === '' || !units.rows.some((row) => row.id === stockUnitId)) {
@@ -495,7 +536,10 @@ function AddProduct({
           clearable
           placeholder={t('products.noBrand')}
           value={brandId}
-          onChange={setBrandId}
+          onChange={(value) => {
+            setBrandTouched(true);
+            setBrandId(value);
+          }}
         />
 
         <MasterPicker

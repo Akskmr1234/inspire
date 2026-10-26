@@ -63,15 +63,10 @@ public sealed class ProductEndpointTests
         string first = (await ReadAsync(client, firstId)).Code;
         string second = (await ReadAsync(client, secondId)).Code;
 
-        first.ShouldStartWith("PRO-");
-        second.ShouldStartWith("PRO-");
-
-        // Parsed from the highest issued number rather than counted. A count would
-        // reissue a code the moment anything was withdrawn - and products are withdrawn
-        // rather than deleted.
-        int.Parse(second[4..], System.Globalization.CultureInfo.InvariantCulture)
-            .ShouldBeGreaterThan(
-                int.Parse(first[4..], System.Globalization.CultureInfo.InvariantCulture));
+        // The firm's product sequence: 10000 at the earliest, then one more each time.
+        long firstNumber = long.Parse(first, System.Globalization.CultureInfo.InvariantCulture);
+        firstNumber.ShouldBeGreaterThanOrEqualTo(10000);
+        long.Parse(second, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(firstNumber + 1);
     }
 
     [Fact]

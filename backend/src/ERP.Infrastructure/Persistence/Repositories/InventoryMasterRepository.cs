@@ -135,6 +135,52 @@ public sealed class InventoryMasterRepository : IInventoryMasterRepository
 /// </remarks>
 public sealed class InventoryMasterReader : IInventoryMasterReader
 {
+    private const string PrimaryNameArabic = "رئيسي";
+
+    private const string PrimaryCategorySql = """
+        WITH adopted AS (
+            UPDATE categories SET is_primary = true, is_active = true
+            WHERE id = (
+                SELECT id FROM categories
+                WHERE firm_id = @firm AND lower(btrim(name)) = 'primary'
+                ORDER BY created_at_utc
+                LIMIT 1)
+              AND NOT EXISTS (SELECT 1 FROM categories WHERE firm_id = @firm AND is_primary)
+            RETURNING id)
+        INSERT INTO categories (
+            id, tenant_id, firm_id, code, name, name_arabic, is_active, is_primary,
+            created_at_utc, created_by)
+        SELECT gen_random_uuid(), firm.tenant_id, firm.id, @code, @name, @nameArabic, true, true,
+               now(), '00000000-0000-0000-0000-00000000513e'::uuid
+        FROM firms firm
+        WHERE firm.id = @firm
+          AND NOT EXISTS (SELECT 1 FROM adopted)
+          AND NOT EXISTS (SELECT 1 FROM categories WHERE firm_id = @firm AND is_primary)
+        ON CONFLICT DO NOTHING
+        """;
+
+    private const string PrimaryBrandSql = """
+        WITH adopted AS (
+            UPDATE brands SET is_primary = true, is_active = true
+            WHERE id = (
+                SELECT id FROM brands
+                WHERE firm_id = @firm AND lower(btrim(name)) = 'primary'
+                ORDER BY created_at_utc
+                LIMIT 1)
+              AND NOT EXISTS (SELECT 1 FROM brands WHERE firm_id = @firm AND is_primary)
+            RETURNING id)
+        INSERT INTO brands (
+            id, tenant_id, firm_id, code, name, name_arabic, is_active, is_primary,
+            created_at_utc, created_by)
+        SELECT gen_random_uuid(), firm.tenant_id, firm.id, @code, @name, @nameArabic, true, true,
+               now(), '00000000-0000-0000-0000-00000000513e'::uuid
+        FROM firms firm
+        WHERE firm.id = @firm
+          AND NOT EXISTS (SELECT 1 FROM adopted)
+          AND NOT EXISTS (SELECT 1 FROM brands WHERE firm_id = @firm AND is_primary)
+        ON CONFLICT DO NOTHING
+        """;
+
     private readonly ErpDbContext _context;
 
     /// <summary>Initialises a new instance of the <see cref="InventoryMasterReader"/> class.</summary>
@@ -198,6 +244,8 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePrimaryAsync("categories", firmId, cancellationToken);
+
         var categories = await _context.Categories
             .Where(category =>
                 category.FirmId == firmId && (includeInactive || category.IsActive))
@@ -217,6 +265,7 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
                     pair.category.Name,
                     pair.category.NameArabic,
                     pair.category.IsActive,
+                    pair.category.IsPrimary,
                 })
             .OrderBy(row => row.Code)
             .ToListAsync(cancellationToken);
@@ -230,7 +279,8 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
                 row.Code,
                 row.Name,
                 row.NameArabic,
-                row.IsActive)),
+                row.IsActive,
+                row.IsPrimary)),
         ];
     }
 
@@ -240,6 +290,8 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
+        await EnsurePrimaryAsync("brands", firmId, cancellationToken);
+
         var brands = await _context.Brands
             .Where(brand => brand.FirmId == firmId && (includeInactive || brand.IsActive))
             .OrderBy(brand => brand.Code)
@@ -250,14 +302,49 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
                 brand.Name,
                 brand.NameArabic,
                 brand.IsActive,
+                brand.IsPrimary,
             })
             .ToListAsync(cancellationToken);
 
         return
         [
             .. brands.Select(row => new BrandSummary(
-                row.Id.Value, row.Code, row.Name, row.NameArabic, row.IsActive)),
+                row.Id.Value, row.Code, row.Name, row.NameArabic, row.IsActive, row.IsPrimary)),
         ];
+    }
+
+    /// <summary>Makes sure the firm has its Primary record of a master, before the master is read.</summary>
+    /// <param name="table">The master's table: <c>categories</c> or <c>brands</c>.</param>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <remarks>
+    /// <para>
+    /// Made the first time the list is read rather than when the firm is set up, so it
+    /// reaches every firm - those set up before there was a Primary record, and a firm
+    /// set up by any route - without touching the set-up itself.
+    /// </para>
+    /// <para>
+    /// A record somebody already called Primary is adopted rather than doubled: it
+    /// becomes the Primary one, and is switched back on if it had been withdrawn.
+    /// Otherwise one is added. One statement, and a filtered unique index allows one
+    /// Primary record per firm, so two lists read at the same moment cannot add two;
+    /// the second finds nothing to do.
+    /// </para>
+    /// </remarks>
+    private async Task EnsurePrimaryAsync(string table, FirmId firmId, CancellationToken cancellationToken)
+    {
+        // One statement per table, written out whole, so nothing is ever spliced into SQL.
+        string sql = table == "brands" ? PrimaryBrandSql : PrimaryCategorySql;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            sql,
+            [
+                new Npgsql.NpgsqlParameter("firm", firmId.Value),
+                new Npgsql.NpgsqlParameter("code", Category.PrimaryCode),
+                new Npgsql.NpgsqlParameter("name", Category.PrimaryName),
+                new Npgsql.NpgsqlParameter("nameArabic", PrimaryNameArabic),
+            ],
+            cancellationToken);
     }
 
     /// <inheritdoc />

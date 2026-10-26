@@ -23,6 +23,8 @@ export interface CategorySummary {
   readonly name: string;
   readonly nameArabic: string | null;
   readonly isActive: boolean;
+  /** The firm's Primary category: the default in every picker, kept off the list. */
+  readonly isPrimary?: boolean;
 }
 
 /** A brand. */
@@ -32,6 +34,8 @@ export interface BrandSummary {
   readonly name: string;
   readonly nameArabic: string | null;
   readonly isActive: boolean;
+  /** The firm's Primary brand: the default in every picker, kept off the list. */
+  readonly isPrimary?: boolean;
 }
 
 /** A place stock is held. */

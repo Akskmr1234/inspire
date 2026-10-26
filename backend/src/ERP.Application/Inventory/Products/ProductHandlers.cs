@@ -12,13 +12,6 @@ namespace ERP.Application.Inventory.Products;
 /// <summary>Shared resolution for the product handlers.</summary>
 internal static class ProductContext
 {
-    /// <summary>The prefix a firm's product sequence runs under.</summary>
-    /// <remarks>
-    /// Matches the reference application's own, so a migrated firm's codes continue
-    /// rather than restarting alongside them.
-    /// </remarks>
-    internal const string CodePrefix = "PRO-";
-
     /// <summary>Resolves the firm a product is being read or written in.</summary>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <returns>The firm, or the reason it could not be resolved.</returns>
@@ -127,6 +120,7 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
     private readonly IFirmRepository _firms;
     private readonly ITaxSlabRepository _slabs;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateProductCommandHandler"/> class.</summary>
     /// <param name="products">The product repository.</param>
@@ -135,13 +129,15 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
     /// <param name="firms">The firm repository.</param>
     /// <param name="slabs">The tax rate repository.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateProductCommandHandler(
         IProductRepository products,
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
         IFirmRepository firms,
         ITaxSlabRepository slabs,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _products = products;
         _masters = masters;
@@ -149,6 +145,7 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
         _firms = firms;
         _slabs = slabs;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -193,11 +190,15 @@ public sealed class CreateProductCommandHandler : ICommandHandler<CreateProductC
                 "Product.UnitNotFound", "No such unit in the selected firm."));
         }
 
-        // Blank means "issue the next one", which is how the reference application
-        // numbers products. A supplied code is checked for a clash here so the refusal
-        // names the code rather than surfacing as a unique-index violation.
+        // Blank means "issue the next one": 10000, 10001 and on, past any number a
+        // product already holds. A supplied code is checked for a clash here so the
+        // refusal names the code rather than surfacing as a unique-index violation.
         string code = string.IsNullOrWhiteSpace(request.Code)
-            ? await _products.NextCodeAsync(firmId, ProductContext.CodePrefix, cancellationToken)
+            ? await _codes.NextAsync(
+                firmId,
+                CodedMaster.Product,
+                candidate => _products.CodeExistsAsync(firmId, candidate, cancellationToken),
+                cancellationToken)
             : request.Code.Trim().ToUpperInvariant();
 
         if (await _products.CodeExistsAsync(firmId, code, cancellationToken))

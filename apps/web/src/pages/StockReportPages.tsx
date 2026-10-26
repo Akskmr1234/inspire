@@ -19,9 +19,9 @@ import {
   fetchItemMovement,
   fetchProductSerials,
   fetchStockLedger,
-  fetchStockRegister,
-  type StockRegisterReport,
-  type StockRegisterRow,
+  fetchStockSummary,
+  type StockSummaryReport,
+  type StockSummaryRow,
   fetchStockValuation,
   SerialStatus,
   type BatchStockReport,
@@ -1020,11 +1020,11 @@ export function SerialStockPage(): React.JSX.Element {
 }
 
 /**
- * The detailed stock register: for each product, what it opened at, what was bought and
- * sold, everything else that came in or went out, and what it closed at. A row opens the
+ * The stock summary: for each product, what it opened at, what was bought and sold,
+ * everything else that came in or went out, and what it closed at. A row opens the
  * product's movements over the same period.
  */
-export function StockRegisterPage(): React.JSX.Element {
+export function StockSummaryPage(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -1035,17 +1035,17 @@ export function StockRegisterPage(): React.JSX.Element {
   const [warehouseId, setWarehouseId] = useState('');
   const [categoryId, setCategoryId] = useState('');
 
-  const query = useQuery<StockRegisterReport, ApiError>({
-    queryKey: ['stock-register', from, to, warehouseId, categoryId],
-    queryFn: () => fetchStockRegister(from, to, warehouseId, categoryId),
+  const query = useQuery<StockSummaryReport, ApiError>({
+    queryKey: ['stock-summary', from, to, warehouseId, categoryId],
+    queryFn: () => fetchStockSummary(from, to, warehouseId, categoryId),
   });
 
   const quantity = (
     key: string,
     header: string,
-    pick: (row: StockRegisterRow) => number,
+    pick: (row: StockSummaryRow) => number,
     strong = false,
-  ): GridColumn<StockRegisterRow> => ({
+  ): GridColumn<StockSummaryRow> => ({
     key,
     header,
     value: pick,
@@ -1055,7 +1055,7 @@ export function StockRegisterPage(): React.JSX.Element {
     ),
   });
 
-  const columns: readonly GridColumn<StockRegisterRow>[] = [
+  const columns: readonly GridColumn<StockSummaryRow>[] = [
     { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
     {
       key: 'description',
@@ -1100,10 +1100,10 @@ export function StockRegisterPage(): React.JSX.Element {
   );
 
   return (
-    <ReportFrame title={t('nav.stockRegister')} controls={controls} query={query}>
+    <ReportFrame title={t('nav.stockSummary')} controls={controls} query={query}>
       {(report) => (
         <DataGrid
-          gridKey="stock-register"
+          gridKey="stock-summary"
           rows={report.rows}
           columns={columns}
           rowKey={(row) => row.productId}

@@ -318,6 +318,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the document numbering series.</summary>
     public DbSet<NumberingSeries> NumberingSeries => Set<NumberingSeries>();
 
+    /// <summary>Gets where each master's automatic codes have got to.</summary>
+    public DbSet<MasterCodeSequence> MasterCodeSequences => Set<MasterCodeSequence>();
+
     /// <summary>Gets the account groups forming the chart of accounts.</summary>
     public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
 
@@ -500,6 +503,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<VoucherLineIdConverter>();
         configurationBuilder.Properties<NumberingSeriesId>()
             .HaveConversion<NumberingSeriesIdConverter>();
+        configurationBuilder.Properties<MasterCodeSequenceId>()
+            .HaveConversion<MasterCodeSequenceIdConverter>();
 
         configurationBuilder.Properties<CurrencyCode>()
             .HaveConversion<CurrencyCodeConverter>()

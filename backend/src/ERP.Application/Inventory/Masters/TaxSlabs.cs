@@ -146,22 +146,26 @@ public sealed class TaxSlabHandlers
     private readonly IInventoryMasterRepository _masters;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="TaxSlabHandlers"/> class.</summary>
     /// <param name="slabs">The tax rate repository.</param>
     /// <param name="masters">The master repository, for codes.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public TaxSlabHandlers(
         ITaxSlabRepository slabs,
         IInventoryMasterRepository masters,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _slabs = slabs;
         _masters = masters;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -212,8 +216,7 @@ public sealed class TaxSlabHandlers
         }
 
         Result<string> code = await MasterContext.ReserveCodeAsync(
-            _masters, InventoryMasterKind.TaxSlab, firm.Value, request.Code,
-            request.Name, TaxSlab.MaximumCodeLength, cancellationToken);
+            _masters, _codes, InventoryMasterKind.TaxSlab, firm.Value, request.Code, cancellationToken);
 
         if (code.IsFailure)
         {

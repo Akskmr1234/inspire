@@ -637,8 +637,8 @@ export function invoiceReceiptNote(
   });
 }
 
-/** One product's line of the detailed stock register. */
-export interface StockRegisterRow {
+/** One product's line of the stock summary. */
+export interface StockSummaryRow {
   readonly productId: string;
   readonly productCode: string;
   readonly productDescription: string;
@@ -652,24 +652,24 @@ export interface StockRegisterRow {
   readonly closing: number;
 }
 
-/** The detailed stock register: opening, purchases, sales, other movements and closing. */
-export interface StockRegisterReport {
+/** The stock summary: opening, purchases, sales, other movements and closing. */
+export interface StockSummaryReport {
   readonly from: string;
   readonly to: string;
-  readonly rows: readonly StockRegisterRow[];
+  readonly rows: readonly StockSummaryRow[];
 }
 
-/** Reads the detailed stock register over a period. */
-export function fetchStockRegister(
+/** Reads the stock summary over a period. */
+export function fetchStockSummary(
   from: string,
   to: string,
   warehouseId: string,
   categoryId: string,
-): Promise<StockRegisterReport> {
+): Promise<StockSummaryReport> {
   const query = new URLSearchParams({ from, to });
 
   if (warehouseId) query.set('warehouseId', warehouseId);
   if (categoryId) query.set('categoryId', categoryId);
 
-  return request<StockRegisterReport>(`${STOCK}/register?${query.toString()}`);
+  return request<StockSummaryReport>(`${STOCK}/summary?${query.toString()}`);
 }

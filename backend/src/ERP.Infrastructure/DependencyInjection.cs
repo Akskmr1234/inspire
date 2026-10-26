@@ -93,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<IFirmRepository, FirmRepository>();
         services.AddScoped<IFinancialYearRepository, FinancialYearRepository>();
         services.AddScoped<INumberingSeriesRepository, NumberingSeriesRepository>();
+        services.AddScoped<IMasterCodeSequenceRepository, MasterCodeSequenceRepository>();
         services.AddScoped<ITrialBalanceReader, TrialBalanceReader>();
         services.AddScoped<ILedgerBalanceReader, LedgerBalanceReader>();
         services.AddScoped<ILedgerStatementReader, LedgerStatementReader>();
@@ -148,7 +149,8 @@ public static class DependencyInjection
         services.AddScoped<ISalesRateReader, SalesRateReader>();
         services.AddScoped<ISalesProfitReader, SalesProfitReader>();
         services.AddScoped<ITransactionReportReader, TransactionReportReader>();
-        services.AddScoped<IStockRegisterReader, StockRegisterReader>();
+        services.AddScoped<IStockSummaryReader, StockSummaryReader>();
+        services.AddScoped<IStockPositionReader, StockPositionReader>();
         services.AddScoped<IRmaReader, RmaReader>();
         services.AddScoped<IStockReportReader, StockReportReader>();
         services.AddScoped<IBatchReader, BatchReader>();

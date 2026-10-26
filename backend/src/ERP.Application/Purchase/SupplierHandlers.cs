@@ -31,22 +31,26 @@ public sealed class CreateSupplierCommandHandler
     private readonly IFirmRepository _firms;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="CreateSupplierCommandHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="firms">The firm repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public CreateSupplierCommandHandler(
         ILedgerRepository ledgers,
         IFirmRepository firms,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _ledgers = ledgers;
         _firms = firms;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -71,9 +75,13 @@ public sealed class CreateSupplierCommandHandler
                 "Firm.NotFound", "The selected firm no longer exists."));
         }
 
-        // Left blank, the next number in the supplier sequence is issued.
+        // Left blank, the next number in the supplier sequence is issued: 10000 first.
         string code = string.IsNullOrWhiteSpace(request.Code)
-            ? await _ledgers.NextCodeAsync(firmId, "SUP-", cancellationToken)
+            ? await _codes.NextAsync(
+                firmId,
+                CodedMaster.Supplier,
+                candidate => _ledgers.IsCodeInUseAsync(firmId, candidate, cancellationToken),
+                cancellationToken)
             : request.Code.Trim().ToUpperInvariant();
 
         // Checked before the group is resolved, so the commonest mistake - re-entering a

@@ -35,6 +35,7 @@ const product: ProductSummary = {
   wholesaleRate: 13,
   maximumRetailPrice: 0,
   taxPercentage: null,
+  stockQuantity: 0,
 };
 
 function row(shown: readonly string[]): void {

@@ -1863,6 +1863,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
                     b.Property<DateTimeOffset?>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
@@ -1894,6 +1898,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_brands");
+
+                    b.HasIndex("FirmId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_brands_primary")
+                        .HasFilter("is_primary = true");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_brands_tenant");
@@ -1933,6 +1942,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
                     b.Property<DateTimeOffset?>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
@@ -1968,6 +1981,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_categories");
+
+                    b.HasIndex("FirmId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_categories_primary")
+                        .HasFilter("is_primary = true");
 
                     b.HasIndex("ParentId")
                         .HasDatabaseName("ix_categories_parent_id");
@@ -3545,6 +3563,65 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_warehouses_code");
 
                     b.ToTable("warehouses", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Numbering.MasterCodeSequence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<long>("LastIssued")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_issued");
+
+                    b.Property<string>("Master")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("master");
+
+                    b.Property<DateTimeOffset?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("modified_by");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_master_code_sequences");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_master_code_sequences_tenant");
+
+                    b.HasIndex("FirmId", "Master")
+                        .IsUnique()
+                        .HasDatabaseName("ix_master_code_sequences_master");
+
+                    b.ToTable("master_code_sequences", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Numbering.NumberingSeries", b =>

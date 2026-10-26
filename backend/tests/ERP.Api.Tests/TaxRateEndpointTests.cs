@@ -43,7 +43,8 @@ public sealed class TaxRateEndpointTests
         Guid id = await created.Content.ReadFromJsonAsync<Guid>();
 
         TaxSlabSummary rate = (await ListAsync(client)).Single(row => row.Id == id);
-        rate.Code.ShouldBe($"LUXURY-{tag}");
+        // Left blank, the code is the next in the firm's sequence, 10000 at the least.
+        long.Parse(rate.Code, System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThanOrEqualTo(10000);
         rate.IsDefault.ShouldBeFalse();
 
         // Made the default, it takes the place of the one before.

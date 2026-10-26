@@ -252,22 +252,26 @@ public sealed class LedgerMasterHandler
     private readonly IFirmRepository _firms;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="LedgerMasterHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="firms">The firm repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public LedgerMasterHandler(
         ILedgerRepository ledgers,
         IFirmRepository firms,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _ledgers = ledgers;
         _firms = firms;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -311,10 +315,12 @@ public sealed class LedgerMasterHandler
 
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            code = await FreeCodeAsync(
-                Codes.FromName(input.Name, 30, "LEDGER"),
-                30,
-                candidate => _ledgers.IsCodeInUseAsync(firmId, candidate, cancellationToken));
+            // Employees are numbered on their own, apart from the accounts.
+            code = await _codes.NextAsync(
+                firmId,
+                input.Kind == LedgerKind.Employee ? CodedMaster.Employee : CodedMaster.Ledger,
+                candidate => _ledgers.IsCodeInUseAsync(firmId, candidate, cancellationToken),
+                cancellationToken);
         }
         else
         {
@@ -457,29 +463,6 @@ public sealed class LedgerMasterHandler
         return Result.Success(Describe(ledger, group));
     }
 
-    /// <summary>Finds a code nobody holds: the wanted one, or it with -2, -3 and so on.</summary>
-    /// <param name="wanted">The code to start from.</param>
-    /// <param name="maxLength">The longest a code may be.</param>
-    /// <param name="inUse">Whether a code is taken.</param>
-    /// <returns>A free code.</returns>
-    internal static async Task<string> FreeCodeAsync(
-        string wanted,
-        int maxLength,
-        Func<string, Task<bool>> inUse)
-    {
-        string candidate = wanted;
-        int attempt = 1;
-
-        while (await inUse(candidate))
-        {
-            attempt++;
-            string suffix = $"-{attempt}";
-            candidate = wanted[..Math.Min(wanted.Length, maxLength - suffix.Length)] + suffix;
-        }
-
-        return candidate;
-    }
-
     private static Result Apply(Ledger ledger, LedgerInput input)
     {
         ledger.SetArabicName(input.NameArabic);
@@ -539,19 +522,23 @@ public sealed class AccountGroupHandler
     private readonly ILedgerRepository _ledgers;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IMasterCodes _codes;
 
     /// <summary>Initialises a new instance of the <see cref="AccountGroupHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository, which also keeps the groups.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
+    /// <param name="codes">Issues the code of a record entered without one.</param>
     public AccountGroupHandler(
         ILedgerRepository ledgers,
         ITenantContext tenantContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMasterCodes codes)
     {
         _ledgers = ledgers;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
+        _codes = codes;
     }
 
     /// <inheritdoc />
@@ -595,10 +582,11 @@ public sealed class AccountGroupHandler
 
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            code = await LedgerMasterHandler.FreeCodeAsync(
-                Codes.FromName(request.Name, 20, "GROUP"),
-                20,
-                candidate => _ledgers.IsGroupCodeInUseAsync(firmId, candidate, cancellationToken));
+            code = await _codes.NextAsync(
+                firmId,
+                CodedMaster.AccountGroup,
+                candidate => _ledgers.IsGroupCodeInUseAsync(firmId, candidate, cancellationToken),
+                cancellationToken);
         }
         else
         {

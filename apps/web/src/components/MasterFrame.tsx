@@ -40,6 +40,7 @@ export function MasterFrame<TRow>({
   editForm,
   controls = null,
   queryArgs = [],
+  hideRow,
 }: {
   readonly title: string;
   /** Names the record being created — "New supplier", not "Add". */
@@ -82,6 +83,11 @@ export function MasterFrame<TRow>({
   readonly controls?: React.ReactNode;
   /** What those filters are set to, so the list is read again when they change. */
   readonly queryArgs?: readonly unknown[];
+  /**
+   * Rows kept off this screen though the pickers elsewhere still offer them - the
+   * Primary category and brand. Neither listed nor offered as a parent here.
+   */
+  readonly hideRow?: (row: TRow) => boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -117,6 +123,9 @@ export function MasterFrame<TRow>({
       );
     }
   }, [editParam, query.data, rowKey, setSearchParams]);
+
+  const visible = (rows: readonly TRow[]): readonly TRow[] =>
+    hideRow ? rows.filter((row) => !hideRow(row)) : rows;
 
   const mutation = useMutation<void, ApiError, () => Promise<void>>({
     mutationFn: (action) => action(),
@@ -173,7 +182,7 @@ export function MasterFrame<TRow>({
 
             <DataGrid
               gridKey={queryKey}
-              rows={rows}
+              rows={visible(rows)}
               columns={columns(run, mutation.isPending, (row) => {
                 setError(null);
                 setEditing(row);
@@ -204,7 +213,7 @@ export function MasterFrame<TRow>({
             </div>
           )}
 
-          {addForm(run, mutation.isPending, query.data ?? [])}
+          {addForm(run, mutation.isPending, visible(query.data ?? []))}
         </Modal>
       )}
 
@@ -230,7 +239,7 @@ export function MasterFrame<TRow>({
           )}
 
           <div key={rowKey(editing)}>
-            {editForm(editing, run, mutation.isPending, query.data ?? [])}
+            {editForm(editing, run, mutation.isPending, visible(query.data ?? []))}
           </div>
         </Modal>
       )}
