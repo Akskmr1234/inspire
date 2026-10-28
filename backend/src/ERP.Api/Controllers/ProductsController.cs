@@ -253,7 +253,8 @@ public sealed class ProductsController : ApiControllerBase
                 request.TracksBatches,
                 request.TracksSerialNumbers,
                 request.ShelfLifeDays,
-                request.IsPacking),
+                request.IsPacking,
+                request.HideInPos),
             cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
@@ -559,6 +560,7 @@ public sealed record SetProductRatesRequest(
 /// <param name="TracksSerialNumbers">Whether every unit carries its own number.</param>
 /// <param name="ShelfLifeDays">How long a batch lasts. Needs batch tracking.</param>
 /// <param name="IsPacking">Whether it is packaging rather than goods.</param>
+/// <param name="HideInPos">Whether it is kept out of the sales item search; left as it is when omitted.</param>
 public sealed record SetProductStockingRequest(
     [property: JsonRequired] Guid PurchaseUnitId,
     [property: JsonRequired] Guid SalesUnitId,
@@ -569,7 +571,8 @@ public sealed record SetProductStockingRequest(
     bool TracksBatches = false,
     bool TracksSerialNumbers = false,
     int? ShelfLifeDays = null,
-    bool IsPacking = false);
+    bool IsPacking = false,
+    bool? HideInPos = null);
 
 /// <summary>Recording the mobile-device attributes.</summary>
 /// <param name="Device">The device model.</param>

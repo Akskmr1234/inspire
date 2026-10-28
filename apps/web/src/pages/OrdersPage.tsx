@@ -10,6 +10,7 @@ import { printableOrder } from '@/lib/printing';
 import { ReportFrame } from '@/components/ReportFrame';
 import { CheckField, DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
   ChargesPanel,
@@ -27,9 +28,10 @@ import {
 } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { PurchaseTaxMode } from '@/lib/purchase';
@@ -55,7 +57,7 @@ import {
   type OrderLineInput,
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings, useTaxOn } from '@/stores/settings';
+import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
@@ -562,6 +564,8 @@ function OrderEntryDialog({
   const words = useOrderWords(quotation);
   const { taxRates, defaultTaxRate, preferredWarehouseId } = useSettings();
   const taxOn = useTaxOn();
+  const godownsOn = useGodownsOn();
+  const directSave = useDirectSave();
 
   // A firm that charges no tax enters every order without it.
   const [mode, setMode] = useState<number>(
@@ -668,15 +672,12 @@ function OrderEntryDialog({
       return;
     }
 
-    const chosen =
-      warehouses.data.find((warehouse) => warehouse.id === preferredWarehouseId) ??
-      warehouses.data.find((warehouse) => warehouse.isDefault) ??
-      (warehouses.data.length === 1 ? warehouses.data[0] : undefined);
+    const chosen = startingGodown(warehouses.data, preferredWarehouseId, godownsOn);
 
     if (chosen) {
       setDraft((current) => ({ ...current, warehouseId: chosen.id }));
     }
-  }, [warehouses.data, preferredWarehouseId, draft.warehouseId]);
+  }, [warehouses.data, preferredWarehouseId, draft.warehouseId, godownsOn]);
 
   const lineColumns: readonly LineColumn[] = [
     { key: 'product', label: t('orders.product'), defaultOn: true, fixed: true },
@@ -805,7 +806,27 @@ function OrderEntryDialog({
               kind: quotation ? SalesOrderKind.quotation : SalesOrderKind.order,
             });
 
-      onSaved(words('savedNotice', { number: header.number }));
+      if (!directSave) {
+        onSaved(words('savedNotice', { number: header.number }));
+        return;
+      }
+
+      // Saved final: under direct save the order is confirmed in the same step. It is
+      // already saved by now, so a refusal here leaves a draft to confirm by hand
+      // rather than an open dialog that would save it a second time.
+      try {
+        if ('purchaseOrderId' in header) {
+          await confirmPurchaseOrder(header.purchaseOrderId);
+        } else {
+          await confirmSalesOrder(header.salesOrderId);
+        }
+
+        onSaved(words('confirmedNotice', { number: header.number }));
+      } catch (refusal) {
+        const api = refusal as ApiError;
+        onSaved(words('savedNotice', { number: header.number }));
+        onError(api.detail || api.code);
+      }
     } catch (failure) {
       const api = failure as ApiError;
       onError(api.detail || api.code);
@@ -859,30 +880,39 @@ function OrderEntryDialog({
           required
           error={errors['partyId']}
         >
-          <SearchSelect
-            value={draft.partyId}
-            onChange={(value) => set('partyId', value)}
-            options={partyOptions}
-            invalid={errors['partyId'] !== undefined}
-            label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
-            placeholder={t('common.choose')}
-          />
+          <QuickAdd
+            kind={kind === 'purchase' ? 'supplier' : 'customer'}
+            onCreated={(id) => set('partyId', id)}
+          >
+            <SearchSelect
+              value={draft.partyId}
+              onChange={(value) => set('partyId', value)}
+              options={partyOptions}
+              invalid={errors['partyId'] !== undefined}
+              label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
+              placeholder={t('common.choose')}
+            />
+          </QuickAdd>
         </Field>
 
-        <Field label={t('orders.warehouse')} required error={errors['warehouseId']}>
-          <SearchSelect
-            value={draft.warehouseId}
-            onChange={(value) => set('warehouseId', value)}
-            options={(warehouses.data ?? []).map((warehouse) => ({
-              value: warehouse.id,
-              label: `${warehouse.code} — ${warehouse.name}`,
-              ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
-            }))}
-            invalid={errors['warehouseId'] !== undefined}
-            label={t('orders.warehouse')}
-            placeholder={t('common.choose')}
-          />
-        </Field>
+        {godownsOn && (
+          <Field label={t('orders.warehouse')} required error={errors['warehouseId']}>
+            <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
+              <SearchSelect
+                value={draft.warehouseId}
+                onChange={(value) => set('warehouseId', value)}
+                options={(warehouses.data ?? []).map((warehouse) => ({
+                  value: warehouse.id,
+                  label: `${warehouse.code} — ${warehouse.name}`,
+                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+                }))}
+                invalid={errors['warehouseId'] !== undefined}
+                label={t('orders.warehouse')}
+                placeholder={t('common.choose')}
+              />
+            </QuickAdd>
+          </Field>
+        )}
 
         {taxOn && (
           <SelectField
@@ -902,13 +932,6 @@ function OrderEntryDialog({
           value={draft.referenceNumber}
           onChange={(value) => set('referenceNumber', value)}
         />
-
-        <TextField
-          label={t('orders.narration')}
-          value={draft.narration}
-          onChange={(value) => set('narration', value)}
-          className="sm:col-span-2"
-        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -917,6 +940,23 @@ function OrderEntryDialog({
       </div>
 
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
+
+      <BarcodeScan
+        products={products.data ?? []}
+        onScan={(product) => {
+          // At the rate the master holds, as choosing it in the picker does.
+          const next = addScanned(lines, product, () => ({
+            ...emptyLine(defaultTaxRate),
+            productId: product.id,
+            rate: String((kind === 'purchase' ? product.cost : product.retailRate) ?? ''),
+            ...(product.taxPercentage != null
+              ? { taxPercentage: String(product.taxPercentage) }
+              : {}),
+          }));
+          setLines(next.lines);
+          return next.quantity;
+        }}
+      />
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
@@ -1092,7 +1132,15 @@ function OrderEntryDialog({
         nonTax={mode === PurchaseTaxMode.nonTax}
       />
 
-      <div className="line-totals flex flex-wrap items-end justify-end gap-6">
+      {/* Under the lines and their totals, where a note about the order is written
+          once the order itself is down - as it is on every invoice. */}
+      <div className="line-totals flex flex-wrap items-end justify-between gap-6">
+        <TextField
+          label={t('orders.narration')}
+          value={draft.narration}
+          onChange={(value) => set('narration', value)}
+          className="min-w-0 flex-1 sm:max-w-xl"
+        />
         <DocumentTotals
           gross={totals.gross}
           discount={totals.discount}
@@ -1104,7 +1152,11 @@ function OrderEntryDialog({
       <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton primary disabled={busy} onClick={() => void save()} shortcut="save">
-          {busy ? t('common.saving') : t('orders.saveDraft')}
+          {busy
+            ? t('common.saving')
+            : directSave
+              ? t('common.save')
+              : t('orders.saveDraft')}
         </ModalButton>
       </div>
     </Modal>

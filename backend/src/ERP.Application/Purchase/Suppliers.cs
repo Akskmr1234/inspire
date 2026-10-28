@@ -127,6 +127,7 @@ public sealed record GetSupplierQuery(Guid SupplierId) : IQuery<SupplierResponse
 /// <param name="Currency">The currency their account is kept in.</param>
 /// <param name="OpeningBalance">What was owed when the system was taken on.</param>
 /// <param name="IsActive">Whether they may be bought from.</param>
+/// <param name="IsPrimary">Whether this is the firm's Primary supplier.</param>
 public sealed record SupplierResponse(
     Guid SupplierId,
     string Code,
@@ -137,7 +138,8 @@ public sealed record SupplierResponse(
     SupplierTaxDetails TaxDetails,
     string Currency,
     decimal OpeningBalance,
-    bool IsActive);
+    bool IsActive,
+    bool IsPrimary = false);
 
 /// <summary>Validates <see cref="CreateSupplierCommand"/>.</summary>
 public sealed class CreateSupplierCommandValidator : AbstractValidator<CreateSupplierCommand>

@@ -618,6 +618,11 @@ public sealed class SetProductStockingCommandHandler
 
         product.SetPacking(request.IsPacking);
 
+        if (request.HideInPos is { } hide)
+        {
+            product.SetHiddenInPos(hide);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

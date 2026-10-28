@@ -51,6 +51,7 @@ public sealed record ListProductsQuery(
 /// What is on hand now across every godown, in the stock unit: the stock positions added
 /// up, which every movement keeps current.
 /// </param>
+/// <param name="HideInPos">Whether it is kept out of the sales item search.</param>
 public sealed record ProductSummary(
     Guid Id,
     string Code,
@@ -73,7 +74,8 @@ public sealed record ProductSummary(
     decimal WholesaleRate,
     decimal MaximumRetailPrice,
     decimal? TaxPercentage = null,
-    decimal StockQuantity = 0m);
+    decimal StockQuantity = 0m,
+    bool HideInPos = false);
 
 /// <summary>Reads one product in full, for the edit screen.</summary>
 /// <param name="ProductId">The product.</param>
@@ -140,6 +142,7 @@ public sealed record ProductBarcodeView(
 /// <param name="Barcodes">The barcodes it carries.</param>
 /// <param name="TaxSlabId">Its tax rate, if it has one.</param>
 /// <param name="TaxPercentage">That rate's percentage.</param>
+/// <param name="HideInPos">Whether it is kept out of the sales item search.</param>
 public sealed record ProductDetail(
     Guid Id,
     string Code,
@@ -185,7 +188,8 @@ public sealed record ProductDetail(
     bool IsActive,
     IReadOnlyList<ProductBarcodeView> Barcodes,
     Guid? TaxSlabId = null,
-    decimal? TaxPercentage = null);
+    decimal? TaxPercentage = null,
+    bool HideInPos = false);
 
 /// <summary>Reads the product master.</summary>
 public interface IProductReader
@@ -345,6 +349,7 @@ public sealed record SetProductRatesCommand(
 /// <param name="TracksSerialNumbers">Whether every unit carries its own number.</param>
 /// <param name="ShelfLifeDays">How long a batch of it lasts.</param>
 /// <param name="IsPacking">Whether it is packaging rather than goods.</param>
+/// <param name="HideInPos">Whether it is kept out of the sales item search; left as it is when omitted.</param>
 public sealed record SetProductStockingCommand(
     Guid ProductId,
     Guid PurchaseUnitId,
@@ -356,7 +361,8 @@ public sealed record SetProductStockingCommand(
     bool TracksBatches = false,
     bool TracksSerialNumbers = false,
     int? ShelfLifeDays = null,
-    bool IsPacking = false) : ICommand;
+    bool IsPacking = false,
+    bool? HideInPos = null) : ICommand;
 
 /// <summary>Records the mobile-device attributes.</summary>
 /// <param name="ProductId">The product.</param>

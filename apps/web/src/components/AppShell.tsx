@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import i18next from '@/i18n';
 import { fetchMenu, labelFor, type Menu, type MenuEntry } from '@/lib/menu';
 import { prefetchScreens } from '@/lib/screens';
+import { applyPrimaryDefaults } from '@/lib/primaryDefaults';
 import { useSettings } from '@/stores/settings';
 import { ReportSkeleton } from '@/components/ReportFrame';
 import { currentDisplayName, type ApiError } from '@/lib/api';
@@ -118,9 +119,10 @@ export function AppShell(): React.JSX.Element {
   useEffect(() => prefetchScreens(), []);
 
   // And read the firm's settings over this browser's copy, so every counter works to
-  // the same setup. See `useSettings.hydrate`.
+  // the same setup, then fill its defaults with the Primary records where none is set.
+  // See `useSettings.hydrate` and `applyPrimaryDefaults`.
   useEffect(() => {
-    void useSettings.getState().hydrate();
+    void useSettings.getState().hydrate().then(applyPrimaryDefaults);
   }, []);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);

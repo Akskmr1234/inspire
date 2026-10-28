@@ -79,17 +79,18 @@ public sealed class DataReset : IDataReset
         "DELETE FROM warehouses WHERE firm_id = @firm",
         """
         DELETE FROM additional_ledgers WHERE firm_id = @firm AND ledger_id IN (
-            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept)))
+            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept) OR is_primary))
         """,
         """
         DELETE FROM inventory_account_assignments WHERE ledger_id IN (
-            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept)))
+            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept) OR is_primary))
         """,
         """
         DELETE FROM tax_account_assignments WHERE ledger_id IN (
-            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept)))
+            SELECT id FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept) OR is_primary))
         """,
-        "DELETE FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept))",
+        // The Primary customer and supplier stay, as the Primary category and brand do.
+        "DELETE FROM ledgers WHERE firm_id = @firm AND NOT (code = ANY(@kept) OR is_primary)",
         "UPDATE ledgers SET opening_balance = 0 WHERE firm_id = @firm",
         // The masters start again from nothing, so their automatic codes start again
         // from 10000; a code still held by a kept record is stepped over as ever.
@@ -143,7 +144,7 @@ public sealed class DataReset : IDataReset
         {
             ["products"] = await _context.Products.CountAsync(x => x.FirmId == firmId, cancellationToken),
             ["parties"] = await _context.Ledgers.CountAsync(
-                x => x.FirmId == firmId && !kept.Contains(x.Code), cancellationToken),
+                x => x.FirmId == firmId && !kept.Contains(x.Code) && !x.IsPrimary, cancellationToken),
             ["warehouses"] = await _context.Warehouses.CountAsync(x => x.FirmId == firmId, cancellationToken),
             ["categories"] = await _context.Categories.CountAsync(x => x.FirmId == firmId, cancellationToken),
             ["units"] = await _context.UnitsOfMeasure.CountAsync(x => x.FirmId == firmId, cancellationToken),

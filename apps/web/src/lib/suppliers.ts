@@ -43,6 +43,8 @@ export interface SupplierSummary {
   readonly currency: string;
   readonly openingBalance: number;
   readonly isActive: boolean;
+  /** The firm's Primary supplier: the default a purchase starts with, kept off the master list. */
+  readonly isPrimary?: boolean;
 }
 
 /** What is needed to create one. */

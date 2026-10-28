@@ -1,8 +1,11 @@
+using System.Globalization;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Platform.Dashboards;
 using ERP.Domain.Accounting;
 using ERP.Domain.Identity;
+using ERP.Domain.Inventory;
 using ERP.Domain.Platform;
+using ERP.Domain.Sales;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -104,6 +107,9 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     /// <summary>How many entries a ranked list returns.</summary>
     private const int RankedListSize = 5;
 
+    /// <summary>How many rows a list of documents or items returns.</summary>
+    private const int RecentListSize = 20;
+
     /// <summary>How many months of history a trend covers.</summary>
     private const int TrendMonths = 12;
 
@@ -118,6 +124,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     private readonly IChequeReportReader _cheques;
     private readonly ITransactionSummaryReader _transactions;
     private readonly ITrialBalanceReader _balances;
+    private readonly ITransactionReportReader _sales;
 
     /// <summary>Initialises a new instance of the <see cref="DashboardMetricReader"/> class.</summary>
     /// <param name="context">The database context.</param>
@@ -125,18 +132,21 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     /// <param name="cheques">The cheque report reader.</param>
     /// <param name="transactions">The transaction summary reader.</param>
     /// <param name="balances">The ledger movement reader behind the trading figures.</param>
+    /// <param name="sales">The sales report reader behind the day-wise sales.</param>
     public DashboardMetricReader(
         ErpDbContext context,
         IOutstandingBillsReader bills,
         IChequeReportReader cheques,
         ITransactionSummaryReader transactions,
-        ITrialBalanceReader balances)
+        ITrialBalanceReader balances,
+        ITransactionReportReader sales)
     {
         _context = context;
         _bills = bills;
         _cheques = cheques;
         _transactions = transactions;
         _balances = balances;
+        _sales = sales;
     }
 
     /// <inheritdoc />
@@ -210,8 +220,31 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
 
         if (metricCodes.Contains(DashboardMetrics.CashAndBank))
         {
-            results[DashboardMetrics.CashAndBank] =
-                await ReadCashPositionAsync(firmId, asAt, cancellationToken);
+            results[DashboardMetrics.CashAndBank] = await ReadCashPositionAsync(
+                firmId, asAt, DashboardMetrics.CashAndBank, cashOnly: false, cancellationToken);
+        }
+
+        if (metricCodes.Contains(DashboardMetrics.CashDrawer))
+        {
+            results[DashboardMetrics.CashDrawer] = await ReadCashPositionAsync(
+                firmId, asAt, DashboardMetrics.CashDrawer, cashOnly: true, cancellationToken);
+        }
+
+        await ReadBillsTodayAsync(firmId, metricCodes, asAt, results, cancellationToken);
+
+        if (metricCodes.Contains(DashboardMetrics.DailySales))
+        {
+            results[DashboardMetrics.DailySales] = await ReadDailySalesAsync(firmId, asAt, cancellationToken);
+        }
+
+        if (metricCodes.Contains(DashboardMetrics.RecentSales))
+        {
+            results[DashboardMetrics.RecentSales] = await ReadRecentSalesAsync(firmId, cancellationToken);
+        }
+
+        if (metricCodes.Contains(DashboardMetrics.LowStock))
+        {
+            results[DashboardMetrics.LowStock] = await ReadLowStockAsync(firmId, cancellationToken);
         }
 
         bool needsReceivedCheques = metricCodes.Contains(DashboardMetrics.PostDatedReceivable);
@@ -399,12 +432,14 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     private async Task<DashboardMetric> ReadCashPositionAsync(
         FirmId firmId,
         DateOnly asAt,
+        string metricCode,
+        bool cashOnly,
         CancellationToken cancellationToken)
     {
         var accounts = await _context.Ledgers
             .Where(ledger =>
                 ledger.FirmId == firmId
-                && (ledger.Kind == LedgerKind.Cash || ledger.Kind == LedgerKind.Bank))
+                && (ledger.Kind == LedgerKind.Cash || (!cashOnly && ledger.Kind == LedgerKind.Bank)))
             .Select(ledger => new
             {
                 ledger.Id,
@@ -415,9 +450,7 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
 
         if (accounts.Count == 0)
         {
-            return new DashboardMetric(
-                Guid.Empty,
-                DashboardMetrics.CashAndBank, 0m, 0, [], IsPermitted: true);
+            return new DashboardMetric(Guid.Empty, metricCode, 0m, 0, [], IsPermitted: true);
         }
 
         List<LedgerId> ids = [.. accounts.Select(account => account.Id)];
@@ -445,12 +478,193 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
 
         return new DashboardMetric(
             Guid.Empty,
-            DashboardMetrics.CashAndBank,
+            metricCode,
             opening + movement,
             accounts.Count,
             [],
             IsPermitted: true);
     }
+
+    /// <summary>Today's bills, in all and by how they were paid.</summary>
+    /// <remarks>
+    /// The bills' own totals - what was rung up, tax and charges and all - net of the day's
+    /// returns, so the cash, card and credit figures add up to the total beside them. Card
+    /// takes online transfers too: both reach the bank rather than the drawer.
+    /// </remarks>
+    private async Task ReadBillsTodayAsync(
+        FirmId firmId,
+        IReadOnlyCollection<string> metricCodes,
+        DateOnly asAt,
+        Dictionary<string, DashboardMetric> results,
+        CancellationToken cancellationToken)
+    {
+        (string Code, Func<SalesPaymentMode, bool> Counts)[] wanted =
+        [
+            (DashboardMetrics.SalesBilledToday, _ => true),
+            (DashboardMetrics.CashSalesToday, mode => mode == SalesPaymentMode.Cash),
+            (DashboardMetrics.CardSalesToday, mode => mode is SalesPaymentMode.Card or SalesPaymentMode.Online),
+            (DashboardMetrics.CreditSalesToday, mode => mode == SalesPaymentMode.Credit),
+        ];
+
+        if (!wanted.Any(metric => metricCodes.Contains(metric.Code)))
+        {
+            return;
+        }
+
+        List<SalesInvoice> bills = await _context.SalesInvoices.AsNoTracking()
+            .Include(invoice => invoice.Lines)
+            .Include(invoice => invoice.Charges)
+            .Where(invoice =>
+                invoice.FirmId == firmId
+                && invoice.Status == SalesInvoiceStatus.Posted
+                && invoice.Date == asAt)
+            .ToListAsync(cancellationToken);
+
+        foreach ((string code, Func<SalesPaymentMode, bool> counts) in wanted)
+        {
+            if (!metricCodes.Contains(code))
+            {
+                continue;
+            }
+
+            List<SalesInvoice> counted = [.. bills.Where(bill => counts(bill.PaymentMode))];
+
+            results[code] = new DashboardMetric(
+                Guid.Empty,
+                code,
+                counted.Sum(Signed),
+                counted.Count(bill => bill.Kind == SalesDocumentKind.Invoice),
+                [],
+                IsPermitted: true);
+        }
+    }
+
+    /// <summary>Bills raised on each day of the month to date, empty days included.</summary>
+    private async Task<DashboardMetric> ReadDailySalesAsync(
+        FirmId firmId,
+        DateOnly asAt,
+        CancellationToken cancellationToken)
+    {
+        DateOnly from = new(asAt.Year, asAt.Month, 1);
+
+        TransactionReport report = await _sales.ReadAsync(
+            firmId,
+            new GetTransactionReportQuery(
+                TransactionReportDocument.Sales, from, asAt, TransactionReportGrouping.Day),
+            cancellationToken);
+
+        Dictionary<string, TransactionReportRow> byDay = report.Rows.ToDictionary(
+            row => row.Key, StringComparer.Ordinal);
+
+        List<MetricPoint> series = [];
+
+        for (DateOnly day = from; day <= asAt; day = day.AddDays(1))
+        {
+            string key = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            series.Add(new MetricPoint(key, byDay.GetValueOrDefault(key)?.Total ?? 0m));
+        }
+
+        return new DashboardMetric(
+            Guid.Empty,
+            DashboardMetrics.DailySales,
+            series.Sum(point => point.Value),
+            report.Rows.Sum(row => row.Bills),
+            series,
+            IsPermitted: true);
+    }
+
+    /// <summary>The last twenty bills posted, newest first, with their customer and how they were paid.</summary>
+    private async Task<DashboardMetric> ReadRecentSalesAsync(FirmId firmId, CancellationToken cancellationToken)
+    {
+        List<SalesInvoice> bills = await _context.SalesInvoices.AsNoTracking()
+            .Include(invoice => invoice.Lines)
+            .Include(invoice => invoice.Charges)
+            .Where(invoice => invoice.FirmId == firmId && invoice.Status == SalesInvoiceStatus.Posted)
+            .OrderByDescending(invoice => invoice.Date)
+            .ThenByDescending(invoice => invoice.CreatedAtUtc)
+            .Take(RecentListSize)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        List<LedgerId> customers = [.. bills.Select(bill => bill.CustomerLedgerId).Distinct()];
+
+        Dictionary<LedgerId, string> names = await _context.Ledgers.AsNoTracking()
+            .Where(ledger => customers.Contains(ledger.Id))
+            .ToDictionaryAsync(ledger => ledger.Id, ledger => ledger.Name, cancellationToken);
+
+        List<MetricPoint> rows =
+        [
+            .. bills.Select(bill => new MetricPoint(
+                bill.Number,
+                Signed(bill),
+                string.Join(
+                    " · ",
+                    bill.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    names.GetValueOrDefault(bill.CustomerLedgerId, string.Empty),
+                    bill.Kind == SalesDocumentKind.Return ? "Return" : bill.PaymentMode.ToString()))),
+        ];
+
+        return new DashboardMetric(
+            Guid.Empty,
+            DashboardMetrics.RecentSales,
+            rows.Sum(row => row.Value),
+            rows.Count,
+            rows,
+            IsPermitted: true);
+    }
+
+    /// <summary>Stocked products whose stock across every godown is at or below their reorder level.</summary>
+    /// <remarks>
+    /// Only products with a reorder level: one without has said nothing about when it runs
+    /// low. The count is all of them; the list the twenty furthest below their level.
+    /// </remarks>
+    private async Task<DashboardMetric> ReadLowStockAsync(FirmId firmId, CancellationToken cancellationToken)
+    {
+        var products = await _context.Products.AsNoTracking()
+            .Where(product =>
+                product.FirmId == firmId
+                && product.IsActive
+                && product.ItemType == ItemType.Stock
+                && product.Levels.Reorder > 0m)
+            .Select(product => new { product.Id, product.Code, product.Description, Reorder = product.Levels.Reorder })
+            .ToListAsync(cancellationToken);
+
+        Dictionary<ProductId, decimal> onHand = await _context.StockBalances.AsNoTracking()
+            .Where(balance => balance.FirmId == firmId)
+            .GroupBy(balance => balance.ProductId)
+            .Select(group => new { group.Key, Quantity = group.Sum(balance => balance.Quantity) })
+            .ToDictionaryAsync(row => row.Key, row => row.Quantity, cancellationToken);
+
+        var low = products
+            .Select(product => new { product, Quantity = onHand.GetValueOrDefault(product.Id) })
+            .Where(row => row.Quantity <= row.product.Reorder)
+            .OrderBy(row => row.Quantity - row.product.Reorder)
+            .ThenBy(row => row.product.Description, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        List<MetricPoint> rows =
+        [
+            .. low.Take(RecentListSize).Select(row => new MetricPoint(
+                row.product.Description,
+                row.Quantity,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{row.product.Code} · reorder {row.product.Reorder:0.##}"),
+                $"/inventory/product-history?productId={row.product.Id.Value}")),
+        ];
+
+        return new DashboardMetric(
+            Guid.Empty,
+            DashboardMetrics.LowStock,
+            low.Count,
+            low.Count,
+            rows,
+            IsPermitted: true);
+    }
+
+    /// <summary>A bill's total, negative for a return.</summary>
+    private static decimal Signed(SalesInvoice bill) =>
+        bill.Kind == SalesDocumentKind.Return ? -bill.Total.Amount : bill.Total.Amount;
 
     /// <summary>Counts vouchers posted per month over the trailing year.</summary>
     private async Task<DashboardMetric> ReadMonthlyPostingsAsync(

@@ -28,7 +28,7 @@ import {
   type TransactionReport,
   type TransactionReportRow,
 } from '@/lib/transactionReports';
-import { useTaxOn } from '@/stores/settings';
+import { useGodownsOn, useTaxOn } from '@/stores/settings';
 
 /** Sales over a period, by month, day, bill, item and more, with every filter the counter uses. */
 export function SalesReportPage(): React.JSX.Element {
@@ -356,6 +356,7 @@ function Filters({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const taxOn = useTaxOn();
+  const godownsOn = useGodownsOn();
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
     queryKey: ['customers', 'picker'],
@@ -461,11 +462,12 @@ function Filters({
           </select>
         </label>
       )}
-      {pick(
-        t('service.godown'),
-        'warehouseId',
-        (warehouses.data ?? []).map((row) => ({ value: row.id, label: row.name })),
-      )}
+      {godownsOn &&
+        pick(
+          t('service.godown'),
+          'warehouseId',
+          (warehouses.data ?? []).map((row) => ({ value: row.id, label: row.name })),
+        )}
       {pick(
         t('txReports.brand'),
         'brandId',

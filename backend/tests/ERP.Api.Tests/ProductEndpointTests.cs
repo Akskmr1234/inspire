@@ -52,6 +52,39 @@ public sealed class ProductEndpointTests
     }
 
     [Fact]
+    public async Task A_product_hidden_in_POS_says_so_and_can_be_shown_again()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        Fixtures fixtures = await Fixtures.CreateAsync(client);
+        Guid id = await CreateProductAsync(client, fixtures, $"Back-room spare {fixtures.Suffix}");
+
+        (await ReadAsync(client, id)).HideInPos.ShouldBeFalse();
+
+        HttpResponseMessage hidden = await client.PutAsJsonAsync($"{Products}/{id}/stocking", new
+        {
+            PurchaseUnitId = fixtures.EachId,
+            SalesUnitId = fixtures.EachId,
+            HideInPos = true,
+        });
+        hidden.StatusCode.ShouldBe(HttpStatusCode.NoContent, await hidden.Content.ReadAsStringAsync());
+
+        (await ReadAsync(client, id)).HideInPos.ShouldBeTrue();
+        (await ListAsync(client, fixtures.Suffix)).Single(row => row.Id == id).HideInPos.ShouldBeTrue();
+
+        // Left out, the flag stays as it is.
+        (await SetStockingAsync(client, id, fixtures.EachId, fixtures.EachId)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await ReadAsync(client, id)).HideInPos.ShouldBeTrue();
+
+        (await client.PutAsJsonAsync($"{Products}/{id}/stocking", new
+        {
+            PurchaseUnitId = fixtures.EachId,
+            SalesUnitId = fixtures.EachId,
+            HideInPos = false,
+        })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await ReadAsync(client, id)).HideInPos.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task An_omitted_code_is_issued_from_the_firms_own_sequence()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

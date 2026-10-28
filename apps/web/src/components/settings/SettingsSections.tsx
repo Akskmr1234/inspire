@@ -348,6 +348,12 @@ export function GeneralSettings(): React.JSX.Element {
         />
       </SettingsCard>
       <SettingsCard title={t('prefs.approvalsTitle')} hint={t('policies.hint')}>
+        <CheckField
+          label={t('settings.directSave')}
+          hint={t('settings.directSaveHint')}
+          checked={settings.directSave === true}
+          onChange={(directSave) => settings.update({ directSave })}
+        />
         <PolicySettings only={['editsRequireApproval']} />
       </SettingsCard>
     </Cards>
@@ -651,6 +657,12 @@ export function InventorySettings(): React.JSX.Element {
       </SettingsCard>
 
       <SettingsCard title={t('prefs.trackingTitle')} hint={t('prefs.trackingHint')}>
+        <CheckField
+          label={t('settings.enableGodowns')}
+          hint={t('settings.enableGodownsHint')}
+          checked={settings.enableGodowns !== false}
+          onChange={(enableGodowns) => settings.update({ enableGodowns })}
+        />
         <CheckField
           label={t('settings.enableAutoBatch')}
           hint={t('settings.enableAutoBatchHint')}

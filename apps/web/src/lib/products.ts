@@ -49,6 +49,8 @@ export interface ProductSummary {
   readonly taxPercentage: number | null;
   /** What is on hand now across every godown, in the stock unit. */
   readonly stockQuantity: number;
+  /** Kept out of the sales item search; still sold by code or barcode. */
+  readonly hideInPos?: boolean;
 }
 
 /** One barcode of a product. */
@@ -103,6 +105,8 @@ export interface ProductDetail {
   readonly tracksSerialNumbers: boolean;
   readonly shelfLifeDays: number | null;
   readonly isPacking: boolean;
+  /** Kept out of the sales item search; still sold by code or barcode. */
+  readonly hideInPos?: boolean;
   readonly isDiscontinued: boolean;
   readonly isActive: boolean;
   readonly barcodes: readonly ProductBarcodeView[];

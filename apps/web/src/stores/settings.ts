@@ -179,6 +179,21 @@ export interface AppSettings {
   readonly taxEnabled: boolean;
   /** Whether sales and purchases offer Save draft beside posting; off, they only post. */
   readonly allowSaveDraft: boolean;
+  /**
+   * Whether the firm keeps stock in more than one godown. Off, no screen asks which
+   * godown: every document uses the default one and the godown columns stay hidden.
+   */
+  readonly enableGodowns: boolean;
+  /**
+   * Whether a transaction is final the moment it is saved: orders and quotations are
+   * confirmed and stock documents posted in the same click, and no draft is offered.
+   */
+  readonly directSave: boolean;
+  /**
+   * Whether the firm's Primary records have been made its defaults. Done once: a
+   * default cleared afterwards is somebody's choice, not a gap to fill again.
+   */
+  readonly primaryDefaultsApplied: boolean;
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -205,6 +220,9 @@ const DEFAULTS: AppSettings = {
   taxRegime: TaxRegime.gccVat,
   taxEnabled: true,
   allowSaveDraft: true,
+  enableGodowns: true,
+  directSave: false,
+  primaryDefaultsApplied: false,
   firmStateCode: '',
   taxRates: VAT_RATES,
   defaultTaxRate: 5,
@@ -491,4 +509,29 @@ export function useTaxOn(): boolean {
   return useSettings(
     (state) => state.taxEnabled !== false && state.taxRegime !== TaxRegime.none,
   );
+}
+
+/** Whether godowns are in use; off, the default godown is used and never asked for. */
+export function useGodownsOn(): boolean {
+  return useSettings((state) => state.enableGodowns !== false);
+}
+
+/** The column keys that say where stock is held. */
+const PLACE_COLUMNS: ReadonlySet<string> = new Set(['warehouse', 'godown', 'branch']);
+
+/**
+ * A report's columns, less the ones naming a godown or its branch while godowns are
+ * switched off: with one godown they would say the same thing on every row.
+ */
+export function useGodownColumns<T extends { readonly key: string }>(
+  columns: readonly T[],
+): readonly T[] {
+  const godownsOn = useGodownsOn();
+
+  return godownsOn ? columns : columns.filter((column) => !PLACE_COLUMNS.has(column.key));
+}
+
+/** Whether a transaction is final the moment it is saved, with no draft or confirm step. */
+export function useDirectSave(): boolean {
+  return useSettings((state) => state.directSave === true);
 }

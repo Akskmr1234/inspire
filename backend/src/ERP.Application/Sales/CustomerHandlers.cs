@@ -295,6 +295,13 @@ public sealed class SetCustomerActiveCommandHandler
             return Result.Failure<CustomerResponse>(found.Error);
         }
 
+        // The default every new document starts with; withdrawn, there would be none.
+        if (found.Value.IsPrimary && !request.IsActive)
+        {
+            return Result.Failure<CustomerResponse>(Error.BusinessRule(
+                "Customer.PrimaryKept", "The Primary customer cannot be withdrawn."));
+        }
+
         if (request.IsActive)
         {
             found.Value.Activate();
@@ -316,14 +323,20 @@ public sealed class GetCustomersQueryHandler
 {
     private readonly ILedgerRepository _ledgers;
     private readonly ITenantContext _tenantContext;
+    private readonly IPrimaryParties _primary;
 
     /// <summary>Initialises a new instance of the <see cref="GetCustomersQueryHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
-    public GetCustomersQueryHandler(ILedgerRepository ledgers, ITenantContext tenantContext)
+    /// <param name="primary">Gives a firm with no customer its Primary one.</param>
+    public GetCustomersQueryHandler(
+        ILedgerRepository ledgers,
+        ITenantContext tenantContext,
+        IPrimaryParties primary)
     {
         _ledgers = ledgers;
         _tenantContext = tenantContext;
+        _primary = primary;
     }
 
     /// <inheritdoc />
@@ -338,6 +351,8 @@ public sealed class GetCustomersQueryHandler
             return Result.Failure<IReadOnlyList<CustomerResponse>>(Error.Forbidden(
                 "Customer.NoFirmSelected", "A firm must be selected to list customers."));
         }
+
+        await _primary.EnsureAsync(firmId, LedgerKind.Customer, cancellationToken);
 
         IReadOnlyList<Ledger> found = await _ledgers.ListByKindAsync(
             firmId, LedgerKind.Customer, request.Search, request.ActiveOnly, cancellationToken);
@@ -551,5 +566,6 @@ internal static class CustomerDetails
                 customer.CountryCode,
                 customer.AreaId?.Value,
                 customer.RouteId?.Value,
-                customer.SendsSms));
+                customer.SendsSms),
+            customer.IsPrimary);
 }

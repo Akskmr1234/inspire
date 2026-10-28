@@ -675,6 +675,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer")
                         .HasColumnName("kind");
@@ -789,6 +793,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("FirmId", "MobileNumber")
                         .HasDatabaseName("ix_ledgers_firm_mobile")
                         .HasFilter("mobile_number IS NOT NULL");
+
+                    b.HasIndex(new[] { "FirmId", "Kind" }, "ix_ledgers_primary")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ledgers_primary")
+                        .HasFilter("is_primary = true AND is_deleted = false");
 
                     b.ToTable("ledgers", (string)null);
                 });
@@ -2152,6 +2161,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FirmId")
                         .HasColumnType("uuid")
                         .HasColumnName("firm_id");
+
+                    b.Property<bool>("HideInPos")
+                        .HasColumnType("boolean")
+                        .HasColumnName("hide_in_pos");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")

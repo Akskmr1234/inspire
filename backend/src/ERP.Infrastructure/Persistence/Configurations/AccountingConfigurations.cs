@@ -99,6 +99,7 @@ public sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
             .OnDelete(DeleteBehavior.Restrict);
         builder.Property(l => l.IsActive).IsRequired();
         builder.Property(l => l.IsBillWise).IsRequired();
+        builder.Property(l => l.IsPrimary).IsRequired();
         builder.Property(l => l.IsDeleted).IsRequired();
 
         builder.Ignore(l => l.IsCashOrBank);
@@ -125,6 +126,12 @@ public sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
         builder
             .HasIndex(l => new { l.FirmId, l.Kind })
             .HasDatabaseName("ix_ledgers_firm_kind");
+
+        // One Primary customer and one Primary supplier per firm.
+        builder
+            .HasIndex(l => new { l.FirmId, l.Kind }, "ix_ledgers_primary")
+            .IsUnique()
+            .HasFilter("is_primary = true AND is_deleted = false");
 
         builder
             .HasOne<AccountGroup>()

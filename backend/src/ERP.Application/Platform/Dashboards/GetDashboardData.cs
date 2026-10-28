@@ -3,6 +3,7 @@ using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
+using ERP.Domain.Platform;
 using ERP.SharedKernel.Abstractions;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -68,6 +69,30 @@ public static class DashboardMetrics
     /// <summary>Net profit from the first of the month to the day.</summary>
     public const string ProfitThisMonth = "accounting.profit-month";
 
+    /// <summary>Bills raised today, net of returns, whatever they were paid by.</summary>
+    public const string SalesBilledToday = "sales.billed-today";
+
+    /// <summary>Today's bills paid in cash, net of cash refunds.</summary>
+    public const string CashSalesToday = "sales.cash-today";
+
+    /// <summary>Today's bills paid by card or online transfer, net of refunds.</summary>
+    public const string CardSalesToday = "sales.card-today";
+
+    /// <summary>Today's bills raised on account, net of returns against them.</summary>
+    public const string CreditSalesToday = "sales.credit-today";
+
+    /// <summary>What is in the cash accounts now: the drawer, not the bank.</summary>
+    public const string CashDrawer = "accounting.cash-drawer";
+
+    /// <summary>Products at or below their reorder level.</summary>
+    public const string LowStock = "inventory.low-stock";
+
+    /// <summary>Bills raised on each day of the month so far.</summary>
+    public const string DailySales = "sales.daily";
+
+    /// <summary>The last twenty sales bills.</summary>
+    public const string RecentSales = "sales.recent";
+
     /// <summary>Every metric the server knows how to compute, with its permission.</summary>
     public static IReadOnlyDictionary<string, string> Permissions { get; } =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -85,7 +110,44 @@ public static class DashboardMetrics
             [ExpensesThisMonth] = "accounting:report:view",
             [ProfitToday] = "accounting:report:view",
             [ProfitThisMonth] = "accounting:report:view",
+            [SalesBilledToday] = "sales:invoice:view",
+            [CashSalesToday] = "sales:invoice:view",
+            [CardSalesToday] = "sales:invoice:view",
+            [CreditSalesToday] = "sales:invoice:view",
+            [CashDrawer] = "accounting:report:view",
+            [LowStock] = "inventory:report:view",
+            [DailySales] = "sales:invoice:view",
+            [RecentSales] = "sales:invoice:view",
         };
+
+    /// <summary>
+    /// The widgets a dashboard can be made of, in the order they are offered: what each
+    /// is called and how it is drawn.
+    /// </summary>
+    public static IReadOnlyList<DashboardWidgetDefinition> Catalogue { get; } =
+    [
+        new(SalesBilledToday, "Total sales today", "إجمالي مبيعات اليوم", WidgetKind.Kpi),
+        new(CashSalesToday, "Cash sales today", "المبيعات النقدية اليوم", WidgetKind.Kpi),
+        new(CardSalesToday, "Card sales today", "مبيعات البطاقة اليوم", WidgetKind.Kpi),
+        new(CreditSalesToday, "Credit sales today", "المبيعات الآجلة اليوم", WidgetKind.Kpi),
+        new(CashDrawer, "Cash drawer", "رصيد الصندوق", WidgetKind.Kpi),
+        new(ExpensesToday, "Expenses today", "مصروفات اليوم", WidgetKind.Kpi),
+        new(ProfitToday, "Profit today", "ربح اليوم", WidgetKind.Kpi),
+        new(SalesThisMonth, "Sales this month", "مبيعات الشهر", WidgetKind.Kpi),
+        new(ExpensesThisMonth, "Expenses this month", "مصروفات الشهر", WidgetKind.Kpi),
+        new(ProfitThisMonth, "Profit this month", "ربح الشهر", WidgetKind.Kpi),
+        new(SalesToday, "Net sales today", "صافي مبيعات اليوم", WidgetKind.Kpi),
+        new(DailySales, "Day-wise sales", "المبيعات اليومية", WidgetKind.Series, 2),
+        new(LowStock, "Low stock", "أصناف منخفضة المخزون", WidgetKind.List, 2),
+        new(RecentSales, "Recent sales", "آخر المبيعات", WidgetKind.List, 2),
+        new(Receivables, "Receivables", "الذمم المدينة", WidgetKind.Kpi),
+        new(Payables, "Payables", "الذمم الدائنة", WidgetKind.Kpi),
+        new(CashAndBank, "Cash and bank", "النقد والبنك", WidgetKind.Kpi),
+        new(PostDatedReceivable, "PDC in hand", "شيكات مؤجلة لدينا", WidgetKind.Kpi),
+        new(PostDatedPayable, "PDC issued", "شيكات مؤجلة صادرة", WidgetKind.Kpi),
+        new(MonthlyPostings, "Postings by month", "القيود حسب الشهر", WidgetKind.Series, 3),
+        new(TopDebtors, "Largest debtors", "أكبر المدينين", WidgetKind.Breakdown, 2),
+    ];
 
     /// <summary>Whether the server knows how to compute a metric.</summary>
     /// <param name="metricCode">The code named by a widget.</param>
@@ -101,10 +163,25 @@ public static class DashboardMetrics
 public sealed record GetDashboardDataQuery(Guid DashboardId, DateOnly? AsAt = null)
     : IQuery<DashboardDataResponse>;
 
+/// <summary>A widget a dashboard can be made of.</summary>
+/// <param name="MetricCode">The metric it draws.</param>
+/// <param name="Title">What it is called.</param>
+/// <param name="TitleArabic">What it is called in Arabic.</param>
+/// <param name="Kind">How it is drawn.</param>
+/// <param name="Span">How many columns it takes, of four.</param>
+public sealed record DashboardWidgetDefinition(
+    string MetricCode,
+    string Title,
+    string TitleArabic,
+    WidgetKind Kind,
+    int Span = 1);
+
 /// <summary>One point of a series.</summary>
 /// <param name="Label">What the point covers, for example <c>2026-03</c>.</param>
 /// <param name="Value">Its value.</param>
-public sealed record MetricPoint(string Label, decimal Value);
+/// <param name="Detail">A line of detail under the label: a bill's date and customer, an item's reorder level.</param>
+/// <param name="Link">Where the row leads, in the application, when it leads anywhere.</param>
+public sealed record MetricPoint(string Label, decimal Value, string? Detail = null, string? Link = null);
 
 /// <summary>One computed panel.</summary>
 /// <param name="WidgetId">

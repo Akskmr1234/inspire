@@ -109,6 +109,12 @@ public sealed record PartyDetails(
 /// </remarks>
 public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, ISoftDeletable
 {
+    /// <summary>The code of the Primary customer a firm is given when it has none.</summary>
+    public const string PrimaryCustomerCode = "PRIMARY-CUSTOMER";
+
+    /// <summary>The code of the Primary supplier a firm is given when it has none.</summary>
+    public const string PrimarySupplierCode = "PRIMARY-SUPPLIER";
+
     private Ledger(
         LedgerId id,
         TenantId tenantId,
@@ -175,6 +181,16 @@ public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, I
 
     /// <summary>Gets a value indicating whether the ledger accepts new postings.</summary>
     public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is the firm's Primary customer or supplier.
+    /// </summary>
+    /// <remarks>
+    /// Made for a firm that has none of its own, so a sale or a purchase can be entered
+    /// before the first party is. It is kept when the masters are cleared, cannot be
+    /// withdrawn, and stands as the default party until another is chosen. One per kind.
+    /// </remarks>
+    public bool IsPrimary { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether bills against this ledger are settled

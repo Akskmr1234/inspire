@@ -99,6 +99,10 @@ public sealed class ProductReader : IProductReader
             products = products.Where(product =>
                 EF.Functions.ILike(product.Code, $"%{term}%")
                 || EF.Functions.ILike(product.Description, $"%{term}%")
+                || (product.DescriptionArabic != null
+                    && EF.Functions.ILike(product.DescriptionArabic, $"%{term}%"))
+                || (product.ShortDescription != null
+                    && EF.Functions.ILike(product.ShortDescription, $"%{term}%"))
                 || product.Barcodes.Any(barcode =>
                     EF.Functions.ILike(barcode.Barcode, $"%{term}%")));
         }
@@ -126,6 +130,7 @@ public sealed class ProductReader : IProductReader
                 product.TracksSerialNumbers,
                 product.IsDiscontinued,
                 product.IsActive,
+                product.HideInPos,
                 BarcodeCount = product.Barcodes.Count,
             })
             .ToListAsync(cancellationToken);
@@ -192,7 +197,8 @@ public sealed class ProductReader : IProductReader
                 row.TaxSlabId is { } slab && slabs.TryGetValue(slab, out decimal rate)
                     ? rate
                     : null,
-                onHand.GetValueOrDefault(row.Id))),
+                onHand.GetValueOrDefault(row.Id),
+                row.HideInPos)),
         ];
     }
 
@@ -241,6 +247,7 @@ public sealed class ProductReader : IProductReader
                 row.IsPacking,
                 row.IsDiscontinued,
                 row.IsActive,
+                row.HideInPos,
                 Barcodes = row.Barcodes
                     .OrderBy(barcode => barcode.Barcode)
                     .Select(barcode => new ProductBarcodeView(
@@ -301,6 +308,7 @@ public sealed class ProductReader : IProductReader
                 product.IsActive,
                 product.Barcodes,
                 product.TaxSlabId?.Value,
-                product.TaxPercentage);
+                product.TaxPercentage,
+                product.HideInPos);
     }
 }

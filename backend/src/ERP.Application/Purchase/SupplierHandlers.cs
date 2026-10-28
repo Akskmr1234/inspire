@@ -255,6 +255,13 @@ public sealed class SetSupplierActiveCommandHandler
             return Result.Failure<SupplierResponse>(found.Error);
         }
 
+        // The default every new document starts with; withdrawn, there would be none.
+        if (found.Value.IsPrimary && !request.IsActive)
+        {
+            return Result.Failure<SupplierResponse>(Error.BusinessRule(
+                "Supplier.PrimaryKept", "The Primary supplier cannot be withdrawn."));
+        }
+
         if (request.IsActive)
         {
             found.Value.Activate();
@@ -276,14 +283,20 @@ public sealed class GetSuppliersQueryHandler
 {
     private readonly ILedgerRepository _ledgers;
     private readonly ITenantContext _tenantContext;
+    private readonly IPrimaryParties _primary;
 
     /// <summary>Initialises a new instance of the <see cref="GetSuppliersQueryHandler"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
-    public GetSuppliersQueryHandler(ILedgerRepository ledgers, ITenantContext tenantContext)
+    /// <param name="primary">Gives a firm with no supplier its Primary one.</param>
+    public GetSuppliersQueryHandler(
+        ILedgerRepository ledgers,
+        ITenantContext tenantContext,
+        IPrimaryParties primary)
     {
         _ledgers = ledgers;
         _tenantContext = tenantContext;
+        _primary = primary;
     }
 
     /// <inheritdoc />
@@ -298,6 +311,8 @@ public sealed class GetSuppliersQueryHandler
             return Result.Failure<IReadOnlyList<SupplierResponse>>(Error.Forbidden(
                 "Supplier.NoFirmSelected", "A firm must be selected to list suppliers."));
         }
+
+        await _primary.EnsureAsync(firmId, LedgerKind.Supplier, cancellationToken);
 
         IReadOnlyList<Ledger> found = await _ledgers.ListByKindAsync(
             firmId, LedgerKind.Supplier, request.Search, request.ActiveOnly, cancellationToken);
@@ -435,5 +450,6 @@ internal static class SupplierDetails
             new SupplierTaxDetails(supplier.TaxRegistrationNumber, supplier.StateCode),
             supplier.Currency.Code,
             supplier.OpeningBalance,
-            supplier.IsActive);
+            supplier.IsActive,
+            supplier.IsPrimary);
 }

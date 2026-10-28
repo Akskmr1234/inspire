@@ -60,6 +60,8 @@ export interface CustomerSummary {
   readonly openingBalance: number;
   readonly isActive: boolean;
   readonly profile: CustomerProfile;
+  /** The firm's Primary customer: the default a sale starts with, kept off the master list. */
+  readonly isPrimary?: boolean;
 }
 
 /** What is needed to create one. */

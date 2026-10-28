@@ -181,6 +181,20 @@ public interface ILedgerRepository
     void AddGroup(AccountGroup group);
 }
 
+/// <summary>Gives a firm the Primary record of a party master it has none of.</summary>
+public interface IPrimaryParties
+{
+    /// <summary>
+    /// Adds the firm's Primary customer or supplier when it has no customer or supplier
+    /// at all, so the first sale or purchase has somebody to name.
+    /// </summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="kind"><see cref="LedgerKind.Customer"/> or <see cref="LedgerKind.Supplier"/>.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes once the record is there, or was already.</returns>
+    Task EnsureAsync(FirmId firmId, LedgerKind kind, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Reads and writes bills.</summary>
 public interface IBillRepository
 {

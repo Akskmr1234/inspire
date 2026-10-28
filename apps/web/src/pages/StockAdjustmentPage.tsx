@@ -7,8 +7,10 @@ import { PageHeading } from '@/components/PageHeading';
 import { SearchSelect } from '@/components/SearchSelect';
 import { PageTabs, StockHistoryTable } from '@/components/StockHistory';
 import { productOption } from '@/components/DocumentLines';
+import { BarcodeScan } from '@/components/BarcodeScan';
 import type { ApiError } from '@/lib/api';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
+import { useGodownsOn, useSettings } from '@/stores/settings';
 import { moneyAlways } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { downloadCsv, readSpreadsheet, type SheetRows } from '@/lib/spreadsheet';
@@ -84,6 +86,8 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const can = useSession((state) => state.can);
+  const godownsOn = useGodownsOn();
+  const preferredWarehouseId = useSettings((state) => state.preferredWarehouseId);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -104,7 +108,8 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
   });
 
   const places = (warehouses.data ?? []).filter((warehouse) => !warehouse.isTransit);
-  const place = warehouseId || places.find((warehouse) => warehouse.isDefault)?.id || '';
+  const place =
+    warehouseId || startingGodown(places, preferredWarehouseId, godownsOn)?.id || '';
 
   const products = useQuery<readonly ProductSummary[], ApiError>({
     queryKey: ['products', '', '', false],
@@ -331,7 +336,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
             className="field-input"
           />
         </label>
-        <label className="block">
+        <label className={clsx('block', !godownsOn && 'hidden')}>
           <span className="field-label">{t('stock.warehouse')}</span>
           <SearchSelect
             value={place}
@@ -399,6 +404,22 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
                 (product) => !positions.has(product.id) && !extra.includes(product.id),
               )
               .map((product) => productOption(product, 0))}
+          />
+        </div>
+        <div className="w-full">
+          {/* Counting by scanner: each scan is one more of the product on the shelf. */}
+          <BarcodeScan
+            products={products.data ?? []}
+            onScan={(product) => {
+              if (!countable.some((candidate) => candidate.id === product.id)) {
+                return t('adjustment.notCountable', { code: product.code });
+              }
+
+              const next = (Number(counted.get(product.id)) || 0) + 1;
+              setExtra((current) => [...new Set([...current, product.id])]);
+              setCount(product.id, String(next));
+              return next;
+            }}
           />
         </div>
         <button type="button" onClick={template} className="btn-secondary btn-sm">

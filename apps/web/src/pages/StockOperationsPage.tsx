@@ -6,7 +6,8 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
-import { IconBarcode } from '@/components/icons';
+import { QuickAdd } from '@/components/QuickAdd';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
 import {
   SerialLineSummary,
@@ -14,6 +15,7 @@ import {
   useSerialNumbersEnabled,
 } from '@/components/SerialNumbers';
 import type { ApiError } from '@/lib/api';
+import { useDirectSave, useGodownsOn } from '@/stores/settings';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
@@ -91,6 +93,7 @@ export function StockOperationsPage({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const godownsOn = useGodownsOn();
 
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = `${today.slice(0, 7)}-01`;
@@ -280,28 +283,32 @@ export function StockOperationsPage({
             size="sm"
             label={t('stock.type')}
             placeholder={t('stock.allTypes')}
-            options={STOCK_TYPES.map((type) => ({
-              value: String(type),
-              label: t(typeKey(type)),
-            }))}
+            options={STOCK_TYPES.filter((type) => godownsOn || !isTransfer(type)).map(
+              (type) => ({
+                value: String(type),
+                label: t(typeKey(type)),
+              }),
+            )}
           />
         </Labelled>
       )}
 
-      <Labelled label={t('stock.warehouse')}>
-        <SearchSelect
-          value={warehouseFilter}
-          onChange={setWarehouseFilter}
-          clearable
-          size="sm"
-          label={t('stock.warehouse')}
-          placeholder={t('stock.allWarehouses')}
-          options={(warehouses.data ?? []).map((warehouse) => ({
-            value: warehouse.id,
-            label: warehouse.name,
-          }))}
-        />
-      </Labelled>
+      {godownsOn && (
+        <Labelled label={t('stock.warehouse')}>
+          <SearchSelect
+            value={warehouseFilter}
+            onChange={setWarehouseFilter}
+            clearable
+            size="sm"
+            label={t('stock.warehouse')}
+            placeholder={t('stock.allWarehouses')}
+            options={(warehouses.data ?? []).map((warehouse) => ({
+              value: warehouse.id,
+              label: warehouse.name,
+            }))}
+          />
+        </Labelled>
+      )}
     </div>
   );
 
@@ -367,7 +374,11 @@ export function StockOperationsPage({
             <DataGrid
               gridKey="stock-documents"
               rows={rows}
-              columns={columns}
+              columns={
+                godownsOn
+                  ? columns
+                  : columns.filter((column) => column.key !== 'warehouse')
+              }
               rowKey={(row) => row.id}
               emptyMessage={t('stock.noneFound')}
               actions={
@@ -519,6 +530,8 @@ export function StockEntry({
   }) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const godownsOn = useGodownsOn();
+  const directSave = useDirectSave();
 
   const [type, setType] = useState<number>(
     lockedType ?? StockDocumentType.materialReceipt,
@@ -626,44 +639,14 @@ export function StockEntry({
   const anyBatched = lines.some((line) => batched(line.productId));
   const anySerialised = lines.some((line) => serialised(line.productId));
 
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
-
-  const handleBarcodeScan = (scanned: string): void => {
-    const query = scanned.trim().toLowerCase();
-    if (!query) return;
-
-    const found = (products.data ?? []).find(
-      (p) =>
-        p.code.toLowerCase() === query ||
-        p.id.toLowerCase() === query ||
-        p.description.toLowerCase().includes(query),
-    );
-
-    if (found) {
-      setLines((current) => {
-        const existingIndex = current.findIndex((l) => l.productId === found.id);
-        if (existingIndex >= 0) {
-          return current.map((l, idx) =>
-            idx === existingIndex
-              ? { ...l, quantity: String((Number(l.quantity) || 0) + 1) }
-              : l,
-          );
-        }
-        if (current.length === 1 && current[0]?.productId === '') {
-          return [{ ...current[0]!, productId: found.id, quantity: '1' }];
-        }
-        return [...current, { ...emptyLine(), productId: found.id, quantity: '1' }];
-      });
-
-      setBarcodeNotice(t('stock.barcodeAdded', { code: found.code, qty: '1' }));
-      window.setTimeout(() => setBarcodeNotice(null), 3000);
-    } else {
-      setBarcodeNotice(t('stock.barcodeNotFound', { barcode: scanned }));
-      window.setTimeout(() => setBarcodeNotice(null), 4000);
-    }
-
-    setBarcodeInput('');
+  // One more of the scanned product, on its line or a new one.
+  const scanned = (product: ProductSummary): number => {
+    const next = addScanned(lines, product, () => ({
+      ...emptyLine(),
+      productId: product.id,
+    }));
+    setLines(next.lines);
+    return next.quantity;
   };
 
   const update = (key: string, patch: Partial<DraftLine>): void =>
@@ -724,7 +707,7 @@ export function StockEntry({
           lines: entered,
           referenceNumber: reference.trim() || null,
           narration: narration.trim() || null,
-          postImmediately: dispatching || post,
+          postImmediately: dispatching || directSave || post,
           partyLedgerId: party ? partyId : null,
         });
       }}
@@ -748,7 +731,10 @@ export function StockEntry({
                 }
               }}
               label={t('stock.type')}
-              options={STOCK_TYPES.map((candidate) => ({
+              // Moving goods between godowns means nothing where there is only one.
+              options={STOCK_TYPES.filter(
+                (candidate) => godownsOn || !isTransfer(candidate),
+              ).map((candidate) => ({
                 value: String(candidate),
                 label: t(typeKey(candidate)),
               }))}
@@ -769,7 +755,12 @@ export function StockEntry({
           />
         </label>
 
-        <label className="block">
+        <label
+          className={clsx(
+            'block',
+            !godownsOn && !transfer && !fixedWarehouseId && 'hidden',
+          )}
+        >
           <span className="field-label">
             {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
           </span>
@@ -783,16 +774,18 @@ export function StockEntry({
               className="field-input"
             />
           ) : (
-            <SearchSelect
-              value={warehouseId}
-              onChange={setWarehouseId}
-              label={t('stock.warehouse')}
-              placeholder={t('stock.choose')}
-              options={warehouses.map((warehouse) => ({
-                value: warehouse.id,
-                label: warehouse.name,
-              }))}
-            />
+            <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+              <SearchSelect
+                value={warehouseId}
+                onChange={setWarehouseId}
+                label={t('stock.warehouse')}
+                placeholder={t('stock.choose')}
+                options={warehouses.map((warehouse) => ({
+                  value: warehouse.id,
+                  label: warehouse.name,
+                }))}
+              />
+            </QuickAdd>
           )}
         </label>
 
@@ -818,20 +811,25 @@ export function StockEntry({
                 ? t('notes.customer')
                 : t('notes.supplier')}
             </span>
-            <SearchSelect
-              value={partyId}
-              onChange={setPartyId}
-              label={
-                type === StockDocumentType.deliveryNote
-                  ? t('notes.customer')
-                  : t('notes.supplier')
-              }
-              placeholder={t('stock.choose')}
-              options={(parties.data ?? []).map((candidate) => ({
-                value: candidate.id,
-                label: `${candidate.code} — ${candidate.name}`,
-              }))}
-            />
+            <QuickAdd
+              kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
+              onCreated={setPartyId}
+            >
+              <SearchSelect
+                value={partyId}
+                onChange={setPartyId}
+                label={
+                  type === StockDocumentType.deliveryNote
+                    ? t('notes.customer')
+                    : t('notes.supplier')
+                }
+                placeholder={t('stock.choose')}
+                options={(parties.data ?? []).map((candidate) => ({
+                  value: candidate.id,
+                  label: `${candidate.code} — ${candidate.name}`,
+                }))}
+              />
+            </QuickAdd>
           </label>
         )}
 
@@ -862,35 +860,7 @@ export function StockEntry({
 
       {problem && <Alert tone="error">{problem}</Alert>}
 
-      {/* Barcode Scanner (Requirement 14) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2/60 p-2.5">
-        <div className="flex flex-1 items-center gap-2">
-          <IconBarcode className="size-5 shrink-0 text-ink-muted" />
-          <input
-            type="text"
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleBarcodeScan(barcodeInput);
-              }
-            }}
-            placeholder={t('stock.barcodeScanPlaceholder')}
-            className="field-input-sm flex-1 font-mono text-xs"
-          />
-          <button
-            type="button"
-            onClick={() => handleBarcodeScan(barcodeInput)}
-            className="btn-secondary btn-xs text-xs"
-          >
-            Scan
-          </button>
-        </div>
-        {barcodeNotice && (
-          <span className="text-xs font-medium text-accent">{barcodeNotice}</span>
-        )}
-      </div>
+      <BarcodeScan products={products.data ?? []} onScan={scanned} />
 
       {/*
         A card a line on a phone, the way the billing screens lay theirs out: the
@@ -1047,7 +1017,7 @@ export function StockEntry({
           {t('stock.addLine')}
         </button>
 
-        {!dispatching && (
+        {!dispatching && !directSave && (
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -1280,6 +1250,7 @@ function StockDocumentView({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const can = useSession((state) => state.can);
+  const godownsOn = useGodownsOn();
   const [reason, setReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
@@ -1315,7 +1286,8 @@ function StockDocumentView({
             {document.number} — {t(typeKey(document.type))}
           </h2>
           <p className="text-xs text-ink-muted">
-            {document.date} · {document.warehouseName}
+            {document.date}
+            {godownsOn && ` · ${document.warehouseName}`}
             {document.destinationWarehouseName
               ? ` → ${document.destinationWarehouseName}`
               : ''}{' '}
@@ -1501,9 +1473,11 @@ function StockDocumentView({
                 <th className="px-3 py-2 text-start font-semibold">
                   {t('stock.product')}
                 </th>
-                <th className="px-3 py-2 text-start font-semibold">
-                  {t('stock.warehouse')}
-                </th>
+                {godownsOn && (
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.warehouse')}
+                  </th>
+                )}
                 <th className="px-3 py-2 text-end font-semibold">
                   {t('stock.quantity')}
                 </th>
@@ -1531,7 +1505,7 @@ function StockDocumentView({
                   className="border-t border-line"
                 >
                   <td className="px-3 py-1.5 font-mono">{movement.productCode}</td>
-                  <td className="px-3 py-1.5">{movement.warehouseName}</td>
+                  {godownsOn && <td className="px-3 py-1.5">{movement.warehouseName}</td>}
                   <td
                     className={clsx(
                       'cell-numeric',

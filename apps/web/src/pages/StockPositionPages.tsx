@@ -14,6 +14,7 @@ import {
 import { trim } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
 import { moneyAlways } from '@/lib/money';
+import { useGodownColumns, useGodownsOn } from '@/stores/settings';
 import {
   AGE_BANDS,
   ageBand,
@@ -48,6 +49,7 @@ function usePositionFilters(): {
   readonly set: (patch: Partial<StockPositionFilters>) => void;
 } {
   const { t } = useTranslation();
+  const godownsOn = useGodownsOn();
   const [filters, setFilters] = useState<StockPositionFilters>({
     asOn: today(),
     branchId: '',
@@ -66,16 +68,20 @@ function usePositionFilters(): {
         value={filters.asOn}
         onChange={(asOn) => set({ asOn })}
       />
-      <BranchFilter
-        value={filters.branchId}
-        // A godown of another branch would leave nothing to show.
-        onChange={(branchId) => set({ branchId, warehouseId: '' })}
-      />
-      <GodownFilter
-        branchId={filters.branchId}
-        value={filters.warehouseId}
-        onChange={(warehouseId) => set({ warehouseId })}
-      />
+      {godownsOn && (
+        <>
+          <BranchFilter
+            value={filters.branchId}
+            // A godown of another branch would leave nothing to show.
+            onChange={(branchId) => set({ branchId, warehouseId: '' })}
+          />
+          <GodownFilter
+            branchId={filters.branchId}
+            value={filters.warehouseId}
+            onChange={(warehouseId) => set({ warehouseId })}
+          />
+        </>
+      )}
       <CategoryFilter
         value={filters.categoryId}
         onChange={(categoryId) => set({ categoryId })}
@@ -269,7 +275,7 @@ export function StockRegisterPage(): React.JSX.Element {
     'branch',
   ]);
 
-  const columns = [...describingColumns(t, false), ...figureColumns(t)];
+  const columns = useGodownColumns([...describingColumns(t, false), ...figureColumns(t)]);
 
   return (
     <ReportFrame
@@ -363,6 +369,7 @@ export function StockAgingPage(): React.JSX.Element {
       },
     })),
   ];
+  const shown = useGodownColumns(columns);
 
   const shownQuantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   const shownValue = lines.reduce((sum, line) => sum + line.value, 0);
@@ -436,7 +443,7 @@ export function StockAgingPage(): React.JSX.Element {
           <DataGrid
             gridKey="stock-aging"
             rows={lines}
-            columns={columns}
+            columns={shown}
             rowKey={(line) => line.key}
             emptyMessage={t('stockPosition.nothing')}
             onVisibleColumnsChange={onColumns}

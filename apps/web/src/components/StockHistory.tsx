@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/SearchSelect';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { moneyAlways } from '@/lib/money';
+import { useGodownColumns, useGodownsOn } from '@/stores/settings';
 import {
   fetchStockHistory,
   StockDocumentStatus,
@@ -31,6 +32,7 @@ export function StockHistoryTable({
   readonly title: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const godownsOn = useGodownsOn();
 
   const today = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
@@ -137,6 +139,7 @@ export function StockHistoryTable({
       hiddenByDefault: true,
     },
   ];
+  const shown = useGodownColumns(columns);
 
   const controls = (
     <div className="toolbar">
@@ -158,7 +161,7 @@ export function StockHistoryTable({
           className="field-input-sm"
         />
       </label>
-      <label className="field">
+      <label className={godownsOn ? 'field' : 'hidden'}>
         <span className="field-label">{t('stock.warehouse')}</span>
         <SearchSelect
           value={warehouseId}
@@ -181,7 +184,7 @@ export function StockHistoryTable({
         <DataGrid
           gridKey={`stock-history-${kind}`}
           rows={rows}
-          columns={columns}
+          columns={shown}
           rowKey={(row) => `${row.documentId}-${row.productId}-${row.batchNumber ?? ''}`}
           emptyMessage={t('history.none')}
         />

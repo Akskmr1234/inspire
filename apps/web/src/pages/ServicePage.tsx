@@ -6,6 +6,7 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { BatchPick } from '@/components/BatchPick';
 import { Panel } from '@/components/Panel';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
@@ -33,9 +34,10 @@ import {
 import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { moneyAlways } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import { SalesPaymentMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
-import { useSettings } from '@/stores/settings';
+import { useGodownsOn, useSettings } from '@/stores/settings';
 import { Alert, Labelled } from '@/pages/StockOperationsPage';
 import { shortcutProps } from '@/lib/shortcuts';
 
@@ -392,6 +394,7 @@ function JobCardForm({
   const navigate = useNavigate();
   const can = useSession((state) => state.can);
   const defaultCustomerId = useSettings((state) => state.defaultCustomerId);
+  const godownsOn = useGodownsOn();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -673,16 +676,18 @@ function JobCardForm({
             onChange={(value) => set('date', value)}
             disabled={card !== null}
           />
-          <SelectField<string>
-            label={t('service.godown')}
-            value={draft.warehouseId}
-            onChange={(value) => set('warehouseId', value)}
-            disabled={card !== null}
-            options={godowns.map((warehouse) => ({
-              value: warehouse.id,
-              label: warehouse.name,
-            }))}
-          />
+          {godownsOn && (
+            <SelectField<string>
+              label={t('service.godown')}
+              value={draft.warehouseId}
+              onChange={(value) => set('warehouseId', value)}
+              disabled={card !== null}
+              options={godowns.map((warehouse) => ({
+                value: warehouse.id,
+                label: warehouse.name,
+              }))}
+            />
+          )}
           <TextField
             label={t('service.reference')}
             value={draft.referenceNumber}
@@ -755,23 +760,28 @@ function JobCardForm({
             />
             <label className="block">
               <span className="field-label">{t('service.account')}</span>
-              <SearchSelect
-                value={draft.customerLedgerId}
-                onChange={(value) => {
-                  const chosen = customers.data?.find(
-                    (customer) => customer.customerId === value,
-                  );
-                  setDraft((current) => ({
-                    ...current,
-                    customerLedgerId: value,
-                    name: current.name || chosen?.name || '',
-                    mobile: current.mobile || chosen?.contact.mobileNumber || '',
-                  }));
-                }}
-                label={t('service.account')}
-                placeholder={t('service.walkIn')}
-                options={[{ value: '', label: t('service.walkIn') }, ...customerOptions]}
-              />
+              <QuickAdd kind="customer" onCreated={(id) => set('customerLedgerId', id)}>
+                <SearchSelect
+                  value={draft.customerLedgerId}
+                  onChange={(value) => {
+                    const chosen = customers.data?.find(
+                      (customer) => customer.customerId === value,
+                    );
+                    setDraft((current) => ({
+                      ...current,
+                      customerLedgerId: value,
+                      name: current.name || chosen?.name || '',
+                      mobile: current.mobile || chosen?.contact.mobileNumber || '',
+                    }));
+                  }}
+                  label={t('service.account')}
+                  placeholder={t('service.walkIn')}
+                  options={[
+                    { value: '', label: t('service.walkIn') },
+                    ...customerOptions,
+                  ]}
+                />
+              </QuickAdd>
             </label>
           </Panel>
 
@@ -918,6 +928,21 @@ function JobCardForm({
         <h3 className="text-sm font-semibold">{t('service.partsAndLabour')}</h3>
         {linesLocked && card && (
           <p className="text-xs text-ink-muted">{t('service.linesLocked')}</p>
+        )}
+        {!linesLocked && editable && (
+          <BarcodeScan
+            products={products.data ?? []}
+            onScan={(product) => {
+              // At the part's retail rate, as choosing it in the picker does.
+              const next = addScanned(lines, product, () => ({
+                ...blankLine(),
+                productId: product.id,
+                rate: String(product.retailRate ?? ''),
+              }));
+              setLines(next.lines);
+              return next.quantity;
+            }}
+          />
         )}
         <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
           <table className="line-table">

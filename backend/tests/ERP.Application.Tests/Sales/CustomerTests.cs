@@ -261,7 +261,7 @@ public sealed class CustomerTests
                 Ledgers, firms, places, tenant, UnitOfWork, Substitute.For<IMasterCodes>());
             _update = new UpdateCustomerCommandHandler(Ledgers, places, tenant, UnitOfWork);
             _setActive = new SetCustomerActiveCommandHandler(Ledgers, tenant, UnitOfWork);
-            _list = new GetCustomersQueryHandler(Ledgers, tenant);
+            _list = new GetCustomersQueryHandler(Ledgers, tenant, Substitute.For<IPrimaryParties>());
             _get = new GetCustomerQueryHandler(Ledgers, tenant);
         }
 
