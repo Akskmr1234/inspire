@@ -54,6 +54,25 @@ export interface WarehouseSummary {
 }
 
 /**
+ * The godown a document starts in: the one chosen in Settings, else the master's
+ * default, else the only one there is. With godowns switched off nobody is asked, so the
+ * first of them stands in when none is marked.
+ */
+export function startingGodown(
+  warehouses: readonly WarehouseSummary[],
+  preferredId: string,
+  godownsOn: boolean,
+): WarehouseSummary | undefined {
+  const usable = warehouses.filter((warehouse) => warehouse.isTransit !== true);
+
+  return (
+    usable.find((warehouse) => warehouse.id === preferredId) ??
+    usable.find((warehouse) => warehouse.isDefault) ??
+    (usable.length === 1 || !godownsOn ? usable[0] : undefined)
+  );
+}
+
+/**
  * Which master a withdrawal applies to.
  *
  * The names match the server's enum, which is what the route segment binds against.

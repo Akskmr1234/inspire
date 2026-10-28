@@ -91,9 +91,46 @@ public sealed class DataResetEndpointTests
         ledgers.ShouldContain(row => row.Code == "CASH");
         ledgers.ShouldNotContain(row => row.LedgerId == masters.CustomerId);
 
+        // With nothing left, the firm is given its Primary customer, supplier and godown,
+        // and a unit, the first time each list is read - and only the once.
+        CustomerResponse customer = await PrimaryCustomerAsync(client);
+        customer.Code.ShouldBe("PRIMARY-CUSTOMER");
+        (await PrimaryCustomerAsync(client)).CustomerId.ShouldBe(customer.CustomerId);
+
+        SupplierResponse supplier = (await client.GetFromJsonAsync<List<SupplierResponse>>("/api/v1/purchase/suppliers"))!
+            .ShouldHaveSingleItem();
+        supplier.IsPrimary.ShouldBeTrue();
+
+        // The default every sale starts with cannot be withdrawn.
+        (await client.PutAsJsonAsync($"/api/v1/sales/customers/{customer.CustomerId}/active", new { IsActive = false }))
+            .StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+
+        List<WarehouseRow> warehouses = (await client.GetFromJsonAsync<List<WarehouseRow>>("/api/v1/inventory/warehouses"))!;
+        WarehouseRow godown = warehouses.ShouldHaveSingleItem();
+        godown.Name.ShouldBe("Primary");
+        godown.IsDefault.ShouldBeTrue();
+        (await client.GetFromJsonAsync<List<WarehouseRow>>("/api/v1/inventory/warehouses"))!.ShouldHaveSingleItem();
+
+        (await client.GetFromJsonAsync<List<UnitRow>>("/api/v1/inventory/units"))!
+            .ShouldHaveSingleItem().Code.ShouldBe("NOS");
+
+        // A second clear keeps the Primary customer, as it keeps the Primary category.
+        (await client.PostAsJsonAsync(Reset, new { Scope = DataResetScope.Everything, Confirmation = "MAIN" }))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await PrimaryCustomerAsync(client)).CustomerId.ShouldBe(customer.CustomerId);
+
         // And the firm can start again at once.
         await TestMasters.ArrangeAsync(client);
     }
+
+    private static async Task<CustomerResponse> PrimaryCustomerAsync(HttpClient client) =>
+        (await client.GetFromJsonAsync<List<CustomerResponse>>("/api/v1/sales/customers"))!
+            .Where(row => row.IsPrimary)
+            .ShouldHaveSingleItem();
+
+    private sealed record WarehouseRow(Guid Id, string Code, string Name, bool IsDefault);
+
+    private sealed record UnitRow(Guid Id, string Code, string Name);
 
     private sealed record LedgerRow(Guid LedgerId, string Code, string Name);
 }

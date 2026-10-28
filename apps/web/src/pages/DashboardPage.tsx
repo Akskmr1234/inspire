@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -6,11 +7,10 @@ import { PageHeading } from '@/components/PageHeading';
 import { NeedsAttention } from '@/components/NeedsAttention';
 import { EmptyState, moneyAlways } from '@/components/ReportFrame';
 import { IconCash, IconChart, IconLayers } from '@/components/icons';
+import { DashboardCustomizer } from '@/components/DashboardCustomizer';
 import { request, type ApiError } from '@/lib/api';
+import { QUANTITY_METRICS, WIDGET_KIND as KIND } from '@/lib/dashboards';
 import { useSession } from '@/stores/session';
-
-/** How a panel draws its figure, keyed by the wire value. */
-const KIND = { Kpi: 1, Series: 2, Breakdown: 3 } as const;
 
 interface DashboardWidget {
   readonly id: string;
@@ -34,6 +34,10 @@ interface Dashboard {
 interface MetricPoint {
   readonly label: string;
   readonly value: number;
+  /** A line under the label: a bill's date and customer, an item's reorder level. */
+  readonly detail?: string | null;
+  /** Where the row leads, when it leads anywhere. */
+  readonly link?: string | null;
 }
 
 interface DashboardMetric {
@@ -66,7 +70,23 @@ interface DashboardData {
  */
 export function DashboardPage(): React.JSX.Element {
   const { t } = useTranslation();
-  const { language } = useSession();
+  const { language, can } = useSession();
+  const [customizing, setCustomizing] = useState(false);
+  const mayCustomize = can('reporting:dashboard:create');
+
+  const customizer = customizing && (
+    <DashboardCustomizer onClose={() => setCustomizing(false)} />
+  );
+
+  const customizeButton = mayCustomize && (
+    <button
+      type="button"
+      onClick={() => setCustomizing(true)}
+      className="btn-secondary btn-sm ms-auto"
+    >
+      {t('dashboard.customize')}
+    </button>
+  );
 
   const dashboards = useQuery<{ readonly dashboards: readonly Dashboard[] }, ApiError>({
     queryKey: ['dashboards'],
@@ -100,7 +120,13 @@ export function DashboardPage(): React.JSX.Element {
   }
 
   if (!dashboard) {
-    return <EmptyState message={t('dashboard.none')} />;
+    return (
+      <>
+        <div className="flex">{customizeButton}</div>
+        <EmptyState message={t('dashboard.none')} />
+        {customizer}
+      </>
+    );
   }
 
   // Keyed by panel rather than by metric. A custom panel has no metric code, and two
@@ -160,7 +186,12 @@ export function DashboardPage(): React.JSX.Element {
           <span className="size-2 rounded-full bg-amber-500" />
           {t('nav.stockValuation')}
         </Link>
+        {customizeButton}
       </div>
+
+      {dashboard.widgets.length === 0 && (
+        <EmptyState message={t('dashboard.noneWidgets')} />
+      )}
 
       {/*
         Four across only at `xl`. A dashboard tile carries a currency figure of up
@@ -190,6 +221,7 @@ export function DashboardPage(): React.JSX.Element {
         to date".
       */}
       <NeedsAttention />
+      {customizer}
     </section>
   );
 }
@@ -276,6 +308,16 @@ function Panel({
           <Series points={metric.series} />
         ) : widget.kind === KIND.Breakdown ? (
           <Breakdown points={metric.series} currency={currency} />
+        ) : widget.kind === KIND.List ? (
+          <List
+            points={metric.series}
+            currency={
+              metric.metricCode && QUANTITY_METRICS.has(metric.metricCode)
+                ? null
+                : currency
+            }
+            total={metric.count}
+          />
         ) : (
           <>
             <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-ink">
@@ -306,6 +348,10 @@ function Panel({
  * else is left alone rather than blindly cut at the fifth character.
  */
 function shortLabel(label: string): string {
+  // A day keeps its day of the month; a month, its month.
+  const day = /^\d{4}-\d{2}-(\d{2})$/.exec(label);
+  if (day) return String(Number(day[1]));
+
   const month = /^\d{4}-(\d{2})/.exec(label);
 
   return month ? (month[1] ?? label) : label;
@@ -407,5 +453,71 @@ function Breakdown({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * A plain list - the latest bills, the items running low - each row with a line of
+ * detail under it and its figure. Money where it is money; a count where it is not.
+ */
+function List({
+  points,
+  currency,
+  total,
+}: {
+  readonly points: readonly MetricPoint[];
+  readonly currency: string | null;
+  readonly total: number;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  if (points.length === 0) {
+    return <p className="mt-3 text-sm text-ink-subtle">{t('dashboard.noData')}</p>;
+  }
+
+  return (
+    <div className="mt-2">
+      <ul className="max-h-80 divide-y divide-line overflow-y-auto">
+        {points.map((point, index) => (
+          <li
+            key={`${point.label}-${index}`}
+            className="flex items-baseline justify-between gap-3 py-1.5 text-sm"
+          >
+            <span className="min-w-0">
+              {point.link ? (
+                <Link
+                  to={point.link}
+                  className="block truncate font-medium text-brand-700 hover:underline dark:text-brand-300"
+                >
+                  {point.label}
+                </Link>
+              ) : (
+                <span className="block truncate font-medium text-ink">{point.label}</span>
+              )}
+              {point.detail && (
+                <span className="block truncate text-xs text-ink-muted">
+                  {point.detail}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 font-mono font-semibold tabular-nums text-ink">
+              {currency === null
+                ? point.value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+                : moneyAlways(point.value)}
+              {currency && (
+                <span className="ms-1 text-xs font-normal text-ink-subtle">
+                  {currency}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {total > points.length && (
+        <p className="mt-1 text-xs text-ink-muted">
+          {t('dashboard.itemCount', { count: total })}
+        </p>
+      )}
+    </div>
   );
 }

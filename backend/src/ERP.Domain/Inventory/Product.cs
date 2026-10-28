@@ -199,6 +199,12 @@ public sealed class Product : AggregateRoot<ProductId>, IFirmScoped, IAuditable,
     /// <summary>Gets whether the item is packing material rather than goods.</summary>
     public bool IsPacking { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the item is kept out of the point-of-sale item search:
+    /// still sold when its code or barcode is entered, but not offered at the counter.
+    /// </summary>
+    public bool HideInPos { get; private set; }
+
     /// <summary>Gets the rack it is stored on.</summary>
     public string? Rack { get; private set; }
 
@@ -653,6 +659,10 @@ public sealed class Product : AggregateRoot<ProductId>, IFirmScoped, IAuditable,
     /// <summary>Marks the product as packing material rather than goods.</summary>
     /// <param name="isPacking">Whether it is packing material.</param>
     public void SetPacking(bool isPacking) => IsPacking = isPacking;
+
+    /// <summary>Keeps the item out of the point-of-sale item search, or offers it there again.</summary>
+    /// <param name="hide">Whether to keep it out.</param>
+    public void SetHiddenInPos(bool hide) => HideInPos = hide;
 
     /// <summary>Sets how closely stock of the product is tracked.</summary>
     /// <param name="tracksBatches">Whether stock is held in batches.</param>

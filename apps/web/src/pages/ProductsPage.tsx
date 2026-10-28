@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal } from '@/components/Modal';
@@ -45,9 +50,21 @@ export function ProductsPage(): React.JSX.Element {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // One box, searched on the server: code, description in either language, short
+  // description and every barcode. Waits for a pause in the typing, and keeps the
+  // last answer on screen meanwhile, so the list narrows rather than flashing.
+  const [search, setSearch] = useState('');
+  const [term, setTerm] = useState('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTerm(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
   const query = useQuery<readonly ProductSummary[], ApiError>({
-    queryKey: ['products'],
-    queryFn: () => listProducts('', '', false),
+    queryKey: term ? ['products', 'search', term] : ['products'],
+    queryFn: () => listProducts(term, '', false),
+    placeholderData: keepPreviousData,
   });
 
   // Shared cache keys with the master screens, so opening this page after those does
@@ -258,6 +275,16 @@ export function ProductsPage(): React.JSX.Element {
               rowKey={(row) => row.id}
               emptyMessage={t('products.noneFound')}
               hideSearch
+              filters={
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t('products.searchPlaceholder')}
+                  aria-label={t('products.search')}
+                  className="field-input-sm w-full sm:w-72"
+                />
+              }
               actions={
                 <GridAction label={t('products.new')} onClick={() => setAdding(true)} />
               }

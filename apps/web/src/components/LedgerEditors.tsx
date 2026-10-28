@@ -63,12 +63,15 @@ export function LedgerEditor({
   ledgerId,
   onClose,
   kind,
+  onSaved,
 }: {
   /** The ledger to correct, or null to open a new one. */
   readonly ledgerId: string | null;
   readonly onClose: () => void;
   /** A kind the ledger is fixed to, for a screen of one kind - employees. */
   readonly kind?: number;
+  /** Told of the ledger once it is saved, for a picker to choose the one just added. */
+  readonly onSaved?: (ledger: LedgerDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const can = useSession((state) => state.can);
@@ -101,6 +104,7 @@ export function LedgerEditor({
             existing={existing.data ?? null}
             onClose={onClose}
             {...(kind === undefined ? {} : { fixedKind: kind })}
+            {...(onSaved ? { onSaved } : {})}
           />
           {/* An employee's photographs, once the employee exists to hang them on. */}
           {existing.data?.kind === LedgerKind.employee && (
@@ -149,10 +153,12 @@ function LedgerForm({
   existing,
   onClose,
   fixedKind,
+  onSaved,
 }: {
   readonly existing: LedgerDetail | null;
   readonly onClose: () => void;
   readonly fixedKind?: number;
+  readonly onSaved?: (ledger: LedgerDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const invalidate = useInvalidateLedgers();
@@ -226,8 +232,9 @@ function LedgerForm({
   const save = useMutation<LedgerDetail, ApiError>({
     mutationFn: () =>
       existing ? updateLedger(existing.ledgerId, body()) : createLedger(body()),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await invalidate();
+      onSaved?.(saved);
       onClose();
     },
   });

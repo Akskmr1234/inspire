@@ -4,6 +4,7 @@ using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Settings;
 using ERP.Domain.Accounting;
+using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
 using ERP.Domain.Platform;
@@ -778,6 +779,42 @@ public sealed class MasterCodeSequenceRepository : IMasterCodeSequenceRepository
 
     /// <inheritdoc />
     public void Add(MasterCodeSequence sequence) => _context.MasterCodeSequences.Add(sequence);
+}
+
+/// <summary>The EF Core repository for the dashboards roles see.</summary>
+public sealed class RoleDashboardRepository : IRoleDashboardRepository
+{
+    private readonly ErpDbContext _context;
+
+    /// <summary>Initialises a new instance of the <see cref="RoleDashboardRepository"/> class.</summary>
+    /// <param name="context">The database context.</param>
+    public RoleDashboardRepository(ErpDbContext context) => _context = context;
+
+    /// <inheritdoc />
+    public Task<string?> FindRoleNameAsync(RoleId roleId, CancellationToken cancellationToken = default) =>
+        _context.Roles
+            .Where(role => role.Id == roleId)
+            .Select(role => (string?)role.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Dashboard>> ListForRoleAsync(
+        FirmId firmId,
+        RoleId roleId,
+        CancellationToken cancellationToken = default) =>
+        await _context.Dashboards
+            .Include(dashboard => dashboard.Widgets)
+            .Include(dashboard => dashboard.Roles)
+            .Where(dashboard =>
+                dashboard.FirmId == firmId
+                && dashboard.Roles.Any(assignment => assignment.RoleId == roleId))
+            .OrderBy(dashboard => dashboard.SortOrder)
+            .ThenBy(dashboard => dashboard.Name)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Dashboard dashboard) => _context.Dashboards.Add(dashboard);
 }
 
 /// <summary>Reads and writes menu entries.</summary>

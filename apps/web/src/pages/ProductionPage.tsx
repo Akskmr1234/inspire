@@ -21,6 +21,7 @@ import {
 } from '@/lib/boms';
 import { moneyAlways } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import {
   fetchStockValuation,
   StockDocumentType,
@@ -28,6 +29,7 @@ import {
   type StockValuationReport,
 } from '@/lib/stock';
 import { useSession } from '@/stores/session';
+import { useGodownsOn } from '@/stores/settings';
 import {
   Alert,
   StockOperationsPage,
@@ -485,6 +487,7 @@ function ProductionEntry({
 }: StockEntryProps): React.JSX.Element {
   const { t } = useTranslation();
   const products = useStockedProducts();
+  const godownsOn = useGodownsOn();
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [warehouseId, setWarehouseId] = useState(
@@ -604,7 +607,7 @@ function ProductionEntry({
             required
           />
         </label>
-        <label className="block">
+        <label className={godownsOn ? 'block' : 'hidden'}>
           <span className="field-label">{t('stock.warehouse')}</span>
           <SearchSelect
             value={warehouseId}
@@ -630,6 +633,7 @@ function ProductionEntry({
       <RunLines
         title={t('production.made')}
         lines={made}
+        products={products}
         options={options}
         batched={batched}
         warehouseId={warehouseId}
@@ -656,6 +660,7 @@ function ProductionEntry({
       <RunLines
         title={t('production.used')}
         lines={used}
+        products={products}
         options={options}
         batched={batched}
         warehouseId={warehouseId}
@@ -681,6 +686,7 @@ function ProductionEntry({
 function RunLines({
   title,
   lines,
+  products,
   options,
   batched,
   warehouseId,
@@ -690,6 +696,8 @@ function RunLines({
 }: {
   readonly title: string;
   readonly lines: readonly RunLine[];
+  /** What a scanned code is looked up in. */
+  readonly products: readonly ProductSummary[];
   readonly options: ReturnType<typeof productOption>[];
   readonly batched: (productId: string) => boolean;
   readonly warehouseId: string;
@@ -708,6 +716,17 @@ function RunLines({
       <div>
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
       </div>
+      <BarcodeScan
+        products={products}
+        onScan={(product) => {
+          const next = addScanned(lines, product, () => ({
+            ...blankRunLine(),
+            productId: product.id,
+          }));
+          onChange(next.lines);
+          return next.quantity;
+        }}
+      />
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
           <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">

@@ -46,6 +46,9 @@ public enum WidgetKind
 
     /// <summary>A ranked list: the largest few of something, with their amounts.</summary>
     Breakdown = 3,
+
+    /// <summary>A plain list of rows - recent documents, items running low - each with its figure.</summary>
+    List = 4,
 }
 
 /// <summary>

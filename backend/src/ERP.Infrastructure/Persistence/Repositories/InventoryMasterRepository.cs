@@ -181,6 +181,36 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
         ON CONFLICT DO NOTHING
         """;
 
+    // A firm with no godown of its own - none set up yet, or its masters cleared - is
+    // given a Primary one, as its default, so stock has somewhere to be from the first
+    // document. The goods-in-transit location does not count: nothing is entered there.
+    private const string PrimaryWarehouseSql = """
+        INSERT INTO warehouses (
+            id, tenant_id, firm_id, code, name, name_arabic, is_default, is_active, is_transit,
+            created_at_utc, created_by)
+        SELECT gen_random_uuid(), firm.tenant_id, firm.id, @code, @name, @nameArabic,
+               NOT EXISTS (SELECT 1 FROM warehouses WHERE firm_id = @firm AND is_default),
+               true, false, now(), '00000000-0000-0000-0000-00000000513e'::uuid
+        FROM firms firm
+        WHERE firm.id = @firm
+          AND NOT EXISTS (SELECT 1 FROM warehouses WHERE firm_id = @firm AND NOT is_transit)
+        ON CONFLICT DO NOTHING
+        """;
+
+    // And a firm with no unit at all is given the one nearly every product is counted
+    // in, so the first product has a unit to be kept in.
+    private const string PrimaryUnitSql = """
+        INSERT INTO units_of_measure (
+            id, tenant_id, firm_id, code, name, symbol, conversion_factor, decimal_places,
+            is_active, created_at_utc, created_by)
+        SELECT gen_random_uuid(), firm.tenant_id, firm.id, @code, @name, @name, 1, 0,
+               true, now(), '00000000-0000-0000-0000-00000000513e'::uuid
+        FROM firms firm
+        WHERE firm.id = @firm
+          AND NOT EXISTS (SELECT 1 FROM units_of_measure WHERE firm_id = @firm)
+        ON CONFLICT DO NOTHING
+        """;
+
     private readonly ErpDbContext _context;
 
     /// <summary>Initialises a new instance of the <see cref="InventoryMasterReader"/> class.</summary>
@@ -193,6 +223,15 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
+        await _context.Database.ExecuteSqlRawAsync(
+            PrimaryUnitSql,
+            [
+                new Npgsql.NpgsqlParameter("firm", firmId.Value),
+                new Npgsql.NpgsqlParameter("code", "NOS"),
+                new Npgsql.NpgsqlParameter("name", "Nos"),
+            ],
+            cancellationToken);
+
         // Left-joined to the base unit, because a base unit has none and an inner join
         // would return only the derived ones - which is every unit except the ones the
         // groups are built on.
@@ -353,6 +392,16 @@ public sealed class InventoryMasterReader : IInventoryMasterReader
         bool includeInactive,
         CancellationToken cancellationToken = default)
     {
+        await _context.Database.ExecuteSqlRawAsync(
+            PrimaryWarehouseSql,
+            [
+                new Npgsql.NpgsqlParameter("firm", firmId.Value),
+                new Npgsql.NpgsqlParameter("code", Category.PrimaryCode),
+                new Npgsql.NpgsqlParameter("name", Category.PrimaryName),
+                new Npgsql.NpgsqlParameter("nameArabic", PrimaryNameArabic),
+            ],
+            cancellationToken);
+
         var warehouses = await _context.Warehouses
             .Where(warehouse =>
                 warehouse.FirmId == firmId && (includeInactive || warehouse.IsActive))

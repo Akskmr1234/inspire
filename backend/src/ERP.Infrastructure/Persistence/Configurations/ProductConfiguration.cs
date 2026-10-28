@@ -52,6 +52,7 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(product => product.TracksBatches).IsRequired();
         builder.Property(product => product.TracksSerialNumbers).IsRequired();
         builder.Property(product => product.IsPacking).IsRequired();
+        builder.Property(product => product.HideInPos).IsRequired();
         builder.Property(product => product.IsActive).IsRequired();
         builder.Property(product => product.IsDiscontinued).IsRequired();
 

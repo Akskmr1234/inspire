@@ -22,7 +22,7 @@ import {
 import { listMaster, type UnitSummary, type WarehouseSummary } from '@/lib/inventory';
 import { currentDecimals, moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
-import { useSettings, useTaxOn } from '@/stores/settings';
+import { useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 import {
   createStockDocument,
@@ -157,6 +157,7 @@ interface ProductForm {
   readonly tracksSerialNumbers: boolean;
   readonly shelfLifeDays: string;
   readonly isPacking: boolean;
+  readonly hideInPos: boolean;
   readonly device: string;
   readonly colour: string;
   readonly battery: string;
@@ -204,6 +205,7 @@ function formFrom(product: ProductDetail, places: number): ProductForm {
     tracksSerialNumbers: product.tracksSerialNumbers,
     shelfLifeDays: product.shelfLifeDays === null ? '' : String(product.shelfLifeDays),
     isPacking: product.isPacking,
+    hideInPos: product.hideInPos ?? false,
     device: product.device ?? '',
     colour: product.colour ?? '',
     battery: product.battery ?? '',
@@ -289,6 +291,7 @@ function EditorBody({
         tracksSerialNumbers: form.tracksSerialNumbers,
         shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
         isPacking: form.isPacking,
+        hideInPos: form.hideInPos,
       });
 
       if (enableDeviceAttributes) {
@@ -781,6 +784,11 @@ function DetailsFields({
           checked={form.isPacking}
           onChange={(value) => set({ isPacking: value })}
         />
+        <Check
+          label={t('products.hideInPos')}
+          checked={form.hideInPos}
+          onChange={(value) => set({ hideInPos: value })}
+        />
 
         {form.tracksBatches && (
           <NumberField
@@ -1163,6 +1171,7 @@ function OpeningStockTab({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { preferredWarehouseId } = useSettings();
+  const godownsOn = useGodownsOn();
   const serialsOn = useSerialNumbersEnabled();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -1293,18 +1302,20 @@ function OpeningStockTab({
         </h4>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label={t('stock.warehouse')}>
-            <SearchSelect
-              value={warehouseId}
-              onChange={setWarehouseId}
-              label={t('stock.warehouse')}
-              placeholder={t('stock.chooseWarehouse') || 'Choose warehouse'}
-              options={(warehouses.data ?? []).map((w) => ({
-                value: w.id,
-                label: `${w.code} — ${w.name}`,
-              }))}
-            />
-          </Field>
+          {godownsOn && (
+            <Field label={t('stock.warehouse')}>
+              <SearchSelect
+                value={warehouseId}
+                onChange={setWarehouseId}
+                label={t('stock.warehouse')}
+                placeholder={t('stock.chooseWarehouse') || 'Choose warehouse'}
+                options={(warehouses.data ?? []).map((w) => ({
+                  value: w.id,
+                  label: `${w.code} — ${w.name}`,
+                }))}
+              />
+            </Field>
+          )}
 
           <Field label={t('stock.date')}>
             <input

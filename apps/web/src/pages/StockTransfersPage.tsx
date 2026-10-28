@@ -11,6 +11,7 @@ import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { getPolicies, type FirmPolicies } from '@/lib/policies';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import {
   createStockDocument,
   fetchStockValuation,
@@ -889,6 +890,18 @@ function RequestForm({
           />
         </label>
       </div>
+
+      <BarcodeScan
+        products={products.data ?? []}
+        onScan={(product) => {
+          const next = addScanned(lines, product, () => ({
+            ...blankLine(),
+            productId: product.id,
+          }));
+          setLines(next.lines);
+          return next.quantity;
+        }}
+      />
 
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">

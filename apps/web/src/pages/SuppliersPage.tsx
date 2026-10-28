@@ -143,6 +143,7 @@ export function SuppliersPage(): React.JSX.Element {
       editTitle={t('suppliers.edit')}
       queryKey="suppliers"
       fetchRows={(includeInactive) => listSuppliers('', !includeInactive)}
+      hideRow={(row) => row.isPrimary === true}
       columns={columns}
       rowKey={(row) => row.supplierId}
       addForm={(run, busy, rows) => <SupplierForm run={run} busy={busy} rows={rows} />}

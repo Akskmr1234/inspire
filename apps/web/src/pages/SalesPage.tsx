@@ -10,6 +10,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field as FormField, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { IconBarcode, IconPrinter } from '@/components/icons';
@@ -28,7 +29,13 @@ import {
 import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings, useTaxOn, type SalesRateType } from '@/stores/settings';
+import {
+  useDirectSave,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+  type SalesRateType,
+} from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { chargeRows, useChargeSetup, type ChargeSetup } from '@/lib/charges';
 import {
@@ -39,7 +46,7 @@ import {
 } from '@/components/SerialNumbers';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import {
   fetchProductBatches,
@@ -624,6 +631,8 @@ function EntryDialog({
   const { t } = useTranslation();
   const settings = useSettings();
   const taxOn = useTaxOn();
+  const godownsOn = useGodownsOn();
+  const directSave = useDirectSave();
   const preferredWarehouseId = settings.preferredWarehouseId;
 
   const today = new Date().toISOString().slice(0, 10);
@@ -888,12 +897,19 @@ function EntryDialog({
 
   const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
 
+  // The counter's item search leaves out what the master hides from it. A line that
+  // already holds such an item still shows it, and its code or barcode still finds it.
   const productOptions = useMemo(
     () =>
-      (products.data ?? []).map((product) =>
-        productOption(product, onHand.get(product.id) ?? 0),
-      ),
-    [products.data, onHand],
+      (products.data ?? [])
+        .filter(
+          (product) =>
+            !product.hideInPos ||
+            isReturn(kind) ||
+            lines.some((line) => line.productId === product.id),
+        )
+        .map((product) => productOption(product, onHand.get(product.id) ?? 0)),
+    [products.data, onHand, lines, kind],
   );
 
   useEffect(() => {
@@ -901,15 +917,12 @@ function EntryDialog({
       return;
     }
 
-    const chosen =
-      warehouses.data.find((warehouse) => warehouse.id === preferredWarehouseId) ??
-      warehouses.data.find((warehouse) => warehouse.isDefault) ??
-      (warehouses.data.length === 1 ? warehouses.data[0] : undefined);
+    const chosen = startingGodown(warehouses.data, preferredWarehouseId, godownsOn);
 
     if (chosen) {
       setWarehouseId(chosen.id);
     }
-  }, [warehouses.data, preferredWarehouseId, warehouseId]);
+  }, [warehouses.data, preferredWarehouseId, warehouseId, godownsOn]);
 
   const returnable = useQuery<PagedResult<SalesInvoiceSummary>, ApiError>({
     queryKey: ['sales-invoices', 'returnable', customerId],
@@ -1557,21 +1570,23 @@ function EntryDialog({
         {/* Column 2: Customer & Payment Mode */}
         <div className="space-y-2">
           <FormField label={t('sales.customer')} required error={errors['customerId']}>
-            <SearchSelect
-              value={customerId}
-              onChange={setCustomerId}
-              options={(customers.data ?? []).map((customer) => ({
-                value: customer.customerId,
-                label: `${customer.code} — ${customer.name}`,
-                ...(customer.contact.mobileNumber
-                  ? { detail: customer.contact.mobileNumber }
-                  : {}),
-              }))}
-              invalid={errors['customerId'] !== undefined}
-              label={t('sales.customer')}
-              placeholder={t('sales.chooseCustomer')}
-              size="sm"
-            />
+            <QuickAdd kind="customer" onCreated={setCustomerId}>
+              <SearchSelect
+                value={customerId}
+                onChange={setCustomerId}
+                options={(customers.data ?? []).map((customer) => ({
+                  value: customer.customerId,
+                  label: `${customer.code} — ${customer.name}`,
+                  ...(customer.contact.mobileNumber
+                    ? { detail: customer.contact.mobileNumber }
+                    : {}),
+                }))}
+                invalid={errors['customerId'] !== undefined}
+                label={t('sales.customer')}
+                placeholder={t('sales.chooseCustomer')}
+                size="sm"
+              />
+            </QuickAdd>
           </FormField>
 
           <SelectField<number>
@@ -1592,30 +1607,34 @@ function EntryDialog({
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <FormField label={t('sales.salesman')}>
-              <SearchSelect
-                value={employeeId(salesman) ?? ''}
-                onChange={setSalesman}
-                options={employeeOptions}
-                clearable
-                size="sm"
-                label={t('sales.salesman')}
-                placeholder={
-                  employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                }
-              />
+              <QuickAdd kind="employee" onCreated={setSalesman}>
+                <SearchSelect
+                  value={employeeId(salesman) ?? ''}
+                  onChange={setSalesman}
+                  options={employeeOptions}
+                  clearable
+                  size="sm"
+                  label={t('sales.salesman')}
+                  placeholder={
+                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+                  }
+                />
+              </QuickAdd>
             </FormField>
             <FormField label={t('sales.billingman')}>
-              <SearchSelect
-                value={employeeId(billingman) ?? ''}
-                onChange={setBillingman}
-                options={employeeOptions}
-                clearable
-                size="sm"
-                label={t('sales.billingman')}
-                placeholder={
-                  employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                }
-              />
+              <QuickAdd kind="employee" onCreated={setBillingman}>
+                <SearchSelect
+                  value={employeeId(billingman) ?? ''}
+                  onChange={setBillingman}
+                  options={employeeOptions}
+                  clearable
+                  size="sm"
+                  label={t('sales.billingman')}
+                  placeholder={
+                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+                  }
+                />
+              </QuickAdd>
             </FormField>
           </div>
 
@@ -1695,25 +1714,31 @@ function EntryDialog({
               ]}
               size="sm"
             />
-            <FormField
-              label={t('sales.warehouse')}
-              required
-              error={errors['warehouseId']}
-            >
-              <SearchSelect
-                value={warehouseId}
-                onChange={setWarehouseId}
-                options={(warehouses.data ?? []).map((warehouse) => ({
-                  value: warehouse.id,
-                  label: `${warehouse.code} — ${warehouse.name}`,
-                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
-                }))}
-                invalid={errors['warehouseId'] !== undefined}
+            {godownsOn && (
+              <FormField
                 label={t('sales.warehouse')}
-                placeholder={t('sales.chooseWarehouse')}
-                size="sm"
-              />
-            </FormField>
+                required
+                error={errors['warehouseId']}
+              >
+                <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+                  <SearchSelect
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                    options={(warehouses.data ?? []).map((warehouse) => ({
+                      value: warehouse.id,
+                      label: `${warehouse.code} — ${warehouse.name}`,
+                      ...(warehouse.isDefault
+                        ? { meta: t('settings.masterDefault') }
+                        : {}),
+                    }))}
+                    invalid={errors['warehouseId'] !== undefined}
+                    label={t('sales.warehouse')}
+                    placeholder={t('sales.chooseWarehouse')}
+                    size="sm"
+                  />
+                </QuickAdd>
+              </FormField>
+            )}
           </div>
         </div>
       </div>
@@ -2215,10 +2240,11 @@ function EntryDialog({
           other thing a counter does with nearly every sale. */}
       <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-line/60">
         <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
-        {/* Off in Settings for a counter that only ever posts; a draft being
-            corrected can still be saved as one. */}
+        {/* Off in Settings for a counter that only ever posts, and under direct
+            save; a draft being corrected can still be saved as one. */}
         {editing?.header.status !== SalesInvoiceStatus.posted &&
-          (settings.allowSaveDraft !== false || editing !== undefined) && (
+          ((settings.allowSaveDraft !== false && !directSave) ||
+            editing !== undefined) && (
             <ModalButton
               disabled={busy}
               onClick={() => void save(false)}

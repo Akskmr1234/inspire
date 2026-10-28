@@ -11,6 +11,7 @@ import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type CategorySummary, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { useGodownColumns, useGodownsOn } from '@/stores/settings';
 import {
   fetchBatchStock,
   fetchExpiring,
@@ -112,6 +113,7 @@ export function StockValuationPage(): React.JSX.Element {
       render: (row) => moneyAlways(row.value),
     },
   ];
+  const shown = useGodownColumns(columns);
 
   const controls = (
     <div className="toolbar">
@@ -143,7 +145,7 @@ export function StockValuationPage(): React.JSX.Element {
           <DataGrid
             gridKey="stock-valuation"
             rows={report.rows}
-            columns={columns}
+            columns={shown}
             rowKey={(row) => `${row.productId}-${row.warehouseId}`}
             emptyMessage={t('stock.nothingOnHand')}
           />
@@ -162,6 +164,7 @@ export function StockValuationPage(): React.JSX.Element {
  */
 export function BatchStockPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const shown = useGodownColumns(batchColumns(t));
 
   const [warehouseId, setWarehouseId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -202,7 +205,7 @@ export function BatchStockPage(): React.JSX.Element {
           <DataGrid
             gridKey="batch-stock"
             rows={report.rows}
-            columns={batchColumns(t)}
+            columns={shown}
             rowKey={(row) => `${row.batchId}-${row.warehouseId}`}
             emptyMessage={t('stock.noBatchStock')}
           />
@@ -221,6 +224,7 @@ export function BatchStockPage(): React.JSX.Element {
  */
 export function ExpiryReportPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const shown = useGodownColumns(batchColumns(t, true));
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -265,7 +269,7 @@ export function ExpiryReportPage(): React.JSX.Element {
         <DataGrid
           gridKey="expiry-report"
           rows={rows}
-          columns={batchColumns(t, true)}
+          columns={shown}
           rowKey={(row) => `${row.batchId}-${row.warehouseId}`}
           emptyMessage={t('stock.nothingExpiring')}
         />
@@ -955,6 +959,7 @@ export function SerialStockPage(): React.JSX.Element {
       value: (row) => row.receivedOn ?? '—',
     },
   ];
+  const shown = useGodownColumns(columns);
 
   const controls = (
     <div className="toolbar flex flex-wrap items-end gap-3">
@@ -1010,7 +1015,7 @@ export function SerialStockPage(): React.JSX.Element {
         <DataGrid
           gridKey="serials-stock"
           rows={rows}
-          columns={columns}
+          columns={shown}
           rowKey={(row) => row.serialNumberId}
           emptyMessage="No serial numbers found matching filters."
         />
@@ -1120,13 +1125,16 @@ function WarehousePicker({
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const { t } = useTranslation();
+  const godownsOn = useGodownsOn();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
     queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
   });
+
+  if (!godownsOn) return null;
 
   return (
     <label className="field">

@@ -111,6 +111,8 @@ public static class DependencyInjection
         services.AddScoped<IDashboardMetricReader, DashboardMetricReader>();
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IRoleDashboardRepository, RoleDashboardRepository>();
+        services.AddScoped<IPrimaryParties, PrimaryParties>();
         services.AddScoped<IInventoryMasterRepository, InventoryMasterRepository>();
         services.AddScoped<ITaxSlabRepository, TaxSlabRepository>();
         services.AddScoped<IPlaceRepository, PlaceRepository>();

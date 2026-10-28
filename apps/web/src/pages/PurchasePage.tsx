@@ -9,6 +9,7 @@ import { Modal, ModalButton } from '@/components/Modal';
 import { ReportFrame } from '@/components/ReportFrame';
 import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
   ChargesPanel,
@@ -25,14 +26,15 @@ import {
   type LineColumn,
 } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useSettings, useTaxOn } from '@/stores/settings';
+import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { useChargeSetup } from '@/lib/charges';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -492,7 +494,10 @@ function EntryDialog({
   const { taxRates, defaultTaxRate, preferredWarehouseId, allowSaveDraft } =
     useSettings();
   const taxOn = useTaxOn();
-  const allowDrafts = allowSaveDraft !== false;
+  const godownsOn = useGodownsOn();
+  const directSave = useDirectSave();
+  // Direct save makes every purchase final as it is saved, so there is no draft to offer.
+  const allowDrafts = allowSaveDraft !== false && !directSave;
 
   const isReturn = isPurchaseReturn(kind);
   const today = new Date().toISOString().slice(0, 10);
@@ -596,19 +601,12 @@ function EntryDialog({
       return;
     }
 
-    const preferred = warehouses.data.find(
-      (warehouse) => warehouse.id === preferredWarehouseId,
-    );
-    const fallback =
-      warehouses.data.find((warehouse) => warehouse.isDefault) ??
-      (warehouses.data.length === 1 ? warehouses.data[0] : undefined);
-
-    const chosen = preferred ?? fallback;
+    const chosen = startingGodown(warehouses.data, preferredWarehouseId, godownsOn);
 
     if (chosen) {
       setDraft((current) => ({ ...current, warehouseId: chosen.id }));
     }
-  }, [warehouses.data, preferredWarehouseId, draft.warehouseId]);
+  }, [warehouses.data, preferredWarehouseId, draft.warehouseId, godownsOn]);
 
   // Only posted purchases can be returned against, and only this supplier's: offering
   // somebody else's would be offering a mistake.
@@ -953,36 +951,42 @@ function EntryDialog({
         />
 
         <Field label={t('purchase.supplier')} required error={errors['supplierId']}>
-          <SearchSelect
-            value={draft.supplierId}
-            onChange={(value) => set('supplierId', value)}
-            options={(suppliers.data ?? []).map((supplier) => ({
-              value: supplier.supplierId,
-              label: `${supplier.code} — ${supplier.name}`,
-              ...(supplier.contact.mobileNumber
-                ? { detail: supplier.contact.mobileNumber }
-                : {}),
-            }))}
-            invalid={errors['supplierId'] !== undefined}
-            label={t('purchase.supplier')}
-            placeholder={t('purchase.chooseSupplier')}
-          />
+          <QuickAdd kind="supplier" onCreated={(id) => set('supplierId', id)}>
+            <SearchSelect
+              value={draft.supplierId}
+              onChange={(value) => set('supplierId', value)}
+              options={(suppliers.data ?? []).map((supplier) => ({
+                value: supplier.supplierId,
+                label: `${supplier.code} — ${supplier.name}`,
+                ...(supplier.contact.mobileNumber
+                  ? { detail: supplier.contact.mobileNumber }
+                  : {}),
+              }))}
+              invalid={errors['supplierId'] !== undefined}
+              label={t('purchase.supplier')}
+              placeholder={t('purchase.chooseSupplier')}
+            />
+          </QuickAdd>
         </Field>
 
-        <Field label={t('purchase.warehouse')} required error={errors['warehouseId']}>
-          <SearchSelect
-            value={draft.warehouseId}
-            onChange={(value) => set('warehouseId', value)}
-            options={(warehouses.data ?? []).map((warehouse) => ({
-              value: warehouse.id,
-              label: `${warehouse.code} — ${warehouse.name}`,
-              ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
-            }))}
-            invalid={errors['warehouseId'] !== undefined}
-            label={t('purchase.warehouse')}
-            placeholder={t('purchase.chooseWarehouse')}
-          />
-        </Field>
+        {godownsOn && (
+          <Field label={t('purchase.warehouse')} required error={errors['warehouseId']}>
+            <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
+              <SearchSelect
+                value={draft.warehouseId}
+                onChange={(value) => set('warehouseId', value)}
+                options={(warehouses.data ?? []).map((warehouse) => ({
+                  value: warehouse.id,
+                  label: `${warehouse.code} — ${warehouse.name}`,
+                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+                }))}
+                invalid={errors['warehouseId'] !== undefined}
+                label={t('purchase.warehouse')}
+                placeholder={t('purchase.chooseWarehouse')}
+              />
+            </QuickAdd>
+          </Field>
+        )}
 
         {/*
           The tax mode: whether this document carries tax at all, and under which
@@ -1057,6 +1061,23 @@ function EntryDialog({
       </div>
 
       {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
+
+      <BarcodeScan
+        products={products.data ?? []}
+        onScan={(product) => {
+          // At the product's cost and its own tax rate, as choosing it in the picker does.
+          const next = addScanned(lines, product, () => ({
+            ...emptyLine(defaultTaxRate),
+            productId: product.id,
+            rate: product.cost ? String(product.cost) : '',
+            ...(product.taxPercentage != null
+              ? { taxPercentage: String(product.taxPercentage) }
+              : {}),
+          }));
+          setLines(next.lines);
+          return next.quantity;
+        }}
+      />
 
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">

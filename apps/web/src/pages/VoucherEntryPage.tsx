@@ -7,6 +7,7 @@ import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
 import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { useIsNarrow } from '@/components/DataGrid';
 import { IconClose, IconPlus } from '@/components/icons';
 import { ApiError, request } from '@/lib/api';
@@ -349,15 +350,17 @@ function JournalForm({
   });
 
   const ledgerControl = (line: JournalLine): React.JSX.Element => (
-    <SearchSelect
-      value={line.ledgerId}
-      onChange={(ledgerId) => update(line.key, { ledgerId })}
-      options={ledgerOptions}
-      disabled={ledgers.isPending}
-      size="sm"
-      label={t('vouchers.ledger')}
-      placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
-    />
+    <QuickAdd kind="ledger" onCreated={(ledgerId) => update(line.key, { ledgerId })}>
+      <SearchSelect
+        value={line.ledgerId}
+        onChange={(ledgerId) => update(line.key, { ledgerId })}
+        options={ledgerOptions}
+        disabled={ledgers.isPending}
+        size="sm"
+        label={t('vouchers.ledger')}
+        placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+      />
+    </QuickAdd>
   );
 
   const amountControl = (
@@ -1311,15 +1314,20 @@ function MoneyForm({
   });
 
   const ledgerControl = (line: MoneyLine): React.JSX.Element => (
-    <SearchSelect
-      value={line.ledgerId}
-      onChange={(ledgerId) => update(line.key, { ledgerId, allocations: {} })}
-      options={ledgerOptions}
-      disabled={ledgers.isPending}
-      size="sm"
-      label={t('vouchers.ledger')}
-      placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
-    />
+    <QuickAdd
+      kind="ledger"
+      onCreated={(ledgerId) => update(line.key, { ledgerId, allocations: {} })}
+    >
+      <SearchSelect
+        value={line.ledgerId}
+        onChange={(ledgerId) => update(line.key, { ledgerId, allocations: {} })}
+        options={ledgerOptions}
+        disabled={ledgers.isPending}
+        size="sm"
+        label={t('vouchers.ledger')}
+        placeholder={ledgers.isPending ? t('common.loading') : t('common.choose')}
+      />
+    </QuickAdd>
   );
 
   const amountControl = (line: MoneyLine): React.JSX.Element => (

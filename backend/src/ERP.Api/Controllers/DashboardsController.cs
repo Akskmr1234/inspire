@@ -81,6 +81,63 @@ public sealed class DashboardsController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Lists every widget a dashboard can be made of.</summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The widgets, in the order they are offered.</returns>
+    /// <response code="200">The catalogue.</response>
+    [HttpGet("catalogue")]
+    [ProducesResponseType(typeof(IReadOnlyList<DashboardWidgetDefinition>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCatalogueAsync(CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyList<DashboardWidgetDefinition>> result = await _sender.Send(
+            new GetDashboardCatalogueQuery(), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Reads the dashboard a role sees.</summary>
+    /// <param name="roleId">The role.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Its widgets, in order.</returns>
+    /// <response code="200">The role's dashboard.</response>
+    /// <response code="404">No such role.</response>
+    [HttpGet("roles/{roleId:guid}")]
+    [RequiresPermission("reporting", "dashboard", "create")]
+    [ProducesResponseType(typeof(RoleDashboardView), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRoleDashboardAsync(Guid roleId, CancellationToken cancellationToken)
+    {
+        Result<RoleDashboardView> result = await _sender.Send(new GetRoleDashboardQuery(roleId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Sets which widgets a role's dashboard shows, and in what order.</summary>
+    /// <param name="roleId">The role.</param>
+    /// <param name="request">The widgets, first to last.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>No content.</returns>
+    /// <response code="204">Arranged.</response>
+    /// <response code="400">A widget the catalogue does not have.</response>
+    /// <response code="404">No such role.</response>
+    [HttpPut("roles/{roleId:guid}")]
+    [RequiresPermission("reporting", "dashboard", "create")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetRoleDashboardAsync(
+        Guid roleId,
+        [FromBody] RoleDashboardRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result result = await _sender.Send(
+            new SetRoleDashboardCommand(roleId, request.Widgets ?? []), cancellationToken);
+
+        return result.IsSuccess ? NoContent() : Problem(result.Error);
+    }
+
     /// <summary>Adds a panel driven by a query of the author's own.</summary>
     /// <param name="id">The dashboard.</param>
     /// <param name="request">The query and how to draw it.</param>
@@ -162,3 +219,7 @@ public sealed record AddCustomWidgetRequest(
     [property: JsonRequired] WidgetKind Kind,
     int SortOrder = 0,
     int Span = 1);
+
+/// <summary>The widgets of a role's dashboard, first to last.</summary>
+/// <param name="Widgets">The widgets.</param>
+public sealed record RoleDashboardRequest(IReadOnlyList<RoleDashboardItem>? Widgets);

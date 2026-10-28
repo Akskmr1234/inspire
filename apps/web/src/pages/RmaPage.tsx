@@ -9,12 +9,15 @@ import { Modal } from '@/components/Modal';
 import { Panel } from '@/components/Panel';
 import { ReportFrame } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
+import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { productOption } from '@/components/DocumentLines';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
-import { listMaster, type WarehouseSummary } from '@/lib/inventory';
+import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
+import { useGodownsOn } from '@/stores/settings';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
 import {
   listPurchaseInvoices,
   PurchaseDocumentKind,
@@ -356,6 +359,7 @@ function RmaForm({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const can = useSession((state) => state.can);
+  const godownsOn = useGodownsOn();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -410,8 +414,7 @@ function RmaForm({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const godown =
-    warehouseId || godowns.find((warehouse) => warehouse.isDefault)?.id || '';
+  const godown = warehouseId || startingGodown(godowns, '', godownsOn)?.id || '';
   const fromCustomer = direction === RmaDirection.fromCustomer;
 
   // The party's posted invoices, for the return to name the one the goods came on.
@@ -590,29 +593,40 @@ function RmaForm({
             <span className="field-label">
               {fromCustomer ? t('rma.customer') : t('rma.supplier')}
             </span>
-            <SearchSelect
-              value={partyId}
+            <QuickAdd
+              kind={fromCustomer ? 'customer' : 'supplier'}
               disabled={rma !== null}
-              onChange={(value) => {
-                setPartyId(value);
+              onCreated={(id) => {
+                setPartyId(id);
                 setInvoiceId('');
               }}
-              label={fromCustomer ? t('rma.customer') : t('rma.supplier')}
-              placeholder={t('stock.choose')}
-              options={parties}
-            />
+            >
+              <SearchSelect
+                value={partyId}
+                disabled={rma !== null}
+                onChange={(value) => {
+                  setPartyId(value);
+                  setInvoiceId('');
+                }}
+                label={fromCustomer ? t('rma.customer') : t('rma.supplier')}
+                placeholder={t('stock.choose')}
+                options={parties}
+              />
+            </QuickAdd>
           </label>
-          <SelectField<string>
-            label={t('rma.godown')}
-            value={godown}
-            disabled={rma !== null}
-            onChange={setWarehouseId}
-            hint={t('rma.godownHint')}
-            options={godowns.map((warehouse) => ({
-              value: warehouse.id,
-              label: warehouse.name,
-            }))}
-          />
+          {godownsOn && (
+            <SelectField<string>
+              label={t('rma.godown')}
+              value={godown}
+              disabled={rma !== null}
+              onChange={setWarehouseId}
+              hint={t('rma.godownHint')}
+              options={godowns.map((warehouse) => ({
+                value: warehouse.id,
+                label: warehouse.name,
+              }))}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -647,6 +661,18 @@ function RmaForm({
           rows={2}
           value={narration}
           onChange={setNarration}
+        />
+
+        <BarcodeScan
+          products={products.data ?? []}
+          onScan={(product) => {
+            const next = addScanned(lines, product, () => ({
+              ...blankLine(),
+              productId: product.id,
+            }));
+            setLines(next.lines);
+            return next.quantity;
+          }}
         />
 
         <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
@@ -820,6 +846,7 @@ function RmaView({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const can = useSession((state) => state.can);
+  const godownsOn = useGodownsOn();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -932,8 +959,12 @@ function RmaView({
               {fromCustomer ? t('rma.customer') : t('rma.supplier')}
             </dt>
             <dd>{rma.summary.partyName}</dd>
-            <dt className="text-ink-muted">{t('rma.godown')}</dt>
-            <dd>{rma.warehouseName}</dd>
+            {godownsOn && (
+              <>
+                <dt className="text-ink-muted">{t('rma.godown')}</dt>
+                <dd>{rma.warehouseName}</dd>
+              </>
+            )}
             <dt className="text-ink-muted">{t('rma.invoice')}</dt>
             <dd>
               {[rma.linkedInvoiceNumber, rma.summary.invoiceReference]
@@ -1067,7 +1098,7 @@ function RmaView({
             >
               {t('rma.repaired')}
             </button>
-            <div className="min-w-56">
+            <div className={godownsOn ? 'min-w-56' : 'hidden'}>
               <SelectField<string>
                 label={t('rma.stockGodown')}
                 value={

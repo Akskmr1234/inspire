@@ -5,6 +5,7 @@ import { PageHeading } from '@/components/PageHeading';
 import { Modal, ModalButton } from '@/components/Modal';
 import { Spinner } from '@/components/ReportFrame';
 import { request, type ApiError } from '@/lib/api';
+import { applyPrimaryDefaults } from '@/lib/primaryDefaults';
 import { useSettings } from '@/stores/settings';
 
 const Scope = { transactions: 1, everything: 2 } as const;
@@ -46,7 +47,8 @@ export function DataResetPage(): React.JSX.Element {
     setDone(result);
 
     // The defaults named masters that no longer exist; a picker pointing at nothing would
-    // show an empty choice that looks chosen.
+    // show an empty choice that looks chosen. The Primary records are still there, so
+    // they become the defaults again.
     if (result.scope === Scope.everything) {
       useSettings.getState().update({
         defaultCustomerId: '',
@@ -55,7 +57,9 @@ export function DataResetPage(): React.JSX.Element {
         defaultCategoryId: '',
         defaultStockUnitId: '',
         defaultBrandId: '',
+        primaryDefaultsApplied: false,
       });
+      void applyPrimaryDefaults();
     }
 
     // Everything on screen was read before the reset.

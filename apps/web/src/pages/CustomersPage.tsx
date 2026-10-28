@@ -262,6 +262,7 @@ export function CustomersPage(): React.JSX.Element {
       editTitle={t('customers.edit')}
       queryKey="customers"
       fetchRows={(includeInactive) => listCustomers('', !includeInactive)}
+      hideRow={(row) => row.isPrimary === true}
       columns={columns}
       rowKey={(row) => row.customerId}
       addForm={(run, busy, rows) => <CustomerForm run={run} busy={busy} rows={rows} />}

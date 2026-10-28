@@ -170,6 +170,7 @@ public sealed record GetCustomerQuery(Guid CustomerId) : IQuery<CustomerResponse
 /// <param name="OpeningBalance">What they owed when the system was taken on.</param>
 /// <param name="IsActive">Whether they may be billed.</param>
 /// <param name="Profile">Where they are, and their other numbers.</param>
+/// <param name="IsPrimary">Whether this is the firm's Primary customer.</param>
 public sealed record CustomerResponse(
     Guid CustomerId,
     string Code,
@@ -181,7 +182,8 @@ public sealed record CustomerResponse(
     string Currency,
     decimal OpeningBalance,
     bool IsActive,
-    CustomerProfile Profile);
+    CustomerProfile Profile,
+    bool IsPrimary = false);
 
 /// <summary>Validates <see cref="CreateCustomerCommand"/>.</summary>
 public sealed class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCommand>

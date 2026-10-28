@@ -42,7 +42,7 @@ import { moneyAlways as money } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { postSalesInvoice, SalesPaymentMode, TaxMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
-import { useSettings, useTaxOn } from '@/stores/settings';
+import { useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
 import { shortcutProps } from '@/lib/shortcuts';
 
 const LIST = '/service/sales';
@@ -284,6 +284,7 @@ function ServiceSaleForm({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const settings = useSettings();
+  const godownsOn = useGodownsOn();
   const can = useSession((s) => s.can);
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
@@ -869,21 +870,23 @@ function ServiceSaleForm({
               ))}
             </select>
           </Field>
-          <Field label={t('service.godown')}>
-            <select
-              aria-label={t('service.godown')}
-              value={warehouseId}
-              disabled={card !== null}
-              onChange={(event) => setWarehouseId(event.target.value)}
-              className="field-input-sm"
-            >
-              {godowns.map((warehouse) => (
-                <option key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {godownsOn && (
+            <Field label={t('service.godown')}>
+              <select
+                aria-label={t('service.godown')}
+                value={warehouseId}
+                disabled={card !== null}
+                onChange={(event) => setWarehouseId(event.target.value)}
+                className="field-input-sm"
+              >
+                {godowns.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <TextField
             label={t('serviceSales.address2')}
             value={customer.addressLine2}
@@ -1117,7 +1120,7 @@ function ServiceSaleForm({
                 <thead>
                   <tr>
                     <th className="text-start">{t('serviceSales.product')}</th>
-                    <th className="text-start">{t('service.godown')}</th>
+                    {godownsOn && <th className="text-start">{t('service.godown')}</th>}
                     <th className="text-start">{t('serviceSales.code')}</th>
                     <th className="w-24 text-end">{t('serviceSales.qty')}</th>
                     <th className="w-24 text-end">{t('service.rate')}</th>
@@ -1143,9 +1146,11 @@ function ServiceSaleForm({
                             label={t('serviceSales.product')}
                           />
                         </td>
-                        <td className="py-1.5 text-ink-muted">
-                          {product ? godownName : ''}
-                        </td>
+                        {godownsOn && (
+                          <td className="py-1.5 text-ink-muted">
+                            {product ? godownName : ''}
+                          </td>
+                        )}
                         <td className="py-1.5 font-mono text-xs">
                           {product?.code ?? ''}
                         </td>
