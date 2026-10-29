@@ -580,6 +580,36 @@ const BY_ROUTE: readonly (readonly [string, (props: IconProps) => React.JSX.Elem
     ['accounting', IconBook],
   ];
 
+export function IconDocument({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h4" />
+    </Svg>
+  );
+}
+
+export function IconCreditCard({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18M7 15h3" />
+    </Svg>
+  );
+}
+
+export function IconTrash({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+      <path d="M10 11v6M14 11v6" />
+    </Svg>
+  );
+}
+
 export function IconPrinter({ className }: IconProps): React.JSX.Element {
   return (
     <Svg className={className}>

@@ -681,9 +681,11 @@
     with `field-label` there, a bare `<label>` on the purchase entry — and captions
     that disagreed about their own height cannot line up with each other.
   */
+  /* Sentence case at reading size rather than small capitals: a caption is read
+     once per field, and capitals at twelve pixels were the slowest text on the
+     screen to read. */
   .field-label {
-    @apply mb-1.5 flex items-center gap-0.5 text-xs font-semibold tracking-wide
-           text-ink-muted uppercase;
+    @apply mb-1.5 flex items-center gap-0.5 text-[13px] font-medium text-ink/80;
   }
 
   /* The marker on a mandatory field. Red, beside the caption, and never the only

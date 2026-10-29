@@ -10,6 +10,7 @@ import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
 import { setupName, type ChargeDocument, type ChargeSetup } from '@/lib/charges';
 import { useSettings, useTaxOn } from '@/stores/settings';
+import { shortcutProps } from '@/lib/shortcuts';
 
 /**
  * The pieces the document entry screens share: the product picker, the
@@ -250,7 +251,7 @@ export function ProductDetailCells({
       {shows('productCode') && (
         <td
           data-label={labels('lineDetails.code')}
-          className="px-2 py-1 font-mono text-xs text-ink-muted"
+          className="px-2 py-1 tabular-nums text-xs text-ink-muted"
         >
           {product?.code ?? '—'}
         </td>
@@ -268,7 +269,7 @@ export function ProductDetailCells({
       {shows('productRetail') && (
         <td
           data-label={labels('lineDetails.retail')}
-          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+          className="px-2 py-1 text-end tabular-nums text-ink-muted"
         >
           {figure(product?.retailRate)}
         </td>
@@ -277,7 +278,7 @@ export function ProductDetailCells({
       {shows('productMrp') && (
         <td
           data-label={labels('lineDetails.mrp')}
-          className="px-2 py-1 text-end font-mono tabular-nums text-ink-muted"
+          className="px-2 py-1 text-end tabular-nums text-ink-muted"
         >
           {figure(product?.maximumRetailPrice)}
         </td>
@@ -423,6 +424,7 @@ export function ChargesPanel({
   currency,
   setup,
   nonTax = false,
+  inline = false,
 }: {
   readonly charges: readonly DraftCharge[];
   readonly ledgers: readonly LedgerSummary[];
@@ -431,6 +433,11 @@ export function ChargesPanel({
   /** The firm's charge setup for the document. */
   readonly setup?: readonly ChargeSetup[] | undefined;
   readonly nonTax?: boolean;
+  /**
+   * Just the list, under a caption, for an invoice's bill panel - where the total
+   * they come to is part of the bill's own figures rather than a panel's heading.
+   */
+  readonly inline?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -445,28 +452,43 @@ export function ChargesPanel({
 
   const total = chargeTotal(charges, ledgers, setup);
 
+  const list = (
+    <AdditionalLedgerList
+      carried={charges}
+      setup={setup}
+      nonTax={nonTax}
+      ledgers={ledgers}
+      onAmount={setAmount}
+      onRemove={(ledgerId) =>
+        onChange(charges.filter((charge) => charge.ledgerId !== ledgerId))
+      }
+    />
+  );
+
+  if (inline) {
+    return (
+      <div className="space-y-1.5" {...shortcutProps('charges')}>
+        <span className="block text-[13px] font-medium text-ink-muted">
+          {t('sales.additionalLedgers')}
+        </span>
+        {list}
+      </div>
+    );
+  }
+
   return (
     <section className="panel space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-ink">{t('documents.charges')}</h3>
 
-        <span className="font-mono text-sm tabular-nums text-ink">
+        <span className="text-sm tabular-nums text-ink">
           {total >= 0 ? '+' : '−'}
           {moneyAlways(Math.abs(total))}
           {currency ? ` ${currency}` : ''}
         </span>
       </header>
 
-      <AdditionalLedgerList
-        carried={charges}
-        setup={setup}
-        nonTax={nonTax}
-        ledgers={ledgers}
-        onAmount={setAmount}
-        onRemove={(ledgerId) =>
-          onChange(charges.filter((charge) => charge.ledgerId !== ledgerId))
-        }
-      />
+      {list}
     </section>
   );
 }
@@ -577,7 +599,7 @@ function Line({
       </dt>
       <dd
         className={clsx(
-          'text-end font-mono tabular-nums',
+          'text-end tabular-nums',
           ruled && 'mt-1.5 border-t border-line/80 pt-1.5',
           strong
             ? 'mt-2 border-t-2 border-line-strong pt-2 text-base font-bold text-brand-600 dark:text-brand-300'

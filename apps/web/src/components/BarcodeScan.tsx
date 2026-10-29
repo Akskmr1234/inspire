@@ -147,13 +147,13 @@ export function BarcodeScan({
         }}
         aria-label={t('stock.barcodeScanner')}
         placeholder={t('stock.barcodeScanPlaceholder')}
-        className="field-input-sm min-w-40 flex-1 font-mono text-xs"
+        className="field-input min-w-40 flex-1"
       />
       <button
         type="button"
         disabled={disabled || code.trim() === ''}
         onClick={() => void scan()}
-        className="btn-secondary btn-sm"
+        className="btn-secondary"
       >
         {t('stock.scan')}
       </button>
