@@ -7,8 +7,21 @@
  * to Arabic as in English.
  */
 
-/** What a button on an entry screen does, as the shortcuts name it. */
-export type EntryAction = 'new' | 'save' | 'draft' | 'print' | 'bill' | 'add-line';
+/**
+ * What a shortcut does on an entry screen: presses a button, or - for the last four -
+ * puts the cursor in a field the counter goes back to on every bill.
+ */
+export type EntryAction =
+  | 'new'
+  | 'save'
+  | 'draft'
+  | 'print'
+  | 'bill'
+  | 'add-line'
+  | 'customer'
+  | 'scan'
+  | 'payment'
+  | 'charges';
 
 /** A shortcut that opens a new entry from anywhere. */
 export interface NewEntryShortcut {
@@ -98,6 +111,12 @@ export const ENTRY_SHORTCUTS: readonly EntryShortcut[] = [
   { action: 'print', code: 'KeyP', mod: true, labelKey: 'shortcuts.print' },
   { action: 'bill', code: 'KeyB', mod: true, labelKey: 'shortcuts.bill' },
   { action: 'add-line', code: 'KeyA', alt: true, labelKey: 'shortcuts.addLine' },
+  // Function keys type nothing, so they work from inside any field. F1, F3, F5-F7 and
+  // F10-F12 are the browser's own and are left to it.
+  { action: 'customer', code: 'F2', labelKey: 'shortcuts.goCustomer' },
+  { action: 'scan', code: 'F4', labelKey: 'shortcuts.goScan' },
+  { action: 'payment', code: 'F8', labelKey: 'shortcuts.goPayment' },
+  { action: 'charges', code: 'F9', labelKey: 'shortcuts.goCharges' },
 ];
 
 /** Whether this is a Mac, where Ctrl is Cmd and Alt is Option. */
@@ -161,6 +180,8 @@ function usable(button: HTMLButtonElement): boolean {
  * The button a shortcut presses: the one marked for it in the open window, or on the
  * screen when no window is open. Inside a window with nothing marked, Save falls back
  * to the window's own submit button, which is how every master form saves.
+ *
+ * For a field shortcut the element marked is the field, or a box around it.
  */
 export function buttonFor(action: EntryAction): HTMLButtonElement | null {
   const dialog = activeDialog();
@@ -181,6 +202,26 @@ export function buttonFor(action: EntryAction): HTMLButtonElement | null {
   }
 
   return null;
+}
+
+/**
+ * Acts on what a shortcut found: presses a button, or puts the cursor in the field -
+ * the first one inside a marked box - with what it holds selected, ready to type over.
+ */
+export function actOn(target: HTMLElement): void {
+  if (target instanceof HTMLButtonElement) {
+    target.click();
+    return;
+  }
+
+  const field = target.matches('input, select, textarea')
+    ? target
+    : target.querySelector<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
+      );
+
+  field?.focus();
+  if (field instanceof HTMLInputElement) field.select();
 }
 
 /** Whether an entry is open - a window, or an entry screen with its Save - so leaving it would lose work. */

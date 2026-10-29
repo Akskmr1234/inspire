@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal } from '@/components/Modal';
 import {
+  actOn,
   buttonFor,
   describe,
   ENTRY_SHORTCUTS,
@@ -162,7 +163,7 @@ export function KeyboardShortcuts(): React.JSX.Element | null {
 
       if (!button) return;
       event.preventDefault();
-      button.click();
+      actOn(button);
     };
 
     window.addEventListener('keydown', onKeyDown, true);
