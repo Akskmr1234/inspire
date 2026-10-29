@@ -94,7 +94,7 @@ export function AdditionalLedgerList({
             value={amountOf(row.ledgerId)}
             disabled={disabled}
             onChange={(event) => onAmount(row.ledgerId, event.target.value, row.adds)}
-            className="field-input-sm w-28 shrink-0 text-end font-mono tabular-nums"
+            className="field-input-sm w-28 shrink-0 text-end tabular-nums"
           />
           <span className="flex w-6 shrink-0 justify-center">
             {row.removable && !disabled && (

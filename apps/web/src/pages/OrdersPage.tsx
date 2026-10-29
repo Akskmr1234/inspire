@@ -4,7 +4,29 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
-import { IconPrinter } from '@/components/icons';
+import {
+  IconBox,
+  IconCreditCard,
+  IconDocument,
+  IconPlus,
+  IconPrinter,
+  IconReceipt,
+  IconTruck,
+  IconUser,
+} from '@/components/icons';
+import {
+  BillFigures,
+  DetailRow,
+  InvoiceBody,
+  InvoiceCard,
+  InvoiceHeader,
+  InvoicePanel,
+  InvoiceWindow,
+  NarrationField,
+  RemoveLineButton,
+  TotalBanner,
+} from '@/components/invoice/InvoiceLayout';
+import { ShortcutHints } from '@/components/ShortcutHints';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printableOrder } from '@/lib/printing';
 import { ReportFrame } from '@/components/ReportFrame';
@@ -591,6 +613,8 @@ function OrderEntryDialog({
   const [lines, setLines] = useState<readonly DraftLine[]>([emptyLine(defaultTaxRate)]);
   const [charges, setCharges] = useState<readonly DraftCharge[]>([]);
   const [busy, setBusy] = useState(false);
+  // Why the last save was refused, shown in the window the user is still in.
+  const [failure, setFailure] = useState<string | null>(null);
 
   const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
     queryKey: ['suppliers', 'picker'],
@@ -762,6 +786,7 @@ function OrderEntryDialog({
   );
 
   const save = async (): Promise<void> => {
+    setFailure(null);
     if (!submit(draft) || lineErrors.some((line) => Object.keys(line).length > 0)) {
       return;
     }
@@ -829,7 +854,7 @@ function OrderEntryDialog({
       }
     } catch (failure) {
       const api = failure as ApiError;
-      onError(api.detail || api.code);
+      setFailure(api.detail || api.code);
     } finally {
       setBusy(false);
     }
@@ -845,321 +870,465 @@ function OrderEntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  const documentTitle = kind === 'purchase' ? t('orders.newPurchase') : words('newSales');
+  const orderTotal =
+    totals.gross -
+    totals.discount +
+    totals.tax +
+    chargeTotal(charges, ledgers.data ?? [], chargeSetup);
+  const itemCount = lines.filter((line) => line.productId !== '').length;
+  const partyName =
+    partyOptions.find((option) => option.value === draft.partyId)?.label ?? '—';
+
   return (
-    <Modal
-      title={kind === 'purchase' ? t('orders.newPurchase') : words('newSales')}
-      size="full"
-      onClose={onClose}
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-surface-2/40 p-4 rounded-2xl border border-line">
-        <Field label={words('number')}>
-          <input
-            value={nextNumber ?? t('orders.numberOnSave')}
-            disabled
-            className="field-input font-mono"
-          />
-        </Field>
-
-        <DateField
-          label={words('date')}
-          required
-          value={draft.date}
-          onChange={(value) => set('date', value)}
-          error={errors['date']}
-        />
-
-        <DateField
-          label={words('expectedOn')}
-          value={draft.expectedOn}
-          onChange={(value) => set('expectedOn', value)}
-          error={errors['expectedOn']}
-        />
-
-        <Field
-          label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
-          required
-          error={errors['partyId']}
-        >
-          <QuickAdd
-            kind={kind === 'purchase' ? 'supplier' : 'customer'}
-            onCreated={(id) => set('partyId', id)}
-          >
-            <SearchSelect
-              value={draft.partyId}
-              onChange={(value) => set('partyId', value)}
-              options={partyOptions}
-              invalid={errors['partyId'] !== undefined}
-              label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
-              placeholder={t('common.choose')}
-            />
-          </QuickAdd>
-        </Field>
-
-        {godownsOn && (
-          <Field label={t('orders.warehouse')} required error={errors['warehouseId']}>
-            <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
-              <SearchSelect
-                value={draft.warehouseId}
-                onChange={(value) => set('warehouseId', value)}
-                options={(warehouses.data ?? []).map((warehouse) => ({
-                  value: warehouse.id,
-                  label: `${warehouse.code} — ${warehouse.name}`,
-                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
-                }))}
-                invalid={errors['warehouseId'] !== undefined}
-                label={t('orders.warehouse')}
-                placeholder={t('common.choose')}
-              />
-            </QuickAdd>
-          </Field>
-        )}
-
-        {taxOn && (
-          <SelectField
-            label={t('purchase.taxMode')}
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-              { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-              { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-            ]}
-          />
-        )}
-
-        <TextField
-          label={t('orders.reference')}
-          value={draft.referenceNumber}
-          onChange={(value) => set('referenceNumber', value)}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-ink">{words('linesTitle')}</h3>
-        {columns.picker}
-      </div>
-
-      {errors['lines'] && <p className="field-message-error">{errors['lines']}</p>}
-
-      <BarcodeScan
-        products={products.data ?? []}
-        onScan={(product) => {
-          // At the rate the master holds, as choosing it in the picker does.
-          const next = addScanned(lines, product, () => ({
-            ...emptyLine(defaultTaxRate),
-            productId: product.id,
-            rate: String((kind === 'purchase' ? product.cost : product.retailRate) ?? ''),
-            ...(product.taxPercentage != null
-              ? { taxPercentage: String(product.taxPercentage) }
-              : {}),
-          }));
-          setLines(next.lines);
-          return next.quantity;
-        }}
-      />
-
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
-          <thead className="text-xs text-ink-muted">
-            <tr>
-              <th className="px-2 py-1 text-start">{t('orders.product')}</th>
-              <ProductDetailHeaders shows={columns.shows} labels={t} />
-              <th className="px-2 py-1 text-end">{t('orders.quantity')}</th>
-              <th className="px-2 py-1 text-end">{t('orders.rate')}</th>
-              {columns.shows('discount') && (
-                <th className="px-2 py-1 text-end">{t('orders.discount')}</th>
-              )}
-              {columns.shows('taxPercent') && (
-                <th className="px-2 py-1 text-end">{t('orders.taxPercent')}</th>
-              )}
-              <th className="px-2 py-1 text-end">{t('orders.net')}</th>
-              {columns.shows('lineTotal') && (
-                <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
-              )}
-              <th className="line-action-column" />
-            </tr>
-          </thead>
-
-          <tbody>
-            {lines.map((line, index) => {
-              const errorsForLine = lineErrors[index] ?? {};
-
-              return (
-                <tr key={line.key} className="border-t border-line">
-                  <td
-                    data-label={t('orders.product')}
-                    className="min-w-40 px-2 py-1 lg:min-w-64"
-                  >
-                    <SearchSelect
-                      value={line.productId}
-                      onChange={(value) => {
-                        const product = (products.data ?? []).find(
-                          (candidate) => candidate.id === value,
-                        );
-
-                        change(index, {
-                          productId: value,
-                          // An order starts at the rate the master holds: cost for a
-                          // purchase, retail for a sale. Typed over freely — it is a
-                          // starting point, not a price list.
-                          rate: String(
-                            (kind === 'purchase' ? product?.cost : product?.retailRate) ??
-                              '',
-                          ),
-                          // The product's own rate from the tax rate master, where it
-                          // has one.
-                          ...(product?.taxPercentage != null
-                            ? { taxPercentage: String(product.taxPercentage) }
-                            : {}),
-                        });
-                      }}
-                      options={productOptions}
-                      size="sm"
-                      label={t('orders.product')}
-                      placeholder={t('purchase.chooseProduct')}
-                    />
-                  </td>
-
-                  <ProductDetailCells
-                    product={(products.data ?? []).find(
-                      (candidate) => candidate.id === line.productId,
-                    )}
-                    shows={columns.shows}
-                    labels={t}
-                  />
-
-                  <NumberCell
-                    value={line.quantity}
-                    label={t('orders.quantity')}
-                    error={errorsForLine['quantity']}
-                    onChange={(value) => change(index, { quantity: value })}
-                  />
-                  <NumberCell
-                    value={line.rate}
-                    label={t('orders.rate')}
-                    error={errorsForLine['rate']}
-                    onChange={(value) => change(index, { rate: value })}
-                  />
-
-                  {columns.shows('discount') && (
-                    <NumberCell
-                      value={line.discount}
-                      label={t('orders.discount')}
-                      onChange={(value) => change(index, { discount: value })}
-                    />
-                  )}
-
-                  {columns.shows('taxPercent') && (
-                    <td data-label={t('orders.taxPercent')} className="px-2 py-1">
-                      <input
-                        type="number"
-                        list="erp-order-tax-rates"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        inputMode="decimal"
-                        aria-label={t('orders.taxPercent')}
-                        value={line.taxPercentage}
-                        onChange={(event) =>
-                          change(index, { taxPercentage: event.target.value })
-                        }
-                        className={clsx(
-                          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
-                          errorsForLine['taxPercentage'] && 'field-invalid',
-                        )}
-                      />
-                      <datalist id="erp-order-tax-rates">
-                        {taxRates.map((rate) => (
-                          <option key={rate} value={rate} />
-                        ))}
-                      </datalist>
-                    </td>
-                  )}
-
-                  <td
-                    data-label={t('orders.net')}
-                    className="px-2 py-1 text-end font-mono tabular-nums"
-                  >
-                    {moneyAlways(lineNet(line))}
-                  </td>
-
-                  {columns.shows('lineTotal') && (
-                    <td
-                      data-label={t('sales.lineTotal')}
-                      className="px-2 py-1 text-end font-mono font-semibold tabular-nums"
-                    >
-                      {moneyAlways(
-                        lineNet(line) *
-                          (1 + (taxOn ? Number(line.taxPercentage || 0) : 0) / 100),
-                      )}
-                    </td>
-                  )}
-
-                  <td className="px-2 py-1 text-end">
-                    {lines.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setLines((previous) => previous.filter((_, at) => at !== index))
-                        }
-                        className="row-action row-action-danger"
-                      >
-                        {t('purchase.removeLine')}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <button
-        {...shortcutProps('add-line')}
-        type="button"
-        onClick={() => setLines((previous) => [...previous, emptyLine(defaultTaxRate)])}
-        className="btn-secondary btn-sm self-start"
-      >
-        {t('purchase.addLine')}
-      </button>
-
-      <ChargesPanel
-        charges={charges}
-        ledgers={ledgers.data ?? []}
-        onChange={setCharges}
-        setup={chargeSetup}
-        nonTax={mode === PurchaseTaxMode.nonTax}
-      />
-
-      {/* Under the lines and their totals, where a note about the order is written
-          once the order itself is down - as it is on every invoice. */}
-      <div className="line-totals flex flex-wrap items-end justify-between gap-6">
-        <TextField
-          label={t('orders.narration')}
-          value={draft.narration}
-          onChange={(value) => set('narration', value)}
-          className="min-w-0 flex-1 sm:max-w-xl"
-        />
-        <DocumentTotals
-          gross={totals.gross}
-          discount={totals.discount}
-          tax={totals.tax}
-          charges={chargeTotal(charges, ledgers.data ?? [], chargeSetup)}
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
-        <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
-        <ModalButton primary disabled={busy} onClick={() => void save()} shortcut="save">
-          {busy
+    <InvoiceWindow title={documentTitle} onClose={onClose}>
+      <InvoiceHeader
+        icon={<IconDocument className="size-6" />}
+        title={documentTitle}
+        subtitle={
+          kind === 'purchase'
+            ? t('invoice.newPurchaseOrder')
+            : quotation
+              ? t('invoice.newQuotation')
+              : t('invoice.newSalesOrder')
+        }
+        onCancel={onClose}
+        primary={{
+          label: busy
             ? t('common.saving')
             : directSave
               ? t('common.save')
-              : t('orders.saveDraft')}
-        </ModalButton>
-      </div>
-    </Modal>
+              : t('orders.saveDraft'),
+          onClick: () => void save(),
+          shortcut: 'save',
+          disabled: busy,
+        }}
+      />
+
+      <InvoiceBody
+        main={
+          <>
+            {failure && (
+              <p role="alert" className="alert-error">
+                {failure}
+              </p>
+            )}
+            <InvoiceCard
+              icon={
+                kind === 'purchase' ? (
+                  <IconTruck className="size-5" />
+                ) : (
+                  <IconUser className="size-5" />
+                )
+              }
+              title={
+                kind === 'purchase'
+                  ? t('invoice.supplierDetails')
+                  : t('invoice.customerDetails')
+              }
+            >
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 md:grid-cols-4">
+                <div className="min-w-0 sm:col-span-2">
+                  <Field
+                    label={
+                      kind === 'purchase' ? t('orders.supplier') : t('orders.customer')
+                    }
+                    required
+                    error={errors['partyId']}
+                  >
+                    <QuickAdd
+                      kind={kind === 'purchase' ? 'supplier' : 'customer'}
+                      onCreated={(id) => set('partyId', id)}
+                    >
+                      <SearchSelect
+                        value={draft.partyId}
+                        onChange={(value) => set('partyId', value)}
+                        options={partyOptions}
+                        invalid={errors['partyId'] !== undefined}
+                        label={
+                          kind === 'purchase'
+                            ? t('orders.supplier')
+                            : t('orders.customer')
+                        }
+                        placeholder={t('common.choose')}
+                      />
+                    </QuickAdd>
+                  </Field>
+                </div>
+
+                <DateField
+                  label={words('date')}
+                  required
+                  value={draft.date}
+                  onChange={(value) => set('date', value)}
+                  error={errors['date']}
+                />
+
+                <DateField
+                  label={words('expectedOn')}
+                  value={draft.expectedOn}
+                  onChange={(value) => set('expectedOn', value)}
+                  error={errors['expectedOn']}
+                />
+
+                <Field label={words('number')}>
+                  <input
+                    value={nextNumber ?? t('orders.numberOnSave')}
+                    disabled
+                    className="field-input"
+                  />
+                </Field>
+
+                <TextField
+                  label={t('orders.reference')}
+                  value={draft.referenceNumber}
+                  onChange={(value) => set('referenceNumber', value)}
+                />
+
+                {taxOn && (
+                  <SelectField
+                    label={t('purchase.taxMode')}
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                      { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                      { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                    ]}
+                  />
+                )}
+
+                {godownsOn && (
+                  <Field
+                    label={t('orders.warehouse')}
+                    required
+                    error={errors['warehouseId']}
+                  >
+                    <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
+                      <SearchSelect
+                        value={draft.warehouseId}
+                        onChange={(value) => set('warehouseId', value)}
+                        options={(warehouses.data ?? []).map((warehouse) => ({
+                          value: warehouse.id,
+                          label: `${warehouse.code} — ${warehouse.name}`,
+                          ...(warehouse.isDefault
+                            ? { meta: t('settings.masterDefault') }
+                            : {}),
+                        }))}
+                        invalid={errors['warehouseId'] !== undefined}
+                        label={t('orders.warehouse')}
+                        placeholder={t('common.choose')}
+                      />
+                    </QuickAdd>
+                  </Field>
+                )}
+              </div>
+
+              <div className="mt-4" {...shortcutProps('scan')}>
+                <BarcodeScan
+                  products={products.data ?? []}
+                  onScan={(product) => {
+                    // At the rate the master holds, as choosing it in the picker does.
+                    const next = addScanned(lines, product, () => ({
+                      ...emptyLine(defaultTaxRate),
+                      productId: product.id,
+                      rate: String(
+                        (kind === 'purchase' ? product.cost : product.retailRate) ?? '',
+                      ),
+                      ...(product.taxPercentage != null
+                        ? { taxPercentage: String(product.taxPercentage) }
+                        : {}),
+                    }));
+                    setLines(next.lines);
+                    return next.quantity;
+                  }}
+                />
+              </div>
+            </InvoiceCard>
+
+            <InvoiceCard
+              icon={<IconBox className="size-5" />}
+              title={t('invoice.items')}
+              meta={t('invoice.itemCount', { count: itemCount })}
+              actions={columns.picker}
+            >
+              {errors['lines'] && (
+                <p className="field-message-error mb-2">{errors['lines']}</p>
+              )}
+
+              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
+                  <thead className="bg-surface-2 text-[13px] text-ink-muted">
+                    <tr>
+                      <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                        {t('orders.product')}
+                      </th>
+                      <ProductDetailHeaders shows={columns.shows} labels={t} />
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('orders.quantity')}
+                      </th>
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('orders.rate')}
+                      </th>
+                      {columns.shows('discount') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('orders.discount')}
+                        </th>
+                      )}
+                      {columns.shows('taxPercent') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('orders.taxPercent')}
+                        </th>
+                      )}
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('orders.net')}
+                      </th>
+                      {columns.shows('lineTotal') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.lineTotal')}
+                        </th>
+                      )}
+                      <th className="line-action-column rounded-e-lg" />
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {lines.map((line, index) => {
+                      const errorsForLine = lineErrors[index] ?? {};
+
+                      return (
+                        <tr key={line.key} className="border-t border-line">
+                          <td
+                            data-label={t('orders.product')}
+                            className="min-w-40 px-2 py-1 lg:min-w-64"
+                          >
+                            <SearchSelect
+                              value={line.productId}
+                              onChange={(value) => {
+                                const product = (products.data ?? []).find(
+                                  (candidate) => candidate.id === value,
+                                );
+
+                                change(index, {
+                                  productId: value,
+                                  // An order starts at the rate the master holds: cost for a
+                                  // purchase, retail for a sale. Typed over freely — it is a
+                                  // starting point, not a price list.
+                                  rate: String(
+                                    (kind === 'purchase'
+                                      ? product?.cost
+                                      : product?.retailRate) ?? '',
+                                  ),
+                                  // The product's own rate from the tax rate master, where it
+                                  // has one.
+                                  ...(product?.taxPercentage != null
+                                    ? { taxPercentage: String(product.taxPercentage) }
+                                    : {}),
+                                });
+                              }}
+                              options={productOptions}
+                              size="sm"
+                              label={t('orders.product')}
+                              placeholder={t('purchase.chooseProduct')}
+                            />
+                          </td>
+
+                          <ProductDetailCells
+                            product={(products.data ?? []).find(
+                              (candidate) => candidate.id === line.productId,
+                            )}
+                            shows={columns.shows}
+                            labels={t}
+                          />
+
+                          <NumberCell
+                            value={line.quantity}
+                            label={t('orders.quantity')}
+                            error={errorsForLine['quantity']}
+                            onChange={(value) => change(index, { quantity: value })}
+                          />
+                          <NumberCell
+                            value={line.rate}
+                            label={t('orders.rate')}
+                            error={errorsForLine['rate']}
+                            onChange={(value) => change(index, { rate: value })}
+                          />
+
+                          {columns.shows('discount') && (
+                            <NumberCell
+                              value={line.discount}
+                              label={t('orders.discount')}
+                              onChange={(value) => change(index, { discount: value })}
+                            />
+                          )}
+
+                          {columns.shows('taxPercent') && (
+                            <td data-label={t('orders.taxPercent')} className="px-2 py-1">
+                              <input
+                                type="number"
+                                list="erp-order-tax-rates"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                inputMode="decimal"
+                                aria-label={t('orders.taxPercent')}
+                                value={line.taxPercentage}
+                                onChange={(event) =>
+                                  change(index, { taxPercentage: event.target.value })
+                                }
+                                className={clsx(
+                                  'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
+                                  errorsForLine['taxPercentage'] && 'field-invalid',
+                                )}
+                              />
+                              <datalist id="erp-order-tax-rates">
+                                {taxRates.map((rate) => (
+                                  <option key={rate} value={rate} />
+                                ))}
+                              </datalist>
+                            </td>
+                          )}
+
+                          <td
+                            data-label={t('orders.net')}
+                            className="px-2 py-1 text-end tabular-nums"
+                          >
+                            {moneyAlways(lineNet(line))}
+                          </td>
+
+                          {columns.shows('lineTotal') && (
+                            <td
+                              data-label={t('sales.lineTotal')}
+                              className="px-2 py-1 text-end font-semibold tabular-nums"
+                            >
+                              {moneyAlways(
+                                lineNet(line) *
+                                  (1 +
+                                    (taxOn ? Number(line.taxPercentage || 0) : 0) / 100),
+                              )}
+                            </td>
+                          )}
+
+                          <td className="px-2 py-1 text-end">
+                            {lines.length > 1 && (
+                              <RemoveLineButton
+                                onClick={() =>
+                                  setLines((previous) =>
+                                    previous.filter((_, at) => at !== index),
+                                  )
+                                }
+                                label={t('purchase.removeLine')}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                {...shortcutProps('add-line')}
+                type="button"
+                onClick={() =>
+                  setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
+                }
+                className="btn-secondary mt-3"
+              >
+                <IconPlus className="size-4" />
+                {t('invoice.addItem')}
+              </button>
+
+              {/* Under the lines: a note about the order, written once the order
+                  itself is down, beside what it comes to. */}
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <InvoicePanel
+                  icon={<IconDocument className="size-[18px]" />}
+                  title={t('invoice.narration')}
+                >
+                  <NarrationField
+                    value={draft.narration}
+                    onChange={(value) => set('narration', value)}
+                    label={t('invoice.narration')}
+                    placeholder={t('invoice.narration')}
+                  />
+                </InvoicePanel>
+
+                <InvoicePanel
+                  icon={<IconReceipt className="size-[18px]" />}
+                  title={t('invoice.bill')}
+                >
+                  <BillFigures
+                    gross={totals.gross}
+                    discount={totals.discount}
+                    tax={totals.tax}
+                    showTax={taxOn}
+                    total={orderTotal}
+                    totalLabel={
+                      quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')
+                    }
+                    money={moneyAlways}
+                    charges={
+                      <ChargesPanel
+                        inline
+                        charges={charges}
+                        ledgers={ledgers.data ?? []}
+                        onChange={setCharges}
+                        setup={chargeSetup}
+                        nonTax={mode === PurchaseTaxMode.nonTax}
+                      />
+                    }
+                  />
+                </InvoicePanel>
+              </div>
+            </InvoiceCard>
+          </>
+        }
+        side={
+          <InvoiceCard
+            icon={<IconCreditCard className="size-5" />}
+            title={t('invoice.summary')}
+          >
+            <TotalBanner
+              icon={<IconCreditCard className="size-5" />}
+              label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
+              amount={moneyAlways(orderTotal)}
+            />
+            <div className="mt-3 divide-y divide-line/70">
+              <div>
+                <DetailRow label={words('number')}>
+                  {nextNumber ?? t('orders.numberOnSave')}
+                </DetailRow>
+                <DetailRow
+                  label={
+                    kind === 'purchase' ? t('orders.supplier') : t('orders.customer')
+                  }
+                >
+                  <span className="block truncate">{partyName}</span>
+                </DetailRow>
+                <DetailRow label={words('date')}>{draft.date}</DetailRow>
+                {draft.expectedOn && (
+                  <DetailRow label={words('expectedOn')}>{draft.expectedOn}</DetailRow>
+                )}
+              </div>
+              <div className="pt-1">
+                <DetailRow label={t('invoice.items')}>{itemCount}</DetailRow>
+                <DetailRow label={t('documents.net')}>
+                  {moneyAlways(totals.gross - totals.discount)}
+                </DetailRow>
+                {(taxOn || totals.tax !== 0) && (
+                  <DetailRow label={t('documents.tax')}>
+                    {moneyAlways(totals.tax)}
+                  </DetailRow>
+                )}
+              </div>
+            </div>
+          </InvoiceCard>
+        }
+        footer={<ShortcutHints actions={['scan', 'add-line', 'charges', 'save']} />}
+      />
+    </InvoiceWindow>
   );
 }
 
@@ -1338,20 +1507,20 @@ function OrderDialog({
                     </td>
                     <td
                       data-label={t('orders.ordered')}
-                      className="px-2 py-1 text-end font-mono"
+                      className="px-2 py-1 text-end tabular-nums"
                     >
                       {line.quantity}
                     </td>
                     <td
                       data-label={t('orders.invoiced')}
-                      className="px-2 py-1 text-end font-mono"
+                      className="px-2 py-1 text-end tabular-nums"
                     >
                       {line.invoicedQuantity}
                     </td>
                     <td
                       data-label={t('orders.outstanding')}
                       className={clsx(
-                        'px-2 py-1 text-end font-mono',
+                        'px-2 py-1 text-end tabular-nums',
                         line.outstandingQuantity > 0 && 'font-semibold text-ink',
                       )}
                     >
@@ -1359,13 +1528,13 @@ function OrderDialog({
                     </td>
                     <td
                       data-label={t('orders.rate')}
-                      className="px-2 py-1 text-end font-mono"
+                      className="px-2 py-1 text-end tabular-nums"
                     >
                       {moneyAlways(line.rate)}
                     </td>
                     <td
                       data-label={t('orders.taxable')}
-                      className="px-2 py-1 text-end font-mono"
+                      className="px-2 py-1 text-end tabular-nums"
                     >
                       {moneyAlways(line.taxable)}
                     </td>
@@ -1479,7 +1648,7 @@ function Detail({
   return (
     <div>
       <span className="text-xs text-ink-muted">{label}</span>
-      <div className="font-mono tabular-nums text-ink">{value}</div>
+      <div className="tabular-nums text-ink">{value}</div>
     </div>
   );
 }
@@ -1511,7 +1680,7 @@ function NumberCell({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
-          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
+          'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
           error && 'field-invalid',
         )}
       />
