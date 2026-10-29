@@ -37,7 +37,7 @@ import {
   type SalesRateType,
 } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
-import { chargeRows, useChargeSetup, type ChargeSetup } from '@/lib/charges';
+import { useChargeSetup } from '@/lib/charges';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -88,6 +88,7 @@ import {
 import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
 import { shortcutProps } from '@/lib/shortcuts';
+import { ShortcutHints } from '@/components/ShortcutHints';
 
 const PAGE_SIZE = 25;
 
@@ -561,57 +562,6 @@ interface AdditionalLedgerItem {
   readonly amount: string;
 }
 
-function AdditionalLedgersSection({
-  rows,
-  ledgers,
-  setup,
-  nonTax,
-  onChange,
-}: {
-  readonly rows: readonly AdditionalLedgerItem[];
-  readonly ledgers: readonly LedgerSummary[];
-  /** The firm's additional ledgers for a sale, as Settings set them up. */
-  readonly setup: readonly ChargeSetup[] | undefined;
-  readonly nonTax: boolean;
-  readonly onChange: (rows: readonly AdditionalLedgerItem[]) => void;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-
-  const setAmount = (ledgerId: string, amount: string, adds: boolean): void =>
-    onChange(
-      rows.some((row) => row.ledgerId === ledgerId)
-        ? rows.map((row) => (row.ledgerId === ledgerId ? { ...row, amount } : row))
-        : [
-            ...rows,
-            {
-              id: Math.random().toString(36).slice(2, 9),
-              ledgerId,
-              isAddition: adds,
-              amount,
-            },
-          ],
-    );
-
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
-      <div className="flex items-center justify-between border-b border-line pb-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
-          {t('sales.additionalLedgers')}
-        </span>
-      </div>
-
-      <AdditionalLedgerList
-        carried={rows}
-        setup={setup}
-        nonTax={nonTax}
-        ledgers={ledgers}
-        onAmount={setAmount}
-        onRemove={(ledgerId) => onChange(rows.filter((row) => row.ledgerId !== ledgerId))}
-      />
-    </div>
-  );
-}
-
 /** Enters a draft: the header, then the lines. */
 function EntryDialog({
   initialKind = SalesDocumentKind.invoice,
@@ -740,9 +690,23 @@ function EntryDialog({
         amount: l.defaultAmount,
       }));
   });
-  const [activeBottomTab, setActiveBottomTab] = useState<'general' | 'shipping'>(
-    'general',
-  );
+
+  /** Sets an additional ledger's amount, putting the ledger on the bill if it is not yet. */
+  const setChargeAmount = (ledgerId: string, amount: string, adds: boolean): void =>
+    setAdditionalLedgers((rows) =>
+      rows.some((row) => row.ledgerId === ledgerId)
+        ? rows.map((row) => (row.ledgerId === ledgerId ? { ...row, amount } : row))
+        : [
+            ...rows,
+            {
+              id: Math.random().toString(36).slice(2, 9),
+              ledgerId,
+              isAddition: adds,
+              amount,
+            },
+          ],
+    );
+
   // Started at the mode's rate. It used to start at '0', and choosing a product only
   // filled the rate in when the line had none — but '0' is a string, so it always
   // had one, and every line of a taxed invoice went out at zero per cent.
@@ -762,6 +726,19 @@ function EntryDialog({
         ],
   );
   const [busy, setBusy] = useState(false);
+
+  // Alt+A, or the Add line button, leaves the cursor in the new line's product.
+  const linesBody = useRef<HTMLTableSectionElement>(null);
+  const focusNewLine = useRef(false);
+  useEffect(() => {
+    if (!focusNewLine.current) return;
+    focusNewLine.current = false;
+
+    const rows = linesBody.current?.querySelectorAll('[data-line-row]');
+    rows?.[rows.length - 1]
+      ?.querySelector<HTMLInputElement>('[role="combobox"]')
+      ?.focus();
+  }, [lines.length]);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
     queryKey: ['customers', 'picker'],
@@ -861,8 +838,6 @@ function EntryDialog({
   );
   const employeeId = (id: string): string | null =>
     employees.some((employee) => employee.ledgerId === id) ? id : null;
-  const employeeName = (id: string): string =>
-    employees.find((employee) => employee.ledgerId === id)?.name ?? '—';
 
   const lineColumnList: readonly LineColumn[] = [
     { key: 'product', label: t('sales.product'), defaultOn: true, fixed: true },
@@ -1541,34 +1516,10 @@ function EntryDialog({
           </label>
         </div>
       )}
-      {/* Four groups of fields: two to a row until there is room for all four,
-          which leaves the paired fields inside each group a usable width - at
-          three or four to a row on a tablet the dates, the warehouse and the
-          salesman were cut to a few characters each. */}
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface-2/40 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
-        {/* Document Numbers */}
-        <div className="space-y-2">
-          <TextField
-            label={
-              isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')
-            }
-            value={nextInvoiceNo}
-            disabled
-            onChange={() => {}}
-            className="bg-surface-3/50 font-mono font-semibold"
-            size="sm"
-          />
-          <TextField
-            label={t('sales.referenceNo')}
-            value={reference}
-            onChange={setReference}
-            placeholder={nextNumber ?? ''}
-            size="sm"
-          />
-        </div>
-
-        {/* Column 2: Customer & Payment Mode */}
-        <div className="space-y-2">
+      {/* The header in two rows: who and when first - the customer, the date, how
+          they pay, the number - then what a counter sets once and seldom touches. */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 rounded-2xl border border-line bg-surface-2/40 p-3 sm:p-4 md:grid-cols-4 xl:grid-cols-6">
+        <div className="col-span-2 min-w-0" {...shortcutProps('customer')}>
           <FormField label={t('sales.customer')} required error={errors['customerId']}>
             <QuickAdd kind="customer" onCreated={setCustomerId}>
               <SearchSelect
@@ -1583,169 +1534,186 @@ function EntryDialog({
                 }))}
                 invalid={errors['customerId'] !== undefined}
                 label={t('sales.customer')}
-                placeholder={t('sales.chooseCustomer')}
+                placeholder={`${t('sales.chooseCustomer')} (F2)`}
                 size="sm"
               />
             </QuickAdd>
           </FormField>
+          {/* Who the bill is going to, without a panel of its own to look in. */}
+          {selectedCustomer && (
+            <p className="mt-1 truncate text-[11px] text-ink-muted">
+              {[
+                selectedCustomer.contact.mobileNumber || selectedCustomer.contact.phone,
+                selectedCustomer.contact.addressLine1 ||
+                  selectedCustomer.contact.addressLine2,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </p>
+          )}
+        </div>
 
-          <SelectField<number>
-            label={t('sales.paymentMode')}
-            value={paymentMode}
-            onChange={(val) => setPaymentMode(Number(val))}
+        <DateField
+          label={t('sales.date')}
+          required
+          value={date}
+          onChange={setDate}
+          error={errors['date']}
+          size="sm"
+        />
+
+        <SelectField<number>
+          label={t('sales.paymentMode')}
+          value={paymentMode}
+          onChange={(val) => setPaymentMode(Number(val))}
+          options={[
+            { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
+            { value: SalesPaymentMode.card, label: t('paymentModes.card') },
+            { value: SalesPaymentMode.online, label: t('paymentModes.online') },
+            { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
+          ]}
+          size="sm"
+        />
+
+        <TextField
+          label={
+            isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')
+          }
+          value={nextInvoiceNo}
+          disabled
+          onChange={() => {}}
+          className="bg-surface-3/50 font-mono font-semibold"
+          size="sm"
+        />
+        <TextField
+          label={t('sales.referenceNo')}
+          value={reference}
+          onChange={setReference}
+          placeholder={nextNumber ?? ''}
+          size="sm"
+        />
+
+        <FormField label={t('sales.salesman')}>
+          <QuickAdd kind="employee" onCreated={setSalesman}>
+            <SearchSelect
+              value={employeeId(salesman) ?? ''}
+              onChange={setSalesman}
+              options={employeeOptions}
+              clearable
+              size="sm"
+              label={t('sales.salesman')}
+              placeholder={
+                employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+              }
+            />
+          </QuickAdd>
+        </FormField>
+        <FormField label={t('sales.billingman')}>
+          <QuickAdd kind="employee" onCreated={setBillingman}>
+            <SearchSelect
+              value={employeeId(billingman) ?? ''}
+              onChange={setBillingman}
+              options={employeeOptions}
+              clearable
+              size="sm"
+              label={t('sales.billingman')}
+              placeholder={
+                employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+              }
+            />
+          </QuickAdd>
+        </FormField>
+        <SelectField<SalesRateType>
+          label={t('sales.salesRateType')}
+          value={rateType}
+          onChange={(val) => handleRateTypeChange(val as SalesRateType)}
+          options={[
+            { value: 'retail', label: t('prefs.rateRetail') },
+            { value: 'wholesale', label: t('prefs.rateWholesale') },
+            { value: 'mrp', label: t('prefs.rateMrp') },
+            { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+            { value: 'customerRate', label: t('prefs.rateCustomer') },
+            { value: 'batch', label: t('prefs.rateBatch') },
+          ]}
+          size="sm"
+        />
+        {taxOn && (
+          <SelectField<'NT' | 'TAX' | 'GST'>
+            label={t('sales.taxMode')}
+            value={taxMode}
+            onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
             options={[
-              { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
-              { value: SalesPaymentMode.card, label: t('paymentModes.card') },
-              { value: SalesPaymentMode.online, label: t('paymentModes.online') },
-              { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
+              { value: 'NT', label: 'NT (0%)' },
+              { value: 'TAX', label: 'TAX (5%)' },
+              { value: 'GST', label: 'GST (18%)' },
             ]}
             size="sm"
           />
-        </div>
-
-        {/* Column 3: Sales Staff & Barcode Scanner */}
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <FormField label={t('sales.salesman')}>
-              <QuickAdd kind="employee" onCreated={setSalesman}>
-                <SearchSelect
-                  value={employeeId(salesman) ?? ''}
-                  onChange={setSalesman}
-                  options={employeeOptions}
-                  clearable
-                  size="sm"
-                  label={t('sales.salesman')}
-                  placeholder={
-                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                  }
-                />
-              </QuickAdd>
-            </FormField>
-            <FormField label={t('sales.billingman')}>
-              <QuickAdd kind="employee" onCreated={setBillingman}>
-                <SearchSelect
-                  value={employeeId(billingman) ?? ''}
-                  onChange={setBillingman}
-                  options={employeeOptions}
-                  clearable
-                  size="sm"
-                  label={t('sales.billingman')}
-                  placeholder={
-                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                  }
-                />
-              </QuickAdd>
-            </FormField>
-          </div>
-
-          <div>
-            <label className="block text-xs text-ink-muted mb-1 font-medium">
-              {t('sales.barcode')}
-            </label>
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleBarcodeScan(barcodeInput);
-                  }
-                }}
-                placeholder={t('sales.barcodePlaceholder')}
-                className="field-input-sm w-full pe-8 font-mono text-xs"
-              />
-              <button
-                type="button"
-                onClick={() => void handleBarcodeScan(barcodeInput)}
-                className="absolute end-1.5 p-1 text-ink-muted hover:text-brand-600 transition"
-                title="Scan / Read Barcode"
-              >
-                <IconBarcode className="size-4" />
-              </button>
-            </div>
-            {barcodeNotice && (
-              <span className="block mt-1 text-[11px] font-medium text-brand-600 dark:text-brand-300 truncate">
-                {barcodeNotice}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Column 4: Date, Mode, Rate & Warehouse */}
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <DateField
-              label={t('sales.date')}
-              required
-              value={date}
-              onChange={setDate}
-              error={errors['date']}
-              size="sm"
-            />
-            {taxOn && (
-              <SelectField<'NT' | 'TAX' | 'GST'>
-                label={t('sales.taxMode')}
-                value={taxMode}
-                onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
-                options={[
-                  { value: 'NT', label: 'NT (0%)' },
-                  { value: 'TAX', label: 'TAX (5%)' },
-                  { value: 'GST', label: 'GST (18%)' },
-                ]}
+        )}
+        {godownsOn && (
+          <FormField label={t('sales.warehouse')} required error={errors['warehouseId']}>
+            <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+              <SearchSelect
+                value={warehouseId}
+                onChange={setWarehouseId}
+                options={(warehouses.data ?? []).map((warehouse) => ({
+                  value: warehouse.id,
+                  label: `${warehouse.code} — ${warehouse.name}`,
+                  ...(warehouse.isDefault ? { meta: t('settings.masterDefault') } : {}),
+                }))}
+                invalid={errors['warehouseId'] !== undefined}
+                label={t('sales.warehouse')}
+                placeholder={t('sales.chooseWarehouse')}
                 size="sm"
               />
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <SelectField<SalesRateType>
-              label={t('sales.salesRateType')}
-              value={rateType}
-              onChange={(val) => handleRateTypeChange(val as SalesRateType)}
-              options={[
-                { value: 'retail', label: t('prefs.rateRetail') },
-                { value: 'wholesale', label: t('prefs.rateWholesale') },
-                { value: 'mrp', label: t('prefs.rateMrp') },
-                { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
-                { value: 'customerRate', label: t('prefs.rateCustomer') },
-                { value: 'batch', label: t('prefs.rateBatch') },
-              ]}
-              size="sm"
-            />
-            {godownsOn && (
-              <FormField
-                label={t('sales.warehouse')}
-                required
-                error={errors['warehouseId']}
-              >
-                <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
-                  <SearchSelect
-                    value={warehouseId}
-                    onChange={setWarehouseId}
-                    options={(warehouses.data ?? []).map((warehouse) => ({
-                      value: warehouse.id,
-                      label: `${warehouse.code} — ${warehouse.name}`,
-                      ...(warehouse.isDefault
-                        ? { meta: t('settings.masterDefault') }
-                        : {}),
-                    }))}
-                    invalid={errors['warehouseId'] !== undefined}
-                    label={t('sales.warehouse')}
-                    placeholder={t('sales.chooseWarehouse')}
-                    size="sm"
-                  />
-                </QuickAdd>
-              </FormField>
-            )}
-          </div>
-        </div>
+            </QuickAdd>
+          </FormField>
+        )}
       </div>
 
-      {/* A new sale can start from a quotation, an order or a purchase; a new return
-          from the invoice it sends goods back against. */}
-      {!editing && <ReferenceLoader sources={referenceSources} onLoad={loadReference} />}
+      {/* Two ways to fill the lines without typing them: scan the goods, or bring them
+          in from a quotation or an order (for a return, from the invoice). */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/60 p-2"
+          {...shortcutProps('scan')}
+        >
+          <IconBarcode className="size-5 shrink-0 text-ink-muted" />
+          <input
+            type="text"
+            value={barcodeInput}
+            onChange={(e) => setBarcodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleBarcodeScan(barcodeInput);
+              }
+            }}
+            aria-label={t('sales.barcode')}
+            placeholder={`${t('sales.barcodePlaceholder')} (F4)`}
+            className="field-input-sm min-w-40 flex-1 font-mono text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => void handleBarcodeScan(barcodeInput)}
+            disabled={barcodeInput.trim() === ''}
+            className="btn-secondary btn-sm"
+          >
+            {t('stock.scan')}
+          </button>
+          {barcodeNotice && (
+            <span
+              role="status"
+              className="w-full truncate text-[11px] font-medium text-brand-700 dark:text-brand-300"
+            >
+              {barcodeNotice}
+            </span>
+          )}
+        </div>
+        {!editing && (
+          <ReferenceLoader sources={referenceSources} onLoad={loadReference} />
+        )}
+      </div>
 
       {/* Sales Return against invoice selector */}
       {isReturn(kind) && (
@@ -1774,230 +1742,139 @@ function EntryDialog({
         </div>
       )}
 
-      {/* Line Items Table. The columns are the user's to choose, remembered in this
-          browser, for the same reason the purchase lines' are. Below `lg` the product
-          and the figures are a little narrower, so a portrait tablet has every
-          column on screen rather than the tax and the net behind a sideways
-          scroll; the purchase and order lines do the same. */}
-      <div className="flex justify-end">{lineColumns.picker}</div>
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
-          <thead className="text-start text-xs text-ink-muted">
-            <tr>
-              <th className="px-2 py-1 text-start">{t('sales.product')}</th>
-              <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
-              <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
-              {enableFreeQty && lineColumns.shows('freeQuantity') && (
-                <th className="px-2 py-1 text-end">{t('sales.freeQuantity')}</th>
-              )}
-              <th className="px-2 py-1 text-end">
-                {t('sales.rate')}
-                {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
-              </th>
-              {enableDiscount && lineColumns.shows('discount') && (
-                <th className="px-2 py-1 text-end">{t('sales.itemDiscount')}</th>
-              )}
-              {lineColumns.shows('taxPercent') && (
-                <th className="px-2 py-1 text-end">{t('sales.taxPercent')}</th>
-              )}
-              {lineColumns.shows('taxAmount') && (
-                <th className="px-2 py-1 text-end">{t('sales.taxAmount')}</th>
-              )}
-              <th className="px-2 py-1 text-end">{t('sales.net')}</th>
-              {lineColumns.shows('lineTotal') && (
-                <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
-              )}
-              <th className="line-action-column" />
-            </tr>
-          </thead>
+      {/* The lines. Their columns are the user's to choose, remembered in this browser;
+          below `lg` the product and the figures are a little narrower, so a portrait
+          tablet has every column on screen rather than behind a sideways scroll. */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-ink">
+            {t('sales.itemsTitle')}
+            <span className="ms-2 text-xs font-normal text-ink-muted">
+              {t('sales.itemCount', {
+                count: lines.filter((line) => line.productId !== '').length,
+              })}
+            </span>
+          </h3>
+          {lineColumns.picker}
+        </div>
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
+            <thead className="text-start text-xs text-ink-muted">
+              <tr>
+                <th className="px-2 py-1 text-start">{t('sales.product')}</th>
+                <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
+                <th className="px-2 py-1 text-end">{t('sales.quantity')}</th>
+                {enableFreeQty && lineColumns.shows('freeQuantity') && (
+                  <th className="px-2 py-1 text-end">{t('sales.freeQuantity')}</th>
+                )}
+                <th className="px-2 py-1 text-end">
+                  {t('sales.rate')}
+                  {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
+                </th>
+                {enableDiscount && lineColumns.shows('discount') && (
+                  <th className="px-2 py-1 text-end">{t('sales.itemDiscount')}</th>
+                )}
+                {lineColumns.shows('taxPercent') && (
+                  <th className="px-2 py-1 text-end">{t('sales.taxPercent')}</th>
+                )}
+                {lineColumns.shows('taxAmount') && (
+                  <th className="px-2 py-1 text-end">{t('sales.taxAmount')}</th>
+                )}
+                <th className="px-2 py-1 text-end">{t('sales.net')}</th>
+                {lineColumns.shows('lineTotal') && (
+                  <th className="px-2 py-1 text-end">{t('sales.lineTotal')}</th>
+                )}
+                <th className="line-action-column" />
+              </tr>
+            </thead>
 
-          <tbody>
-            {lines.map((line, index) => (
-              <LineRow
-                key={index}
-                line={line}
-                products={products.data ?? []}
-                productOptions={productOptions}
-                warehouseId={warehouseId}
-                serialDirection={isReturn(kind) ? 'back' : 'out'}
-                rateType={rateType}
-                customerId={customerId}
-                modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
-                productTax={taxMode === 'TAX'}
-                reverseCalc={reverseCalc}
-                autoBatch={autoBatch}
-                enableFreeQty={enableFreeQty}
-                enableDiscount={enableDiscount}
-                shows={lineColumns.shows}
-                columnCount={
-                  3 +
-                  lineColumnList.filter(
-                    (column) =>
-                      column.key !== 'product' &&
-                      column.key !== 'quantity' &&
-                      lineColumns.shows(column.key),
-                  ).length
-                }
-                errors={lineErrors[index] ?? {}}
-                removable={lines.length > 1}
-                onChange={(patch) => change(index, patch)}
-                onRemove={() =>
-                  setLines((previous) => previous.filter((_, at) => at !== index))
-                }
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            <tbody ref={linesBody}>
+              {lines.map((line, index) => (
+                <LineRow
+                  key={index}
+                  line={line}
+                  products={products.data ?? []}
+                  productOptions={productOptions}
+                  warehouseId={warehouseId}
+                  serialDirection={isReturn(kind) ? 'back' : 'out'}
+                  rateType={rateType}
+                  customerId={customerId}
+                  modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
+                  productTax={taxMode === 'TAX'}
+                  reverseCalc={reverseCalc}
+                  autoBatch={autoBatch}
+                  enableFreeQty={enableFreeQty}
+                  enableDiscount={enableDiscount}
+                  shows={lineColumns.shows}
+                  columnCount={
+                    3 +
+                    lineColumnList.filter(
+                      (column) =>
+                        column.key !== 'product' &&
+                        column.key !== 'quantity' &&
+                        lineColumns.shows(column.key),
+                    ).length
+                  }
+                  errors={lineErrors[index] ?? {}}
+                  removable={lines.length > 1}
+                  onChange={(patch) => change(index, patch)}
+                  onRemove={() =>
+                    setLines((previous) => previous.filter((_, at) => at !== index))
+                  }
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-4">
         <button
           {...shortcutProps('add-line')}
           type="button"
-          onClick={() =>
+          onClick={() => {
+            // The cursor goes to the new line's product, so the next item is typed
+            // straight away rather than reached with the mouse.
+            focusNewLine.current = true;
             setLines((previous) => [
               ...previous,
               {
                 ...emptyLine,
                 taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
               },
-            ])
-          }
+            ]);
+          }}
           className="btn-secondary btn-sm"
         >
-          {t('sales.addLine')}
+          + {t('sales.addLine')}
         </button>
       </div>
 
-      {/* Bottom Master Section: Customer Details + Additional Ledgers + Partial Payment & Totals */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
-        {/* Panel 1: Customer Details & Narration */}
-        <div
-          className={clsx(
-            'flex flex-col gap-2 rounded-xl border border-line bg-surface p-3',
-            'lg:col-span-4',
-          )}
-        >
-          <div className="flex items-center gap-2 border-b border-line pb-1.5">
-            <button
-              type="button"
-              onClick={() => setActiveBottomTab('general')}
-              className={clsx(
-                'text-xs font-semibold uppercase tracking-wider transition px-1 py-0.5 border-b-2',
-                activeBottomTab === 'general'
-                  ? 'border-brand-600 text-brand-700 dark:text-brand-300'
-                  : 'border-transparent text-ink-muted hover:text-ink',
-              )}
-            >
-              {t('sales.generalTab')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveBottomTab('shipping')}
-              className={clsx(
-                'text-xs font-semibold uppercase tracking-wider transition px-1 py-0.5 border-b-2',
-                activeBottomTab === 'shipping'
-                  ? 'border-brand-600 text-brand-700 dark:text-brand-300'
-                  : 'border-transparent text-ink-muted hover:text-ink',
-              )}
-            >
-              {t('sales.shippingTab')}
-            </button>
-          </div>
-
-          {activeBottomTab === 'general' ? (
-            <div className="space-y-2 text-xs">
-              <div className="grid grid-cols-2 gap-2 text-ink-muted">
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
-                    {t('customers.address')}
-                  </span>
-                  <p className="truncate text-ink font-medium">
-                    {selectedCustomer?.contact.addressLine1 ||
-                      selectedCustomer?.contact.addressLine2 ||
-                      '—'}
-                  </p>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
-                    {t('customers.mobile')}
-                  </span>
-                  <p className="truncate font-mono text-ink">
-                    {selectedCustomer?.contact.mobileNumber ||
-                      selectedCustomer?.contact.phone ||
-                      '—'}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-ink-muted/80 mb-1">
-                  {t('sales.narration')}
-                </label>
-                <textarea
-                  rows={2}
-                  value={narration}
-                  onChange={(e) => setNarration(e.target.value)}
-                  placeholder={t('sales.narration')}
-                  className="w-full rounded-lg border border-line bg-surface p-2 text-xs text-ink focus:border-brand-500 focus:outline-none resize-none"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
-                    {t('sales.salesman')}
-                  </span>
-                  <p className="text-ink font-medium">{employeeName(salesman)}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] uppercase font-bold text-ink-muted/80">
-                    {t('sales.billingman')}
-                  </span>
-                  <p className="text-ink font-medium">{employeeName(billingman)}</p>
-                </div>
-              </div>
-            </div>
-          )}
+      {/* Below the lines, two things: a note on the bill, and every figure of it in one
+          card - what it comes to, the additional ledgers that move it, what is paid
+          now, and where that leaves the customer. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3 lg:col-span-4">
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {t('sales.narration')}
+            </span>
+            <textarea
+              rows={4}
+              value={narration}
+              onChange={(e) => setNarration(e.target.value)}
+              placeholder={t('sales.narration')}
+              className="w-full resize-none rounded-lg border border-line bg-surface p-2 text-xs text-ink focus:border-brand-500 focus:outline-none"
+            />
+          </label>
         </div>
 
-        {/* Panel 2: Charges - freight, delivery, a discount off the whole bill. Always
-            here: they used to appear only when Settings had defaults, so there was no
-            way to put a charge on an invoice that did not start with one. */}
-        <div className="lg:col-span-4">
-          <AdditionalLedgersSection
-            rows={additionalLedgers}
-            ledgers={ledgers.data ?? []}
-            setup={chargeSetup}
-            nonTax={taxMode === 'NT'}
-            onChange={setAdditionalLedgers}
-          />
-        </div>
-
-        {/*
-          Panel 3: the bill, what is paid against it, and where that leaves the customer.
-
-          Three blocks because they answer three different questions, and one list of
-          figures had been answering all three at once: a "Balance" that was the bill
-          minus the cash, beside a "Prev. Balance" that was the customer's opening
-          balance from the day the firm started, beside a grand total nobody could tell
-          the paid amount was taken from.
-        */}
-        <div
-          className={clsx(
-            'rounded-xl border border-line bg-surface-2/60 p-3 flex flex-col gap-3 text-xs',
-            'lg:col-span-4',
-          )}
-        >
-          <section aria-label={t('sales.billSection')} className="space-y-1.5">
+        <div className="grid gap-4 rounded-xl border border-line bg-surface-2/60 p-3 text-xs sm:p-4 md:grid-cols-2 lg:col-span-8">
+          {/* What the bill comes to, in the order it is built: the goods, what came
+              off them, the tax, then each additional ledger - typed here, beside the
+              figures it changes. */}
+          <section aria-label={t('sales.billSection')} className="flex flex-col gap-1.5">
             <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
               {t('sales.billSection')}
             </h3>
-            {/* Each figure the total is built from, in the order it is built: the
-                goods, what came off them, what is taxed, the tax, then each
-                additional ledger by name. */}
             {totals.discount > 0 && (
               <>
                 <div className="flex justify-between text-ink-muted">
@@ -2028,246 +1905,268 @@ function EntryDialog({
                 <span className="font-mono tabular-nums">{moneyAlways(totals.tax)}</span>
               </div>
             )}
-            {chargeRows(
-              chargeSetup,
-              taxMode === 'NT',
-              additionalLedgers,
-              ledgers.data ?? [],
-            )
-              .filter(
-                (row) =>
-                  Number(
-                    additionalLedgers.find((item) => item.ledgerId === row.ledgerId)
-                      ?.amount,
-                  ) > 0,
-              )
-              .map((row) => (
-                <div key={row.ledgerId} className="flex justify-between text-ink-muted">
-                  <span className="truncate pe-2">{row.label}</span>
-                  <span className="font-mono tabular-nums">
-                    {row.adds ? '+' : '−'}
-                    {moneyAlways(
-                      Number(
-                        additionalLedgers.find((item) => item.ledgerId === row.ledgerId)
-                          ?.amount,
-                      ),
-                    )}
-                  </span>
-                </div>
-              ))}
-            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+
+            <div
+              className="mt-1 space-y-1.5 border-t border-dashed border-line pt-2"
+              {...shortcutProps('charges')}
+            >
+              <span className="block text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+                {t('sales.additionalLedgers')}
+              </span>
+              <AdditionalLedgerList
+                carried={additionalLedgers}
+                setup={chargeSetup}
+                nonTax={taxMode === 'NT'}
+                ledgers={ledgers.data ?? []}
+                onAmount={setChargeAmount}
+                onRemove={(ledgerId) =>
+                  setAdditionalLedgers((rows) =>
+                    rows.filter((row) => row.ledgerId !== ledgerId),
+                  )
+                }
+              />
+            </div>
+
+            <div className="mt-auto flex items-baseline justify-between border-t border-line pt-2 text-sm font-bold text-ink">
               <span>
                 {isReturn(kind) ? t('sales.returnTotal') : t('sales.billTotal')}
               </span>
-              <span className="font-mono text-base text-brand-700 tabular-nums dark:text-brand-300">
+              <span className="font-mono text-lg text-brand-700 tabular-nums dark:text-brand-300">
                 {moneyAlways(grandTotal)}
               </span>
             </div>
           </section>
 
-          {!isReturn(kind) && (
-            <section
-              aria-label={t('sales.paymentSection')}
-              className="space-y-2 border-t border-line/70 pt-2"
-            >
-              <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
-                {t('sales.paymentSection')}
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">
-                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                    {t('sales.receivedNow')}
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={paidAmount}
-                    placeholder={
-                      paymentMode === SalesPaymentMode.credit
-                        ? '0.00'
-                        : moneyAlways(grandTotal)
-                    }
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    className="field-input-sm w-full text-end font-mono font-semibold tabular-nums"
-                  />
-                </label>
-                <label className="block min-w-0">
-                  <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                    {t('sales.receivedInto')}
-                  </span>
-                  <select
-                    value={receivingAccountId}
-                    onChange={(e) => setReceivedInto(e.target.value)}
-                    disabled={effectivePaid <= 0}
-                    className="field-input-sm w-full"
-                  >
-                    {receivingAccounts.length === 0 && (
-                      <option value="">{t('sales.noReceivingAccount')}</option>
-                    )}
-                    {receivingAccounts.map((ledger) => (
-                      <option key={ledger.ledgerId} value={ledger.ledgerId}>
-                        {ledger.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {paidThroughBank(paymentMode) && (
-                  <label className="col-span-2 block">
+          <div className="flex flex-col gap-3 md:border-s md:border-line md:ps-4">
+            {!isReturn(kind) && (
+              <section aria-label={t('sales.paymentSection')} className="space-y-2">
+                <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+                  {t('sales.paymentSection')}
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
                     <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                      {paymentMode === SalesPaymentMode.card
-                        ? t('sales.cardApproval')
-                        : t('sales.transactionId')}
+                      {t('sales.receivedNow')}
                     </span>
                     <input
-                      value={paymentReference}
-                      maxLength={60}
-                      onChange={(e) => setPaymentReference(e.target.value)}
+                      {...shortcutProps('payment')}
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      value={paidAmount}
                       placeholder={
-                        paymentMode === SalesPaymentMode.card
-                          ? t('sales.cardApprovalPlaceholder')
-                          : t('sales.transactionIdPlaceholder')
+                        paymentMode === SalesPaymentMode.credit
+                          ? '0.00'
+                          : moneyAlways(grandTotal)
                       }
-                      className="field-input-sm w-full font-mono"
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                      className="field-input-sm w-full text-end font-mono font-semibold tabular-nums"
                     />
                   </label>
-                )}
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                      {t('sales.receivedInto')}
+                    </span>
+                    <select
+                      value={receivingAccountId}
+                      onChange={(e) => setReceivedInto(e.target.value)}
+                      disabled={effectivePaid <= 0}
+                      className="field-input-sm w-full"
+                    >
+                      {receivingAccounts.length === 0 && (
+                        <option value="">{t('sales.noReceivingAccount')}</option>
+                      )}
+                      {receivingAccounts.map((ledger) => (
+                        <option key={ledger.ledgerId} value={ledger.ledgerId}>
+                          {ledger.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                {paymentMode === SalesPaymentMode.cash && (
-                  <>
-                    <label className="block">
+                  {paidThroughBank(paymentMode) && (
+                    <label className="col-span-2 block">
                       <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                        {t('sales.cashGiven')}
+                        {paymentMode === SalesPaymentMode.card
+                          ? t('sales.cardApproval')
+                          : t('sales.transactionId')}
                       </span>
                       <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        value={cashGiven}
-                        placeholder="0.00"
-                        onChange={(e) => setCashGiven(e.target.value)}
-                        className="field-input-sm w-full text-end font-mono tabular-nums"
+                        value={paymentReference}
+                        maxLength={60}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                        placeholder={
+                          paymentMode === SalesPaymentMode.card
+                            ? t('sales.cardApprovalPlaceholder')
+                            : t('sales.transactionIdPlaceholder')
+                        }
+                        className="field-input-sm w-full font-mono"
                       />
                     </label>
-                    <div>
-                      <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
-                        {t('sales.changeBack')}
-                      </span>
-                      <div className="flex h-8 items-center justify-end font-mono text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
-                        {moneyAlways(changeBack)}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                  )}
 
-              {/* What of this bill is left unpaid - distinct from the customer's whole
-                  balance below, which the two used to be confused with. */}
-              <div className="flex justify-between border-t border-line/60 pt-1.5 font-semibold text-ink">
-                <span>{t('sales.billDue')}</span>
+                  {paymentMode === SalesPaymentMode.cash && (
+                    <>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                          {t('sales.cashGiven')}
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          value={cashGiven}
+                          placeholder="0.00"
+                          onChange={(e) => setCashGiven(e.target.value)}
+                          className="field-input-sm w-full text-end font-mono tabular-nums"
+                        />
+                      </label>
+                      <div>
+                        <span className="mb-1 block text-[10px] font-bold text-ink-muted uppercase">
+                          {t('sales.changeBack')}
+                        </span>
+                        <div className="flex h-8 items-center justify-end font-mono text-sm font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
+                          {moneyAlways(changeBack)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* What of this bill is left unpaid - distinct from the customer's
+                    whole balance below. */}
+                <div className="flex justify-between border-t border-line/60 pt-1.5 font-semibold text-ink">
+                  <span>{t('sales.billDue')}</span>
+                  <span
+                    className={clsx(
+                      'font-mono tabular-nums',
+                      grandTotal - effectivePaid > 0.004 &&
+                        'text-red-600 dark:text-red-400',
+                    )}
+                  >
+                    {moneyAlways(Math.max(0, grandTotal - effectivePaid))}
+                  </span>
+                </div>
+              </section>
+            )}
+
+            <section
+              aria-label={t('sales.accountSection')}
+              className={clsx(
+                'space-y-1.5',
+                !isReturn(kind) && 'border-t border-line/70 pt-2',
+              )}
+            >
+              <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+                {t('sales.accountSection')}
+              </h3>
+              <div className="flex justify-between text-ink-muted">
+                <span>{t('sales.prevBalance')}</span>
+                <span className="font-mono tabular-nums">
+                  {customerId === '' || account.isPending
+                    ? '—'
+                    : moneyAlways(prevBalance)}
+                </span>
+              </div>
+              <div className="flex justify-between text-ink-muted">
+                <span>
+                  {isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}
+                </span>
+                <span className="font-mono tabular-nums">
+                  {isReturn(kind) ? '−' : '+'}
+                  {moneyAlways(grandTotal)}
+                </span>
+              </div>
+              {effectivePaid > 0 && (
+                <div className="flex justify-between text-ink-muted">
+                  <span>{t('sales.receivedNow')}</span>
+                  <span className="font-mono tabular-nums">
+                    −{moneyAlways(effectivePaid)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
+                <span>{t('sales.balanceAfter')}</span>
                 <span
                   className={clsx(
                     'font-mono tabular-nums',
-                    grandTotal - effectivePaid > 0.004 &&
-                      'text-red-600 dark:text-red-400',
+                    balanceAfter > 0.004 && 'text-red-600 dark:text-red-400',
                   )}
                 >
-                  {moneyAlways(Math.max(0, grandTotal - effectivePaid))}
+                  {moneyAlways(balanceAfter)}
                 </span>
               </div>
+              {overLimitBy > 0 && (
+                <p
+                  role="alert"
+                  className="text-[11px] font-medium text-amber-700 dark:text-amber-400"
+                >
+                  {t('sales.overCreditLimit', {
+                    limit: moneyAlways(account.data?.creditLimit ?? 0),
+                    by: moneyAlways(overLimitBy),
+                  })}
+                  {creditRule === CreditLimitPolicy.block &&
+                    ` ${t('sales.creditLimitBlocks')}`}
+                </p>
+              )}
             </section>
-          )}
-
-          <section
-            aria-label={t('sales.accountSection')}
-            className="space-y-1.5 border-t border-line/70 pt-2"
-          >
-            <h3 className="text-[10px] font-bold tracking-wide text-ink-muted uppercase">
-              {t('sales.accountSection')}
-            </h3>
-            <div className="flex justify-between text-ink-muted">
-              <span>{t('sales.prevBalance')}</span>
-              <span className="font-mono tabular-nums">
-                {customerId === '' || account.isPending ? '—' : moneyAlways(prevBalance)}
-              </span>
-            </div>
-            <div className="flex justify-between text-ink-muted">
-              <span>{isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}</span>
-              <span className="font-mono tabular-nums">
-                {isReturn(kind) ? '−' : '+'}
-                {moneyAlways(grandTotal)}
-              </span>
-            </div>
-            {effectivePaid > 0 && (
-              <div className="flex justify-between text-ink-muted">
-                <span>{t('sales.receivedNow')}</span>
-                <span className="font-mono tabular-nums">
-                  −{moneyAlways(effectivePaid)}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between border-t border-line pt-1 text-sm font-bold text-ink">
-              <span>{t('sales.balanceAfter')}</span>
-              <span
-                className={clsx(
-                  'font-mono tabular-nums',
-                  balanceAfter > 0.004 && 'text-red-600 dark:text-red-400',
-                )}
-              >
-                {moneyAlways(balanceAfter)}
-              </span>
-            </div>
-            {overLimitBy > 0 && (
-              <p
-                role="alert"
-                className="text-[11px] font-medium text-amber-700 dark:text-amber-400"
-              >
-                {t('sales.overCreditLimit', {
-                  limit: moneyAlways(account.data?.creditLimit ?? 0),
-                  by: moneyAlways(overLimitBy),
-                })}
-                {creditRule === CreditLimitPolicy.block &&
-                  ` ${t('sales.creditLimitBlocks')}`}
-              </p>
-            )}
-          </section>
+          </div>
         </div>
       </div>
 
-      {/* Save posts: the counter's sale is made in one press. A draft is still there
-          for a document that is not finished, and printing straight after is the
-          other thing a counter does with nearly every sale. */}
-      <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-line/60">
-        <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
-        {/* Off in Settings for a counter that only ever posts, and under direct
-            save; a draft being corrected can still be saved as one. */}
-        {editing?.header.status !== SalesInvoiceStatus.posted &&
-          ((settings.allowSaveDraft !== false && !directSave) ||
-            editing !== undefined) && (
-            <ModalButton
-              disabled={busy}
-              onClick={() => void save(false)}
-              shortcut="draft"
-            >
-              {t('sales.saveDraft')}
-            </ModalButton>
-          )}
-        <ModalButton
-          disabled={busy}
-          onClick={() => void save(true, true)}
-          shortcut="print"
-        >
-          {t('sales.saveAndPrint')}
-        </ModalButton>
-        <ModalButton
-          primary
-          disabled={busy}
-          onClick={() => void save(true)}
-          shortcut="save"
-        >
-          {busy ? t('common.saving') : t('sales.save')}
-        </ModalButton>
+      {/* Held at the foot of the window however long the bill: the total and the
+          buttons that finish it are always in reach, with the keys that press them. */}
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-auto flex flex-wrap items-center gap-3 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
+        <ShortcutHints
+          actions={[
+            'customer',
+            'scan',
+            'add-line',
+            'charges',
+            'payment',
+            'save',
+            'print',
+          ]}
+        />
+        <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
+          <div className="me-2 text-end leading-tight">
+            <span className="block text-[10px] font-bold tracking-wide text-ink-muted uppercase">
+              {isReturn(kind) ? t('sales.returnTotal') : t('sales.billTotal')}
+            </span>
+            <span className="font-mono text-xl font-bold text-brand-700 tabular-nums dark:text-brand-300">
+              {moneyAlways(grandTotal)}
+            </span>
+          </div>
+          <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
+          {/* Off in Settings for a counter that only ever posts, and under direct
+              save; a draft being corrected can still be saved as one. */}
+          {editing?.header.status !== SalesInvoiceStatus.posted &&
+            ((settings.allowSaveDraft !== false && !directSave) ||
+              editing !== undefined) && (
+              <ModalButton
+                disabled={busy}
+                onClick={() => void save(false)}
+                shortcut="draft"
+              >
+                {t('sales.saveDraft')}
+              </ModalButton>
+            )}
+          <ModalButton
+            disabled={busy}
+            onClick={() => void save(true, true)}
+            shortcut="print"
+          >
+            {t('sales.saveAndPrint')}
+          </ModalButton>
+          <ModalButton
+            primary
+            disabled={busy}
+            onClick={() => void save(true)}
+            shortcut="save"
+          >
+            {busy ? t('common.saving') : t('sales.save')}
+          </ModalButton>
+        </div>
       </div>
     </Modal>
   );
@@ -2512,7 +2411,7 @@ function LineRow({
 
   return (
     <>
-      <tr className="border-t border-line">
+      <tr data-line-row className="border-t border-line">
         <td data-label={t('sales.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           <SearchSelect
             value={line.productId}

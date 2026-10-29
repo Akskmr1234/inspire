@@ -160,8 +160,8 @@ export function AppShell(): React.JSX.Element {
     Ctrl-K, or Cmd-K on a Mac, opens the palette.
 
     Registered on the window rather than on a focused element, because the whole
-    point is that it works wherever you are. `opensPalette` declines while the caret
-    is in a field, so it never eats the keystroke from somebody typing.
+    point is that it works wherever you are - inside a field as well, where the
+    browser would otherwise take Ctrl-K for its own web search. See `opensPalette`.
   */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

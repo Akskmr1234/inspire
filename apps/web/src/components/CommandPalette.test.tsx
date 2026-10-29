@@ -7,6 +7,7 @@ import {
   CommandPalette,
   destinationsOf,
   opensPalette,
+  scoreOf,
 } from '@/components/CommandPalette';
 import type { Menu } from '@/lib/menu';
 
@@ -146,14 +147,55 @@ describe('the shortcut', () => {
     expect(opensPalette(press({}))).toBe(false);
   });
 
-  it('keeps out of the way while somebody is typing', () => {
-    // Ctrl-K already means something inside a text box to some people, and taking
-    // it mid-sentence is worse than not offering the shortcut there.
+  it('opens from inside a field too, where the browser would otherwise take it', () => {
     expect(
       opensPalette(press({ ctrlKey: true, target: document.createElement('input') })),
-    ).toBe(false);
-    expect(
-      opensPalette(press({ ctrlKey: true, target: document.createElement('textarea') })),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('answers to the key rather than the letter, so an Arabic keyboard works', () => {
+    expect(opensPalette(press({ ctrlKey: true, key: 'ن', code: 'KeyK' }))).toBe(true);
+  });
+
+  it('leaves AltGr alone', () => {
+    expect(opensPalette(press({ ctrlKey: true, altKey: true }))).toBe(false);
+  });
+});
+
+describe('ranking what was typed', () => {
+  const screens = destinationsOf(
+    {
+      items: [
+        entry('h1', 'Masters', null, [
+          entry('c', 'Customers', '/sales/customers'),
+          entry('w', 'Warehouses', '/inventory/warehouses'),
+        ]),
+        entry('h2', 'Sales', null, [
+          entry('s', 'Sales invoices', '/sales/invoices'),
+          entry('r', 'Sales returns', '/sales/returns'),
+        ]),
+      ],
+    },
+    'en',
+  );
+  const score = (label: string, needle: string): number | null =>
+    scoreOf(
+      screens.find((screen) => screen.label === label)!,
+      needle,
+    );
+
+  it('puts a screen named for the word ahead of one only filed under it', () => {
+    expect(score('Sales invoices', 'sales')!).toBeGreaterThan(
+      score('Customers', 'sales')!,
+    );
+  });
+
+  it('forgives a slip of the keys', () => {
+    expect(score('Sales invoices', 'invocie')).not.toBeNull();
+    expect(score('Customers', 'invocie')).toBeNull();
+  });
+
+  it('knows a godown is a warehouse', () => {
+    expect(score('Warehouses', 'godown')).not.toBeNull();
   });
 });

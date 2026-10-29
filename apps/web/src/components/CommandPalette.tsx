@@ -25,6 +25,8 @@ import { iconFor } from '@/components/icons';
 interface Destination {
   readonly id: string;
   readonly label: string;
+  /** Its name in the other language, so a screen is found by either. */
+  readonly otherLabel: string;
   /** The headings above it, so two screens with the same name are told apart. */
   readonly path: string;
   readonly route: string;
@@ -53,6 +55,7 @@ export function destinationsOf(
         found.push({
           id: entry.id,
           label,
+          otherLabel: label === entry.label ? (entry.labelArabic ?? '') : entry.label,
           path: trail.join(' › '),
           route: entry.route,
           icon: entry.icon,
@@ -70,26 +73,132 @@ export function destinationsOf(
   return found;
 }
 
-/** Whether a destination answers what was typed. */
-function matches(destination: Destination, needle: string): boolean {
-  if (needle === '') {
-    return true;
+/**
+ * Other words for the same screens: what a counter calls something that the menu
+ * names differently. "Godown" is a warehouse, a "bill" an invoice.
+ */
+const SYNONYMS: Readonly<Record<string, readonly string[]>> = {
+  godown: ['warehouse'],
+  godowns: ['warehouses'],
+  store: ['warehouse'],
+  bill: ['invoice'],
+  bills: ['invoices'],
+  pos: ['sales invoice'],
+  item: ['product'],
+  items: ['products'],
+  party: ['customer', 'supplier'],
+  parties: ['customers', 'suppliers'],
+  client: ['customer'],
+  vendor: ['supplier'],
+  voucher: ['payment', 'receipt', 'journal'],
+  vouchers: ['payments', 'receipts', 'journals'],
+  gst: ['vat'],
+  inventory: ['stock'],
+  account: ['ledger'],
+  accounts: ['ledgers'],
+};
+
+/**
+ * Edits between two words, a swap of neighbours counting as one: "invocie" is one
+ * from "invoice", which is how fingers actually miss.
+ */
+function distance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const d: number[][] = Array.from({ length: rows }, (_, i) =>
+    Array.from({ length: cols }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  );
+
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(
+        (d[i - 1]?.[j] ?? 0) + 1,
+        (d[i]?.[j - 1] ?? 0) + 1,
+        (d[i - 1]?.[j - 1] ?? 0) + cost,
+      );
+
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        best = Math.min(best, (d[i - 2]?.[j - 2] ?? 0) + 1);
+      }
+
+      (d[i] as number[])[j] = best;
+    }
   }
 
-  const haystack =
-    `${destination.label} ${destination.path} ${destination.route}`.toLowerCase();
-
-  // Every word, in any order, anywhere in the label, its headings or its route. So
-  // "pur ret" finds Purchase returns, and so does "returns".
-  return needle
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word !== '')
-    .every((word) => haystack.includes(word));
+  return d[a.length]?.[b.length] ?? 0;
 }
 
-/** How many rows the list draws before it stops. */
-const LIMIT = 8;
+/** Whether a typed word is a slip of the keys away from the start of a word in the text. */
+function nearly(word: string, text: string): boolean {
+  if (word.length < 4) return false;
+  const allowed = word.length >= 7 ? 2 : 1;
+
+  return text
+    .split(/[^\p{L}\p{N}]+/u)
+    .some(
+      (candidate) =>
+        candidate.length >= word.length - 1 &&
+        distance(word, candidate.slice(0, word.length)) <= allowed,
+    );
+}
+
+/** How well one typed word fits a destination: nought for not at all. */
+function wordScore(destination: Destination, word: string): number {
+  const label = destination.label.toLowerCase();
+  const other = destination.otherLabel.toLowerCase();
+  const path = destination.path.toLowerCase();
+  const route = destination.route.toLowerCase();
+  const startsAWord = (text: string): boolean =>
+    text.split(/[^\p{L}\p{N}]+/u).some((part) => part.startsWith(word));
+
+  // The screen's own name counts for most, and the start of it most of all; the
+  // headings above it next; its address last - "/sales/customers" is how a customer
+  // master came first for "sales" ahead of the sales invoices.
+  if (label.startsWith(word)) return 100;
+  if (startsAWord(label)) return 85;
+  if (label.includes(word)) return 70;
+  if (other.includes(word)) return 65;
+  if (startsAWord(path)) return 40;
+  if (path.includes(word)) return 30;
+  if (route.includes(word)) return 15;
+  if (nearly(word, label) || nearly(word, other)) return 10;
+  return 0;
+}
+
+/**
+ * How well a destination answers what was typed, or null when it does not.
+ *
+ * Every word must fit, in any order: "pur ret" finds Purchase returns, and so does
+ * "returns". A word may also be one of its everyday synonyms, or a typing slip.
+ */
+export function scoreOf(destination: Destination, needle: string): number | null {
+  const words = needle
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== '');
+
+  let total = 0;
+
+  for (const word of words) {
+    const variants = [word, ...(SYNONYMS[word] ?? [])];
+    const best = Math.max(
+      ...variants.map((variant) =>
+        variant.includes(' ')
+          ? Math.min(...variant.split(' ').map((part) => wordScore(destination, part)))
+          : wordScore(destination, variant),
+      ),
+    );
+
+    if (best === 0) return null;
+    total += best;
+  }
+
+  return total;
+}
+
+/** How many rows the list draws before it stops: all of them, short of a runaway menu. */
+const LIMIT = 50;
 
 export function CommandPalette({
   menu,
@@ -109,16 +218,22 @@ export function CommandPalette({
 
   const destinations = useMemo(() => destinationsOf(menu, language), [menu, language]);
 
-  const shown = useMemo(() => {
-    const found = destinations.filter((destination) => matches(destination, needle));
-
-    return found.slice(0, LIMIT);
-  }, [destinations, needle]);
-
-  const total = useMemo(
-    () => destinations.filter((destination) => matches(destination, needle)).length,
+  // Best first; the menu's own order between equals, so an empty box lists the menu.
+  const found = useMemo(
+    () =>
+      destinations
+        .map((destination, index) => ({
+          destination,
+          index,
+          score: scoreOf(destination, needle),
+        }))
+        .filter((row): row is typeof row & { score: number } => row.score !== null)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map((row) => row.destination),
     [destinations, needle],
   );
+  const shown = useMemo(() => found.slice(0, LIMIT), [found]);
+  const total = found.length;
 
   // Typing changes what is on the list, so the highlight goes back to the top —
   // otherwise the fourth row stays selected while the list under it becomes one row.
@@ -191,12 +306,18 @@ export function CommandPalette({
                 placeholder={t('palette.placeholder')}
                 onChange={(event) => setNeedle(event.target.value)}
                 onKeyDown={(event) => {
+                  // Round from the last row to the first and back, as every list
+                  // of this kind does.
                   if (event.key === 'ArrowDown') {
                     event.preventDefault();
-                    setActive((index) => Math.min(index + 1, shown.length - 1));
+                    setActive((index) => (index + 1) % Math.max(shown.length, 1));
                   } else if (event.key === 'ArrowUp') {
                     event.preventDefault();
-                    setActive((index) => Math.max(index - 1, 0));
+                    setActive(
+                      (index) =>
+                        (index - 1 + Math.max(shown.length, 1)) %
+                        Math.max(shown.length, 1),
+                    );
                   } else if (event.key === 'Enter') {
                     event.preventDefault();
                     go(shown[active]);
@@ -290,21 +411,18 @@ export function CommandPalette({
  * Whether the palette should open, given a keystroke.
  *
  * Cmd-K on a Mac, Ctrl-K everywhere else — the shortcut everything from an editor to
- * a chat client has trained people to try. Ignored while the caret is in a field,
- * because Ctrl-K in a text box already means something to some people and stealing
- * it mid-sentence is worse than not offering the shortcut there.
+ * a chat client has trained people to try. From inside a field as well: an entry
+ * screen is nearly all fields, and there Edge and Chrome took Ctrl-K for their own
+ * web search, so the shortcut looked broken exactly where people were.
+ *
+ * By the key's place rather than its letter, so it still works with the keyboard
+ * switched to Arabic, where that key types "ن". AltGr - Ctrl and Alt together on
+ * some keyboards - is left alone.
  */
 export function opensPalette(event: KeyboardEvent): boolean {
-  if (event.key !== 'k' && event.key !== 'K') {
+  if (event.code !== 'KeyK' && event.key !== 'k' && event.key !== 'K') {
     return false;
   }
 
-  if (!event.metaKey && !event.ctrlKey) {
-    return false;
-  }
-
-  const target = event.target as HTMLElement | null;
-  const tag = target?.tagName;
-
-  return tag !== 'INPUT' && tag !== 'TEXTAREA' && target?.isContentEditable !== true;
+  return (event.metaKey || event.ctrlKey) && !event.altKey;
 }
