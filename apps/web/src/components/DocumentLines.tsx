@@ -228,6 +228,14 @@ export function productDetailColumns(t: (key: string) => string): readonly LineC
 }
 
 /**
+ * How many of {@link productDetailColumns} a table shows: the cells a row of totals
+ * spans beside the product's.
+ */
+export function shownProductDetails(shows: (key: string) => boolean): number {
+  return productDetailColumns((key) => key).filter((column) => shows(column.key)).length;
+}
+
+/**
  * The cells behind {@link productDetailColumns}.
  *
  * Rendered as a fragment so a caller drops them into its row at whatever point its

@@ -1490,6 +1490,34 @@
       border-top-width: 1px;
     }
 
+    /* The row of totals is a card of its own under the lines, picked out. */
+    .line-table tfoot {
+      @apply static block bg-transparent;
+    }
+
+    .line-table tfoot tr {
+      @apply rounded-xl border border-brand-500/30 bg-brand-50 p-2 dark:bg-brand-500/10;
+    }
+
+    .line-table tfoot td {
+      @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] items-center gap-2 px-0 py-1;
+    }
+
+    .line-table tfoot td::before {
+      content: attr(data-label);
+      text-align: start;
+      font-family: var(--font-sans);
+      @apply text-xs font-medium text-ink-muted;
+    }
+
+    .line-table tfoot td:empty {
+      @apply hidden;
+    }
+
+    .line-table tfoot td:first-child {
+      @apply block text-start;
+    }
+
     .line-table tbody td {
       @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] items-center gap-2 px-0 py-1;
       min-width: 0;

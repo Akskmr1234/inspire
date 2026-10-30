@@ -26,6 +26,7 @@ import {
   BillCard,
   CompactField,
   FooterSection,
+  formatQuantity,
   InvoiceBody,
   InvoiceCard,
   InvoiceFields,
@@ -34,6 +35,7 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
@@ -47,6 +49,7 @@ import {
   ProductDetailCells,
   ProductDetailHeaders,
   productDetailColumns,
+  shownProductDetails,
   productOption,
   stockByProduct,
   useLineColumns,
@@ -679,7 +682,6 @@ function EntryDialog({
       ? String(editing.amountReceived)
       : '',
   );
-  const [cashGiven, setCashGiven] = useState<string>('');
   // Where the money paid with the sale goes: the settings' default cash or bank
   // account for the mode, or the one a corrected document already named.
   const [receivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
@@ -1056,18 +1058,13 @@ function EntryDialog({
     return after > limit + 0.004 ? after - limit : 0;
   }, [account.data, kind, grandTotal, effectivePaid, editing, creditRule]);
 
-  // Cash handed over beyond what is being paid comes back as change - whether it was
-  // typed as cash tendered or as more than the bill in the amount received.
+  // Cash handed over beyond the bill comes back as change: the amount paid is the one
+  // box, and more than the bill typed into it is what was tendered.
   const changeBack = useMemo(() => {
-    const tendered =
-      cashGiven.trim() !== ''
-        ? Number(cashGiven)
-        : typedPaid !== null && typedPaid > grandTotal
-          ? typedPaid
-          : 0;
+    const tendered = typedPaid !== null && typedPaid > grandTotal ? typedPaid : 0;
     if (!Number.isFinite(tendered) || tendered <= 0) return 0;
     return Math.max(0, tendered - effectivePaid);
-  }, [cashGiven, typedPaid, grandTotal, effectivePaid]);
+  }, [typedPaid, grandTotal, effectivePaid]);
 
   // ---- Loading from another document, found by its number.
   const referenceSources: readonly ReferenceSource[] = isReturn(kind)
@@ -1528,12 +1525,19 @@ function EntryDialog({
     editing?.header.status !== SalesInvoiceStatus.posted &&
     ((settings.allowSaveDraft !== false && !directSave) || editing !== undefined);
   const itemCount = lines.filter((line) => line.productId !== '').length;
-  const totalQuantity = lines.reduce(
-    (sum, line) =>
-      line.productId !== '' && Number.isFinite(Number(line.quantity))
-        ? sum + Number(line.quantity)
-        : sum,
-    0,
+  // What the lines add up to, column by column, for the row of totals under them.
+  const lineSums = lines.reduce(
+    (sums, line) => {
+      if (line.productId === '') return sums;
+      const add = (value: string | undefined): number =>
+        Number.isFinite(Number(value || 0)) ? Number(value || 0) : 0;
+      return {
+        quantity: sums.quantity + add(line.quantity),
+        free: sums.free + add(line.freeQuantity),
+        rate: sums.rate + add(reverseCalc ? line.inclusiveRate : line.rate),
+      };
+    },
+    { quantity: 0, free: 0, rate: 0 },
   );
 
   return (
@@ -1715,6 +1719,30 @@ function EntryDialog({
               </FormField>
             )}
 
+            {!editing && (
+              <ReferenceLoader
+                asField
+                sources={referenceSources}
+                onLoad={loadReference}
+                className="sm:col-span-2 lg:col-span-3 xl:col-span-2"
+              />
+            )}
+            <NarrationInput
+              value={narration}
+              onChange={setNarration}
+              label={t('invoice.narration')}
+              className={clsx(
+                'sm:col-span-2 lg:col-span-3',
+                // Wide enough that the scan box lands at the end of the row.
+                editing
+                  ? isReturn(kind)
+                    ? 'xl:col-span-4'
+                    : 'xl:col-span-5'
+                  : isReturn(kind)
+                    ? 'xl:col-span-2'
+                    : 'xl:col-span-3',
+              )}
+            />
             <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
               <ScanField
                 value={barcodeInput}
@@ -1734,24 +1762,6 @@ function EntryDialog({
                 }
               />
             </div>
-            {!editing && (
-              <ReferenceLoader
-                asField
-                sources={referenceSources}
-                onLoad={loadReference}
-                className="sm:col-span-2 lg:col-span-3 xl:col-span-2"
-              />
-            )}
-            <NarrationInput
-              value={narration}
-              onChange={setNarration}
-              label={t('invoice.narration')}
-              className={
-                isReturn(kind)
-                  ? 'sm:col-span-2 lg:col-span-3 xl:col-span-2'
-                  : 'sm:col-span-2 lg:col-span-3'
-              }
-            />
           </InvoiceFields>
         </InvoiceCard>
 
@@ -1846,6 +1856,65 @@ function EntryDialog({
                   />
                 ))}
               </tbody>
+              <LinesTotalRow
+                label={t('invoice.linesTotal')}
+                span={1 + shownProductDetails(lineColumns.shows)}
+                cells={[
+                  {
+                    key: 'quantity',
+                    label: t('sales.quantity'),
+                    value: formatQuantity(lineSums.quantity),
+                  },
+                  ...(enableFreeQty && lineColumns.shows('freeQuantity')
+                    ? [
+                        {
+                          key: 'free',
+                          label: t('sales.freeQuantity'),
+                          value: formatQuantity(lineSums.free),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: 'rate',
+                    label: t('sales.rate'),
+                    value: moneyAlways(lineSums.rate),
+                  },
+                  ...(enableDiscount && lineColumns.shows('discount')
+                    ? [
+                        {
+                          key: 'discount',
+                          label: t('sales.itemDiscount'),
+                          value: moneyAlways(totals.discount),
+                        },
+                      ]
+                    : []),
+                  ...(lineColumns.shows('taxPercent') ? [{ key: 'taxPercent' }] : []),
+                  ...(lineColumns.shows('taxAmount')
+                    ? [
+                        {
+                          key: 'taxAmount',
+                          label: t('sales.taxAmount'),
+                          value: moneyAlways(totals.tax),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: 'net',
+                    label: t('sales.net'),
+                    value: moneyAlways(totals.taxable),
+                  },
+                  ...(lineColumns.shows('lineTotal')
+                    ? [
+                        {
+                          key: 'lineTotal',
+                          label: t('sales.lineTotal'),
+                          value: moneyAlways(totals.taxable + totals.tax),
+                        },
+                      ]
+                    : []),
+                  { key: 'actions' },
+                ]}
+              />
             </table>
 
             <button
@@ -1989,18 +2058,6 @@ function EntryDialog({
               )}
               {!isReturn(kind) && paymentMode === SalesPaymentMode.cash && (
                 <>
-                  <CompactField label={t('sales.cashGiven')}>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      aria-label={t('sales.cashGiven')}
-                      value={cashGiven}
-                      placeholder="0.00"
-                      onChange={(e) => setCashGiven(e.target.value)}
-                      className="field-input-sm text-end tabular-nums"
-                    />
-                  </CompactField>
                   <ValueField
                     label={t('sales.changeBack')}
                     value={moneyAlways(changeBack)}
@@ -2056,7 +2113,7 @@ function EntryDialog({
             money={moneyAlways}
             breakdown={{
               items: itemCount,
-              quantity: totalQuantity,
+              quantity: lineSums.quantity,
               gross: totals.gross,
               discount: totals.discount,
               taxable: totals.taxable,

@@ -482,6 +482,11 @@ export function ValueField({
   );
 }
 
+/** A quantity as the lines show it: no more decimals than it has, up to three. */
+export function formatQuantity(quantity: number): string {
+  return Number(quantity.toFixed(3)).toString();
+}
+
 /** What a bill is built from, for its card to set out line by line. */
 export interface BillBreakdown {
   /** Lines with a product on them. */
@@ -502,9 +507,10 @@ export interface BillBreakdown {
 }
 
 /**
- * The bill, picked out: its total at the head, then how it comes to that - the
- * items and their quantity, the goods, what came off them, the tax, and each
- * additional ledger with what it adds or takes off.
+ * The bill, picked out: how it comes to its total - the items and their quantity,
+ * the goods, what came off them, the tax, and each additional ledger with what it
+ * adds or takes off - and the total itself at the foot, in the bottom corner, where
+ * a bill's total is read.
  */
 export function BillCard({
   label,
@@ -529,22 +535,14 @@ export function BillCard({
     <FooterSection
       highlight
       icon={<IconReceipt className="size-5" />}
-      title={label}
-      aside={
-        <span className="block truncate text-2xl leading-none font-bold text-brand-600 tabular-nums sm:text-3xl dark:text-brand-300">
-          {money(total)}
-        </span>
-      }
+      title={t('invoice.bill')}
       className={className}
     >
       <div className="divide-y divide-brand-500/15">
         <div className="pb-1">
           <FigureRow
             label={t('invoice.items')}
-            value={t('invoice.itemsQty', {
-              count: items,
-              qty: Number(quantity.toFixed(3)).toString(),
-            })}
+            value={t('invoice.itemsQty', { count: items, qty: formatQuantity(quantity) })}
           />
           <FigureRow label={t('invoice.itemsTotal')} value={money(gross)} />
           {discount !== 0 && (
@@ -574,7 +572,60 @@ export function BillCard({
           </div>
         )}
       </div>
+      <div className="mt-auto flex items-baseline justify-between gap-3 border-t border-brand-500/25 pt-2">
+        <span className="text-sm font-semibold text-ink">{label}</span>
+        <span className="truncate text-2xl leading-tight font-bold text-brand-600 tabular-nums sm:text-3xl dark:text-brand-300">
+          {money(total)}
+        </span>
+      </div>
     </FooterSection>
+  );
+}
+
+/** One figure in the row of totals under the lines, under the column it adds up. */
+export interface LinesTotalCell {
+  readonly key: string;
+  /** The column's caption, for the phone, where the row is a card. */
+  readonly label?: string;
+  readonly value?: string;
+}
+
+/**
+ * The row under the lines that adds them up, column by column - quantity, rate,
+ * discount, tax, net, total - held at the foot of the lines however far they
+ * scroll, as the header row is held at their head.
+ */
+export function LinesTotalRow({
+  label,
+  span,
+  cells,
+}: {
+  readonly label: string;
+  /** How many columns the caption covers: the product's and any beside it. */
+  readonly span: number;
+  /** The rest of the row, one per column, the last the actions column. */
+  readonly cells: readonly LinesTotalCell[];
+}): React.JSX.Element {
+  return (
+    <tfoot className="sticky bottom-0 z-10 bg-surface-2 text-sm font-semibold text-ink">
+      <tr>
+        <td colSpan={span} className="rounded-s-lg px-3 py-2.5 text-start">
+          {label}
+        </td>
+        {cells.map((cell, index) => (
+          <td
+            key={cell.key}
+            {...(cell.label ? { 'data-label': cell.label } : {})}
+            className={clsx(
+              'px-2 py-2.5 text-end whitespace-nowrap tabular-nums',
+              index === cells.length - 1 && 'rounded-e-lg',
+            )}
+          >
+            {cell.value ?? ''}
+          </td>
+        ))}
+      </tr>
+    </tfoot>
   );
 }
 
@@ -681,7 +732,7 @@ function FigureRow({
   readonly muted?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-3 py-1 text-sm">
+    <div className="flex items-center justify-between gap-3 py-0.5 text-sm">
       <span className={muted ? 'text-ink-muted' : 'font-medium text-ink'}>{label}</span>
       <span className="font-medium text-ink tabular-nums">{value}</span>
     </div>

@@ -18,6 +18,13 @@ interface ImportMetaEnv {
    * single-origin reverse-proxy deployment both provide.
    */
   readonly VITE_API_URL?: string;
+
+  /**
+   * The brand where the address does not name one - `localhost`, an IP address - e.g.
+   * `inspire`. On a domain the first label decides: inspire.wishkraft.app is
+   * Inspire ERP whatever this says. Unset, it is Aider.
+   */
+  readonly VITE_APP_BRAND?: string;
 }
 
 interface ImportMeta {

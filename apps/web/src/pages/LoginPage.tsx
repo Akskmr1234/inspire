@@ -10,6 +10,7 @@ import {
   IconUser,
 } from '@/components/icons';
 import { ApiError, getStoredTenantCode } from '@/lib/api';
+import { brand } from '@/lib/brand';
 import { useSession } from '@/stores/session';
 
 /** The sign-in screen. */
@@ -71,7 +72,7 @@ export function LoginPage(): React.JSX.Element {
       >
         <div className="mb-7 flex items-center gap-3">
           <div className="relative grid size-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 font-bold text-white shadow-card ring-1 ring-white/20">
-            AE
+            {brand.initials}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
