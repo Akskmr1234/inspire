@@ -143,7 +143,7 @@ export function GeneralSettings(): React.JSX.Element {
                 key={choice}
                 type="button"
                 onClick={() => {
-                  settings.update({ defaultTheme: choice });
+                  settings.update({ firmTheme: choice });
                   setDefaultAppTheme(choice);
                 }}
                 aria-pressed={theme === choice}

@@ -163,8 +163,11 @@ export interface AppSettings {
   readonly fillBillsOnPayments: boolean;
   /** Configured default additional ledgers per transaction type. */
   readonly defaultAdditionalLedgers: readonly DefaultAdditionalLedgerConfig[];
-  /** Application-wide default theme ('light' or 'dark') applied for all users. */
-  readonly defaultTheme: 'light' | 'dark';
+  /**
+   * The theme every user starts in, as the firm chose it. Blank where it has not
+   * chosen, which leaves it to the deployment: see src/lib/theme.ts.
+   */
+  readonly firmTheme: 'light' | 'dark' | '';
   /**
    * Whether the firm trades in the Gulf: Arabic names beside the English ones on the
    * masters, and documents that can be printed in both languages. Off, the Arabic
@@ -258,7 +261,7 @@ const DEFAULTS: AppSettings = {
   billWisePayments: true,
   fillBillsOnPayments: true,
   defaultAdditionalLedgers: [],
-  defaultTheme: 'light',
+  firmTheme: '',
   gulfMode: true,
 };
 
@@ -269,7 +272,8 @@ const DEFAULTS: AppSettings = {
  * simpler list; they now live with the additional-ledger defaults, and an older copy's
  * list is folded in rather than left applying where nothing can show or change it.
  */
-function upgrade(settings: AppSettings): AppSettings {
+function upgrade(stored: AppSettings): AppSettings {
+  const settings = withFirmTheme(stored);
   const legacy = Object.entries(settings.defaultCharges ?? {}).filter(
     ([, rows]) => rows.length > 0,
   );
@@ -304,6 +308,28 @@ function upgrade(settings: AppSettings): AppSettings {
     ...settings,
     defaultCharges: NO_DEFAULT_CHARGES,
     defaultAdditionalLedgers: [...(settings.defaultAdditionalLedgers ?? []), ...folded],
+  };
+}
+
+/**
+ * Reads the firm's theme from where an earlier release kept it.
+ *
+ * That was `defaultTheme`, written with every save and light unless somebody changed
+ * it - so light there cannot be told from nobody having chosen, and is read as nobody
+ * having chosen, which lets the deployment's default show. Dark was always a choice.
+ */
+function withFirmTheme(settings: AppSettings): AppSettings {
+  const { defaultTheme, ...rest } = settings as AppSettings & {
+    readonly defaultTheme?: unknown;
+  };
+
+  if (defaultTheme === undefined) {
+    return settings;
+  }
+
+  return {
+    ...rest,
+    firmTheme: rest.firmTheme || (defaultTheme === 'dark' ? 'dark' : ''),
   };
 }
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as api from '@/lib/api';
+import { deploymentTheme, resolveThemeDefault } from '@/lib/theme';
 import { useSettings } from '@/stores/settings';
 
 export type Theme = 'light' | 'dark';
@@ -58,18 +59,15 @@ function readTheme(): Theme {
     return defaultStored;
   }
 
-  try {
-    const settings = JSON.parse(localStorage.getItem('erp.settings') || '{}') as {
-      defaultTheme?: string;
-    };
-    if (settings.defaultTheme === 'light' || settings.defaultTheme === 'dark') {
-      return settings.defaultTheme;
-    }
-  } catch {
-    // Ignore JSON errors.
+  const firm = useSettings.getState().firmTheme;
+  if (firm !== '') {
+    return firm;
   }
 
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return resolveThemeDefault(
+    deploymentTheme,
+    window.matchMedia('(prefers-color-scheme: dark)').matches,
+  );
 }
 
 /**
@@ -87,7 +85,7 @@ export function setDefaultAppTheme(theme: Theme): void {
 
   // Through the settings store rather than written into its storage by hand, so the
   // default reaches the firm's shared copy and every other workstation with it.
-  useSettings.getState().update({ defaultTheme: theme });
+  useSettings.getState().update({ firmTheme: theme });
 
   withThemeTransition(() => applyPresentation(theme, useSession.getState().language));
   useSession.setState({ theme });

@@ -25,6 +25,11 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
+# The theme the application opens in for anybody who has not picked one - light,
+# dark, or system to follow the device - compiled in the same way. Unset, light.
+ARG VITE_DEFAULT_THEME
+ENV VITE_DEFAULT_THEME=$VITE_DEFAULT_THEME
+
 # The manifest is copied first so the dependency install is cached against it
 # alone, and editing a component does not reinstall node_modules.
 #
