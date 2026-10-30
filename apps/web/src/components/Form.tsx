@@ -33,16 +33,19 @@ export function Field({
   error,
   htmlFor,
   className,
+  aside,
   children,
 }: {
   readonly label: string;
   /** Marks the field mandatory and colours the marker red. */
   readonly required?: boolean;
+  /** Quieter, at the far end of the caption: a phone number, what a scan found. */
+  readonly aside?: React.ReactNode;
   readonly hint?: string;
   /** Shown under the control, and expected to have made the control red too. */
   readonly error?: string | undefined;
   readonly htmlFor?: string;
-  readonly className?: string;
+  readonly className?: string | undefined;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -52,6 +55,11 @@ export function Field({
         {required && (
           <span aria-hidden="true" className="field-required">
             *
+          </span>
+        )}
+        {aside && (
+          <span className="ms-auto min-w-0 truncate ps-2 text-xs font-normal text-ink-subtle">
+            {aside}
           </span>
         )}
       </label>

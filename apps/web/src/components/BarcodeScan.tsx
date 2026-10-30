@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Field } from '@/components/Form';
 import { IconBarcode } from '@/components/icons';
 import { listProducts, type ProductSummary } from '@/lib/products';
 
@@ -83,6 +84,8 @@ export function BarcodeScan({
   products,
   onScan,
   disabled = false,
+  asField = false,
+  className,
 }: {
   readonly products: readonly ProductSummary[];
   /**
@@ -91,6 +94,9 @@ export function BarcodeScan({
    */
   readonly onScan: (product: ProductSummary) => number | string;
   readonly disabled?: boolean;
+  /** As one field among the others - a caption over the box - not a strip. */
+  readonly asField?: boolean;
+  readonly className?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [code, setCode] = useState('');
@@ -131,6 +137,34 @@ export function BarcodeScan({
     }
   };
 
+  if (asField) {
+    return (
+      <ScanField
+        value={code}
+        onChange={setCode}
+        onScan={() => void scan()}
+        disabled={disabled}
+        label={t('invoice.scanLabel')}
+        placeholder={t('stock.barcodeScanPlaceholder')}
+        className={className}
+        notice={
+          notice && (
+            <span
+              role="status"
+              className={
+                notice.found
+                  ? 'font-medium text-brand-700 dark:text-brand-300'
+                  : 'font-medium text-red-700 dark:text-red-300'
+              }
+            >
+              {notice.text}
+            </span>
+          )
+        }
+      />
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/60 p-2">
       <IconBarcode className="size-5 shrink-0 text-ink-muted" />
@@ -170,5 +204,66 @@ export function BarcodeScan({
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * The scan box as a field: a caption, what the last scan found at the end of it,
+ * and the box with its button underneath - the height of every other field, so it
+ * sits in a row of them.
+ */
+export function ScanField({
+  value,
+  onChange,
+  onScan,
+  label,
+  placeholder,
+  notice,
+  disabled = false,
+  className,
+}: {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly onScan: () => void;
+  readonly label: string;
+  readonly placeholder: string;
+  readonly notice?: React.ReactNode;
+  readonly disabled?: boolean;
+  readonly className?: string | undefined;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const id = useId();
+
+  return (
+    <Field label={label} htmlFor={id} aside={notice} className={className}>
+      <div className="flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <IconBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" />
+          <input
+            id={id}
+            type="text"
+            value={value}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                onScan();
+              }
+            }}
+            placeholder={placeholder}
+            className="field-input ps-9"
+          />
+        </div>
+        <button
+          type="button"
+          disabled={disabled || value.trim() === ''}
+          onClick={onScan}
+          className="btn-secondary shrink-0"
+        >
+          {t('stock.scan')}
+        </button>
+      </div>
+    </Field>
   );
 }

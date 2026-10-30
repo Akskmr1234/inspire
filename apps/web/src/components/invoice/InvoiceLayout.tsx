@@ -8,8 +8,8 @@ import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 /*
   The pieces every invoice is built from - sales and purchase, their returns, orders
   and quotations - so the screens read alike: a header that names the document and
-  holds its buttons, a column of cards for the party and the items, and a column
-  beside it with the money.
+  holds its buttons, the party in two lines under it, the items taking whatever
+  height is left, and the money along the foot.
 */
 
 /**
@@ -70,6 +70,7 @@ export function InvoiceHeader({
   onCancel,
   primary,
   more = [],
+  hints,
 }: {
   readonly icon: React.ReactNode;
   readonly title: string;
@@ -78,23 +79,28 @@ export function InvoiceHeader({
   readonly primary: InvoiceAction;
   /** Under the arrow beside the main button: the other ways to save. */
   readonly more?: readonly InvoiceAction[];
+  /** The keys the screen answers to, between the title and the buttons. */
+  readonly hints?: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
   return (
     <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas/90 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-3 py-3 sm:px-6 sm:py-4">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 sm:size-12 dark:text-brand-300">
+      <div className="flex w-full items-center gap-3 px-3 py-2.5 sm:px-4">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
           {icon}
         </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-bold tracking-tight text-ink sm:text-2xl">
+        <div className="min-w-0 flex-1 lg:max-w-[18rem] lg:flex-none">
+          <h2 className="truncate text-lg font-bold tracking-tight text-ink sm:text-xl">
             {title}
           </h2>
           {subtitle && (
-            <p className="hidden truncate text-sm text-ink-muted sm:block">{subtitle}</p>
+            <p className="hidden truncate text-xs text-ink-muted sm:block">{subtitle}</p>
           )}
         </div>
+        {/* In the header rather than a strip of their own, so the lines keep the
+            height. */}
+        {hints && <div className="hidden min-w-0 flex-1 lg:flex">{hints}</div>}
         <button
           type="button"
           onClick={onCancel}
@@ -220,47 +226,44 @@ function SplitButton({
 }
 
 /**
- * The body of an invoice: its cards in a column, the money in a narrower one beside
- * it on a wide screen and under it on a narrow one.
+ * The body of an invoice, the window's full width: the party, the items, and the
+ * money along the foot.
+ *
+ * On a wide screen it is exactly the window's height - the items card stretches to
+ * fill what the party and the money leave, and its lines scroll inside it - and when
+ * the window is too short even for that, the whole of it scrolls. On a narrow
+ * screen the cards simply stack.
  */
 export function InvoiceBody({
-  main,
-  side,
-  footer,
+  children,
 }: {
-  readonly main: React.ReactNode;
-  readonly side: React.ReactNode;
-  /** Under both columns: the keys the screen answers to. */
-  readonly footer?: React.ReactNode;
+  readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-3 py-4 sm:px-6 sm:py-5">
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
-        <div className="flex min-w-0 flex-col gap-4">{main}</div>
-        {/* Held in view beside the items on a wide screen, so the total and the
-            payment are never a scroll away from the line being typed. */}
-        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-24">{side}</aside>
-      </div>
-      {footer}
+    <div className="flex w-full flex-1 flex-col gap-2.5 px-3 py-2.5 sm:px-4">
+      {children}
     </div>
   );
 }
 
-/** A card of an invoice, under a heading with its icon. */
+/** A card of an invoice, under a heading with its icon - or with none, for the party. */
 export function InvoiceCard({
   icon,
   title,
   meta,
   actions,
+  fill = false,
   children,
   className,
 }: {
-  readonly icon: React.ReactNode;
-  readonly title: string;
+  readonly icon?: React.ReactNode;
+  readonly title?: string;
   /** Beside the title, quieter: "3 items". */
   readonly meta?: React.ReactNode;
   /** At the end of the heading row. */
   readonly actions?: React.ReactNode;
+  /** Takes whatever height the window has left, on a wide screen: the items. */
+  readonly fill?: boolean;
   readonly children: React.ReactNode;
   readonly className?: string;
 }): React.JSX.Element {
@@ -268,45 +271,135 @@ export function InvoiceCard({
     <section
       className={clsx(
         'min-w-0 rounded-2xl border border-line bg-surface shadow-card',
+        fill ? 'lg:flex lg:flex-1 lg:flex-col' : 'shrink-0',
         className,
       )}
     >
-      <div className="flex items-center gap-2.5 border-b border-line/70 px-4 py-3.5 sm:px-5">
-        <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
-        <h3 className="text-base font-semibold text-ink">{title}</h3>
-        {meta && <span className="text-xs text-ink-muted">{meta}</span>}
-        {actions && <div className="ms-auto flex items-center gap-2">{actions}</div>}
+      {title && (
+        <div className="flex items-center gap-2.5 border-b border-line/70 px-3 py-2 sm:px-4">
+          <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
+          <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+          {meta && <span className="text-xs text-ink-muted">{meta}</span>}
+          {actions && <div className="ms-auto flex items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      <div className={clsx('p-3', fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col')}>
+        {children}
       </div>
-      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }
 
-/** A smaller card inside a card: the narration, the bill. */
-export function InvoicePanel({
+/**
+ * The party's fields, in two lines on a wide screen: eight columns, the party
+ * itself two of them wide. Narrower screens take four, then two, then one.
+ */
+export function InvoiceFields({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Where the lines' table goes, inside the items card.
+ *
+ * On a wide screen it stretches to the card's height and scrolls inside it, under a
+ * header row that stays put - laid out of the flow, so a long bill grows the
+ * scroll rather than the window. On a narrow one it is as long as its lines.
+ */
+export function InvoiceLines({
+  children,
+}: {
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="relative lg:min-h-44 lg:flex-1">
+      <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0 lg:absolute lg:inset-0 lg:overflow-auto">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The foot of an invoice, under its lines: the narration, the bill, the payment and
+ * the total, side by side on a wide screen so they take the height of the tallest
+ * rather than the sum of them all. `className` sets the columns.
+ */
+export function InvoiceFooter({
+  children,
+  className,
+}: {
+  readonly children: React.ReactNode;
+  readonly className?: string;
+}): React.JSX.Element {
+  return (
+    <section className="shrink-0 rounded-2xl border border-line bg-surface shadow-card">
+      <div
+        className={clsx(
+          'grid gap-4 p-3 md:grid-cols-2 lg:gap-x-0 lg:divide-x lg:divide-line/70',
+          className,
+        )}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** One part of the foot: the bill, the payment. */
+export function FooterSection({
   icon,
   title,
   children,
   className,
 }: {
-  readonly icon: React.ReactNode;
-  readonly title: string;
+  readonly icon?: React.ReactNode;
+  readonly title?: string;
   readonly children: React.ReactNode;
   readonly className?: string;
 }): React.JSX.Element {
   return (
     <div
       className={clsx(
-        'flex min-w-0 flex-col rounded-xl border border-line p-3.5 sm:p-4',
+        'flex min-w-0 flex-col lg:px-4 lg:first:ps-0 lg:last:pe-0',
         className,
       )}
     >
-      <div className="mb-3 flex items-center gap-2">
-        <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
-        <h4 className="text-sm font-semibold text-ink">{title}</h4>
-      </div>
+      {title && (
+        <div className="mb-1.5 flex items-center gap-2">
+          {icon && (
+            <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
+          )}
+          <h4 className="text-sm font-semibold text-ink">{title}</h4>
+        </div>
+      )}
       {children}
     </div>
+  );
+}
+
+/** A small caption over its box: the payment's fields, two to a row on the foot. */
+export function CompactField({
+  label,
+  children,
+  className,
+}: {
+  readonly label: string;
+  readonly children: React.ReactNode;
+  readonly className?: string;
+}): React.JSX.Element {
+  return (
+    <label className={clsx('flex min-w-0 flex-col gap-1', className)}>
+      <span className="truncate text-xs text-ink-muted">{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -330,7 +423,7 @@ export function TotalBanner({
       className={clsx(
         'flex items-center gap-3 rounded-xl',
         tone === 'danger' ? 'bg-red-500/10' : 'bg-brand-500/10',
-        size === 'lg' ? 'px-4 py-4 sm:px-5' : 'px-3.5 py-3',
+        size === 'lg' ? 'px-4 py-3' : 'px-3.5 py-2.5',
       )}
     >
       {icon && (
@@ -359,7 +452,7 @@ export function TotalBanner({
   );
 }
 
-/** One line of figures: a caption, and its value or the control that sets it. */
+/** One line of figures: a caption, and its value at the far end. */
 export function DetailRow({
   label,
   children,
@@ -370,15 +463,18 @@ export function DetailRow({
   readonly strong?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-3 py-2 text-sm">
+    <div className="flex items-center justify-between gap-3 py-1 text-sm">
       <span
-        className={clsx('min-w-0', strong ? 'font-semibold text-ink' : 'text-ink-muted')}
+        className={clsx(
+          'min-w-0 truncate',
+          strong ? 'font-semibold text-ink' : 'text-ink-muted',
+        )}
       >
         {label}
       </span>
       <div
         className={clsx(
-          'min-w-0 tabular-nums',
+          'shrink-0 text-end tabular-nums',
           strong ? 'font-semibold text-ink' : 'font-medium text-ink',
         )}
       >
@@ -433,13 +529,13 @@ export function NarrationField({
   return (
     <div className="relative flex flex-1 flex-col">
       <textarea
-        rows={4}
+        rows={3}
         value={value}
         maxLength={NARRATION_LIMIT}
         aria-label={label}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="field-input min-h-28 flex-1 resize-none pb-6"
+        className="field-input min-h-20 flex-1 resize-none pb-6"
       />
       <span className="pointer-events-none absolute end-3 bottom-2 text-[11px] text-ink-subtle tabular-nums">
         {value.length}/{NARRATION_LIMIT}
@@ -470,8 +566,9 @@ export function BillFigures({
   readonly showTax: boolean;
   /** The additional ledgers, as a list to type into. */
   readonly charges: React.ReactNode;
-  readonly total: number;
-  readonly totalLabel: string;
+  /** Picked out under the figures - left off where the foot shows it beside them. */
+  readonly total?: number;
+  readonly totalLabel?: string;
   readonly money: (value: number) => string;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -489,9 +586,11 @@ export function BillFigures({
         <FigureRow label={t('documents.tax')} value={money(tax)} />
       )}
       <div className="mt-2">{charges}</div>
-      <div className="mt-auto pt-3">
-        <TotalBanner label={totalLabel} amount={money(total)} size="md" />
-      </div>
+      {total !== undefined && totalLabel !== undefined && (
+        <div className="mt-auto pt-3">
+          <TotalBanner label={totalLabel} amount={money(total)} size="md" />
+        </div>
+      )}
     </>
   );
 }
