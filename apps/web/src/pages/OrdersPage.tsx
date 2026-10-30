@@ -16,6 +16,7 @@ import {
 import {
   BillCard,
   FooterSection,
+  formatQuantity,
   InvoiceBody,
   InvoiceCard,
   InvoiceFields,
@@ -24,6 +25,7 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
@@ -46,6 +48,7 @@ import {
   productDetailColumns,
   ProductDetailCells,
   ProductDetailHeaders,
+  shownProductDetails,
   useLineColumns,
   type DraftCharge,
   type LineColumn,
@@ -876,12 +879,18 @@ function OrderEntryDialog({
   const chargesAmount = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
   const orderTotal = totals.gross - totals.discount + totals.tax + chargesAmount;
   const itemCount = lines.filter((line) => line.productId !== '').length;
-  const totalQuantity = lines.reduce(
-    (sum, line) =>
-      line.productId !== '' && Number.isFinite(Number(line.quantity))
-        ? sum + Number(line.quantity)
-        : sum,
-    0,
+  // What the lines add up to, column by column, for the row of totals under them.
+  const lineSums = lines.reduce(
+    (sums, line) => {
+      if (line.productId === '') return sums;
+      const add = (value: string | undefined): number =>
+        Number.isFinite(Number(value || 0)) ? Number(value || 0) : 0;
+      return {
+        quantity: sums.quantity + add(line.quantity),
+        rate: sums.rate + add(line.rate),
+      };
+    },
+    { quantity: 0, rate: 0 },
   );
 
   return (
@@ -986,6 +995,12 @@ function OrderEntryDialog({
               </Field>
             )}
 
+            <NarrationInput
+              value={draft.narration}
+              onChange={(value) => set('narration', value)}
+              label={t('invoice.narration')}
+              className={'sm:col-span-2 lg:col-span-3 xl:col-span-6'}
+            />
             <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
               <BarcodeScan
                 asField
@@ -1007,12 +1022,6 @@ function OrderEntryDialog({
                 }}
               />
             </div>
-            <NarrationInput
-              value={draft.narration}
-              onChange={(value) => set('narration', value)}
-              label={t('invoice.narration')}
-              className="sm:col-span-2 lg:col-span-3"
-            />
           </InvoiceFields>
         </InvoiceCard>
 
@@ -1191,6 +1200,47 @@ function OrderEntryDialog({
                   );
                 })}
               </tbody>
+              <LinesTotalRow
+                label={t('invoice.linesTotal')}
+                span={1 + shownProductDetails(columns.shows)}
+                cells={[
+                  {
+                    key: 'quantity',
+                    label: t('orders.quantity'),
+                    value: formatQuantity(lineSums.quantity),
+                  },
+                  {
+                    key: 'rate',
+                    label: t('orders.rate'),
+                    value: moneyAlways(lineSums.rate),
+                  },
+                  ...(columns.shows('discount')
+                    ? [
+                        {
+                          key: 'discount',
+                          label: t('orders.discount'),
+                          value: moneyAlways(totals.discount),
+                        },
+                      ]
+                    : []),
+                  ...(columns.shows('taxPercent') ? [{ key: 'taxPercent' }] : []),
+                  {
+                    key: 'net',
+                    label: t('orders.net'),
+                    value: moneyAlways(totals.taxable),
+                  },
+                  ...(columns.shows('lineTotal')
+                    ? [
+                        {
+                          key: 'lineTotal',
+                          label: t('sales.lineTotal'),
+                          value: moneyAlways(totals.taxable + totals.tax),
+                        },
+                      ]
+                    : []),
+                  { key: 'actions' },
+                ]}
+              />
             </table>
 
             <button
@@ -1275,7 +1325,7 @@ function OrderEntryDialog({
             money={moneyAlways}
             breakdown={{
               items: itemCount,
-              quantity: totalQuantity,
+              quantity: lineSums.quantity,
               gross: totals.gross,
               discount: totals.discount,
               taxable: totals.taxable,
