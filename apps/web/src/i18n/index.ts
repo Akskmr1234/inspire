@@ -1,5 +1,6 @@
 import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import { brand } from '@/lib/brand';
 
 /**
  * English and Arabic, per section 7 of the specification.
@@ -9,7 +10,8 @@ import { initReactI18next } from 'react-i18next';
  * splitting a hundred keys across files buys nothing but indirection.
  */
 const en = {
-  app: { name: 'Aider ERP' },
+  // Named after the domain the page was opened at: Aider ERP, Inspire ERP.
+  app: { name: brand.appName },
   signIn: {
     title: 'Sign in',
     subtitle: 'Sign in to continue',
@@ -2869,7 +2871,7 @@ const en = {
 } as const;
 
 const ar = {
-  app: { name: 'أيدر إي آر بي' },
+  app: { name: brand.appNameArabic },
   signIn: {
     title: 'تسجيل الدخول',
     subtitle: 'سجّل الدخول للمتابعة',

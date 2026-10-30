@@ -17,6 +17,7 @@ import { CommandPalette, opensPalette } from '@/components/CommandPalette';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { SHOW_SHORTCUTS_EVENT } from '@/lib/shortcuts';
 import { useSession, type Language, type Theme } from '@/stores/session';
+import { brand } from '@/lib/brand';
 import {
   IconChevron,
   IconClose,
@@ -309,7 +310,7 @@ export function AppShell(): React.JSX.Element {
           {/*
             The wordmark rides in the header only where the sidebar is not showing
             it — and only until a screen puts its own name there, because on a 390px
-            phone "Aider ERP" and "Cheque register" cannot both have the bar, and
+            phone "Inspire ERP" and "Cheque register" cannot both have the bar, and
             the second is the one saying where the user is.
           */}
           {!occupied && (
@@ -770,7 +771,7 @@ function Brand({ collapsed }: { readonly collapsed: boolean }): React.JSX.Elemen
   return (
     <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
       <div className="relative grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 text-xs font-bold text-white shadow-xs ring-1 ring-white/20">
-        AE
+        {brand.initials}
       </div>
       {!collapsed && (
         <div className="flex min-w-0 items-center gap-1.5">
