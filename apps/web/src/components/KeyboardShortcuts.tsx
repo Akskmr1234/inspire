@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IconKeyboard } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal } from '@/components/Modal';
@@ -208,7 +209,12 @@ function ShortcutList({ onClose }: { readonly onClose: () => void }): React.JSX.
   );
 
   return (
-    <Modal title={t('shortcuts.title')} onClose={onClose} size="form">
+    <Modal
+      title={t('shortcuts.title')}
+      icon={<IconKeyboard className="size-5" />}
+      onClose={onClose}
+      size="form"
+    >
       <div className="grid gap-6 sm:grid-cols-2">
         <section>
           <h3 className="mb-1 text-xs font-bold tracking-wide text-ink-muted uppercase">

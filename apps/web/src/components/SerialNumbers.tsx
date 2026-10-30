@@ -300,7 +300,7 @@ export function SerialPickerDialog({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+      <div className="form-actions justify-between">
         <span className="text-xs text-ink-muted">
           {t('serials.pickedOf', {
             chosen: picked.length,

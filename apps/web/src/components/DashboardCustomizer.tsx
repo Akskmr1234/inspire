@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IconGrid } from '@/components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/Modal';
@@ -132,7 +133,12 @@ export function DashboardCustomizer({
     );
 
   return (
-    <Modal title={t('dashboard.customize')} size="form" onClose={onClose}>
+    <Modal
+      title={t('dashboard.customize')}
+      icon={<IconGrid className="size-5" />}
+      size="form"
+      onClose={onClose}
+    >
       <div className="space-y-4">
         <label className="field">
           <span className="field-label">{t('dashboard.role')}</span>

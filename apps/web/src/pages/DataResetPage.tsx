@@ -206,7 +206,7 @@ function ConfirmDialog({
       {reset.isError && (
         <p className="alert-error">{reset.error.detail || reset.error.code}</p>
       )}
-      <div className="flex justify-end gap-2 border-t border-line pt-3">
+      <div className="form-actions">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton
           primary

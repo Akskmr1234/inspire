@@ -348,7 +348,7 @@ function QuickCreate({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-line pt-3">
+        <div className="form-actions">
           <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
           <button type="submit" disabled={!ready} className="btn-primary btn-sm">
             {save.isPending ? t('common.saving') : t('masters.add')}

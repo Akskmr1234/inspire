@@ -2,7 +2,7 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { IconClose } from '@/components/icons';
+import { IconClose, IconDocument } from '@/components/icons';
 import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
 /**
@@ -25,14 +25,25 @@ import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
  *
  * The props are unchanged, so the fifteen screens that open one of these did not
  * have to learn anything.
+ *
+ * Dressed as an invoice is: a header with the window's icon, its title and what it
+ * is for, the content under it, and the row of buttons that finishes it held along
+ * the foot - every `.form-actions` row inside one is that bar - so a dialog anywhere
+ * in the application reads like the bills do.
  */
 export function Modal({
   title,
+  subtitle,
+  icon,
   onClose,
   size = 'wide',
   children,
 }: {
   readonly title: string;
+  /** Under the title, quieter: what the window is for. */
+  readonly subtitle?: string;
+  /** In the tile beside the title. A document, unless the window is something else. */
+  readonly icon?: React.ReactNode;
   readonly onClose: () => void;
   /**
    * `fullscreen` for complete viewport full screen; `full` for wide 7xl tables; `wide` for standard documents; `form` for compact forms.
@@ -63,9 +74,9 @@ export function Modal({
             className={clsx(
               'animate-rise flex w-full flex-col overflow-hidden border border-line/80 bg-surface shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10 outline-none transition-all duration-200',
               isFullscreen
-                ? 'fixed inset-0 h-screen max-h-screen w-screen max-w-none rounded-none border-0 ring-0 m-0 z-50'
+                ? 'modal-fullscreen fixed inset-0 h-screen max-h-screen w-screen max-w-none rounded-none border-0 ring-0 m-0 z-50'
                 : clsx(
-                    'max-h-[92vh] sm:max-h-[90vh] rounded-2xl sm:rounded-3xl my-auto',
+                    'max-h-[92vh] sm:max-h-[90vh] rounded-2xl my-auto',
                     size === 'full'
                       ? 'max-w-7xl'
                       : size === 'wide'
@@ -74,16 +85,26 @@ export function Modal({
                   ),
             )}
           >
-            <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-line/60 bg-surface/90 px-5 py-3.5 backdrop-blur-md sm:px-6">
-              <Dialog.Title className="truncate text-base sm:text-lg font-bold tracking-tight text-ink">
-                {title}
-              </Dialog.Title>
+            <div className="flex shrink-0 items-center gap-3 border-b border-line/70 bg-canvas px-4 py-2 sm:px-5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
+                {icon ?? <IconDocument className="size-5" />}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <Dialog.Title className="truncate text-lg font-bold tracking-tight text-ink">
+                  {title}
+                </Dialog.Title>
+                {subtitle && (
+                  <p className="hidden truncate text-sm text-ink-muted sm:block">
+                    {subtitle}
+                  </p>
+                )}
+              </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setIsFullscreen((prev) => !prev)}
-                  className="btn-icon size-8 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
+                  className="btn-icon size-9 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
                   aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                   title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
                 >
@@ -113,11 +134,11 @@ export function Modal({
                 </button>
 
                 <Dialog.Close
-                  className="btn-icon size-8 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
+                  className="btn-icon size-9 rounded-full hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
                   aria-label={t('common.close')}
                   title={t('common.close')}
                 >
-                  <IconClose className="size-4" />
+                  <IconClose className="size-5" />
                 </Dialog.Close>
               </div>
             </div>
@@ -131,8 +152,21 @@ export function Modal({
               zero. The product row was still there, under the Add line button, which
               is why a purchase could not be given an item.
             */}
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-6 [&>*]:shrink-0">
-              {children}
+            <div
+              className={clsx(
+                'modal-body flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 sm:p-5 [&>*]:shrink-0',
+                isFullscreen && 'bg-canvas',
+              )}
+            >
+              {/* Full screen, the content is a card on the canvas, as an invoice's
+                  are; in a dialog the dialog is the card. */}
+              {isFullscreen ? (
+                <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5 [&>*]:shrink-0">
+                  {children}
+                </div>
+              ) : (
+                children
+              )}
             </div>
           </Dialog.Content>
         </div>
@@ -163,9 +197,20 @@ export function ModalButton({
       disabled={disabled}
       {...(shortcut ? shortcutProps(shortcut) : {})}
       {...(shortcut ? { title: shortcutFor(shortcut) } : {})}
-      className={clsx('btn px-4 py-2 text-sm', primary ? 'btn-primary' : 'btn-secondary')}
+      className={primary ? 'btn-primary' : 'btn-secondary'}
     >
       {children}
+      {/* Its key on it, as on an invoice's buttons. */}
+      {shortcut && (
+        <kbd
+          className={clsx(
+            'hidden rounded px-1.5 py-px font-mono text-[10px] font-medium md:inline',
+            primary ? 'bg-white/20 text-white' : 'bg-surface-3 text-ink-muted',
+          )}
+        >
+          {shortcutFor(shortcut)}
+        </kbd>
+      )}
     </button>
   );
 }

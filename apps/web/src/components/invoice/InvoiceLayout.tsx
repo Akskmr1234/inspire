@@ -731,17 +731,21 @@ export function NarrationInput({
 export function RemoveLineButton({
   onClick,
   label,
+  disabled = false,
 }: {
   readonly onClick: () => void;
   readonly label: string;
+  /** The last line of a document, which cannot go. */
+  readonly disabled?: boolean;
 }): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
-      className="inline-grid size-9 place-items-center rounded-lg border border-line text-ink-muted transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+      className="inline-grid size-9 place-items-center rounded-lg border border-line text-ink-muted transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
     >
       <IconTrash className="size-4" />
     </button>

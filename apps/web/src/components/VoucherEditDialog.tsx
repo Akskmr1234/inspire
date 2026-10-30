@@ -360,7 +360,7 @@ function VoucherForm({
         <p className="alert-error">{save.error.detail || save.error.code}</p>
       )}
 
-      <div className="flex justify-end gap-2 border-t border-line pt-3">
+      <div className="form-actions">
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton
           primary
@@ -422,7 +422,7 @@ export function VoucherCancelDialog({
       {cancel.isError && (
         <p className="alert-error">{cancel.error.detail || cancel.error.code}</p>
       )}
-      <div className="flex justify-end gap-2 border-t border-line pt-3">
+      <div className="form-actions">
         <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
         <ModalButton
           primary

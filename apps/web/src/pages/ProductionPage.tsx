@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { IconLayers } from '@/components/icons';
+import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -171,7 +173,8 @@ export function BomsPage(): React.JSX.Element {
       {editing !== null && (
         <Modal
           title={editing === 'new' ? t('boms.new') : t('boms.edit')}
-          size="full"
+          icon={<IconLayers className="size-5" />}
+          size="fullscreen"
           onClose={() => setEditing(null)}
         >
           {error && <Alert tone="error">{error}</Alert>}
@@ -332,7 +335,7 @@ function BomForm({
 
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">
                 {t('boms.component')}
@@ -387,18 +390,15 @@ function BomForm({
                     />
                   </td>
                   <td className="px-2 py-1 text-end">
-                    <button
-                      type="button"
+                    <RemoveLineButton
                       disabled={lines.length === 1}
                       onClick={() =>
                         setLines((current) =>
                           current.filter((candidate) => candidate.key !== line.key),
                         )
                       }
-                      className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-muted disabled:opacity-40"
-                    >
-                      {t('stock.removeLine')}
-                    </button>
+                      label={t('stock.removeLine')}
+                    />
                   </td>
                 </tr>
               );
@@ -409,7 +409,7 @@ function BomForm({
 
       {problem && <Alert tone="error">{problem}</Alert>}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+      <div className="form-actions">
         <button
           {...shortcutProps('add-line')}
           type="button"
@@ -428,11 +428,11 @@ function BomForm({
             {initial.summary.isActive ? t('boms.withdraw') : t('boms.restore')}
           </button>
         )}
-        <button type="submit" disabled={busy} className="btn-primary ms-auto">
-          {t('stock.save')}
-        </button>
-        <button type="button" onClick={onCancel} className="btn-secondary">
+        <button type="button" onClick={onCancel} className="btn-secondary ms-auto">
           {t('products.cancel')}
+        </button>
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('stock.save')}
         </button>
       </div>
     </form>
@@ -671,12 +671,12 @@ function ProductionEntry({
 
       {problem && <Alert tone="error">{problem}</Alert>}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        <button type="submit" disabled={busy} className="btn-primary ms-auto">
-          {t('production.post')}
-        </button>
-        <button type="button" onClick={onCancel} className="btn-secondary">
+      <div className="form-actions">
+        <button type="button" onClick={onCancel} className="btn-secondary ms-auto">
           {t('products.cancel')}
+        </button>
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('production.post')}
         </button>
       </div>
     </form>
@@ -729,7 +729,7 @@ function RunLines({
       />
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
               <th className="px-3 py-2 text-end font-semibold">{t('stock.quantity')}</th>
@@ -802,16 +802,13 @@ function RunLines({
                     </td>
                   )}
                   <td className="px-2 py-1 text-end">
-                    <button
-                      type="button"
+                    <RemoveLineButton
                       disabled={lines.length === 1}
                       onClick={() =>
                         onChange(lines.filter((candidate) => candidate.key !== line.key))
                       }
-                      className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-muted disabled:opacity-40"
-                    >
-                      {t('stock.removeLine')}
-                    </button>
+                      label={t('stock.removeLine')}
+                    />
                   </td>
                 </tr>
               );

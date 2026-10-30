@@ -57,7 +57,7 @@ export function FinancialYearsSettings(): React.JSX.Element {
 
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full text-sm">
-          <thead className="bg-surface-2 text-xs text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('years.code')}</th>
               <th className="px-3 py-2 text-start font-semibold">{t('years.start')}</th>
