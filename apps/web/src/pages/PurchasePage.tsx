@@ -11,25 +11,21 @@ import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
+import { IconBox, IconDocument, IconPlus } from '@/components/icons';
 import {
-  IconBox,
-  IconCreditCard,
-  IconDocument,
-  IconPlus,
-  IconReceipt,
-  IconTruck,
-} from '@/components/icons';
-import {
+  BillCard,
   BillFigures,
-  DetailRow,
+  FooterSection,
   InvoiceBody,
   InvoiceCard,
+  InvoiceFields,
+  InvoiceFooter,
+  InvoiceActions,
   InvoiceHeader,
-  InvoicePanel,
+  InvoiceLines,
   InvoiceWindow,
   NarrationField,
   RemoveLineButton,
-  TotalBanner,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import {
@@ -934,14 +930,15 @@ function EntryDialog({
   const billTotal = totals.taxable + totals.tax + chargesTotal;
   const totalLabel = isReturn ? t('invoice.returnTotal') : t('invoice.billTotal');
   const itemCount = lines.filter((line) => line.productId !== '').length;
-  const supplierName =
-    suppliers.data?.find((supplier) => supplier.supplierId === draft.supplierId)?.name ??
-    '—';
 
   return (
-    <InvoiceWindow title={documentTitle} onClose={onClose}>
+    <InvoiceWindow
+      title={documentTitle}
+      onClose={onClose}
+      dirty={!editing && (itemCount > 0 || draft.narration.trim() !== '')}
+    >
       <InvoiceHeader
-        icon={<IconDocument className="size-6" />}
+        icon={<IconDocument className="size-5" />}
         title={documentTitle}
         subtitle={
           editing
@@ -950,7 +947,330 @@ function EntryDialog({
               ? t('invoice.newPurchaseReturn')
               : t('invoice.newPurchase')
         }
-        onCancel={onClose}
+      />
+
+      <InvoiceBody>
+        {failure && (
+          <p role="alert" className="alert-error">
+            {failure}
+          </p>
+        )}
+        {editing && editing.header.status === PurchaseInvoiceStatus.posted && (
+          <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
+            <p className="min-w-0 flex-1">{t('purchase.editPostedHint')}</p>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('purchase.editReason')}</span>
+              <input
+                value={editReason}
+                onChange={(event) => setEditReason(event.target.value)}
+                className="field-input-sm w-64"
+                maxLength={400}
+              />
+            </label>
+          </div>
+        )}
+
+        <InvoiceCard>
+          {/* Two lines on a wide screen: who, when and the numbers; then what fills
+              the lines without typing them - a new purchase from its order, a new
+              return from the purchase it sends goods back against, or a scan. */}
+          <InvoiceFields>
+            <div className="min-w-0 sm:col-span-2">
+              <Field label={t('purchase.supplier')} required error={errors['supplierId']}>
+                <QuickAdd kind="supplier" onCreated={(id) => set('supplierId', id)}>
+                  <SearchSelect
+                    value={draft.supplierId}
+                    onChange={(value) => set('supplierId', value)}
+                    options={(suppliers.data ?? []).map((supplier) => ({
+                      value: supplier.supplierId,
+                      label: `${supplier.code} — ${supplier.name}`,
+                      ...(supplier.contact.mobileNumber
+                        ? { detail: supplier.contact.mobileNumber }
+                        : {}),
+                    }))}
+                    invalid={errors['supplierId'] !== undefined}
+                    label={t('purchase.supplier')}
+                    placeholder={t('purchase.chooseSupplier')}
+                  />
+                </QuickAdd>
+              </Field>
+            </div>
+
+            <DateField
+              label={t('purchase.date')}
+              required
+              value={draft.date}
+              onChange={(value) => set('date', value)}
+              error={errors['date']}
+            />
+
+            {/*
+              The tax mode: whether this document carries tax at all, and under
+              which scheme. Defaulted by the server from the firm's regime when
+              it is not stated — but a purchase from an unregistered supplier is
+              a real and frequent case.
+            */}
+            {taxOn ? (
+              <SelectField
+                label={t('purchase.taxMode')}
+                value={mode}
+                onChange={setMode}
+                options={[
+                  { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                  { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                  { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                ]}
+              />
+            ) : null}
+
+            {/*
+              The document's own number is not asked for: it is issued by the
+              branch's numbering series when the draft is saved. The supplier's
+              number, which the firm does not issue, is beside it and mandatory
+              on a tax invoice.
+            */}
+            <Field label={t('purchase.documentNumber')}>
+              <input
+                value={editing?.header.number ?? nextNumber ?? t('purchase.numberOnSave')}
+                disabled
+                className="field-input"
+              />
+            </Field>
+
+            <TextField
+              label={t('purchase.supplierInvoice')}
+              required={!isReturn}
+              value={draft.supplierInvoiceNumber}
+              onChange={(value) => set('supplierInvoiceNumber', value)}
+              error={errors['supplierInvoiceNumber']}
+            />
+
+            <DateField
+              label={t('purchase.supplierInvoiceDate')}
+              value={draft.supplierInvoiceDate}
+              onChange={(value) => set('supplierInvoiceDate', value)}
+              error={errors['supplierInvoiceDate']}
+            />
+
+            {godownsOn && (
+              <Field
+                label={t('purchase.warehouse')}
+                required
+                error={errors['warehouseId']}
+              >
+                <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
+                  <SearchSelect
+                    value={draft.warehouseId}
+                    onChange={(value) => set('warehouseId', value)}
+                    options={(warehouses.data ?? []).map((warehouse) => ({
+                      value: warehouse.id,
+                      label: `${warehouse.code} — ${warehouse.name}`,
+                      ...(warehouse.isDefault
+                        ? { meta: t('settings.masterDefault') }
+                        : {}),
+                    }))}
+                    invalid={errors['warehouseId'] !== undefined}
+                    label={t('purchase.warehouse')}
+                    placeholder={t('purchase.chooseWarehouse')}
+                  />
+                </QuickAdd>
+              </Field>
+            )}
+
+            {isReturn && (
+              <Field label={t('purchase.againstInvoice')} className="sm:col-span-2">
+                <SearchSelect
+                  value={draft.returnsInvoiceId}
+                  onChange={(value) => set('returnsInvoiceId', value)}
+                  clearable
+                  label={t('purchase.againstInvoice')}
+                  placeholder={t('purchase.noInvoice')}
+                  options={(returnable.data?.items ?? []).map((invoice) => ({
+                    value: invoice.purchaseInvoiceId,
+                    label: invoice.number,
+                    detail: invoice.date,
+                    meta: moneyAlways(invoice.total),
+                  }))}
+                />
+              </Field>
+            )}
+
+            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+              <BarcodeScan
+                asField
+                products={products.data ?? []}
+                onScan={(product) => {
+                  // At the product's cost and its own tax rate, as choosing it in
+                  // the picker does.
+                  const next = addScanned(lines, product, () => ({
+                    ...emptyLine(defaultTaxRate),
+                    productId: product.id,
+                    rate: product.cost ? String(product.cost) : '',
+                    ...(product.taxPercentage != null
+                      ? { taxPercentage: String(product.taxPercentage) }
+                      : {}),
+                  }));
+                  setLines(next.lines);
+                  return next.quantity;
+                }}
+              />
+            </div>
+            {!editing && (
+              <ReferenceLoader
+                asField
+                sources={referenceSources}
+                onLoad={loadReference}
+                className="sm:col-span-2 lg:col-span-3"
+              />
+            )}
+          </InvoiceFields>
+        </InvoiceCard>
+
+        <InvoiceCard
+          fill
+          icon={<IconBox className="size-5" />}
+          title={t('invoice.items')}
+          meta={t('invoice.itemCount', { count: itemCount })}
+          actions={columns.picker}
+        >
+          {errors['lines'] && (
+            <p className="field-message-error mb-2">{errors['lines']}</p>
+          )}
+
+          <InvoiceLines>
+            <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">
+              <thead className="sticky top-0 z-10 bg-surface-2 text-[13px] text-ink-muted">
+                <tr>
+                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                    {t('purchase.product')}
+                  </th>
+                  <ProductDetailHeaders shows={columns.shows} labels={t} />
+                  <th className="px-2 py-2.5 text-end font-medium">
+                    {t('purchase.quantity')}
+                  </th>
+                  <th className="px-2 py-2.5 text-end font-medium">
+                    {t('purchase.rate')}
+                  </th>
+                  {columns.shows('discount') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('purchase.discount')}
+                    </th>
+                  )}
+                  {columns.shows('taxPercent') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('purchase.taxPercent')}
+                    </th>
+                  )}
+                  {columns.shows('taxAmount') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('purchase.taxAmount')}
+                    </th>
+                  )}
+                  <th className="px-2 py-2.5 text-end font-medium">
+                    {t('purchase.net')}
+                  </th>
+                  {columns.shows('lineTotal') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.lineTotal')}
+                    </th>
+                  )}
+                  <th className="line-action-column rounded-e-lg" />
+                </tr>
+              </thead>
+
+              <tbody>
+                {lines.map((line, index) => (
+                  <LineRow
+                    key={line.key}
+                    line={line}
+                    isReturn={isReturn}
+                    warehouseId={draft.warehouseId}
+                    products={products.data ?? []}
+                    productOptions={productOptions}
+                    taxRates={taxRates}
+                    columns={columns}
+                    errors={lineErrors[index] ?? {}}
+                    removable={lines.length > 1}
+                    onChange={(patch) => change(index, patch)}
+                    onRemove={() =>
+                      setLines((previous) => previous.filter((_, at) => at !== index))
+                    }
+                  />
+                ))}
+              </tbody>
+            </table>
+
+            <button
+              {...shortcutProps('add-line')}
+              type="button"
+              onClick={() =>
+                setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
+              }
+              className="btn-secondary mt-3 mb-1"
+            >
+              <IconPlus className="size-4" />
+              {t('invoice.addItem')}
+            </button>
+          </InvoiceLines>
+        </InvoiceCard>
+
+        {/* Along the foot: the narration, and the bill picked out - its total, the
+            figures it is built from, and the additional ledgers typed in beside
+            them. */}
+        <InvoiceFooter className="lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+          <FooterSection
+            icon={<IconDocument className="size-[18px]" />}
+            title={t('invoice.narration')}
+          >
+            <NarrationField
+              value={draft.narration}
+              onChange={(value) => set('narration', value)}
+              label={t('invoice.narration')}
+              placeholder={t('invoice.narration')}
+            />
+          </FooterSection>
+
+          <BillCard
+            label={totalLabel}
+            total={moneyAlways(billTotal)}
+            figures={
+              <BillFigures
+                gross={totals.gross}
+                discount={totals.discount}
+                tax={totals.tax}
+                showTax={taxOn}
+                money={moneyAlways}
+              />
+            }
+            charges={
+              <ChargesPanel
+                inline
+                charges={charges}
+                ledgers={ledgers.data ?? []}
+                onChange={setCharges}
+                setup={chargeSetup}
+                nonTax={mode === PurchaseTaxMode.nonTax}
+              />
+            }
+          />
+        </InvoiceFooter>
+      </InvoiceBody>
+
+      <InvoiceActions
+        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        total={{ label: totalLabel, amount: moneyAlways(billTotal) }}
+        secondary={
+          !editing && allowDrafts
+            ? [
+                {
+                  label: t('purchase.saveDraft'),
+                  onClick: () => void save(),
+                  shortcut: 'draft',
+                  disabled: busy,
+                },
+              ]
+            : []
+        }
         primary={
           editing
             ? {
@@ -966,377 +1286,6 @@ function EntryDialog({
                 disabled: busy,
               }
         }
-        more={
-          !editing && allowDrafts
-            ? [
-                {
-                  label: t('purchase.saveDraft'),
-                  onClick: () => void save(),
-                  shortcut: 'draft',
-                  disabled: busy,
-                },
-              ]
-            : []
-        }
-      />
-
-      <InvoiceBody
-        main={
-          <>
-            {failure && (
-              <p role="alert" className="alert-error">
-                {failure}
-              </p>
-            )}
-            {editing && editing.header.status === PurchaseInvoiceStatus.posted && (
-              <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
-                <p className="min-w-0 flex-1">{t('purchase.editPostedHint')}</p>
-                <label className="flex flex-col gap-1">
-                  <span className="font-medium">{t('purchase.editReason')}</span>
-                  <input
-                    value={editReason}
-                    onChange={(event) => setEditReason(event.target.value)}
-                    className="field-input-sm w-64"
-                    maxLength={400}
-                  />
-                </label>
-              </div>
-            )}
-
-            <InvoiceCard
-              icon={<IconTruck className="size-5" />}
-              title={t('invoice.supplierDetails')}
-            >
-              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 md:grid-cols-4">
-                <div className="min-w-0 sm:col-span-2">
-                  <Field
-                    label={t('purchase.supplier')}
-                    required
-                    error={errors['supplierId']}
-                  >
-                    <QuickAdd kind="supplier" onCreated={(id) => set('supplierId', id)}>
-                      <SearchSelect
-                        value={draft.supplierId}
-                        onChange={(value) => set('supplierId', value)}
-                        options={(suppliers.data ?? []).map((supplier) => ({
-                          value: supplier.supplierId,
-                          label: `${supplier.code} — ${supplier.name}`,
-                          ...(supplier.contact.mobileNumber
-                            ? { detail: supplier.contact.mobileNumber }
-                            : {}),
-                        }))}
-                        invalid={errors['supplierId'] !== undefined}
-                        label={t('purchase.supplier')}
-                        placeholder={t('purchase.chooseSupplier')}
-                      />
-                    </QuickAdd>
-                  </Field>
-                </div>
-
-                <DateField
-                  label={t('purchase.date')}
-                  required
-                  value={draft.date}
-                  onChange={(value) => set('date', value)}
-                  error={errors['date']}
-                />
-
-                {/*
-                  The tax mode: whether this document carries tax at all, and under
-                  which scheme. Defaulted by the server from the firm's regime when
-                  it is not stated — but a purchase from an unregistered supplier is
-                  a real and frequent case.
-                */}
-                {taxOn ? (
-                  <SelectField
-                    label={t('purchase.taxMode')}
-                    value={mode}
-                    onChange={setMode}
-                    options={[
-                      { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-                      { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-                      { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-                    ]}
-                  />
-                ) : (
-                  <span className="hidden md:block" />
-                )}
-
-                {/*
-                  The document's own number is not asked for: it is issued by the
-                  branch's numbering series when the draft is saved. The supplier's
-                  number, which the firm does not issue, is beside it and mandatory
-                  on a tax invoice.
-                */}
-                <Field label={t('purchase.documentNumber')}>
-                  <input
-                    value={
-                      editing?.header.number ?? nextNumber ?? t('purchase.numberOnSave')
-                    }
-                    disabled
-                    className="field-input"
-                  />
-                </Field>
-
-                <TextField
-                  label={t('purchase.supplierInvoice')}
-                  required={!isReturn}
-                  value={draft.supplierInvoiceNumber}
-                  onChange={(value) => set('supplierInvoiceNumber', value)}
-                  error={errors['supplierInvoiceNumber']}
-                />
-
-                <DateField
-                  label={t('purchase.supplierInvoiceDate')}
-                  value={draft.supplierInvoiceDate}
-                  onChange={(value) => set('supplierInvoiceDate', value)}
-                  error={errors['supplierInvoiceDate']}
-                />
-
-                {godownsOn && (
-                  <Field
-                    label={t('purchase.warehouse')}
-                    required
-                    error={errors['warehouseId']}
-                  >
-                    <QuickAdd kind="warehouse" onCreated={(id) => set('warehouseId', id)}>
-                      <SearchSelect
-                        value={draft.warehouseId}
-                        onChange={(value) => set('warehouseId', value)}
-                        options={(warehouses.data ?? []).map((warehouse) => ({
-                          value: warehouse.id,
-                          label: `${warehouse.code} — ${warehouse.name}`,
-                          ...(warehouse.isDefault
-                            ? { meta: t('settings.masterDefault') }
-                            : {}),
-                        }))}
-                        invalid={errors['warehouseId'] !== undefined}
-                        label={t('purchase.warehouse')}
-                        placeholder={t('purchase.chooseWarehouse')}
-                      />
-                    </QuickAdd>
-                  </Field>
-                )}
-
-                {isReturn && (
-                  <div className="min-w-0 sm:col-span-2">
-                    <Field label={t('purchase.againstInvoice')}>
-                      <SearchSelect
-                        value={draft.returnsInvoiceId}
-                        onChange={(value) => set('returnsInvoiceId', value)}
-                        clearable
-                        label={t('purchase.againstInvoice')}
-                        placeholder={t('purchase.noInvoice')}
-                        options={(returnable.data?.items ?? []).map((invoice) => ({
-                          value: invoice.purchaseInvoiceId,
-                          label: invoice.number,
-                          detail: invoice.date,
-                          meta: moneyAlways(invoice.total),
-                        }))}
-                      />
-                    </Field>
-                  </div>
-                )}
-              </div>
-
-              {/* A new purchase can start from its order; a new return from the
-                  purchase it sends goods back against. Or the goods are scanned. */}
-              <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                <div {...shortcutProps('scan')}>
-                  <BarcodeScan
-                    products={products.data ?? []}
-                    onScan={(product) => {
-                      // At the product's cost and its own tax rate, as choosing it in
-                      // the picker does.
-                      const next = addScanned(lines, product, () => ({
-                        ...emptyLine(defaultTaxRate),
-                        productId: product.id,
-                        rate: product.cost ? String(product.cost) : '',
-                        ...(product.taxPercentage != null
-                          ? { taxPercentage: String(product.taxPercentage) }
-                          : {}),
-                      }));
-                      setLines(next.lines);
-                      return next.quantity;
-                    }}
-                  />
-                </div>
-                {!editing && (
-                  <ReferenceLoader sources={referenceSources} onLoad={loadReference} />
-                )}
-              </div>
-            </InvoiceCard>
-
-            <InvoiceCard
-              icon={<IconBox className="size-5" />}
-              title={t('invoice.items')}
-              meta={t('invoice.itemCount', { count: itemCount })}
-              actions={columns.picker}
-            >
-              {errors['lines'] && (
-                <p className="field-message-error mb-2">{errors['lines']}</p>
-              )}
-
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">
-                  <thead className="bg-surface-2 text-[13px] text-ink-muted">
-                    <tr>
-                      <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
-                        {t('purchase.product')}
-                      </th>
-                      <ProductDetailHeaders shows={columns.shows} labels={t} />
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('purchase.quantity')}
-                      </th>
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('purchase.rate')}
-                      </th>
-                      {columns.shows('discount') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('purchase.discount')}
-                        </th>
-                      )}
-                      {columns.shows('taxPercent') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('purchase.taxPercent')}
-                        </th>
-                      )}
-                      {columns.shows('taxAmount') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('purchase.taxAmount')}
-                        </th>
-                      )}
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('purchase.net')}
-                      </th>
-                      {columns.shows('lineTotal') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.lineTotal')}
-                        </th>
-                      )}
-                      <th className="line-action-column rounded-e-lg" />
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {lines.map((line, index) => (
-                      <LineRow
-                        key={line.key}
-                        line={line}
-                        isReturn={isReturn}
-                        warehouseId={draft.warehouseId}
-                        products={products.data ?? []}
-                        productOptions={productOptions}
-                        taxRates={taxRates}
-                        columns={columns}
-                        errors={lineErrors[index] ?? {}}
-                        removable={lines.length > 1}
-                        onChange={(patch) => change(index, patch)}
-                        onRemove={() =>
-                          setLines((previous) => previous.filter((_, at) => at !== index))
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <button
-                {...shortcutProps('add-line')}
-                type="button"
-                onClick={() =>
-                  setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
-                }
-                className="btn-secondary mt-3"
-              >
-                <IconPlus className="size-4" />
-                {t('invoice.addItem')}
-              </button>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InvoicePanel
-                  icon={<IconDocument className="size-[18px]" />}
-                  title={t('invoice.narration')}
-                >
-                  <NarrationField
-                    value={draft.narration}
-                    onChange={(value) => set('narration', value)}
-                    label={t('invoice.narration')}
-                    placeholder={t('invoice.narration')}
-                  />
-                </InvoicePanel>
-
-                <InvoicePanel
-                  icon={<IconReceipt className="size-[18px]" />}
-                  title={t('invoice.bill')}
-                >
-                  <BillFigures
-                    gross={totals.gross}
-                    discount={totals.discount}
-                    tax={totals.tax}
-                    showTax={taxOn}
-                    total={billTotal}
-                    totalLabel={totalLabel}
-                    money={moneyAlways}
-                    charges={
-                      <ChargesPanel
-                        inline
-                        charges={charges}
-                        ledgers={ledgers.data ?? []}
-                        onChange={setCharges}
-                        setup={chargeSetup}
-                        nonTax={mode === PurchaseTaxMode.nonTax}
-                      />
-                    }
-                  />
-                </InvoicePanel>
-              </div>
-            </InvoiceCard>
-          </>
-        }
-        side={
-          <InvoiceCard
-            icon={<IconCreditCard className="size-5" />}
-            title={t('invoice.summary')}
-          >
-            <TotalBanner
-              icon={<IconCreditCard className="size-5" />}
-              label={totalLabel}
-              amount={moneyAlways(billTotal)}
-            />
-            <div className="mt-3 divide-y divide-line/70">
-              <div>
-                <DetailRow label={t('purchase.documentNumber')}>
-                  {editing?.header.number ?? nextNumber ?? t('purchase.numberOnSave')}
-                </DetailRow>
-                <DetailRow label={t('purchase.supplier')}>
-                  <span className="block truncate">{supplierName}</span>
-                </DetailRow>
-                <DetailRow label={t('purchase.supplierInvoice')}>
-                  {draft.supplierInvoiceNumber.trim() || '—'}
-                </DetailRow>
-                <DetailRow label={t('purchase.date')}>{draft.date}</DetailRow>
-              </div>
-              <div className="pt-1">
-                <DetailRow label={t('invoice.items')}>{itemCount}</DetailRow>
-                <DetailRow label={t('documents.net')}>
-                  {moneyAlways(totals.taxable)}
-                </DetailRow>
-                {(taxOn || totals.tax !== 0) && (
-                  <DetailRow label={t('documents.tax')}>
-                    {moneyAlways(totals.tax)}
-                  </DetailRow>
-                )}
-                {chargesTotal !== 0 && (
-                  <DetailRow label={t('documents.chargesShort')}>
-                    {moneyAlways(chargesTotal)}
-                  </DetailRow>
-                )}
-              </div>
-            </div>
-          </InvoiceCard>
-        }
-        footer={<ShortcutHints actions={['scan', 'add-line', 'charges', 'save']} />}
       />
     </InvoiceWindow>
   );

@@ -14,28 +14,30 @@ import { QuickAdd } from '@/components/QuickAdd';
 import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
-  IconBarcode,
   IconBox,
   IconCreditCard,
   IconDocument,
   IconPlus,
   IconPrinter,
-  IconReceipt,
-  IconUser,
 } from '@/components/icons';
 import {
-  DetailRow,
+  BillCard,
+  CompactField,
   FigureRow,
-  GroupHeading,
+  FooterSection,
   InvoiceBody,
   InvoiceCard,
+  InvoiceFields,
+  InvoiceFooter,
+  InvoiceActions,
   InvoiceHeader,
-  InvoicePanel,
+  InvoiceLines,
   InvoiceWindow,
   NarrationField,
   RemoveLineButton,
-  TotalBanner,
+  ValueField,
 } from '@/components/invoice/InvoiceLayout';
+import { ScanField } from '@/components/BarcodeScan';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printableSale } from '@/lib/printing';
 import {
@@ -676,7 +678,9 @@ function EntryDialog({
       : '',
   );
   const [cashGiven, setCashGiven] = useState<string>('');
-  const [receivedInto, setReceivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
+  // Where the money paid with the sale goes: the settings' default cash or bank
+  // account for the mode, or the one a corrected document already named.
+  const [receivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
   const [paymentReference, setPaymentReference] = useState(
     editing?.paymentReference ?? '',
   );
@@ -1522,11 +1526,23 @@ function EntryDialog({
     editing?.header.status !== SalesInvoiceStatus.posted &&
     ((settings.allowSaveDraft !== false && !directSave) || editing !== undefined);
   const itemCount = lines.filter((line) => line.productId !== '').length;
+  const customerContact = selectedCustomer
+    ? [
+        selectedCustomer.contact.mobileNumber || selectedCustomer.contact.phone,
+        selectedCustomer.contact.addressLine1 || selectedCustomer.contact.addressLine2,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   return (
-    <InvoiceWindow title={documentTitle} onClose={onClose}>
+    <InvoiceWindow
+      title={documentTitle}
+      onClose={onClose}
+      dirty={!editing && (itemCount > 0 || narration.trim() !== '')}
+    >
       <InvoiceHeader
-        icon={<IconDocument className="size-6" />}
+        icon={<IconDocument className="size-5" />}
         title={documentTitle}
         subtitle={
           editing
@@ -1535,21 +1551,537 @@ function EntryDialog({
               ? t('invoice.newSalesReturn')
               : t('invoice.newSales')
         }
-        onCancel={onClose}
-        primary={{
-          label: busy ? t('common.saving') : t('sales.saveAndPrint'),
-          icon: <IconPrinter className="size-4" />,
-          onClick: () => void save(true, true),
-          shortcut: 'print',
-          disabled: busy,
-        }}
-        more={[
-          {
-            label: t('sales.save'),
-            onClick: () => void save(true),
-            shortcut: 'save',
-            disabled: busy,
-          },
+      />
+
+      <InvoiceBody>
+        {failure && (
+          <p role="alert" className="alert-error">
+            {failure}
+          </p>
+        )}
+        {editing && editing.header.status === SalesInvoiceStatus.posted && (
+          <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
+            <p className="min-w-0 flex-1">{t('sales.editPostedHint')}</p>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium">{t('sales.editReason')}</span>
+              <input
+                value={editReason}
+                onChange={(event) => setEditReason(event.target.value)}
+                className="field-input-sm w-64"
+                maxLength={400}
+              />
+            </label>
+          </div>
+        )}
+
+        <InvoiceCard>
+          {/* Two lines on a wide screen: who, when, how they pay and the numbers; then
+              what a counter sets once and seldom touches, and the two ways to fill the
+              lines without typing them - scan the goods, or bring them in from a
+              quotation or an order (for a return, from the invoice). */}
+          <InvoiceFields>
+            <div className="min-w-0 sm:col-span-2" {...shortcutProps('customer')}>
+              <FormField
+                label={t('sales.customer')}
+                required
+                error={errors['customerId']}
+                aside={customerContact}
+              >
+                <QuickAdd kind="customer" onCreated={setCustomerId}>
+                  <SearchSelect
+                    value={customerId}
+                    onChange={setCustomerId}
+                    options={(customers.data ?? []).map((customer) => ({
+                      value: customer.customerId,
+                      label: `${customer.code} — ${customer.name}`,
+                      ...(customer.contact.mobileNumber
+                        ? { detail: customer.contact.mobileNumber }
+                        : {}),
+                    }))}
+                    invalid={errors['customerId'] !== undefined}
+                    label={t('sales.customer')}
+                    placeholder={`${t('sales.chooseCustomer')} (F2)`}
+                  />
+                </QuickAdd>
+              </FormField>
+            </div>
+
+            <DateField
+              label={t('sales.date')}
+              required
+              value={date}
+              onChange={setDate}
+              error={errors['date']}
+            />
+
+            <SelectField<number>
+              label={t('sales.paymentMode')}
+              value={paymentMode}
+              onChange={(val) => setPaymentMode(Number(val))}
+              options={[
+                { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
+                { value: SalesPaymentMode.card, label: t('paymentModes.card') },
+                { value: SalesPaymentMode.online, label: t('paymentModes.online') },
+                { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
+              ]}
+            />
+
+            <TextField
+              label={
+                isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')
+              }
+              value={nextInvoiceNo}
+              disabled
+              onChange={() => {}}
+            />
+            <TextField
+              label={t('sales.referenceNo')}
+              value={reference}
+              onChange={setReference}
+              placeholder={nextNumber ?? ''}
+            />
+            {taxOn && (
+              <SelectField<'NT' | 'TAX' | 'GST'>
+                label={t('sales.taxMode')}
+                value={taxMode}
+                onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
+                options={[
+                  { value: 'NT', label: 'NT (0%)' },
+                  { value: 'TAX', label: 'TAX (5%)' },
+                  { value: 'GST', label: 'GST (18%)' },
+                ]}
+              />
+            )}
+            {godownsOn && (
+              <FormField
+                label={t('sales.warehouse')}
+                required
+                error={errors['warehouseId']}
+              >
+                <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+                  <SearchSelect
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                    options={(warehouses.data ?? []).map((warehouse) => ({
+                      value: warehouse.id,
+                      label: `${warehouse.code} — ${warehouse.name}`,
+                      ...(warehouse.isDefault
+                        ? { meta: t('settings.masterDefault') }
+                        : {}),
+                    }))}
+                    invalid={errors['warehouseId'] !== undefined}
+                    label={t('sales.warehouse')}
+                    placeholder={t('sales.chooseWarehouse')}
+                  />
+                </QuickAdd>
+              </FormField>
+            )}
+
+            <FormField label={t('sales.salesman')}>
+              <QuickAdd kind="employee" onCreated={setSalesman}>
+                <SearchSelect
+                  value={employeeId(salesman) ?? ''}
+                  onChange={setSalesman}
+                  options={employeeOptions}
+                  clearable
+                  label={t('sales.salesman')}
+                  placeholder={
+                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+                  }
+                />
+              </QuickAdd>
+            </FormField>
+            <FormField label={t('sales.billingman')}>
+              <QuickAdd kind="employee" onCreated={setBillingman}>
+                <SearchSelect
+                  value={employeeId(billingman) ?? ''}
+                  onChange={setBillingman}
+                  options={employeeOptions}
+                  clearable
+                  label={t('sales.billingman')}
+                  placeholder={
+                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
+                  }
+                />
+              </QuickAdd>
+            </FormField>
+            <SelectField<SalesRateType>
+              label={t('sales.salesRateType')}
+              value={rateType}
+              onChange={(val) => handleRateTypeChange(val as SalesRateType)}
+              options={[
+                { value: 'retail', label: t('prefs.rateRetail') },
+                { value: 'wholesale', label: t('prefs.rateWholesale') },
+                { value: 'mrp', label: t('prefs.rateMrp') },
+                { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+                { value: 'customerRate', label: t('prefs.rateCustomer') },
+                { value: 'batch', label: t('prefs.rateBatch') },
+              ]}
+            />
+
+            {isReturn(kind) && (
+              <FormField
+                label={t('sales.againstInvoice')}
+                className="sm:col-span-2 md:col-span-1"
+              >
+                <SearchSelect
+                  value={returnsInvoiceId}
+                  onChange={setReturnsInvoiceId}
+                  clearable
+                  label={t('sales.againstInvoice')}
+                  placeholder={t('sales.noInvoice')}
+                  options={(returnable.data?.items ?? []).map((inv) => ({
+                    value: inv.salesInvoiceId,
+                    label: inv.number,
+                    detail: inv.date,
+                    meta: moneyAlways(inv.total),
+                  }))}
+                />
+              </FormField>
+            )}
+
+            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+              <ScanField
+                value={barcodeInput}
+                onChange={setBarcodeInput}
+                onScan={() => void handleBarcodeScan(barcodeInput)}
+                label={t('invoice.scanLabel')}
+                placeholder={`${t('sales.barcodePlaceholder')} (F4)`}
+                notice={
+                  barcodeNotice && (
+                    <span
+                      role="status"
+                      className="font-medium text-brand-700 dark:text-brand-300"
+                    >
+                      {barcodeNotice}
+                    </span>
+                  )
+                }
+              />
+            </div>
+            {!editing && (
+              <ReferenceLoader
+                asField
+                sources={referenceSources}
+                onLoad={loadReference}
+                className={
+                  isReturn(kind)
+                    ? 'sm:col-span-2 lg:col-span-3 xl:col-span-2'
+                    : 'sm:col-span-2 lg:col-span-3'
+                }
+              />
+            )}
+          </InvoiceFields>
+        </InvoiceCard>
+
+        {/* The lines take whatever height the party and the money leave. Their
+            columns are the user's to choose, remembered in this browser; on a phone
+            each line is a card of its own. */}
+        <InvoiceCard
+          fill
+          icon={<IconBox className="size-5" />}
+          title={t('invoice.items')}
+          meta={t('invoice.itemCount', { count: itemCount })}
+          actions={lineColumns.picker}
+        >
+          <InvoiceLines>
+            <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
+              <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
+                <tr>
+                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                    {t('sales.product')}
+                  </th>
+                  <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
+                  <th className="px-2 py-2.5 text-end font-medium">
+                    {t('sales.quantity')}
+                  </th>
+                  {enableFreeQty && lineColumns.shows('freeQuantity') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.freeQuantity')}
+                    </th>
+                  )}
+                  <th className="px-2 py-2.5 text-end font-medium">
+                    {t('sales.rate')}
+                    {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
+                  </th>
+                  {enableDiscount && lineColumns.shows('discount') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.itemDiscount')}
+                    </th>
+                  )}
+                  {lineColumns.shows('taxPercent') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.taxPercent')}
+                    </th>
+                  )}
+                  {lineColumns.shows('taxAmount') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.taxAmount')}
+                    </th>
+                  )}
+                  <th className="px-2 py-2.5 text-end font-medium">{t('sales.net')}</th>
+                  {lineColumns.shows('lineTotal') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
+                      {t('sales.lineTotal')}
+                    </th>
+                  )}
+                  <th className="line-action-column rounded-e-lg" />
+                </tr>
+              </thead>
+
+              <tbody ref={linesBody}>
+                {lines.map((line, index) => (
+                  <LineRow
+                    key={index}
+                    line={line}
+                    products={products.data ?? []}
+                    productOptions={productOptions}
+                    warehouseId={warehouseId}
+                    serialDirection={isReturn(kind) ? 'back' : 'out'}
+                    rateType={rateType}
+                    customerId={customerId}
+                    modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
+                    productTax={taxMode === 'TAX'}
+                    reverseCalc={reverseCalc}
+                    autoBatch={autoBatch}
+                    enableFreeQty={enableFreeQty}
+                    enableDiscount={enableDiscount}
+                    shows={lineColumns.shows}
+                    columnCount={
+                      3 +
+                      lineColumnList.filter(
+                        (column) =>
+                          column.key !== 'product' &&
+                          column.key !== 'quantity' &&
+                          lineColumns.shows(column.key),
+                      ).length
+                    }
+                    errors={lineErrors[index] ?? {}}
+                    removable={lines.length > 1}
+                    onChange={(patch) => change(index, patch)}
+                    onRemove={() =>
+                      setLines((previous) => previous.filter((_, at) => at !== index))
+                    }
+                  />
+                ))}
+              </tbody>
+            </table>
+
+            <button
+              {...shortcutProps('add-line')}
+              type="button"
+              onClick={() => {
+                // The cursor goes to the new line's product, so the next item is
+                // typed straight away rather than reached with the mouse.
+                focusNewLine.current = true;
+                setLines((previous) => [
+                  ...previous,
+                  {
+                    ...emptyLine,
+                    taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
+                  },
+                ]);
+              }}
+              className="btn-secondary mt-3 mb-1"
+            >
+              <IconPlus className="size-4" />
+              {t('invoice.addItem')}
+            </button>
+          </InvoiceLines>
+        </InvoiceCard>
+
+        {/* Along the foot: the narration; the payment, with what it leaves owing on
+            this bill and on the customer's account; and the bill itself, picked
+            out - its total, the figures it is built from, and each additional
+            ledger typed in beside them. */}
+        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.1fr)_minmax(0,1.45fr)]">
+          <FooterSection
+            icon={<IconDocument className="size-[18px]" />}
+            title={t('invoice.narration')}
+          >
+            <NarrationField
+              value={narration}
+              onChange={setNarration}
+              label={t('invoice.narration')}
+              placeholder={t('invoice.narration')}
+            />
+          </FooterSection>
+
+          <FooterSection
+            icon={<IconCreditCard className="size-[18px]" />}
+            title={
+              isReturn(kind) ? t('invoice.customerAccount') : t('invoice.paymentDetails')
+            }
+          >
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3 xl:grid-cols-3">
+              {!isReturn(kind) && (
+                <CompactField label={t('sales.receivedNow')}>
+                  <input
+                    {...shortcutProps('payment')}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    aria-label={t('sales.receivedNow')}
+                    value={paidAmount}
+                    placeholder={
+                      paymentMode === SalesPaymentMode.credit
+                        ? '0.00'
+                        : moneyAlways(grandTotal)
+                    }
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="field-input-sm text-end font-semibold tabular-nums"
+                  />
+                </CompactField>
+              )}
+              {!isReturn(kind) && paidThroughBank(paymentMode) && (
+                <CompactField
+                  label={
+                    paymentMode === SalesPaymentMode.card
+                      ? t('sales.cardApproval')
+                      : t('sales.transactionId')
+                  }
+                >
+                  <input
+                    value={paymentReference}
+                    maxLength={60}
+                    aria-label={
+                      paymentMode === SalesPaymentMode.card
+                        ? t('sales.cardApproval')
+                        : t('sales.transactionId')
+                    }
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder={
+                      paymentMode === SalesPaymentMode.card
+                        ? t('sales.cardApprovalPlaceholder')
+                        : t('sales.transactionIdPlaceholder')
+                    }
+                    className="field-input-sm tabular-nums"
+                  />
+                </CompactField>
+              )}
+              {!isReturn(kind) && paymentMode === SalesPaymentMode.cash && (
+                <>
+                  <CompactField label={t('sales.cashGiven')}>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      aria-label={t('sales.cashGiven')}
+                      value={cashGiven}
+                      placeholder="0.00"
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      className="field-input-sm text-end tabular-nums"
+                    />
+                  </CompactField>
+                  <ValueField
+                    label={t('sales.changeBack')}
+                    value={moneyAlways(changeBack)}
+                    tone="good"
+                  />
+                </>
+              )}
+              {isReturn(kind) ? (
+                <ValueField
+                  label={t('sales.thisReturn')}
+                  value={
+                    grandTotal > 0.004 ? `−${moneyAlways(grandTotal)}` : moneyAlways(0)
+                  }
+                />
+              ) : (
+                <ValueField
+                  label={t('sales.billDue')}
+                  value={moneyAlways(Math.max(0, grandTotal - effectivePaid))}
+                  tone={grandTotal - effectivePaid > 0.004 ? 'due' : 'strong'}
+                />
+              )}
+              <ValueField
+                label={t('sales.prevBalance')}
+                value={
+                  customerId === '' || account.isPending ? '—' : moneyAlways(prevBalance)
+                }
+              />
+              <ValueField
+                label={t('invoice.newBalance')}
+                value={moneyAlways(balanceAfter)}
+                tone={balanceAfter > 0.004 ? 'due' : 'strong'}
+              />
+            </div>
+            {overLimitBy > 0 && (
+              <p
+                role="alert"
+                className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400"
+              >
+                {t('sales.overCreditLimit', {
+                  limit: moneyAlways(account.data?.creditLimit ?? 0),
+                  by: moneyAlways(overLimitBy),
+                })}
+                {creditRule === CreditLimitPolicy.block &&
+                  ` ${t('sales.creditLimitBlocks')}`}
+              </p>
+            )}
+          </FooterSection>
+
+          <BillCard
+            className="md:col-span-2 lg:col-span-1"
+            label={totalLabel}
+            total={moneyAlways(grandTotal)}
+            figures={
+              <>
+                {totals.discount > 0 && (
+                  <>
+                    <FigureRow
+                      label={t('sales.itemsTotal')}
+                      value={moneyAlways(totals.gross)}
+                    />
+                    <FigureRow
+                      label={t('sales.discount')}
+                      value={`−${moneyAlways(totals.discount)}`}
+                    />
+                  </>
+                )}
+                <FigureRow
+                  label={taxOn ? t('sales.taxable') : t('sales.net')}
+                  value={moneyAlways(totals.taxable)}
+                />
+                {totals.tax > 0 && (
+                  <FigureRow
+                    label={`${t('sales.tax')} (${taxMode})`}
+                    value={moneyAlways(totals.tax)}
+                  />
+                )}
+              </>
+            }
+            charges={
+              <div className="space-y-1.5" {...shortcutProps('charges')}>
+                <span className="block text-[13px] font-medium text-ink-muted">
+                  {t('sales.additionalLedgers')}
+                </span>
+                <AdditionalLedgerList
+                  carried={additionalLedgers}
+                  setup={chargeSetup}
+                  nonTax={taxMode === 'NT'}
+                  ledgers={ledgers.data ?? []}
+                  onAmount={setChargeAmount}
+                  onRemove={(ledgerId) =>
+                    setAdditionalLedgers((rows) =>
+                      rows.filter((row) => row.ledgerId !== ledgerId),
+                    )
+                  }
+                />
+              </div>
+            }
+          />
+        </InvoiceFooter>
+      </InvoiceBody>
+
+      <InvoiceActions
+        hints={
+          <ShortcutHints
+            actions={['customer', 'scan', 'add-line', 'charges', 'payment']}
+          />
+        }
+        total={{ label: totalLabel, amount: moneyAlways(grandTotal) }}
+        secondary={[
           ...(draftAllowed
             ? [
                 {
@@ -1560,643 +2092,20 @@ function EntryDialog({
                 },
               ]
             : []),
+          {
+            label: t('sales.save'),
+            onClick: () => void save(true),
+            shortcut: 'save',
+            disabled: busy,
+          },
         ]}
-      />
-
-      <InvoiceBody
-        main={
-          <>
-            {failure && (
-              <p role="alert" className="alert-error">
-                {failure}
-              </p>
-            )}
-            {editing && editing.header.status === SalesInvoiceStatus.posted && (
-              <div className="alert-warn flex flex-wrap items-end gap-3 text-xs">
-                <p className="min-w-0 flex-1">{t('sales.editPostedHint')}</p>
-                <label className="flex flex-col gap-1">
-                  <span className="font-medium">{t('sales.editReason')}</span>
-                  <input
-                    value={editReason}
-                    onChange={(event) => setEditReason(event.target.value)}
-                    className="field-input-sm w-64"
-                    maxLength={400}
-                  />
-                </label>
-              </div>
-            )}
-
-            <InvoiceCard
-              icon={<IconUser className="size-5" />}
-              title={t('invoice.customerDetails')}
-            >
-              {/* Who and when first - the customer, the date, how they pay - then the
-                  numbers, then what a counter sets once and seldom touches. */}
-              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 md:grid-cols-4">
-                <div className="min-w-0 sm:col-span-2" {...shortcutProps('customer')}>
-                  <FormField
-                    label={t('sales.customer')}
-                    required
-                    error={errors['customerId']}
-                  >
-                    <QuickAdd kind="customer" onCreated={setCustomerId}>
-                      <SearchSelect
-                        value={customerId}
-                        onChange={setCustomerId}
-                        options={(customers.data ?? []).map((customer) => ({
-                          value: customer.customerId,
-                          label: `${customer.code} — ${customer.name}`,
-                          ...(customer.contact.mobileNumber
-                            ? { detail: customer.contact.mobileNumber }
-                            : {}),
-                        }))}
-                        invalid={errors['customerId'] !== undefined}
-                        label={t('sales.customer')}
-                        placeholder={`${t('sales.chooseCustomer')} (F2)`}
-                      />
-                    </QuickAdd>
-                  </FormField>
-                  {selectedCustomer && (
-                    <p className="mt-1 truncate text-xs text-ink-muted">
-                      {[
-                        selectedCustomer.contact.mobileNumber ||
-                          selectedCustomer.contact.phone,
-                        selectedCustomer.contact.addressLine1 ||
-                          selectedCustomer.contact.addressLine2,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || '—'}
-                    </p>
-                  )}
-                </div>
-
-                <DateField
-                  label={t('sales.date')}
-                  required
-                  value={date}
-                  onChange={setDate}
-                  error={errors['date']}
-                />
-
-                <SelectField<number>
-                  label={t('sales.paymentMode')}
-                  value={paymentMode}
-                  onChange={(val) => setPaymentMode(Number(val))}
-                  options={[
-                    { value: SalesPaymentMode.cash, label: t('paymentModes.cash') },
-                    { value: SalesPaymentMode.card, label: t('paymentModes.card') },
-                    { value: SalesPaymentMode.online, label: t('paymentModes.online') },
-                    { value: SalesPaymentMode.credit, label: t('paymentModes.credit') },
-                  ]}
-                />
-
-                <TextField
-                  label={
-                    isReturn(kind)
-                      ? t('sales.returnNo') || 'Return No'
-                      : t('sales.invoiceNo')
-                  }
-                  value={nextInvoiceNo}
-                  disabled
-                  onChange={() => {}}
-                />
-                <TextField
-                  label={t('sales.referenceNo')}
-                  value={reference}
-                  onChange={setReference}
-                  placeholder={nextNumber ?? ''}
-                />
-                {taxOn ? (
-                  <SelectField<'NT' | 'TAX' | 'GST'>
-                    label={t('sales.taxMode')}
-                    value={taxMode}
-                    onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
-                    options={[
-                      { value: 'NT', label: 'NT (0%)' },
-                      { value: 'TAX', label: 'TAX (5%)' },
-                      { value: 'GST', label: 'GST (18%)' },
-                    ]}
-                  />
-                ) : (
-                  <span className="hidden md:block" />
-                )}
-                <span className="hidden md:block" />
-
-                <FormField label={t('sales.salesman')}>
-                  <QuickAdd kind="employee" onCreated={setSalesman}>
-                    <SearchSelect
-                      value={employeeId(salesman) ?? ''}
-                      onChange={setSalesman}
-                      options={employeeOptions}
-                      clearable
-                      label={t('sales.salesman')}
-                      placeholder={
-                        employees.length === 0
-                          ? t('sales.noEmployees')
-                          : t('common.choose')
-                      }
-                    />
-                  </QuickAdd>
-                </FormField>
-                <FormField label={t('sales.billingman')}>
-                  <QuickAdd kind="employee" onCreated={setBillingman}>
-                    <SearchSelect
-                      value={employeeId(billingman) ?? ''}
-                      onChange={setBillingman}
-                      options={employeeOptions}
-                      clearable
-                      label={t('sales.billingman')}
-                      placeholder={
-                        employees.length === 0
-                          ? t('sales.noEmployees')
-                          : t('common.choose')
-                      }
-                    />
-                  </QuickAdd>
-                </FormField>
-                <SelectField<SalesRateType>
-                  label={t('sales.salesRateType')}
-                  value={rateType}
-                  onChange={(val) => handleRateTypeChange(val as SalesRateType)}
-                  options={[
-                    { value: 'retail', label: t('prefs.rateRetail') },
-                    { value: 'wholesale', label: t('prefs.rateWholesale') },
-                    { value: 'mrp', label: t('prefs.rateMrp') },
-                    { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
-                    { value: 'customerRate', label: t('prefs.rateCustomer') },
-                    { value: 'batch', label: t('prefs.rateBatch') },
-                  ]}
-                />
-                {godownsOn && (
-                  <FormField
-                    label={t('sales.warehouse')}
-                    required
-                    error={errors['warehouseId']}
-                  >
-                    <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
-                      <SearchSelect
-                        value={warehouseId}
-                        onChange={setWarehouseId}
-                        options={(warehouses.data ?? []).map((warehouse) => ({
-                          value: warehouse.id,
-                          label: `${warehouse.code} — ${warehouse.name}`,
-                          ...(warehouse.isDefault
-                            ? { meta: t('settings.masterDefault') }
-                            : {}),
-                        }))}
-                        invalid={errors['warehouseId'] !== undefined}
-                        label={t('sales.warehouse')}
-                        placeholder={t('sales.chooseWarehouse')}
-                      />
-                    </QuickAdd>
-                  </FormField>
-                )}
-              </div>
-
-              {/* Two ways to fill the lines without typing them: scan the goods, or
-                  bring them in from a quotation or an order (for a return, from the
-                  invoice). */}
-              <div className="mt-4 grid gap-3 xl:grid-cols-2">
-                <div
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2 p-2"
-                  {...shortcutProps('scan')}
-                >
-                  <IconBarcode className="ms-1 size-5 shrink-0 text-ink-muted" />
-                  <input
-                    type="text"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void handleBarcodeScan(barcodeInput);
-                      }
-                    }}
-                    aria-label={t('sales.barcode')}
-                    placeholder={`${t('sales.barcodePlaceholder')} (F4)`}
-                    className="field-input min-w-40 flex-1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleBarcodeScan(barcodeInput)}
-                    disabled={barcodeInput.trim() === ''}
-                    className="btn-secondary"
-                  >
-                    {t('stock.scan')}
-                  </button>
-                  {barcodeNotice && (
-                    <span
-                      role="status"
-                      className="w-full truncate px-1 text-xs font-medium text-brand-700 dark:text-brand-300"
-                    >
-                      {barcodeNotice}
-                    </span>
-                  )}
-                </div>
-                {!editing && (
-                  <ReferenceLoader sources={referenceSources} onLoad={loadReference} />
-                )}
-              </div>
-
-              {isReturn(kind) && (
-                <div className="mt-3 max-w-md">
-                  <FormField label={t('sales.againstInvoice')}>
-                    <SearchSelect
-                      value={returnsInvoiceId}
-                      onChange={setReturnsInvoiceId}
-                      clearable
-                      label={t('sales.againstInvoice')}
-                      placeholder={t('sales.noInvoice')}
-                      options={(returnable.data?.items ?? []).map((inv) => ({
-                        value: inv.salesInvoiceId,
-                        label: inv.number,
-                        detail: inv.date,
-                        meta: moneyAlways(inv.total),
-                      }))}
-                    />
-                  </FormField>
-                </div>
-              )}
-            </InvoiceCard>
-
-            <InvoiceCard
-              icon={<IconBox className="size-5" />}
-              title={t('invoice.items')}
-              meta={t('invoice.itemCount', { count: itemCount })}
-              actions={lineColumns.picker}
-            >
-              {/* The lines. Their columns are the user's to choose, remembered in this
-                  browser; on a phone each line is a card of its own. */}
-              <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
-                  <thead className="bg-surface-2 text-start text-[13px] text-ink-muted">
-                    <tr>
-                      <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
-                        {t('sales.product')}
-                      </th>
-                      <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('sales.quantity')}
-                      </th>
-                      {enableFreeQty && lineColumns.shows('freeQuantity') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.freeQuantity')}
-                        </th>
-                      )}
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('sales.rate')}
-                        {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
-                      </th>
-                      {enableDiscount && lineColumns.shows('discount') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.itemDiscount')}
-                        </th>
-                      )}
-                      {lineColumns.shows('taxPercent') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.taxPercent')}
-                        </th>
-                      )}
-                      {lineColumns.shows('taxAmount') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.taxAmount')}
-                        </th>
-                      )}
-                      <th className="px-2 py-2.5 text-end font-medium">
-                        {t('sales.net')}
-                      </th>
-                      {lineColumns.shows('lineTotal') && (
-                        <th className="px-2 py-2.5 text-end font-medium">
-                          {t('sales.lineTotal')}
-                        </th>
-                      )}
-                      <th className="line-action-column rounded-e-lg" />
-                    </tr>
-                  </thead>
-
-                  <tbody ref={linesBody}>
-                    {lines.map((line, index) => (
-                      <LineRow
-                        key={index}
-                        line={line}
-                        products={products.data ?? []}
-                        productOptions={productOptions}
-                        warehouseId={warehouseId}
-                        serialDirection={isReturn(kind) ? 'back' : 'out'}
-                        rateType={rateType}
-                        customerId={customerId}
-                        modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
-                        productTax={taxMode === 'TAX'}
-                        reverseCalc={reverseCalc}
-                        autoBatch={autoBatch}
-                        enableFreeQty={enableFreeQty}
-                        enableDiscount={enableDiscount}
-                        shows={lineColumns.shows}
-                        columnCount={
-                          3 +
-                          lineColumnList.filter(
-                            (column) =>
-                              column.key !== 'product' &&
-                              column.key !== 'quantity' &&
-                              lineColumns.shows(column.key),
-                          ).length
-                        }
-                        errors={lineErrors[index] ?? {}}
-                        removable={lines.length > 1}
-                        onChange={(patch) => change(index, patch)}
-                        onRemove={() =>
-                          setLines((previous) => previous.filter((_, at) => at !== index))
-                        }
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <button
-                {...shortcutProps('add-line')}
-                type="button"
-                onClick={() => {
-                  // The cursor goes to the new line's product, so the next item is
-                  // typed straight away rather than reached with the mouse.
-                  focusNewLine.current = true;
-                  setLines((previous) => [
-                    ...previous,
-                    {
-                      ...emptyLine,
-                      taxPercentage: String(
-                        modeTaxRate(taxMode, settings.defaultTaxRate),
-                      ),
-                    },
-                  ]);
-                }}
-                className="btn-secondary mt-3"
-              >
-                <IconPlus className="size-4" />
-                {t('invoice.addItem')}
-              </button>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InvoicePanel
-                  icon={<IconDocument className="size-[18px]" />}
-                  title={t('invoice.narration')}
-                >
-                  <NarrationField
-                    value={narration}
-                    onChange={setNarration}
-                    label={t('invoice.narration')}
-                    placeholder={t('invoice.narration')}
-                  />
-                </InvoicePanel>
-
-                {/* What the bill comes to, in the order it is built: the goods, what
-                    came off them, the tax, then each additional ledger - typed here,
-                    beside the figures it changes. */}
-                <InvoicePanel
-                  icon={<IconReceipt className="size-[18px]" />}
-                  title={t('invoice.bill')}
-                >
-                  {totals.discount > 0 && (
-                    <>
-                      <FigureRow
-                        label={t('sales.itemsTotal')}
-                        value={moneyAlways(totals.gross)}
-                      />
-                      <FigureRow
-                        label={t('sales.discount')}
-                        value={`−${moneyAlways(totals.discount)}`}
-                      />
-                    </>
-                  )}
-                  <FigureRow
-                    label={taxOn ? t('sales.taxable') : t('sales.net')}
-                    value={moneyAlways(totals.taxable)}
-                  />
-                  {totals.tax > 0 && (
-                    <FigureRow
-                      label={`${t('sales.tax')} (${taxMode})`}
-                      value={moneyAlways(totals.tax)}
-                    />
-                  )}
-
-                  <div className="mt-2 space-y-1.5" {...shortcutProps('charges')}>
-                    <span className="block text-[13px] font-medium text-ink-muted">
-                      {t('sales.additionalLedgers')}
-                    </span>
-                    <AdditionalLedgerList
-                      carried={additionalLedgers}
-                      setup={chargeSetup}
-                      nonTax={taxMode === 'NT'}
-                      ledgers={ledgers.data ?? []}
-                      onAmount={setChargeAmount}
-                      onRemove={(ledgerId) =>
-                        setAdditionalLedgers((rows) =>
-                          rows.filter((row) => row.ledgerId !== ledgerId),
-                        )
-                      }
-                    />
-                  </div>
-
-                  <div className="mt-auto pt-3">
-                    <TotalBanner
-                      label={totalLabel}
-                      amount={moneyAlways(grandTotal)}
-                      size="md"
-                    />
-                  </div>
-                </InvoicePanel>
-              </div>
-            </InvoiceCard>
-          </>
-        }
-        side={
-          <InvoiceCard
-            icon={<IconCreditCard className="size-5" />}
-            title={isReturn(kind) ? t('invoice.summary') : t('invoice.paymentDetails')}
-          >
-            <TotalBanner
-              icon={<IconCreditCard className="size-5" />}
-              label={totalLabel}
-              amount={moneyAlways(grandTotal)}
-            />
-
-            <div className="mt-3 divide-y divide-line/70">
-              <div>
-                <DetailRow label={t('sales.paymentMode')}>
-                  {paymentModeLabel(paymentMode, t)}
-                </DetailRow>
-                <DetailRow
-                  label={
-                    isReturn(kind)
-                      ? t('sales.returnNo') || 'Return No'
-                      : t('sales.invoiceNo')
-                  }
-                >
-                  {nextInvoiceNo}
-                </DetailRow>
-                {reference.trim() !== '' && (
-                  <DetailRow label={t('sales.referenceNo')}>{reference}</DetailRow>
-                )}
-              </div>
-
-              {!isReturn(kind) && (
-                <div className="py-1">
-                  <DetailRow label={t('sales.receivedNow')}>
-                    <input
-                      {...shortcutProps('payment')}
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      aria-label={t('sales.receivedNow')}
-                      value={paidAmount}
-                      placeholder={
-                        paymentMode === SalesPaymentMode.credit
-                          ? '0.00'
-                          : moneyAlways(grandTotal)
-                      }
-                      onChange={(e) => setPaidAmount(e.target.value)}
-                      className="field-input text-end font-semibold tabular-nums"
-                    />
-                  </DetailRow>
-                  <DetailRow label={t('sales.receivedInto')}>
-                    <select
-                      value={receivingAccountId}
-                      onChange={(e) => setReceivedInto(e.target.value)}
-                      disabled={effectivePaid <= 0}
-                      aria-label={t('sales.receivedInto')}
-                      className="field-input"
-                    >
-                      {receivingAccounts.length === 0 && (
-                        <option value="">{t('sales.noReceivingAccount')}</option>
-                      )}
-                      {receivingAccounts.map((ledger) => (
-                        <option key={ledger.ledgerId} value={ledger.ledgerId}>
-                          {ledger.name}
-                        </option>
-                      ))}
-                    </select>
-                  </DetailRow>
-                  {paidThroughBank(paymentMode) && (
-                    <DetailRow
-                      label={
-                        paymentMode === SalesPaymentMode.card
-                          ? t('sales.cardApproval')
-                          : t('sales.transactionId')
-                      }
-                    >
-                      <input
-                        value={paymentReference}
-                        maxLength={60}
-                        aria-label={
-                          paymentMode === SalesPaymentMode.card
-                            ? t('sales.cardApproval')
-                            : t('sales.transactionId')
-                        }
-                        onChange={(e) => setPaymentReference(e.target.value)}
-                        placeholder={
-                          paymentMode === SalesPaymentMode.card
-                            ? t('sales.cardApprovalPlaceholder')
-                            : t('sales.transactionIdPlaceholder')
-                        }
-                        className="field-input tabular-nums"
-                      />
-                    </DetailRow>
-                  )}
-                  {paymentMode === SalesPaymentMode.cash && (
-                    <>
-                      <DetailRow label={t('sales.cashGiven')}>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          aria-label={t('sales.cashGiven')}
-                          value={cashGiven}
-                          placeholder="0.00"
-                          onChange={(e) => setCashGiven(e.target.value)}
-                          className="field-input text-end tabular-nums"
-                        />
-                      </DetailRow>
-                      <DetailRow label={t('sales.changeBack')}>
-                        <span className="block font-semibold text-emerald-600 dark:text-emerald-400">
-                          {moneyAlways(changeBack)}
-                        </span>
-                      </DetailRow>
-                    </>
-                  )}
-                  <DetailRow label={t('sales.billDue')} strong>
-                    <span
-                      className={clsx(
-                        'block',
-                        grandTotal - effectivePaid > 0.004 &&
-                          'text-red-600 dark:text-red-400',
-                      )}
-                    >
-                      {moneyAlways(Math.max(0, grandTotal - effectivePaid))}
-                    </span>
-                  </DetailRow>
-                </div>
-              )}
-
-              <div className="pt-2">
-                <GroupHeading>{t('invoice.customerAccount')}</GroupHeading>
-                <DetailRow label={t('sales.prevBalance')}>
-                  <span className="block">
-                    {customerId === '' || account.isPending
-                      ? '—'
-                      : moneyAlways(prevBalance)}
-                  </span>
-                </DetailRow>
-                <DetailRow
-                  label={isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}
-                >
-                  <span className="block">
-                    {isReturn(kind) ? '−' : '+'}
-                    {moneyAlways(grandTotal)}
-                  </span>
-                </DetailRow>
-                {effectivePaid > 0 && (
-                  <DetailRow label={t('sales.receivedNow')}>
-                    <span className="block">−{moneyAlways(effectivePaid)}</span>
-                  </DetailRow>
-                )}
-                <div className="mt-2">
-                  <TotalBanner
-                    label={t('invoice.newBalance')}
-                    amount={moneyAlways(balanceAfter)}
-                    size="md"
-                    tone={balanceAfter > 0.004 ? 'danger' : 'brand'}
-                  />
-                </div>
-                {overLimitBy > 0 && (
-                  <p
-                    role="alert"
-                    className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400"
-                  >
-                    {t('sales.overCreditLimit', {
-                      limit: moneyAlways(account.data?.creditLimit ?? 0),
-                      by: moneyAlways(overLimitBy),
-                    })}
-                    {creditRule === CreditLimitPolicy.block &&
-                      ` ${t('sales.creditLimitBlocks')}`}
-                  </p>
-                )}
-              </div>
-            </div>
-          </InvoiceCard>
-        }
-        footer={
-          <ShortcutHints
-            actions={[
-              'customer',
-              'scan',
-              'add-line',
-              'charges',
-              'payment',
-              'save',
-              'print',
-            ]}
-          />
-        }
+        primary={{
+          label: busy ? t('common.saving') : t('sales.saveAndPrint'),
+          icon: <IconPrinter className="size-4" />,
+          onClick: () => void save(true, true),
+          shortcut: 'print',
+          disabled: busy,
+        }}
       />
     </InvoiceWindow>
   );
