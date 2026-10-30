@@ -19,11 +19,10 @@ import {
   IconDocument,
   IconPlus,
   IconPrinter,
-  IconReceipt,
 } from '@/components/icons';
 import {
+  BillCard,
   CompactField,
-  DetailRow,
   FigureRow,
   FooterSection,
   InvoiceBody,
@@ -35,7 +34,7 @@ import {
   InvoiceWindow,
   NarrationField,
   RemoveLineButton,
-  TotalBanner,
+  ValueField,
 } from '@/components/invoice/InvoiceLayout';
 import { ScanField } from '@/components/BarcodeScan';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -678,7 +677,9 @@ function EntryDialog({
       : '',
   );
   const [cashGiven, setCashGiven] = useState<string>('');
-  const [receivedInto, setReceivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
+  // Where the money paid with the sale goes: the settings' default cash or bank
+  // account for the mode, or the one a corrected document already named.
+  const [receivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
   const [paymentReference, setPaymentReference] = useState(
     editing?.paymentReference ?? '',
   );
@@ -1923,16 +1924,11 @@ function EntryDialog({
           </InvoiceLines>
         </InvoiceCard>
 
-        {/* Along the foot: the narration; the bill in the order it is built, with
-            each additional ledger typed beside the figures it changes; the payment;
-            and what the bill and the customer's account come to. */}
-        <InvoiceFooter
-          className={
-            isReturn(kind)
-              ? 'lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1fr)]'
-              : 'lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.1fr)_minmax(0,1fr)]'
-          }
-        >
+        {/* Along the foot: the narration; the payment, with what it leaves owing on
+            this bill and on the customer's account; and the bill itself, picked
+            out - its total, the figures it is built from, and each additional
+            ledger typed in beside them. */}
+        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.1fr)_minmax(0,1.45fr)]">
           <FooterSection
             icon={<IconDocument className="size-[18px]" />}
             title={t('invoice.narration')}
@@ -1946,57 +1942,13 @@ function EntryDialog({
           </FooterSection>
 
           <FooterSection
-            icon={<IconReceipt className="size-[18px]" />}
-            title={t('invoice.bill')}
+            icon={<IconCreditCard className="size-[18px]" />}
+            title={
+              isReturn(kind) ? t('invoice.customerAccount') : t('invoice.paymentDetails')
+            }
           >
-            {totals.discount > 0 && (
-              <>
-                <FigureRow
-                  label={t('sales.itemsTotal')}
-                  value={moneyAlways(totals.gross)}
-                />
-                <FigureRow
-                  label={t('sales.discount')}
-                  value={`−${moneyAlways(totals.discount)}`}
-                />
-              </>
-            )}
-            <FigureRow
-              label={taxOn ? t('sales.taxable') : t('sales.net')}
-              value={moneyAlways(totals.taxable)}
-            />
-            {totals.tax > 0 && (
-              <FigureRow
-                label={`${t('sales.tax')} (${taxMode})`}
-                value={moneyAlways(totals.tax)}
-              />
-            )}
-
-            <div className="mt-2 space-y-1.5" {...shortcutProps('charges')}>
-              <span className="block text-[13px] font-medium text-ink-muted">
-                {t('sales.additionalLedgers')}
-              </span>
-              <AdditionalLedgerList
-                carried={additionalLedgers}
-                setup={chargeSetup}
-                nonTax={taxMode === 'NT'}
-                ledgers={ledgers.data ?? []}
-                onAmount={setChargeAmount}
-                onRemove={(ledgerId) =>
-                  setAdditionalLedgers((rows) =>
-                    rows.filter((row) => row.ledgerId !== ledgerId),
-                  )
-                }
-              />
-            </div>
-          </FooterSection>
-
-          {!isReturn(kind) && (
-            <FooterSection
-              icon={<IconCreditCard className="size-[18px]" />}
-              title={t('invoice.paymentDetails')}
-            >
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3 xl:grid-cols-3">
+              {!isReturn(kind) && (
                 <CompactField label={t('sales.receivedNow')}>
                   <input
                     {...shortcutProps('payment')}
@@ -2014,134 +1966,84 @@ function EntryDialog({
                     className="field-input-sm text-end font-semibold tabular-nums"
                   />
                 </CompactField>
-                <CompactField label={t('sales.receivedInto')}>
-                  <select
-                    value={receivingAccountId}
-                    onChange={(e) => setReceivedInto(e.target.value)}
-                    disabled={effectivePaid <= 0}
-                    aria-label={t('sales.receivedInto')}
-                    className="field-input-sm"
-                  >
-                    {receivingAccounts.length === 0 && (
-                      <option value="">{t('sales.noReceivingAccount')}</option>
-                    )}
-                    {receivingAccounts.map((ledger) => (
-                      <option key={ledger.ledgerId} value={ledger.ledgerId}>
-                        {ledger.name}
-                      </option>
-                    ))}
-                  </select>
-                </CompactField>
-                {paidThroughBank(paymentMode) && (
-                  <CompactField
-                    className="col-span-2"
-                    label={
+              )}
+              {!isReturn(kind) && paidThroughBank(paymentMode) && (
+                <CompactField
+                  label={
+                    paymentMode === SalesPaymentMode.card
+                      ? t('sales.cardApproval')
+                      : t('sales.transactionId')
+                  }
+                >
+                  <input
+                    value={paymentReference}
+                    maxLength={60}
+                    aria-label={
                       paymentMode === SalesPaymentMode.card
                         ? t('sales.cardApproval')
                         : t('sales.transactionId')
                     }
-                  >
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder={
+                      paymentMode === SalesPaymentMode.card
+                        ? t('sales.cardApprovalPlaceholder')
+                        : t('sales.transactionIdPlaceholder')
+                    }
+                    className="field-input-sm tabular-nums"
+                  />
+                </CompactField>
+              )}
+              {!isReturn(kind) && paymentMode === SalesPaymentMode.cash && (
+                <>
+                  <CompactField label={t('sales.cashGiven')}>
                     <input
-                      value={paymentReference}
-                      maxLength={60}
-                      aria-label={
-                        paymentMode === SalesPaymentMode.card
-                          ? t('sales.cardApproval')
-                          : t('sales.transactionId')
-                      }
-                      onChange={(e) => setPaymentReference(e.target.value)}
-                      placeholder={
-                        paymentMode === SalesPaymentMode.card
-                          ? t('sales.cardApprovalPlaceholder')
-                          : t('sales.transactionIdPlaceholder')
-                      }
-                      className="field-input-sm tabular-nums"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      aria-label={t('sales.cashGiven')}
+                      value={cashGiven}
+                      placeholder="0.00"
+                      onChange={(e) => setCashGiven(e.target.value)}
+                      className="field-input-sm text-end tabular-nums"
                     />
                   </CompactField>
-                )}
-                {paymentMode === SalesPaymentMode.cash && (
-                  <>
-                    <CompactField label={t('sales.cashGiven')}>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        aria-label={t('sales.cashGiven')}
-                        value={cashGiven}
-                        placeholder="0.00"
-                        onChange={(e) => setCashGiven(e.target.value)}
-                        className="field-input-sm text-end tabular-nums"
-                      />
-                    </CompactField>
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <span className="truncate text-xs text-ink-muted">
-                        {t('sales.changeBack')}
-                      </span>
-                      <span className="flex min-h-8 items-center justify-end font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
-                        {moneyAlways(changeBack)}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="mt-auto pt-1">
-                <DetailRow label={t('sales.billDue')} strong>
-                  <span
-                    className={clsx(
-                      'block text-end',
-                      grandTotal - effectivePaid > 0.004 &&
-                        'text-red-600 dark:text-red-400',
-                    )}
-                  >
-                    {moneyAlways(Math.max(0, grandTotal - effectivePaid))}
-                  </span>
-                </DetailRow>
-              </div>
-            </FooterSection>
-          )}
-
-          <FooterSection>
-            <TotalBanner
-              icon={<IconCreditCard className="size-5" />}
-              label={totalLabel}
-              amount={moneyAlways(grandTotal)}
-            />
-            <div className="mt-1">
-              <DetailRow label={t('sales.prevBalance')}>
-                <span className="block text-end">
-                  {customerId === '' || account.isPending
-                    ? '—'
-                    : moneyAlways(prevBalance)}
-                </span>
-              </DetailRow>
-              <DetailRow
-                label={isReturn(kind) ? t('sales.thisReturn') : t('sales.thisBill')}
-              >
-                <span className="block text-end">
-                  {isReturn(kind) ? '−' : '+'}
-                  {moneyAlways(grandTotal)}
-                </span>
-              </DetailRow>
-              {effectivePaid > 0 && (
-                <DetailRow label={t('sales.receivedNow')}>
-                  <span className="block text-end">−{moneyAlways(effectivePaid)}</span>
-                </DetailRow>
+                  <ValueField
+                    label={t('sales.changeBack')}
+                    value={moneyAlways(changeBack)}
+                    tone="good"
+                  />
+                </>
               )}
-              <DetailRow label={t('invoice.newBalance')} strong>
-                <span
-                  className={clsx(
-                    'block text-end text-base',
-                    balanceAfter > 0.004 && 'text-red-600 dark:text-red-400',
-                  )}
-                >
-                  {moneyAlways(balanceAfter)}
-                </span>
-              </DetailRow>
+              {isReturn(kind) ? (
+                <ValueField
+                  label={t('sales.thisReturn')}
+                  value={
+                    grandTotal > 0.004 ? `−${moneyAlways(grandTotal)}` : moneyAlways(0)
+                  }
+                />
+              ) : (
+                <ValueField
+                  label={t('sales.billDue')}
+                  value={moneyAlways(Math.max(0, grandTotal - effectivePaid))}
+                  tone={grandTotal - effectivePaid > 0.004 ? 'due' : 'strong'}
+                />
+              )}
+              <ValueField
+                label={t('sales.prevBalance')}
+                value={
+                  customerId === '' || account.isPending ? '—' : moneyAlways(prevBalance)
+                }
+              />
+              <ValueField
+                label={t('invoice.newBalance')}
+                value={moneyAlways(balanceAfter)}
+                tone={balanceAfter > 0.004 ? 'due' : 'strong'}
+              />
             </div>
             {overLimitBy > 0 && (
               <p
                 role="alert"
-                className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400"
+                className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400"
               >
                 {t('sales.overCreditLimit', {
                   limit: moneyAlways(account.data?.creditLimit ?? 0),
@@ -2152,6 +2054,57 @@ function EntryDialog({
               </p>
             )}
           </FooterSection>
+
+          <BillCard
+            className="md:col-span-2 lg:col-span-1"
+            label={totalLabel}
+            total={moneyAlways(grandTotal)}
+            figures={
+              <>
+                {totals.discount > 0 && (
+                  <>
+                    <FigureRow
+                      label={t('sales.itemsTotal')}
+                      value={moneyAlways(totals.gross)}
+                    />
+                    <FigureRow
+                      label={t('sales.discount')}
+                      value={`−${moneyAlways(totals.discount)}`}
+                    />
+                  </>
+                )}
+                <FigureRow
+                  label={taxOn ? t('sales.taxable') : t('sales.net')}
+                  value={moneyAlways(totals.taxable)}
+                />
+                {totals.tax > 0 && (
+                  <FigureRow
+                    label={`${t('sales.tax')} (${taxMode})`}
+                    value={moneyAlways(totals.tax)}
+                  />
+                )}
+              </>
+            }
+            charges={
+              <div className="space-y-1.5" {...shortcutProps('charges')}>
+                <span className="block text-[13px] font-medium text-ink-muted">
+                  {t('sales.additionalLedgers')}
+                </span>
+                <AdditionalLedgerList
+                  carried={additionalLedgers}
+                  setup={chargeSetup}
+                  nonTax={taxMode === 'NT'}
+                  ledgers={ledgers.data ?? []}
+                  onAmount={setChargeAmount}
+                  onRemove={(ledgerId) =>
+                    setAdditionalLedgers((rows) =>
+                      rows.filter((row) => row.ledgerId !== ledgerId),
+                    )
+                  }
+                />
+              </div>
+            }
+          />
         </InvoiceFooter>
       </InvoiceBody>
     </InvoiceWindow>

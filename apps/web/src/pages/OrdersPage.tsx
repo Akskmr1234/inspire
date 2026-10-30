@@ -4,17 +4,10 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
+import { IconBox, IconDocument, IconPlus, IconPrinter } from '@/components/icons';
 import {
-  IconBox,
-  IconCreditCard,
-  IconDocument,
-  IconPlus,
-  IconPrinter,
-  IconReceipt,
-} from '@/components/icons';
-import {
+  BillCard,
   BillFigures,
-  DetailRow,
   FooterSection,
   InvoiceBody,
   InvoiceCard,
@@ -25,7 +18,6 @@ import {
   InvoiceWindow,
   NarrationField,
   RemoveLineButton,
-  TotalBanner,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -1214,9 +1206,10 @@ function OrderEntryDialog({
           </InvoiceLines>
         </InvoiceCard>
 
-        {/* Along the foot: a note about the order, written once the order itself
-            is down, beside what it comes to. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
+        {/* Along the foot: the narration, and the bill picked out - its total, the
+            figures it is built from, and the additional ledgers typed in beside
+            them. */}
+        <InvoiceFooter className="lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
           <FooterSection
             icon={<IconDocument className="size-[18px]" />}
             title={t('invoice.narration')}
@@ -1229,52 +1222,29 @@ function OrderEntryDialog({
             />
           </FooterSection>
 
-          <FooterSection
-            icon={<IconReceipt className="size-[18px]" />}
-            title={t('invoice.bill')}
-          >
-            <BillFigures
-              gross={totals.gross}
-              discount={totals.discount}
-              tax={totals.tax}
-              showTax={taxOn}
-              money={moneyAlways}
-              charges={
-                <ChargesPanel
-                  inline
-                  charges={charges}
-                  ledgers={ledgers.data ?? []}
-                  onChange={setCharges}
-                  setup={chargeSetup}
-                  nonTax={mode === PurchaseTaxMode.nonTax}
-                />
-              }
-            />
-          </FooterSection>
-
-          <FooterSection className="md:col-span-2 lg:col-span-1">
-            <TotalBanner
-              icon={<IconCreditCard className="size-5" />}
-              label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
-              amount={moneyAlways(orderTotal)}
-            />
-            <div className="mt-1.5">
-              <DetailRow label={t('invoice.items')}>{itemCount}</DetailRow>
-              <DetailRow label={t('documents.net')}>
-                {moneyAlways(totals.gross - totals.discount)}
-              </DetailRow>
-              {(taxOn || totals.tax !== 0) && (
-                <DetailRow label={t('documents.tax')}>
-                  {moneyAlways(totals.tax)}
-                </DetailRow>
-              )}
-              {chargesAmount !== 0 && (
-                <DetailRow label={t('documents.chargesShort')}>
-                  {moneyAlways(chargesAmount)}
-                </DetailRow>
-              )}
-            </div>
-          </FooterSection>
+          <BillCard
+            label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
+            total={moneyAlways(orderTotal)}
+            figures={
+              <BillFigures
+                gross={totals.gross}
+                discount={totals.discount}
+                tax={totals.tax}
+                showTax={taxOn}
+                money={moneyAlways}
+              />
+            }
+            charges={
+              <ChargesPanel
+                inline
+                charges={charges}
+                ledgers={ledgers.data ?? []}
+                onChange={setCharges}
+                setup={chargeSetup}
+                nonTax={mode === PurchaseTaxMode.nonTax}
+              />
+            }
+          />
         </InvoiceFooter>
       </InvoiceBody>
     </InvoiceWindow>

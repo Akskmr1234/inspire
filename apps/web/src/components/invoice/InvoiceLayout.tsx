@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { IconChevron, IconClose, IconTrash } from '@/components/icons';
+import { IconChevron, IconClose, IconReceipt, IconTrash } from '@/components/icons';
 import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
 /*
@@ -90,7 +90,7 @@ export function InvoiceHeader({
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
           {icon}
         </span>
-        <div className="min-w-0 flex-1 lg:max-w-[18rem] lg:flex-none">
+        <div className="min-w-0 flex-1 2xl:max-w-[18rem] 2xl:flex-none">
           <h2 className="truncate text-lg font-bold tracking-tight text-ink sm:text-xl">
             {title}
           </h2>
@@ -99,8 +99,8 @@ export function InvoiceHeader({
           )}
         </div>
         {/* In the header rather than a strip of their own, so the lines keep the
-            height. */}
-        {hints && <div className="hidden min-w-0 flex-1 lg:flex">{hints}</div>}
+            height - and only on a screen wide enough to hold them on one line. */}
+        {hints && <div className="hidden min-w-0 flex-1 2xl:flex">{hints}</div>}
         <button
           type="button"
           onClick={onCancel}
@@ -240,9 +240,7 @@ export function InvoiceBody({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex w-full flex-1 flex-col gap-2.5 px-3 py-2.5 sm:px-4">
-      {children}
-    </div>
+    <div className="flex w-full flex-1 flex-col gap-3 px-3 py-3 sm:px-4">{children}</div>
   );
 }
 
@@ -283,7 +281,9 @@ export function InvoiceCard({
           {actions && <div className="ms-auto flex items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className={clsx('p-3', fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col')}>
+      <div
+        className={clsx('p-3 sm:p-4', fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col')}
+      >
         {children}
       </div>
     </section>
@@ -300,7 +300,7 @@ export function InvoiceFields({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
       {children}
     </div>
   );
@@ -328,8 +328,8 @@ export function InvoiceLines({
 }
 
 /**
- * The foot of an invoice, under its lines: the narration, the bill, the payment and
- * the total, side by side on a wide screen so they take the height of the tallest
+ * The foot of an invoice, under its lines: its cards - the narration, the payment,
+ * the bill - side by side on a wide screen, so they take the height of the tallest
  * rather than the sum of them all. `className` sets the columns.
  */
 export function InvoiceFooter({
@@ -340,48 +340,50 @@ export function InvoiceFooter({
   readonly className?: string;
 }): React.JSX.Element {
   return (
-    <section className="shrink-0 rounded-2xl border border-line bg-surface shadow-card">
-      <div
-        className={clsx(
-          'grid gap-4 p-3 md:grid-cols-2 lg:gap-x-0 lg:divide-x lg:divide-line/70',
-          className,
-        )}
-      >
-        {children}
-      </div>
-    </section>
+    <div className={clsx('grid shrink-0 gap-3 md:grid-cols-2', className)}>
+      {children}
+    </div>
   );
 }
 
-/** One part of the foot: the bill, the payment. */
+/** One card of the foot, under a heading - with, at its far end, what it comes to. */
 export function FooterSection({
   icon,
   title,
+  aside,
+  highlight = false,
   children,
   className,
 }: {
   readonly icon?: React.ReactNode;
   readonly title?: string;
+  readonly aside?: React.ReactNode;
+  /** Tinted and bordered in the brand colour: the bill's total. */
+  readonly highlight?: boolean;
   readonly children: React.ReactNode;
-  readonly className?: string;
+  readonly className?: string | undefined;
 }): React.JSX.Element {
   return (
-    <div
+    <section
       className={clsx(
-        'flex min-w-0 flex-col lg:px-4 lg:first:ps-0 lg:last:pe-0',
+        'flex min-w-0 flex-col rounded-2xl border p-4 shadow-card',
+        highlight
+          ? 'border-brand-500/35 bg-brand-50 dark:bg-brand-500/10'
+          : 'border-line bg-surface',
         className,
       )}
     >
       {title && (
-        <div className="mb-1.5 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           {icon && (
             <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
           )}
           <h4 className="text-sm font-semibold text-ink">{title}</h4>
+          {aside && <div className="ms-auto min-w-0">{aside}</div>}
         </div>
       )}
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -403,84 +405,75 @@ export function CompactField({
   );
 }
 
-/** The figure a card is about, picked out: the bill total, the new balance. */
-export function TotalBanner({
-  icon,
+/**
+ * A figure in the shape of a field - the caption over a box - for the payment's
+ * worked-out amounts, so they line up with the boxes typed into beside them.
+ */
+export function ValueField({
   label,
-  amount,
-  size = 'lg',
-  tone = 'brand',
+  value,
+  tone = 'plain',
+  className,
 }: {
-  readonly icon?: React.ReactNode;
   readonly label: string;
-  readonly amount: string;
-  readonly size?: 'md' | 'lg';
-  /** `danger` for a balance left owing. */
-  readonly tone?: 'brand' | 'danger';
+  readonly value: string;
+  /** `due` for money still owed, `good` for change to hand back. */
+  readonly tone?: 'plain' | 'strong' | 'due' | 'good';
+  readonly className?: string;
 }): React.JSX.Element {
   return (
-    <div
-      className={clsx(
-        'flex items-center gap-3 rounded-xl',
-        tone === 'danger' ? 'bg-red-500/10' : 'bg-brand-500/10',
-        size === 'lg' ? 'px-4 py-3' : 'px-3.5 py-2.5',
-      )}
-    >
-      {icon && (
-        <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
-      )}
+    <div className={clsx('flex min-w-0 flex-col gap-1', className)}>
+      <span className="truncate text-xs text-ink-muted">{label}</span>
       <span
         className={clsx(
-          'font-semibold text-ink',
-          size === 'lg' ? 'text-sm sm:text-base' : 'text-sm',
+          'flex min-h-8 items-center justify-end rounded-lg bg-surface-2 px-2.5 text-sm tabular-nums',
+          tone === 'plain' ? 'font-medium text-ink' : 'font-semibold',
+          tone === 'strong' && 'text-ink',
+          tone === 'due' && 'text-red-600 dark:text-red-400',
+          tone === 'good' && 'text-emerald-600 dark:text-emerald-400',
         )}
       >
-        {label}
-      </span>
-      <span
-        className={clsx(
-          'ms-auto font-bold tabular-nums',
-          tone === 'danger'
-            ? 'text-red-600 dark:text-red-400'
-            : 'text-brand-600 dark:text-brand-300',
-          size === 'lg' ? 'text-2xl sm:text-3xl' : 'text-lg',
-        )}
-      >
-        {amount}
+        {value}
       </span>
     </div>
   );
 }
 
-/** One line of figures: a caption, and its value at the far end. */
-export function DetailRow({
+/**
+ * The bill, picked out: its total at the head, then the figures it is built from
+ * beside the additional ledgers typed into it.
+ */
+export function BillCard({
   label,
-  children,
-  strong = false,
+  total,
+  figures,
+  charges,
+  className,
 }: {
-  readonly label: React.ReactNode;
-  readonly children: React.ReactNode;
-  readonly strong?: boolean;
+  readonly label: string;
+  /** Already formatted. */
+  readonly total: string;
+  readonly figures: React.ReactNode;
+  readonly charges: React.ReactNode;
+  readonly className?: string;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-3 py-1 text-sm">
-      <span
-        className={clsx(
-          'min-w-0 truncate',
-          strong ? 'font-semibold text-ink' : 'text-ink-muted',
-        )}
-      >
-        {label}
-      </span>
-      <div
-        className={clsx(
-          'shrink-0 text-end tabular-nums',
-          strong ? 'font-semibold text-ink' : 'font-medium text-ink',
-        )}
-      >
-        {children}
+    <FooterSection
+      highlight
+      icon={<IconReceipt className="size-5" />}
+      title={label}
+      aside={
+        <span className="block truncate text-2xl leading-none font-bold text-brand-600 tabular-nums sm:text-3xl dark:text-brand-300">
+          {total}
+        </span>
+      }
+      className={className}
+    >
+      <div className="grid gap-x-6 gap-y-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="min-w-0">{figures}</div>
+        <div className="min-w-0">{charges}</div>
       </div>
-    </div>
+    </FooterSection>
   );
 }
 
@@ -500,15 +493,6 @@ export function FigureRow({
       <span className="font-medium text-ink tabular-nums">{value}</span>
     </div>
   );
-}
-
-/** A heading inside a card, over a group of rows. */
-export function GroupHeading({
-  children,
-}: {
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  return <h4 className="pt-1 text-sm font-semibold text-ink">{children}</h4>;
 }
 
 /** The longest narration any document takes, as the server holds it. */
@@ -546,17 +530,13 @@ export function NarrationField({
 
 /**
  * A bill's figures in the order it is built: the goods, what came off them, the
- * net the tax is worked on, the tax, then the additional ledgers - typed in place,
- * beside the figures they change - and the total, picked out.
+ * net the tax is worked on, and the tax.
  */
 export function BillFigures({
   gross,
   discount,
   tax,
   showTax,
-  charges,
-  total,
-  totalLabel,
   money,
 }: {
   readonly gross: number;
@@ -564,11 +544,6 @@ export function BillFigures({
   readonly discount: number;
   readonly tax: number;
   readonly showTax: boolean;
-  /** The additional ledgers, as a list to type into. */
-  readonly charges: React.ReactNode;
-  /** Picked out under the figures - left off where the foot shows it beside them. */
-  readonly total?: number;
-  readonly totalLabel?: string;
   readonly money: (value: number) => string;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -584,12 +559,6 @@ export function BillFigures({
       <FigureRow label={t('documents.net')} value={money(gross - discount)} />
       {(showTax || tax !== 0) && (
         <FigureRow label={t('documents.tax')} value={money(tax)} />
-      )}
-      <div className="mt-2">{charges}</div>
-      {total !== undefined && totalLabel !== undefined && (
-        <div className="mt-auto pt-3">
-          <TotalBanner label={totalLabel} amount={money(total)} size="md" />
-        </div>
       )}
     </>
   );
