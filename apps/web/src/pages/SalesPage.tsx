@@ -17,13 +17,14 @@ import {
   IconBox,
   IconCreditCard,
   IconDocument,
+  IconPercent,
   IconPlus,
   IconPrinter,
+  IconUser,
 } from '@/components/icons';
 import {
   BillCard,
   CompactField,
-  FigureRow,
   FooterSection,
   InvoiceBody,
   InvoiceCard,
@@ -33,7 +34,8 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
-  NarrationField,
+  NarrationInput,
+  PartyCard,
   RemoveLineButton,
   ValueField,
 } from '@/components/invoice/InvoiceLayout';
@@ -61,7 +63,7 @@ import {
   type SalesRateType,
 } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
-import { useChargeSetup } from '@/lib/charges';
+import { chargeAmounts, useChargeSetup } from '@/lib/charges';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -1526,14 +1528,13 @@ function EntryDialog({
     editing?.header.status !== SalesInvoiceStatus.posted &&
     ((settings.allowSaveDraft !== false && !directSave) || editing !== undefined);
   const itemCount = lines.filter((line) => line.productId !== '').length;
-  const customerContact = selectedCustomer
-    ? [
-        selectedCustomer.contact.mobileNumber || selectedCustomer.contact.phone,
-        selectedCustomer.contact.addressLine1 || selectedCustomer.contact.addressLine2,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
+  const totalQuantity = lines.reduce(
+    (sum, line) =>
+      line.productId !== '' && Number.isFinite(Number(line.quantity))
+        ? sum + Number(line.quantity)
+        : sum,
+    0,
+  );
 
   return (
     <InvoiceWindow
@@ -1585,7 +1586,6 @@ function EntryDialog({
                 label={t('sales.customer')}
                 required
                 error={errors['customerId']}
-                aside={customerContact}
               >
                 <QuickAdd kind="customer" onCreated={setCustomerId}>
                   <SearchSelect
@@ -1640,18 +1640,6 @@ function EntryDialog({
               onChange={setReference}
               placeholder={nextNumber ?? ''}
             />
-            {taxOn && (
-              <SelectField<'NT' | 'TAX' | 'GST'>
-                label={t('sales.taxMode')}
-                value={taxMode}
-                onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
-                options={[
-                  { value: 'NT', label: 'NT (0%)' },
-                  { value: 'TAX', label: 'TAX (5%)' },
-                  { value: 'GST', label: 'GST (18%)' },
-                ]}
-              />
-            )}
             {godownsOn && (
               <FormField
                 label={t('sales.warehouse')}
@@ -1705,19 +1693,6 @@ function EntryDialog({
                 />
               </QuickAdd>
             </FormField>
-            <SelectField<SalesRateType>
-              label={t('sales.salesRateType')}
-              value={rateType}
-              onChange={(val) => handleRateTypeChange(val as SalesRateType)}
-              options={[
-                { value: 'retail', label: t('prefs.rateRetail') },
-                { value: 'wholesale', label: t('prefs.rateWholesale') },
-                { value: 'mrp', label: t('prefs.rateMrp') },
-                { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
-                { value: 'customerRate', label: t('prefs.rateCustomer') },
-                { value: 'batch', label: t('prefs.rateBatch') },
-              ]}
-            />
 
             {isReturn(kind) && (
               <FormField
@@ -1764,13 +1739,19 @@ function EntryDialog({
                 asField
                 sources={referenceSources}
                 onLoad={loadReference}
-                className={
-                  isReturn(kind)
-                    ? 'sm:col-span-2 lg:col-span-3 xl:col-span-2'
-                    : 'sm:col-span-2 lg:col-span-3'
-                }
+                className="sm:col-span-2 lg:col-span-3 xl:col-span-2"
               />
             )}
+            <NarrationInput
+              value={narration}
+              onChange={setNarration}
+              label={t('invoice.narration')}
+              className={
+                isReturn(kind)
+                  ? 'sm:col-span-2 lg:col-span-3 xl:col-span-2'
+                  : 'sm:col-span-2 lg:col-span-3'
+              }
+            />
           </InvoiceFields>
         </InvoiceCard>
 
@@ -1890,21 +1871,68 @@ function EntryDialog({
           </InvoiceLines>
         </InvoiceCard>
 
-        {/* Along the foot: the narration; the payment, with what it leaves owing on
-            this bill and on the customer's account; and the bill itself, picked
-            out - its total, the figures it is built from, and each additional
-            ledger typed in beside them. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.1fr)_minmax(0,1.45fr)]">
+        {/* Along the foot: who the bill is for; everything that changes what it
+            comes to - the rates, the tax, the additional ledgers - in one card; the
+            payment, with what it leaves owing; and the bill set out line by line. */}
+        <InvoiceFooter className="xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.05fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+          <PartyCard
+            icon={<IconUser className="size-[18px]" />}
+            title={t('invoice.customerDetails')}
+            party={selectedCustomer}
+            empty={t('invoice.noCustomer')}
+            money={moneyAlways}
+          />
+
           <FooterSection
-            icon={<IconDocument className="size-[18px]" />}
-            title={t('invoice.narration')}
+            icon={<IconPercent className="size-[18px]" />}
+            title={t('invoice.ratesAndCharges')}
           >
-            <NarrationField
-              value={narration}
-              onChange={setNarration}
-              label={t('invoice.narration')}
-              placeholder={t('invoice.narration')}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <SelectField<SalesRateType>
+                size="sm"
+                label={t('sales.salesRateType')}
+                value={rateType}
+                onChange={(val) => handleRateTypeChange(val as SalesRateType)}
+                options={[
+                  { value: 'retail', label: t('prefs.rateRetail') },
+                  { value: 'wholesale', label: t('prefs.rateWholesale') },
+                  { value: 'mrp', label: t('prefs.rateMrp') },
+                  { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+                  { value: 'customerRate', label: t('prefs.rateCustomer') },
+                  { value: 'batch', label: t('prefs.rateBatch') },
+                ]}
+              />
+              {taxOn && (
+                <SelectField<'NT' | 'TAX' | 'GST'>
+                  size="sm"
+                  label={t('sales.taxMode')}
+                  value={taxMode}
+                  onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
+                  options={[
+                    { value: 'NT', label: 'NT (0%)' },
+                    { value: 'TAX', label: 'TAX (5%)' },
+                    { value: 'GST', label: 'GST (18%)' },
+                  ]}
+                />
+              )}
+            </div>
+            <div className="mt-3 space-y-1.5" {...shortcutProps('charges')}>
+              <span className="block text-[13px] font-medium text-ink/80">
+                {t('sales.additionalLedgers')}
+              </span>
+              <AdditionalLedgerList
+                carried={additionalLedgers}
+                setup={chargeSetup}
+                nonTax={taxMode === 'NT'}
+                ledgers={ledgers.data ?? []}
+                onAmount={setChargeAmount}
+                onRemove={(ledgerId) =>
+                  setAdditionalLedgers((rows) =>
+                    rows.filter((row) => row.ledgerId !== ledgerId),
+                  )
+                }
+              />
+            </div>
           </FooterSection>
 
           <FooterSection
@@ -2022,54 +2050,26 @@ function EntryDialog({
           </FooterSection>
 
           <BillCard
-            className="md:col-span-2 lg:col-span-1"
+            className="md:col-span-2 xl:col-span-1"
             label={totalLabel}
-            total={moneyAlways(grandTotal)}
-            figures={
-              <>
-                {totals.discount > 0 && (
-                  <>
-                    <FigureRow
-                      label={t('sales.itemsTotal')}
-                      value={moneyAlways(totals.gross)}
-                    />
-                    <FigureRow
-                      label={t('sales.discount')}
-                      value={`−${moneyAlways(totals.discount)}`}
-                    />
-                  </>
-                )}
-                <FigureRow
-                  label={taxOn ? t('sales.taxable') : t('sales.net')}
-                  value={moneyAlways(totals.taxable)}
-                />
-                {totals.tax > 0 && (
-                  <FigureRow
-                    label={`${t('sales.tax')} (${taxMode})`}
-                    value={moneyAlways(totals.tax)}
-                  />
-                )}
-              </>
-            }
-            charges={
-              <div className="space-y-1.5" {...shortcutProps('charges')}>
-                <span className="block text-[13px] font-medium text-ink-muted">
-                  {t('sales.additionalLedgers')}
-                </span>
-                <AdditionalLedgerList
-                  carried={additionalLedgers}
-                  setup={chargeSetup}
-                  nonTax={taxMode === 'NT'}
-                  ledgers={ledgers.data ?? []}
-                  onAmount={setChargeAmount}
-                  onRemove={(ledgerId) =>
-                    setAdditionalLedgers((rows) =>
-                      rows.filter((row) => row.ledgerId !== ledgerId),
-                    )
-                  }
-                />
-              </div>
-            }
+            total={grandTotal}
+            money={moneyAlways}
+            breakdown={{
+              items: itemCount,
+              quantity: totalQuantity,
+              gross: totals.gross,
+              discount: totals.discount,
+              taxable: totals.taxable,
+              tax: totals.tax,
+              showTax: taxOn,
+              taxLabel: `${t('sales.tax')} (${taxMode})`,
+              charges: chargeAmounts(
+                chargeSetup,
+                taxMode === 'NT',
+                additionalLedgers,
+                ledgers.data ?? [],
+              ),
+            }}
           />
         </InvoiceFooter>
       </InvoiceBody>

@@ -11,10 +11,15 @@ import { DateField, Field, SelectField, TextField } from '@/components/Form';
 import { SearchSelect } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
-import { IconBox, IconDocument, IconPlus } from '@/components/icons';
+import {
+  IconBox,
+  IconDocument,
+  IconPercent,
+  IconPlus,
+  IconTruck,
+} from '@/components/icons';
 import {
   BillCard,
-  BillFigures,
   FooterSection,
   InvoiceBody,
   InvoiceCard,
@@ -24,7 +29,8 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
-  NarrationField,
+  NarrationInput,
+  PartyCard,
   RemoveLineButton,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
@@ -53,7 +59,7 @@ import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
-import { useChargeSetup } from '@/lib/charges';
+import { chargeAmounts, useChargeSetup } from '@/lib/charges';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printablePurchase } from '@/lib/printing';
 import {
@@ -930,6 +936,13 @@ function EntryDialog({
   const billTotal = totals.taxable + totals.tax + chargesTotal;
   const totalLabel = isReturn ? t('invoice.returnTotal') : t('invoice.billTotal');
   const itemCount = lines.filter((line) => line.productId !== '').length;
+  const totalQuantity = lines.reduce(
+    (sum, line) =>
+      line.productId !== '' && Number.isFinite(Number(line.quantity))
+        ? sum + Number(line.quantity)
+        : sum,
+    0,
+  );
 
   return (
     <InvoiceWindow
@@ -1005,25 +1018,6 @@ function EntryDialog({
             />
 
             {/*
-              The tax mode: whether this document carries tax at all, and under
-              which scheme. Defaulted by the server from the firm's regime when
-              it is not stated — but a purchase from an unregistered supplier is
-              a real and frequent case.
-            */}
-            {taxOn ? (
-              <SelectField
-                label={t('purchase.taxMode')}
-                value={mode}
-                onChange={setMode}
-                options={[
-                  { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-                  { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-                  { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-                ]}
-              />
-            ) : null}
-
-            {/*
               The document's own number is not asked for: it is issued by the
               branch's numbering series when the draft is saved. The supplier's
               number, which the firm does not issue, is beside it and mandatory
@@ -1078,7 +1072,10 @@ function EntryDialog({
             )}
 
             {isReturn && (
-              <Field label={t('purchase.againstInvoice')} className="sm:col-span-2">
+              <Field
+                label={t('purchase.againstInvoice')}
+                className="sm:col-span-2 xl:col-span-1"
+              >
                 <SearchSelect
                   value={draft.returnsInvoiceId}
                   onChange={(value) => set('returnsInvoiceId', value)}
@@ -1123,6 +1120,12 @@ function EntryDialog({
                 className="sm:col-span-2 lg:col-span-3"
               />
             )}
+            <NarrationInput
+              value={draft.narration}
+              onChange={(value) => set('narration', value)}
+              label={t('invoice.narration')}
+              className="sm:col-span-2 lg:col-span-3"
+            />
           </InvoiceFields>
         </InvoiceCard>
 
@@ -1214,44 +1217,69 @@ function EntryDialog({
           </InvoiceLines>
         </InvoiceCard>
 
-        {/* Along the foot: the narration, and the bill picked out - its total, the
-            figures it is built from, and the additional ledgers typed in beside
-            them. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        {/* Along the foot: who the document is with; everything that changes what
+            it comes to - the tax treatment and the additional ledgers - in one
+            card; and the bill set out line by line. */}
+        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+          <PartyCard
+            icon={<IconTruck className="size-[18px]" />}
+            title={t('invoice.supplierDetails')}
+            party={suppliers.data?.find(
+              (supplier) => supplier.supplierId === draft.supplierId,
+            )}
+            empty={t('invoice.noSupplier')}
+            money={moneyAlways}
+          />
+
           <FooterSection
-            icon={<IconDocument className="size-[18px]" />}
-            title={t('invoice.narration')}
+            icon={<IconPercent className="size-[18px]" />}
+            title={t('invoice.ratesAndCharges')}
           >
-            <NarrationField
-              value={draft.narration}
-              onChange={(value) => set('narration', value)}
-              label={t('invoice.narration')}
-              placeholder={t('invoice.narration')}
+            {taxOn && (
+              <div className="mb-3">
+                <SelectField
+                  size="sm"
+                  label={t('purchase.taxMode')}
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                    { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                    { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                  ]}
+                />
+              </div>
+            )}
+            <ChargesPanel
+              inline
+              charges={charges}
+              ledgers={ledgers.data ?? []}
+              onChange={setCharges}
+              setup={chargeSetup}
+              nonTax={mode === PurchaseTaxMode.nonTax}
             />
           </FooterSection>
 
           <BillCard
+            className="md:col-span-2 lg:col-span-1"
             label={totalLabel}
-            total={moneyAlways(billTotal)}
-            figures={
-              <BillFigures
-                gross={totals.gross}
-                discount={totals.discount}
-                tax={totals.tax}
-                showTax={taxOn}
-                money={moneyAlways}
-              />
-            }
-            charges={
-              <ChargesPanel
-                inline
-                charges={charges}
-                ledgers={ledgers.data ?? []}
-                onChange={setCharges}
-                setup={chargeSetup}
-                nonTax={mode === PurchaseTaxMode.nonTax}
-              />
-            }
+            total={billTotal}
+            money={moneyAlways}
+            breakdown={{
+              items: itemCount,
+              quantity: totalQuantity,
+              gross: totals.gross,
+              discount: totals.discount,
+              taxable: totals.taxable,
+              tax: totals.tax,
+              showTax: taxOn,
+              charges: chargeAmounts(
+                chargeSetup,
+                mode === PurchaseTaxMode.nonTax,
+                charges,
+                ledgers.data ?? [],
+              ),
+            }}
           />
         </InvoiceFooter>
       </InvoiceBody>
