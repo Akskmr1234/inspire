@@ -2803,7 +2803,7 @@ function DocumentDialog({
                 />
               </div>
 
-              <div className="flex flex-wrap items-end justify-between gap-3 pt-4 border-t border-line max-sm:justify-start max-sm:gap-2">
+              <div className="form-actions items-end justify-between gap-3 max-sm:justify-start">
                 <div className="flex items-center gap-2">
                   <ModalButton onClick={() => setActiveTab('print')}>
                     <span className="inline-flex items-center gap-1.5">

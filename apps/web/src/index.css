@@ -666,6 +666,27 @@
     @apply flex items-center justify-end gap-2 border-t border-line pt-4;
   }
 
+  /*
+    Inside a dialog the row of buttons is the bar along its foot, as on an
+    invoice: held in view however far the form scrolls, out to the dialog's edges,
+    on the canvas colour under a hairline.
+  */
+  .modal-body .form-actions {
+    @apply sticky -bottom-4 z-10 -mx-4 -mb-4 flex-wrap border-line/70 bg-canvas px-4 py-3
+           sm:-bottom-5 sm:-mx-5 sm:-mb-5 sm:px-5;
+  }
+
+  /* A window the full size of the screen keeps the bar at the screen's foot, as an
+     invoice does, however little is in it - with room left under the content so
+     the bar never sits on the last field. */
+  .modal-fullscreen .modal-body {
+    @apply pb-24;
+  }
+
+  .modal-fullscreen .modal-body .form-actions {
+    @apply fixed inset-x-0 bottom-0 m-0;
+  }
+
   .divider {
     @apply border-line;
   }
@@ -1066,9 +1087,9 @@
     @apply w-full border-collapse text-sm;
   }
 
+  /* Captions in sentence case, as an invoice's line table has them. */
   .table thead th {
-    @apply bg-surface-3 px-3 py-2.5 text-xs font-semibold tracking-wide
-           text-ink-muted uppercase whitespace-nowrap;
+    @apply bg-surface-2 px-3 py-2.5 text-[13px] font-medium text-ink-muted whitespace-nowrap;
   }
 
   .table tbody td {
@@ -1261,6 +1282,27 @@
    so the screen behind the dialog that asked for it never reaches the printer. */
 .print-root {
   display: none;
+}
+
+/*
+  Inside a dialog, the captions and figures read as an invoice's do: headings in
+  sentence case rather than shouted in capitals, and figures in the text face with
+  even-width digits rather than the typewriter one. A key on a keyboard is still set
+  as a key. Outside any layer, so it wins over the utilities a screen wrote inline.
+*/
+.modal-body .uppercase {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.modal-body :is(h3, h4).uppercase {
+  font-size: 0.875rem;
+  color: var(--color-ink);
+}
+
+.modal-body :is(.font-mono:not(kbd), .cell-numeric, .figure) {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
 @media print {
@@ -1465,7 +1507,7 @@
       /* In the face of the captions, not of the cell: a figure's cell is set in
          the monospaced face, and its caption came out in it too. */
       font-family: var(--font-sans);
-      @apply text-xs font-medium tracking-wide text-ink-muted uppercase;
+      @apply text-xs font-medium text-ink-muted;
     }
 
     /* The cells that caption nothing sit whole, not in two halves. */

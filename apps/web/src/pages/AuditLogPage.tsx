@@ -260,7 +260,7 @@ function EntryDetail({
 
       <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line">
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">
                 {t('auditLog.field')}

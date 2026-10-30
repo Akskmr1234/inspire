@@ -457,7 +457,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
 
       <div className="overflow-x-auto sm:max-h-[60vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
               <th className="px-3 py-2 text-end font-semibold">
@@ -590,7 +590,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
             </p>
             <div className="overflow-x-auto sm:max-h-[50vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line">
               <table className="line-table">
-                <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+                <thead className="bg-surface-2 text-[13px] text-ink-muted">
                   <tr>
                     <th className="px-3 py-2 text-start font-semibold">
                       {t('stock.product')}
@@ -644,7 +644,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
             {changed.length === 0 && (
               <p className="text-sm text-ink-muted">{t('adjustment.noDifferences')}</p>
             )}
-            <div className="flex justify-end gap-2">
+            <div className="form-actions">
               <button
                 type="button"
                 onClick={() => setReviewing(false)}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -946,7 +947,7 @@ function JobCardForm({
         )}
         <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
           <table className="line-table">
-            <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+            <thead className="bg-surface-2 text-[13px] text-ink-muted">
               <tr>
                 <th className="px-3 py-2 text-start font-semibold">
                   {t('service.part')}
@@ -1049,18 +1050,15 @@ function JobCardForm({
                       />
                     </td>
                     <td className="px-2 py-1 text-end">
-                      <button
-                        type="button"
+                      <RemoveLineButton
                         disabled={locked || lines.length === 1}
                         onClick={() =>
                           setLines((current) =>
                             current.filter((candidate) => candidate.key !== line.key),
                           )
                         }
-                        className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-muted disabled:opacity-40"
-                      >
-                        {t('stock.removeLine')}
-                      </button>
+                        label={t('stock.removeLine')}
+                      />
                     </td>
                   </tr>
                 );
@@ -1123,12 +1121,7 @@ function JobCardForm({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        {editable && (
-          <button type="submit" disabled={busy} className="btn-primary">
-            {card ? t('service.save') : t('service.takeIn')}
-          </button>
-        )}
+      <div className="form-actions">
         {card && !billed && !cancelled && can('sales:invoice:create') && (
           <>
             {!card.customerLedgerId && (
@@ -1176,6 +1169,11 @@ function JobCardForm({
         <button type="button" onClick={() => onClose()} className="btn-secondary ms-auto">
           {t('common.close')}
         </button>
+        {editable && (
+          <button type="submit" disabled={busy} className="btn-primary">
+            {card ? t('service.save') : t('service.takeIn')}
+          </button>
+        )}
       </div>
     </form>
   );

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IconBox } from '@/components/icons';
+import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -414,7 +416,8 @@ export function StockOperationsPage({
               ? t('stock.new')
               : t('stock.newOf', { type: t(typeKey(lockedType)).toLowerCase() })
           }
-          size="full"
+          icon={<IconBox className="size-5" />}
+          size="fullscreen"
           onClose={() => setEntering(false)}
         >
           {error && <Alert tone="error">{error}</Alert>}
@@ -869,7 +872,7 @@ export function StockEntry({
       */}
       <div className="overflow-x-auto sm:max-h-[60vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
               <th className="px-3 py-2 text-end font-semibold">{quantityLabel}</th>
@@ -988,18 +991,15 @@ export function StockEntry({
                   />
                 </td>
                 <td className="px-2 py-1 text-end">
-                  <button
-                    type="button"
+                  <RemoveLineButton
                     disabled={lines.length === 1}
                     onClick={() =>
                       setLines((current) =>
                         current.filter((candidate) => candidate.key !== line.key),
                       )
                     }
-                    className="rounded-md border border-line px-2 py-0.5 text-xs font-medium text-ink-muted transition hover:border-line-strong hover:bg-surface-3 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    {t('stock.removeLine')}
-                  </button>
+                    label={t('stock.removeLine')}
+                  />
                 </td>
               </tr>
             ))}
@@ -1007,7 +1007,7 @@ export function StockEntry({
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-line/60">
+      <div className="form-actions">
         <button
           {...shortcutProps('add-line')}
           type="button"
@@ -1028,11 +1028,11 @@ export function StockEntry({
           </label>
         )}
 
-        <button type="submit" disabled={busy} className="btn-primary ms-auto">
-          {t('stock.save')}
-        </button>
-        <button type="button" onClick={onCancel} className="btn-secondary">
+        <button type="button" onClick={onCancel} className="btn-secondary ms-auto">
           {t('products.cancel')}
+        </button>
+        <button type="submit" disabled={busy} className="btn-primary">
+          {t('stock.save')}
         </button>
       </div>
     </form>
@@ -1401,7 +1401,7 @@ function StockDocumentView({
 
       <Panel title={t('stock.lines')} stacks>
         <table className="line-table">
-          <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+          <thead className="bg-surface-2 text-[13px] text-ink-muted">
             <tr>
               <th className="px-3 py-2 text-start font-semibold">#</th>
               <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>

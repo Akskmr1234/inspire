@@ -254,7 +254,7 @@ function LedgerForm({
         <p className="alert-info">
           {t('ledgerMaster.editedElsewhere', { name: existing.name })}
         </p>
-        <div className="flex justify-end">
+        <div className="form-actions">
           <button type="button" className="btn-secondary btn-sm" onClick={onClose}>
             {t('common.close')}
           </button>
@@ -505,7 +505,7 @@ export function GroupEditor({
             className="sm:col-span-2"
           />
         </div>
-        <div className="flex justify-end gap-2 border-t border-line pt-4">
+        <div className="form-actions">
           <button type="button" className="btn-secondary btn-sm" onClick={onClose}>
             {t('common.cancel')}
           </button>

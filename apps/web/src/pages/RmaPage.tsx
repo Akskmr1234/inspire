@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -677,7 +678,7 @@ function RmaForm({
 
         <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
           <table className="line-table">
-            <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+            <thead className="bg-surface-2 text-[13px] text-ink-muted">
               <tr>
                 <th className="px-3 py-2 text-start font-semibold">{t('rma.product')}</th>
                 <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
@@ -750,18 +751,15 @@ function RmaForm({
                       />
                     </td>
                     <td className="px-2 py-1 text-end">
-                      <button
-                        type="button"
+                      <RemoveLineButton
                         disabled={lines.length === 1}
                         onClick={() =>
                           setLines((current) =>
                             current.filter((candidate) => candidate.key !== line.key),
                           )
                         }
-                        className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-muted disabled:opacity-40"
-                      >
-                        {t('stock.removeLine')}
-                      </button>
+                        label={t('stock.removeLine')}
+                      />
                     </td>
                   </tr>
                 );
@@ -790,12 +788,7 @@ function RmaForm({
 
       {error && <Alert tone="error">{error}</Alert>}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        {editable && (
-          <button type="submit" disabled={save.isPending} className="btn-primary">
-            {rma ? t('rma.save') : t('rma.request')}
-          </button>
-        )}
+      <div className="form-actions">
         {rma && can('service:rma:approve') && (
           <>
             <button
@@ -829,6 +822,11 @@ function RmaForm({
         <button type="button" onClick={() => onClose()} className="btn-secondary ms-auto">
           {t('common.close')}
         </button>
+        {editable && (
+          <button type="submit" disabled={save.isPending} className="btn-primary">
+            {rma ? t('rma.save') : t('rma.request')}
+          </button>
+        )}
       </div>
     </form>
   );
@@ -1042,7 +1040,7 @@ function RmaView({
       <Panel title={t('rma.goods')}>
         <div className="overflow-x-auto">
           <table className="line-table">
-            <thead className="bg-surface-3 text-xs tracking-wide text-ink-muted uppercase">
+            <thead className="bg-surface-2 text-[13px] text-ink-muted">
               <tr>
                 <th className="px-3 py-2 text-start font-semibold">{t('rma.product')}</th>
                 <th className="px-3 py-2 text-end font-semibold">
@@ -1169,7 +1167,7 @@ function RmaView({
       {notice && <Alert tone="ok">{notice}</Alert>}
       {error && <Alert tone="error">{error}</Alert>}
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+      <div className="form-actions">
         {status === RmaStatus.approved && can('service:rma:edit') && (
           <button
             type="button"

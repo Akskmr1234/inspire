@@ -16,6 +16,7 @@ import {
   IconDocument,
   IconPercent,
   IconPlus,
+  IconPrinter,
   IconTruck,
 } from '@/components/icons';
 import {
@@ -1785,28 +1786,25 @@ function DocumentDialog({
                     {t('purchase.supplierInvoiceMissing')}
                   </p>
                 )}
-
-              <div className="flex justify-end">
-                <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
-                  {t('purchase.post')}
-                </ModalButton>
-              </div>
             </>
           )}
+        </>
+      )}
 
-          <div className="flex justify-end gap-2">
-            <ModalButton onClick={() => setPrinting(true)}>
-              {t('printing.print')}
-            </ModalButton>
-            {document.header.status !== PurchaseInvoiceStatus.cancelled && (
+      {/* Everything that can be done with the document, along the foot. */}
+      <div className="form-actions items-end">
+        {document && (
+          <ModalButton onClick={() => setPrinting(true)}>
+            <IconPrinter className="size-4" />
+            {t('printing.print')}
+          </ModalButton>
+        )}
+        <div className="ms-auto flex flex-wrap items-end justify-end gap-2">
+          {document && document.header.status !== PurchaseInvoiceStatus.cancelled && (
+            <>
               <ModalButton disabled={busy} onClick={() => onEdit(document)}>
                 {t('purchase.edit')}
               </ModalButton>
-            )}
-          </div>
-
-          {document.header.status !== PurchaseInvoiceStatus.cancelled && (
-            <div className="flex flex-wrap items-end justify-end gap-2">
               <TextField
                 label={t('purchase.cancelReason')}
                 className="max-sm:min-w-0 max-sm:flex-1"
@@ -1820,13 +1818,15 @@ function DocumentDialog({
               >
                 {t('purchase.cancelDocument')}
               </ModalButton>
-            </div>
+            </>
           )}
-        </>
-      )}
-
-      <div className="flex justify-end pt-3 border-t border-line/60">
-        <ModalButton onClick={onClose}>{t('purchase.close')}</ModalButton>
+          <ModalButton onClick={onClose}>{t('purchase.close')}</ModalButton>
+          {document && document.header.status === PurchaseInvoiceStatus.draft && (
+            <ModalButton primary disabled={busy} onClick={() => onPost(id)}>
+              {t('purchase.post')}
+            </ModalButton>
+          )}
+        </div>
       </div>
     </Modal>
   );

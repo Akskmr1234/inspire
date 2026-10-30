@@ -1550,53 +1550,51 @@ function OrderDialog({
             one is finished, and offering a button that the server would refuse is
             how a screen teaches people to distrust it.
           */}
-          {order.status === OrderStatus.draft && (
-            <div className="flex justify-end">
-              <ModalButton primary disabled={busy} onClick={() => onConfirm(id)}>
-                {words('confirm')}
-              </ModalButton>
-            </div>
-          )}
-
-          {order.status === OrderStatus.confirmed && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <ModalButton primary disabled={busy} onClick={() => onConvert(id)}>
-                {kind === 'purchase'
-                  ? t('orders.convertPurchase')
-                  : t('orders.convertSales')}
-              </ModalButton>
-            </div>
-          )}
-
-          {(order.status === OrderStatus.draft ||
-            order.status === OrderStatus.confirmed) && (
-            <div className="flex flex-wrap items-end justify-end gap-2">
-              <TextField
-                label={t('orders.closeReason')}
-                className="max-sm:min-w-0 max-sm:flex-1"
-                size="sm"
-                value={reason}
-                onChange={setReason}
-              />
-              <ModalButton
-                disabled={busy || reason.trim() === ''}
-                onClick={() => onClose_(id, reason.trim())}
-              >
-                {words('close')}
-              </ModalButton>
-            </div>
-          )}
         </>
       )}
 
-      <div className="flex justify-end gap-2 pt-3 border-t border-line/60">
+      {/* Everything that can be done with the order, along the foot. */}
+      <div className="form-actions items-end">
         {order?.sales && (
           <ModalButton onClick={() => setPrinting(true)}>
             <IconPrinter className="size-4" />
             {t('printing.print')}
           </ModalButton>
         )}
-        <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
+        <div className="ms-auto flex flex-wrap items-end justify-end gap-2">
+          {order &&
+            (order.status === OrderStatus.draft ||
+              order.status === OrderStatus.confirmed) && (
+              <>
+                <TextField
+                  label={t('orders.closeReason')}
+                  className="max-sm:min-w-0 max-sm:flex-1"
+                  size="sm"
+                  value={reason}
+                  onChange={setReason}
+                />
+                <ModalButton
+                  disabled={busy || reason.trim() === ''}
+                  onClick={() => onClose_(id, reason.trim())}
+                >
+                  {words('close')}
+                </ModalButton>
+              </>
+            )}
+          <ModalButton onClick={onClose}>{t('common.close')}</ModalButton>
+          {order?.status === OrderStatus.draft && (
+            <ModalButton primary disabled={busy} onClick={() => onConfirm(id)}>
+              {words('confirm')}
+            </ModalButton>
+          )}
+          {order?.status === OrderStatus.confirmed && (
+            <ModalButton primary disabled={busy} onClick={() => onConvert(id)}>
+              {kind === 'purchase'
+                ? t('orders.convertPurchase')
+                : t('orders.convertSales')}
+            </ModalButton>
+          )}
+        </div>
       </div>
     </Modal>
   );
