@@ -1,54 +1,139 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { IconChevron, IconClose, IconReceipt, IconTrash } from '@/components/icons';
+import { IconClose, IconReceipt, IconTrash } from '@/components/icons';
 import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
 /*
   The pieces every invoice is built from - sales and purchase, their returns, orders
-  and quotations - so the screens read alike: a header that names the document and
-  holds its buttons, the party in two lines under it, the items taking whatever
-  height is left, and the money along the foot.
+  and quotations - so the screens read alike: a header that names the document, the
+  party in two lines under it, the items taking whatever height is left, the money
+  under them, and the buttons that save it along the very foot.
 */
+
+/** Asks to close the window: straight away, or after asking when there is work in it. */
+const RequestClose = createContext<() => void>(() => {});
 
 /**
  * The whole window an invoice is entered in.
  *
  * A dialog still - Escape closes it, focus stays inside, the list stays underneath -
- * but with no title bar of its own: the invoice's header is the title bar, so the
- * buttons that finish it sit where the eye starts rather than at the foot of a page
- * that scrolls.
+ * but with no title bar of its own: the invoice's header is the title bar, and the
+ * bar along its foot holds the buttons that finish it.
+ *
+ * With work in it (`dirty`), Escape, the cross and Cancel ask before throwing it
+ * away. A box of figures takes the whole of what is in it when it is entered, so a
+ * quantity of 1 is typed over rather than typed after.
  */
 export function InvoiceWindow({
   title,
   onClose,
+  dirty = false,
   children,
 }: {
   /** What a screen reader announces the window as. */
   readonly title: string;
   readonly onClose: () => void;
+  /** Something has been entered that closing would lose. */
+  readonly dirty?: boolean;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
+  const [confirming, setConfirming] = useState(false);
+  const clicked = useRef<EventTarget | null>(null);
+
+  const requestClose = (): void => {
+    if (dirty) setConfirming(true);
+    else onClose();
+  };
+
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-md dark:bg-black/80" />
         <Dialog.Content
           aria-describedby={undefined}
           className="animate-rise fixed inset-0 z-50 flex flex-col bg-canvas outline-none"
+          onFocusCapture={(event) => {
+            const field = event.target;
+            if (
+              field instanceof HTMLInputElement &&
+              (field.type === 'number' || field.inputMode === 'decimal')
+            ) {
+              field.select();
+              clicked.current = field;
+            }
+          }}
+          // The click that focused the box would otherwise put the caret where it
+          // landed and undo the selection.
+          onMouseUpCapture={(event) => {
+            if (clicked.current === event.target) event.preventDefault();
+            clicked.current = null;
+          }}
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-            {children}
-          </div>
+          <RequestClose.Provider value={requestClose}>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+              {children}
+            </div>
+          </RequestClose.Provider>
+          {confirming && (
+            <DiscardPrompt onKeep={() => setConfirming(false)} onDiscard={onClose} />
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-/** One of the actions under the arrow of the header's main button. */
+/** Whether to throw away an invoice with work in it. Keeping it is the default. */
+function DiscardPrompt({
+  onKeep,
+  onDiscard,
+}: {
+  readonly onKeep: () => void;
+  readonly onDiscard: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  // Escape answers "keep" - caught at the window, ahead of the dialog's own
+  // listener, so it does not ask again.
+  useEffect(() => {
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      onKeep();
+    };
+    window.addEventListener('keydown', escape, true);
+    return () => window.removeEventListener('keydown', escape, true);
+  }, [onKeep]);
+
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="invoice-discard-title"
+        className="animate-rise w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-float"
+      >
+        <h3 id="invoice-discard-title" className="text-base font-semibold text-ink">
+          {t('invoice.discardTitle')}
+        </h3>
+        <p className="mt-1.5 text-sm text-ink-muted">{t('invoice.discardBody')}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onKeep} className="btn-secondary" autoFocus>
+            {t('invoice.keepEditing')}
+          </button>
+          <button type="button" onClick={onDiscard} className="btn-danger">
+            {t('invoice.discard')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A way to finish the invoice: a button in the bar along its foot. */
 export interface InvoiceAction {
   readonly label: string;
   readonly onClick: () => void;
@@ -58,63 +143,39 @@ export interface InvoiceAction {
 }
 
 /**
- * The top of an invoice: what it is, and the buttons that finish it.
- *
- * Held at the top of the window however far the items run. On a phone the subtitle
- * goes and the buttons keep their room.
+ * The top of an invoice: what it is, and the way out of it. The buttons that finish
+ * it are along the foot, under the total they save.
  */
 export function InvoiceHeader({
   icon,
   title,
   subtitle,
-  onCancel,
-  primary,
-  more = [],
-  hints,
 }: {
   readonly icon: React.ReactNode;
   readonly title: string;
   readonly subtitle?: string;
-  readonly onCancel: () => void;
-  readonly primary: InvoiceAction;
-  /** Under the arrow beside the main button: the other ways to save. */
-  readonly more?: readonly InvoiceAction[];
-  /** The keys the screen answers to, between the title and the buttons. */
-  readonly hints?: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const onCancel = useContext(RequestClose);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas/90 backdrop-blur-md">
-      <div className="flex w-full items-center gap-3 px-3 py-2.5 sm:px-4">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
+    <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas">
+      <div className="flex w-full items-center gap-3 px-3 py-2 sm:px-4">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
           {icon}
         </span>
-        <div className="min-w-0 flex-1 2xl:max-w-[18rem] 2xl:flex-none">
-          <h2 className="truncate text-lg font-bold tracking-tight text-ink sm:text-xl">
-            {title}
-          </h2>
+        <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-3">
+          <h2 className="truncate text-lg font-bold tracking-tight text-ink">{title}</h2>
           {subtitle && (
-            <p className="hidden truncate text-xs text-ink-muted sm:block">{subtitle}</p>
+            <p className="hidden truncate text-sm text-ink-muted sm:block">{subtitle}</p>
           )}
         </div>
-        {/* In the header rather than a strip of their own, so the lines keep the
-            height - and only on a screen wide enough to hold them on one line. */}
-        {hints && <div className="hidden min-w-0 flex-1 2xl:flex">{hints}</div>}
         <button
           type="button"
           onClick={onCancel}
-          className="btn-secondary hidden sm:inline-flex"
-        >
-          {t('common.cancel')}
-        </button>
-        <SplitButton primary={primary} more={more} />
-        {/* A phone has no Escape key and no room for Cancel beside the save. */}
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label={t('common.cancel')}
-          className="btn-icon size-9 shrink-0 rounded-full text-ink-muted hover:bg-surface-3 hover:text-ink sm:hidden"
+          aria-label={t('common.close')}
+          title={`${t('common.close')} (Esc)`}
+          className="btn-icon size-9 shrink-0 rounded-full text-ink-muted hover:bg-surface-3 hover:text-ink"
         >
           <IconClose className="size-5" />
         </button>
@@ -124,104 +185,80 @@ export function InvoiceHeader({
 }
 
 /**
- * A main button with its alternatives under an arrow beside it.
+ * The bar along the foot of an invoice, held in view however far it scrolls: the
+ * keys the screen answers to, and the buttons that finish it - every way to save
+ * its own button, its key on it, the main one last and coloured.
  *
- * The alternatives are drawn even while the menu is shut - out of sight and out of
- * reach of Tab, but there - so the keyboard shortcuts that press them (Ctrl+S, a
- * draft) still find them.
+ * On a phone or a tablet, where the bill's card may be a scroll away, the total is
+ * on the bar beside the buttons that save it.
  */
-function SplitButton({
+export function InvoiceActions({
   primary,
-  more,
+  secondary = [],
+  hints,
+  total,
 }: {
   readonly primary: InvoiceAction;
-  readonly more: readonly InvoiceAction[];
+  readonly secondary?: readonly InvoiceAction[];
+  readonly hints?: React.ReactNode;
+  readonly total?: { readonly label: string; readonly amount: string };
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
+  const onCancel = useContext(RequestClose);
 
-  // Shut by a press anywhere else, and by Escape - caught at the window, ahead of
-  // the dialog's own listener, so it shuts the menu rather than the invoice.
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: PointerEvent): void => {
-      if (!box.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const escape = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      setOpen(false);
-    };
-    document.addEventListener('pointerdown', away);
-    window.addEventListener('keydown', escape, true);
-    return () => {
-      document.removeEventListener('pointerdown', away);
-      window.removeEventListener('keydown', escape, true);
-    };
-  }, [open]);
-
-  const visible = more;
+  const button = (action: InvoiceAction, main: boolean): React.JSX.Element => (
+    <button
+      key={action.label}
+      type="button"
+      onClick={action.onClick}
+      disabled={action.disabled}
+      {...(action.shortcut ? shortcutProps(action.shortcut) : {})}
+      title={action.shortcut ? shortcutFor(action.shortcut) : undefined}
+      className={clsx(
+        main ? 'btn-primary' : 'btn-secondary',
+        'flex-1 px-3 sm:flex-none sm:px-4',
+      )}
+    >
+      {action.icon && <span className="hidden sm:inline-flex">{action.icon}</span>}
+      {action.label}
+      {action.shortcut && (
+        <kbd
+          className={clsx(
+            'hidden rounded px-1.5 py-px font-mono text-[10px] font-medium md:inline',
+            main ? 'bg-white/20 text-white' : 'bg-surface-3 text-ink-muted',
+          )}
+        >
+          {shortcutFor(action.shortcut)}
+        </kbd>
+      )}
+    </button>
+  );
 
   return (
-    <div ref={box} className="relative flex">
-      <button
-        type="button"
-        onClick={primary.onClick}
-        disabled={primary.disabled}
-        {...(primary.shortcut ? shortcutProps(primary.shortcut) : {})}
-        title={primary.shortcut ? shortcutFor(primary.shortcut) : undefined}
-        className={clsx('btn-primary', visible.length > 0 && 'rounded-e-none')}
-      >
-        {primary.icon}
-        {primary.label}
-      </button>
-      {visible.length > 0 && (
-        <>
+    <footer className="sticky bottom-0 z-20 border-t border-line/70 bg-canvas shadow-[0_-4px_12px_-8px_rgb(15_23_42/0.15)]">
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap sm:px-4">
+        {total && (
+          <div className="flex min-w-0 basis-full items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0 lg:hidden">
+            <span className="text-xs text-ink-muted">{total.label}</span>
+            <span className="text-lg leading-tight font-bold text-brand-600 tabular-nums dark:text-brand-300">
+              {total.amount}
+            </span>
+          </div>
+        )}
+        {hints && <div className="hidden min-w-0 flex-1 lg:flex">{hints}</div>}
+        <div className="flex w-full items-center gap-2 sm:ms-auto sm:w-auto">
           <button
             type="button"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={t('invoice.moreActions')}
-            onClick={() => setOpen((now) => !now)}
-            className="btn-primary rounded-s-none border-s border-white/25 px-2.5"
+            onClick={onCancel}
+            className="btn-ghost hidden text-ink-muted sm:inline-flex"
           >
-            <IconChevron className="size-4 rotate-90" />
+            {t('common.cancel')}
           </button>
-          <div
-            role="menu"
-            className={clsx(
-              'absolute end-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-line bg-surface p-1.5 shadow-float transition',
-              open ? 'visible opacity-100' : 'pointer-events-none invisible opacity-0',
-            )}
-          >
-            {visible.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                role="menuitem"
-                tabIndex={open ? 0 : -1}
-                disabled={action.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  action.onClick();
-                }}
-                {...(action.shortcut ? shortcutProps(action.shortcut) : {})}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-start text-sm font-medium text-ink hover:bg-surface-3 disabled:opacity-50"
-              >
-                {action.icon}
-                <span className="flex-1">{action.label}</span>
-                {action.shortcut && (
-                  <kbd className="font-mono text-[11px] text-ink-subtle">
-                    {shortcutFor(action.shortcut)}
-                  </kbd>
-                )}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+          {secondary.map((action) => button(action, false))}
+          {button(primary, true)}
+        </div>
+      </div>
+    </footer>
   );
 }
 

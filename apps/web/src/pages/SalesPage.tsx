@@ -29,6 +29,7 @@ import {
   InvoiceCard,
   InvoiceFields,
   InvoiceFooter,
+  InvoiceActions,
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
@@ -1535,9 +1536,13 @@ function EntryDialog({
     : '';
 
   return (
-    <InvoiceWindow title={documentTitle} onClose={onClose}>
+    <InvoiceWindow
+      title={documentTitle}
+      onClose={onClose}
+      dirty={!editing && (itemCount > 0 || narration.trim() !== '')}
+    >
       <InvoiceHeader
-        icon={<IconDocument className="size-6" />}
+        icon={<IconDocument className="size-5" />}
         title={documentTitle}
         subtitle={
           editing
@@ -1545,45 +1550,6 @@ function EntryDialog({
             : isReturn(kind)
               ? t('invoice.newSalesReturn')
               : t('invoice.newSales')
-        }
-        onCancel={onClose}
-        primary={{
-          label: busy ? t('common.saving') : t('sales.saveAndPrint'),
-          icon: <IconPrinter className="size-4" />,
-          onClick: () => void save(true, true),
-          shortcut: 'print',
-          disabled: busy,
-        }}
-        more={[
-          {
-            label: t('sales.save'),
-            onClick: () => void save(true),
-            shortcut: 'save',
-            disabled: busy,
-          },
-          ...(draftAllowed
-            ? [
-                {
-                  label: t('sales.saveDraft'),
-                  onClick: () => void save(false),
-                  shortcut: 'draft' as const,
-                  disabled: busy,
-                },
-              ]
-            : []),
-        ]}
-        hints={
-          <ShortcutHints
-            actions={[
-              'customer',
-              'scan',
-              'add-line',
-              'charges',
-              'payment',
-              'save',
-              'print',
-            ]}
-          />
         }
       />
 
@@ -2107,6 +2073,40 @@ function EntryDialog({
           />
         </InvoiceFooter>
       </InvoiceBody>
+
+      <InvoiceActions
+        hints={
+          <ShortcutHints
+            actions={['customer', 'scan', 'add-line', 'charges', 'payment']}
+          />
+        }
+        total={{ label: totalLabel, amount: moneyAlways(grandTotal) }}
+        secondary={[
+          ...(draftAllowed
+            ? [
+                {
+                  label: t('sales.saveDraft'),
+                  onClick: () => void save(false),
+                  shortcut: 'draft' as const,
+                  disabled: busy,
+                },
+              ]
+            : []),
+          {
+            label: t('sales.save'),
+            onClick: () => void save(true),
+            shortcut: 'save',
+            disabled: busy,
+          },
+        ]}
+        primary={{
+          label: busy ? t('common.saving') : t('sales.saveAndPrint'),
+          icon: <IconPrinter className="size-4" />,
+          onClick: () => void save(true, true),
+          shortcut: 'print',
+          disabled: busy,
+        }}
+      />
     </InvoiceWindow>
   );
 }

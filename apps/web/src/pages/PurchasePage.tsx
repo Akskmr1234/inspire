@@ -20,6 +20,7 @@ import {
   InvoiceCard,
   InvoiceFields,
   InvoiceFooter,
+  InvoiceActions,
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
@@ -931,9 +932,13 @@ function EntryDialog({
   const itemCount = lines.filter((line) => line.productId !== '').length;
 
   return (
-    <InvoiceWindow title={documentTitle} onClose={onClose}>
+    <InvoiceWindow
+      title={documentTitle}
+      onClose={onClose}
+      dirty={!editing && (itemCount > 0 || draft.narration.trim() !== '')}
+    >
       <InvoiceHeader
-        icon={<IconDocument className="size-6" />}
+        icon={<IconDocument className="size-5" />}
         title={documentTitle}
         subtitle={
           editing
@@ -942,35 +947,6 @@ function EntryDialog({
               ? t('invoice.newPurchaseReturn')
               : t('invoice.newPurchase')
         }
-        onCancel={onClose}
-        primary={
-          editing
-            ? {
-                label: busy ? t('common.saving') : t('common.save'),
-                onClick: () => void save(),
-                shortcut: 'save',
-                disabled: busy,
-              }
-            : {
-                label: busy ? t('common.saving') : t('purchase.saveAndPost'),
-                onClick: () => void save(true),
-                shortcut: 'save',
-                disabled: busy,
-              }
-        }
-        more={
-          !editing && allowDrafts
-            ? [
-                {
-                  label: t('purchase.saveDraft'),
-                  onClick: () => void save(),
-                  shortcut: 'draft',
-                  disabled: busy,
-                },
-              ]
-            : []
-        }
-        hints={<ShortcutHints actions={['scan', 'add-line', 'charges', 'save']} />}
       />
 
       <InvoiceBody>
@@ -1279,6 +1255,38 @@ function EntryDialog({
           />
         </InvoiceFooter>
       </InvoiceBody>
+
+      <InvoiceActions
+        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        total={{ label: totalLabel, amount: moneyAlways(billTotal) }}
+        secondary={
+          !editing && allowDrafts
+            ? [
+                {
+                  label: t('purchase.saveDraft'),
+                  onClick: () => void save(),
+                  shortcut: 'draft',
+                  disabled: busy,
+                },
+              ]
+            : []
+        }
+        primary={
+          editing
+            ? {
+                label: busy ? t('common.saving') : t('common.save'),
+                onClick: () => void save(),
+                shortcut: 'save',
+                disabled: busy,
+              }
+            : {
+                label: busy ? t('common.saving') : t('purchase.saveAndPost'),
+                onClick: () => void save(true),
+                shortcut: 'save',
+                disabled: busy,
+              }
+        }
+      />
     </InvoiceWindow>
   );
 }

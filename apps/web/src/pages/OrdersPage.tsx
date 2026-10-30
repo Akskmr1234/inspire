@@ -13,6 +13,7 @@ import {
   InvoiceCard,
   InvoiceFields,
   InvoiceFooter,
+  InvoiceActions,
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
@@ -869,9 +870,13 @@ function OrderEntryDialog({
   const itemCount = lines.filter((line) => line.productId !== '').length;
 
   return (
-    <InvoiceWindow title={documentTitle} onClose={onClose}>
+    <InvoiceWindow
+      title={documentTitle}
+      onClose={onClose}
+      dirty={itemCount > 0 || draft.narration.trim() !== ''}
+    >
       <InvoiceHeader
-        icon={<IconDocument className="size-6" />}
+        icon={<IconDocument className="size-5" />}
         title={documentTitle}
         subtitle={
           kind === 'purchase'
@@ -880,18 +885,6 @@ function OrderEntryDialog({
               ? t('invoice.newQuotation')
               : t('invoice.newSalesOrder')
         }
-        onCancel={onClose}
-        primary={{
-          label: busy
-            ? t('common.saving')
-            : directSave
-              ? t('common.save')
-              : t('orders.saveDraft'),
-          onClick: () => void save(),
-          shortcut: 'save',
-          disabled: busy,
-        }}
-        hints={<ShortcutHints actions={['scan', 'add-line', 'charges', 'save']} />}
       />
 
       <InvoiceBody>
@@ -1247,6 +1240,24 @@ function OrderEntryDialog({
           />
         </InvoiceFooter>
       </InvoiceBody>
+
+      <InvoiceActions
+        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        total={{
+          label: quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal'),
+          amount: moneyAlways(orderTotal),
+        }}
+        primary={{
+          label: busy
+            ? t('common.saving')
+            : directSave
+              ? t('common.save')
+              : t('orders.saveDraft'),
+          onClick: () => void save(),
+          shortcut: 'save',
+          disabled: busy,
+        }}
+      />
     </InvoiceWindow>
   );
 }
