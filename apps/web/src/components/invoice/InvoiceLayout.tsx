@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { Field } from '@/components/Form';
 import { IconClose, IconReceipt, IconTrash } from '@/components/icons';
 import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
@@ -236,7 +237,7 @@ export function InvoiceActions({
 
   return (
     <footer className="sticky bottom-0 z-20 border-t border-line/70 bg-canvas shadow-[0_-4px_12px_-8px_rgb(15_23_42/0.15)]">
-      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:flex-nowrap sm:px-4">
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:flex-nowrap sm:px-4">
         {total && (
           <div className="flex min-w-0 basis-full items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0 lg:hidden">
             <span className="text-xs text-ink-muted">{total.label}</span>
@@ -277,7 +278,9 @@ export function InvoiceBody({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex w-full flex-1 flex-col gap-3 px-3 py-3 sm:px-4">{children}</div>
+    <div className="flex w-full flex-1 flex-col gap-2.5 px-3 py-2.5 sm:px-4">
+      {children}
+    </div>
   );
 }
 
@@ -311,7 +314,7 @@ export function InvoiceCard({
       )}
     >
       {title && (
-        <div className="flex items-center gap-2.5 border-b border-line/70 px-3 py-2 sm:px-4">
+        <div className="flex items-center gap-2.5 border-b border-line/70 px-3 py-1.5 sm:px-4">
           <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
           <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
           {meta && <span className="text-xs text-ink-muted">{meta}</span>}
@@ -319,7 +322,10 @@ export function InvoiceCard({
         </div>
       )}
       <div
-        className={clsx('p-3 sm:p-4', fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col')}
+        className={clsx(
+          'p-3 sm:p-3.5',
+          fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col',
+        )}
       >
         {children}
       </div>
@@ -356,7 +362,7 @@ export function InvoiceLines({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="relative lg:min-h-44 lg:flex-1">
+    <div className="relative lg:min-h-40 lg:flex-1">
       <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0 lg:absolute lg:inset-0 lg:overflow-auto">
         {children}
       </div>
@@ -403,7 +409,7 @@ export function FooterSection({
   return (
     <section
       className={clsx(
-        'flex min-w-0 flex-col rounded-2xl border p-4 shadow-card',
+        'flex min-w-0 flex-col rounded-2xl border p-3.5 shadow-card',
         highlight
           ? 'border-brand-500/35 bg-brand-50 dark:bg-brand-500/10'
           : 'border-line bg-surface',
@@ -411,7 +417,7 @@ export function FooterSection({
       )}
     >
       {title && (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-2 flex items-center gap-2">
           {icon && (
             <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
           )}
@@ -476,24 +482,49 @@ export function ValueField({
   );
 }
 
+/** What a bill is built from, for its card to set out line by line. */
+export interface BillBreakdown {
+  /** Lines with a product on them. */
+  readonly items: number;
+  readonly quantity: number;
+  /** The goods at their rates, before any discount. */
+  readonly gross: number;
+  /** What came off the lines. Positive: it is shown as a deduction. */
+  readonly discount: number;
+  /** What the tax is worked on: the lines less their discounts. */
+  readonly taxable: number;
+  readonly tax: number;
+  readonly showTax: boolean;
+  /** The tax line's caption where it says more than "Tax": "Tax (GST)". */
+  readonly taxLabel?: string;
+  /** Each additional ledger with an amount, signed the way it moves the total. */
+  readonly charges: readonly { readonly label: string; readonly amount: number }[];
+}
+
 /**
- * The bill, picked out: its total at the head, then the figures it is built from
- * beside the additional ledgers typed into it.
+ * The bill, picked out: its total at the head, then how it comes to that - the
+ * items and their quantity, the goods, what came off them, the tax, and each
+ * additional ledger with what it adds or takes off.
  */
 export function BillCard({
   label,
   total,
-  figures,
-  charges,
+  breakdown,
+  money,
   className,
 }: {
   readonly label: string;
-  /** Already formatted. */
-  readonly total: string;
-  readonly figures: React.ReactNode;
-  readonly charges: React.ReactNode;
+  readonly total: number;
+  readonly breakdown: BillBreakdown;
+  readonly money: (value: number) => string;
   readonly className?: string;
 }): React.JSX.Element {
+  const { t } = useTranslation();
+  const { items, quantity, gross, discount, taxable, tax, showTax, taxLabel, charges } =
+    breakdown;
+  const signed = (value: number): string =>
+    `${value < 0 ? '−' : '+'}${money(Math.abs(value))}`;
+
   return (
     <FooterSection
       highlight
@@ -501,21 +532,146 @@ export function BillCard({
       title={label}
       aside={
         <span className="block truncate text-2xl leading-none font-bold text-brand-600 tabular-nums sm:text-3xl dark:text-brand-300">
-          {total}
+          {money(total)}
         </span>
       }
       className={className}
     >
-      <div className="grid gap-x-6 gap-y-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="min-w-0">{figures}</div>
-        <div className="min-w-0">{charges}</div>
+      <div className="divide-y divide-brand-500/15">
+        <div className="pb-1">
+          <FigureRow
+            label={t('invoice.items')}
+            value={t('invoice.itemsQty', {
+              count: items,
+              qty: Number(quantity.toFixed(3)).toString(),
+            })}
+          />
+          <FigureRow label={t('invoice.itemsTotal')} value={money(gross)} />
+          {discount !== 0 && (
+            <FigureRow
+              label={t('documents.discount')}
+              value={`−${money(Math.abs(discount))}`}
+            />
+          )}
+          {showTax && <FigureRow label={t('documents.taxable')} value={money(taxable)} />}
+          {(showTax || tax !== 0) && (
+            <FigureRow label={taxLabel ?? t('documents.tax')} value={money(tax)} />
+          )}
+        </div>
+        {charges.length > 0 && (
+          <div className="pt-1">
+            {charges.map((charge) => (
+              <FigureRow
+                key={charge.label}
+                label={
+                  <span className="block truncate" title={charge.label}>
+                    {charge.label}
+                  </span>
+                }
+                value={signed(charge.amount)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </FooterSection>
   );
 }
 
+/** The fields a party's card can show: a customer's or a supplier's. */
+export interface PartyDetails {
+  readonly code: string;
+  readonly name: string;
+  readonly contact: {
+    readonly mobileNumber: string | null;
+    readonly phone: string | null;
+    readonly addressLine1: string | null;
+    readonly addressLine2: string | null;
+  };
+  readonly terms: {
+    readonly creditLimit: number | null;
+    readonly creditDays: number | null;
+  };
+  readonly taxDetails: { readonly registrationNumber: string | null };
+}
+
+/**
+ * Who the document is for, at a glance: the party's name and code, how to reach
+ * them, their tax registration, and the credit they are allowed.
+ */
+export function PartyCard({
+  icon,
+  title,
+  party,
+  empty,
+  money,
+  className,
+}: {
+  readonly icon: React.ReactNode;
+  readonly title: string;
+  readonly party: PartyDetails | undefined;
+  /** Said when nobody is chosen yet. */
+  readonly empty: string;
+  readonly money: (value: number) => string;
+  readonly className?: string;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  const rows: readonly (readonly [string, string])[] = party
+    ? [
+        [
+          t('customers.mobile'),
+          [party.contact.mobileNumber, party.contact.phone].filter(Boolean).join(' · '),
+        ],
+        [
+          t('customers.address'),
+          [party.contact.addressLine1, party.contact.addressLine2]
+            .filter(Boolean)
+            .join(', '),
+        ],
+        [t('customers.registrationNumber'), party.taxDetails.registrationNumber ?? ''],
+        [
+          t('customers.creditLimit'),
+          party.terms.creditLimit == null
+            ? ''
+            : party.terms.creditDays
+              ? t('invoice.creditTerms', {
+                  limit: money(party.terms.creditLimit),
+                  days: party.terms.creditDays,
+                })
+              : money(party.terms.creditLimit),
+        ],
+      ]
+    : [];
+
+  return (
+    <FooterSection icon={icon} title={title} className={className}>
+      {party ? (
+        <>
+          <p className="truncate text-sm font-semibold text-ink" title={party.name}>
+            {party.name}
+          </p>
+          <p className="text-xs text-ink-muted">{party.code}</p>
+          <dl className="mt-2 space-y-1 text-sm">
+            {rows.map(([label, value]) => (
+              <div key={label} className="flex gap-3">
+                <dt className="w-32 shrink-0 truncate text-ink-muted">{label}</dt>
+                <dd className="min-w-0 truncate text-ink" title={value || undefined}>
+                  {value || '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      ) : (
+        <p className="text-sm text-ink-muted">{empty}</p>
+      )}
+    </FooterSection>
+  );
+}
+
 /** A line of figures where the value is right-aligned: the bill's breakdown. */
-export function FigureRow({
+function FigureRow({
   label,
   value,
   muted = true,
@@ -535,69 +691,39 @@ export function FigureRow({
 /** The longest narration any document takes, as the server holds it. */
 export const NARRATION_LIMIT = 500;
 
-/** The narration box, with what is left of it counted underneath. */
-export function NarrationField({
+/**
+ * The narration, as one line among the party's fields - with how much of it is
+ * used beside the caption once something is typed.
+ */
+export function NarrationInput({
   value,
   onChange,
-  placeholder,
   label,
+  className,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
-  readonly placeholder: string;
   readonly label: string;
+  readonly className?: string;
 }): React.JSX.Element {
+  const id = useId();
+
   return (
-    <div className="relative flex flex-1 flex-col">
-      <textarea
-        rows={3}
+    <Field
+      label={label}
+      htmlFor={id}
+      className={className}
+      aside={value.length > 0 ? `${value.length}/${NARRATION_LIMIT}` : undefined}
+    >
+      <input
+        id={id}
         value={value}
         maxLength={NARRATION_LIMIT}
-        aria-label={label}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="field-input min-h-20 flex-1 resize-none pb-6"
+        placeholder={label}
+        className="field-input"
       />
-      <span className="pointer-events-none absolute end-3 bottom-2 text-[11px] text-ink-subtle tabular-nums">
-        {value.length}/{NARRATION_LIMIT}
-      </span>
-    </div>
-  );
-}
-
-/**
- * A bill's figures in the order it is built: the goods, what came off them, the
- * net the tax is worked on, and the tax.
- */
-export function BillFigures({
-  gross,
-  discount,
-  tax,
-  showTax,
-  money,
-}: {
-  readonly gross: number;
-  /** What came off the lines. Positive: it is shown as a deduction. */
-  readonly discount: number;
-  readonly tax: number;
-  readonly showTax: boolean;
-  readonly money: (value: number) => string;
-}): React.JSX.Element {
-  const { t } = useTranslation();
-
-  return (
-    <>
-      {discount !== 0 && (
-        <>
-          <FigureRow label={t('documents.gross')} value={money(gross)} />
-          <FigureRow label={t('documents.discount')} value={money(-Math.abs(discount))} />
-        </>
-      )}
-      <FigureRow label={t('documents.net')} value={money(gross - discount)} />
-      {(showTax || tax !== 0) && (
-        <FigureRow label={t('documents.tax')} value={money(tax)} />
-      )}
-    </>
+    </Field>
   );
 }
 

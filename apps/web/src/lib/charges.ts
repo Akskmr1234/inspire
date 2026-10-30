@@ -237,6 +237,27 @@ export function chargeRows(
   return rows;
 }
 
+/**
+ * The additional ledgers a document carries an amount on, for its bill to set out:
+ * each under its name, signed the way it moves the total.
+ */
+export function chargeAmounts(
+  setup: readonly ChargeSetup[] | undefined,
+  nonTax: boolean,
+  carried: readonly { readonly ledgerId: string; readonly amount: string }[],
+  ledgers: readonly LedgerSummary[],
+): readonly { readonly label: string; readonly amount: number }[] {
+  return chargeRows(setup, nonTax, carried, ledgers).flatMap((row) => {
+    const amount = Number(
+      carried.find((charge) => charge.ledgerId === row.ledgerId)?.amount ?? '',
+    );
+
+    return Number.isFinite(amount) && amount > 0
+      ? [{ label: row.label, amount: row.adds ? amount : -amount }]
+      : [];
+  });
+}
+
 /** The ledgers set up for a document that are not on it yet, for picking by hand. */
 export function offeredCharges(
   setup: readonly ChargeSetup[] | undefined,
