@@ -15,11 +15,11 @@ import {
   IconBox,
   IconDocument,
   IconPercent,
-  IconPlus,
   IconPrinter,
   IconTruck,
 } from '@/components/icons';
 import {
+  AddLineButton,
   BillCard,
   FooterSection,
   formatQuantity,
@@ -31,10 +31,14 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LineNumberCell,
+  LineNumberHeader,
+  LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
+  useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import {
@@ -709,6 +713,16 @@ function EntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  // A line just added, or just scanned onto, is scrolled to and picked out; Add item
+  // leaves the cursor in the new line's product.
+  const lineAttention = useLineAttention();
+
+  /** A new, empty line at the foot, with the cursor in its product. */
+  const addLine = (): void => {
+    setLines((previous) => [...previous, emptyLine(defaultTaxRate)]);
+    lineAttention.attend('last', { focus: true });
+  };
+
   const { errors, submit } = useValidation<HeaderDraft>((values) =>
     collect({
       date: required(values.date, t('purchase.dateRequired')),
@@ -998,7 +1012,7 @@ function EntryDialog({
               the lines without typing them - a new purchase from its order, a new
               return from the purchase it sends goods back against, or a scan. */}
           <InvoiceFields>
-            <div className="min-w-0 sm:col-span-2">
+            <div className="col-span-2 min-w-0" data-party-field>
               <Field label={t('purchase.supplier')} required error={errors['supplierId']}>
                 <QuickAdd kind="supplier" onCreated={(id) => set('supplierId', id)}>
                   <SearchSelect
@@ -1084,7 +1098,7 @@ function EntryDialog({
             {isReturn && (
               <Field
                 label={t('purchase.againstInvoice')}
-                className="sm:col-span-2 xl:col-span-1"
+                className="col-span-2 xl:col-span-1"
               >
                 <SearchSelect
                   value={draft.returnsInvoiceId}
@@ -1107,7 +1121,7 @@ function EntryDialog({
                 asField
                 sources={referenceSources}
                 onLoad={loadReference}
-                className="sm:col-span-2 lg:col-span-3"
+                className="col-span-2 lg:col-span-3"
               />
             )}
             <NarrationInput
@@ -1116,11 +1130,11 @@ function EntryDialog({
               label={t('invoice.narration')}
               className={
                 editing
-                  ? 'sm:col-span-2 lg:col-span-3 xl:col-span-6'
-                  : 'sm:col-span-2 lg:col-span-3'
+                  ? 'col-span-2 lg:col-span-3 xl:col-span-6'
+                  : 'col-span-2 lg:col-span-3'
               }
             />
-            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
               <BarcodeScan
                 asField
                 products={products.data ?? []}
@@ -1136,6 +1150,9 @@ function EntryDialog({
                       : {}),
                   }));
                   setLines(next.lines);
+                  lineAttention.attend(
+                    next.lines.findIndex((line) => line.productId === product.id),
+                  );
                   return next.quantity;
                 }}
               />
@@ -1148,7 +1165,12 @@ function EntryDialog({
           icon={<IconBox className="size-5" />}
           title={t('invoice.items')}
           meta={t('invoice.itemCount', { count: itemCount })}
-          actions={columns.picker}
+          actions={
+            <>
+              <AddLineButton onClick={addLine} />
+              {columns.picker}
+            </>
+          }
         >
           {errors['lines'] && (
             <p className="field-message-error mb-2">{errors['lines']}</p>
@@ -1158,7 +1180,8 @@ function EntryDialog({
             <table className="line-table sm:min-w-[40rem] lg:min-w-[44rem]">
               <thead className="sticky top-0 z-10 bg-surface-2 text-[13px] text-ink-muted">
                 <tr>
-                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                  <LineNumberHeader />
+                  <th className="px-3 py-2.5 text-start font-medium">
                     {t('purchase.product')}
                   </th>
                   <ProductDetailHeaders shows={columns.shows} labels={t} />
@@ -1195,10 +1218,11 @@ function EntryDialog({
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody ref={lineAttention.bodyRef}>
                 {lines.map((line, index) => (
                   <LineRow
                     key={line.key}
+                    number={index + 1}
                     line={line}
                     isReturn={isReturn}
                     warehouseId={draft.warehouseId}
@@ -1217,7 +1241,7 @@ function EntryDialog({
               </tbody>
               <LinesTotalRow
                 label={t('invoice.linesTotal')}
-                span={1 + shownProductDetails(columns.shows)}
+                span={2 + shownProductDetails(columns.shows)}
                 cells={[
                   {
                     key: 'quantity',
@@ -1267,17 +1291,7 @@ function EntryDialog({
               />
             </table>
 
-            <button
-              {...shortcutProps('add-line')}
-              type="button"
-              onClick={() =>
-                setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
-              }
-              className="btn-secondary mt-3 mb-1"
-            >
-              <IconPlus className="size-4" />
-              {t('invoice.addItem')}
-            </button>
+            {itemCount === 0 && <LinesEmptyHint />}
           </InvoiceLines>
         </InvoiceCard>
 
@@ -1292,6 +1306,7 @@ function EntryDialog({
               (supplier) => supplier.supplierId === draft.supplierId,
             )}
             empty={t('invoice.noSupplier')}
+            choose={t('invoice.chooseSupplier')}
             money={moneyAlways}
           />
 
@@ -1392,6 +1407,7 @@ function EntryDialog({
  * the batch it names has to be one that already exists.
  */
 function LineRow({
+  number,
   line,
   isReturn,
   warehouseId,
@@ -1404,6 +1420,8 @@ function LineRow({
   onChange,
   onRemove,
 }: {
+  /** Its place on the document, from 1. */
+  readonly number: number;
   readonly line: DraftLine;
   readonly isReturn: boolean;
   /** Where the goods go to or come from, for the units a return can send back. */
@@ -1433,13 +1451,13 @@ function LineRow({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   /*
-    How far the batch and serial sub-row reaches: product, quantity, rate, net and
-    the action column, plus whichever optional columns are on. Counted rather than
+    How far the batch and serial sub-row reaches: the number, product, quantity, rate,
+    net and the action column, plus whichever optional columns are on. Counted rather than
     fixed because the row above it is counted too, and a sub-row that stops short
     leaves a gap in the middle of a line somebody is filling in.
   */
   const span =
-    4 +
+    5 +
     [
       'productCode',
       'productUnit',
@@ -1453,7 +1471,8 @@ function LineRow({
 
   return (
     <>
-      <tr className="border-t border-line">
+      <tr data-line-row className="border-t border-line">
+        <LineNumberCell number={number} />
         <td data-label={t('purchase.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           {/*
             The picker shows what each product is and what is on the shelf, and it

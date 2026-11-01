@@ -18,11 +18,11 @@ import {
   IconCreditCard,
   IconDocument,
   IconPercent,
-  IconPlus,
   IconPrinter,
   IconUser,
 } from '@/components/icons';
 import {
+  AddLineButton,
   BillCard,
   CompactField,
   FooterSection,
@@ -35,10 +35,14 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LineNumberCell,
+  LineNumberHeader,
+  LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
+  useLineAttention,
   ValueField,
 } from '@/components/invoice/InvoiceLayout';
 import { ScanField } from '@/components/BarcodeScan';
@@ -756,18 +760,9 @@ function EntryDialog({
   // Why the last save was refused, shown in the window the user is still in.
   const [failure, setFailure] = useState<string | null>(null);
 
-  // Alt+A, or the Add line button, leaves the cursor in the new line's product.
-  const linesBody = useRef<HTMLTableSectionElement>(null);
-  const focusNewLine = useRef(false);
-  useEffect(() => {
-    if (!focusNewLine.current) return;
-    focusNewLine.current = false;
-
-    const rows = linesBody.current?.querySelectorAll('[data-line-row]');
-    rows?.[rows.length - 1]
-      ?.querySelector<HTMLInputElement>('[role="combobox"]')
-      ?.focus();
-  }, [lines.length]);
+  // A line just added, or just scanned onto, is scrolled to and picked out; Alt+A, or
+  // Add item, leaves the cursor in the new line's product.
+  const lineAttention = useLineAttention();
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
     queryKey: ['customers', 'picker'],
@@ -1198,6 +1193,18 @@ function EntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  /** A new, empty line at the foot, with the cursor in its product. */
+  const addLine = (): void => {
+    setLines((previous) => [
+      ...previous,
+      {
+        ...emptyLine,
+        taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
+      },
+    ]);
+    lineAttention.attend('last', { focus: true });
+  };
+
   const serialsOn = settings.enableSerialNumbers;
 
   /** Adds one unit of a product to the invoice, with its serial number if it has one. */
@@ -1222,6 +1229,7 @@ function EntryDialog({
       const nextQty = serial && serialNumbers.length <= counted ? counted : counted + 1;
 
       change(existingIndex, { quantity: String(nextQty), serialNumbers });
+      lineAttention.attend(existingIndex);
       setBarcodeNotice(`${found.code}${serial ? ` · ${serial}` : ''} (Qty: ${nextQty})`);
     } else {
       const emptyIndex = lines.findIndex((l) => !l.productId);
@@ -1239,8 +1247,10 @@ function EntryDialog({
       };
       if (emptyIndex >= 0) {
         setLines((prev) => prev.map((l, idx) => (idx === emptyIndex ? newLine : l)));
+        lineAttention.attend(emptyIndex);
       } else {
         setLines((prev) => [...prev, newLine]);
+        lineAttention.attend('last');
       }
       setBarcodeNotice(
         `${t('sales.scanProductSuccess')}: ${found.code}${serial ? ` · ${serial}` : ''}`,
@@ -1585,7 +1595,11 @@ function EntryDialog({
               lines without typing them - scan the goods, or bring them in from a
               quotation or an order (for a return, from the invoice). */}
           <InvoiceFields>
-            <div className="min-w-0 sm:col-span-2" {...shortcutProps('customer')}>
+            <div
+              className="col-span-2 min-w-0"
+              data-party-field
+              {...shortcutProps('customer')}
+            >
               <FormField
                 label={t('sales.customer')}
                 required
@@ -1701,7 +1715,7 @@ function EntryDialog({
             {isReturn(kind) && (
               <FormField
                 label={t('sales.againstInvoice')}
-                className="sm:col-span-2 md:col-span-1"
+                className="col-span-2 md:col-span-1"
               >
                 <SearchSelect
                   value={returnsInvoiceId}
@@ -1724,7 +1738,7 @@ function EntryDialog({
                 asField
                 sources={referenceSources}
                 onLoad={loadReference}
-                className="sm:col-span-2 lg:col-span-3 xl:col-span-2"
+                className="col-span-2 lg:col-span-3 xl:col-span-2"
               />
             )}
             <NarrationInput
@@ -1732,7 +1746,7 @@ function EntryDialog({
               onChange={setNarration}
               label={t('invoice.narration')}
               className={clsx(
-                'sm:col-span-2 lg:col-span-3',
+                'col-span-2 lg:col-span-3',
                 // Wide enough that the scan box lands at the end of the row.
                 editing
                   ? isReturn(kind)
@@ -1743,7 +1757,7 @@ function EntryDialog({
                     : 'xl:col-span-3',
               )}
             />
-            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
               <ScanField
                 value={barcodeInput}
                 onChange={setBarcodeInput}
@@ -1773,13 +1787,19 @@ function EntryDialog({
           icon={<IconBox className="size-5" />}
           title={t('invoice.items')}
           meta={t('invoice.itemCount', { count: itemCount })}
-          actions={lineColumns.picker}
+          actions={
+            <>
+              <AddLineButton onClick={addLine} />
+              {lineColumns.picker}
+            </>
+          }
         >
           <InvoiceLines>
             <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
               <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
                 <tr>
-                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                  <LineNumberHeader />
+                  <th className="px-3 py-2.5 text-start font-medium">
                     {t('sales.product')}
                   </th>
                   <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
@@ -1820,10 +1840,11 @@ function EntryDialog({
                 </tr>
               </thead>
 
-              <tbody ref={linesBody}>
+              <tbody ref={lineAttention.bodyRef}>
                 {lines.map((line, index) => (
                   <LineRow
                     key={index}
+                    number={index + 1}
                     line={line}
                     products={products.data ?? []}
                     productOptions={productOptions}
@@ -1839,7 +1860,7 @@ function EntryDialog({
                     enableDiscount={enableDiscount}
                     shows={lineColumns.shows}
                     columnCount={
-                      3 +
+                      4 +
                       lineColumnList.filter(
                         (column) =>
                           column.key !== 'product' &&
@@ -1858,7 +1879,7 @@ function EntryDialog({
               </tbody>
               <LinesTotalRow
                 label={t('invoice.linesTotal')}
-                span={1 + shownProductDetails(lineColumns.shows)}
+                span={2 + shownProductDetails(lineColumns.shows)}
                 cells={[
                   {
                     key: 'quantity',
@@ -1917,26 +1938,7 @@ function EntryDialog({
               />
             </table>
 
-            <button
-              {...shortcutProps('add-line')}
-              type="button"
-              onClick={() => {
-                // The cursor goes to the new line's product, so the next item is
-                // typed straight away rather than reached with the mouse.
-                focusNewLine.current = true;
-                setLines((previous) => [
-                  ...previous,
-                  {
-                    ...emptyLine,
-                    taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
-                  },
-                ]);
-              }}
-              className="btn-secondary mt-3 mb-1"
-            >
-              <IconPlus className="size-4" />
-              {t('invoice.addItem')}
-            </button>
+            {itemCount === 0 && <LinesEmptyHint />}
           </InvoiceLines>
         </InvoiceCard>
 
@@ -1949,6 +1951,7 @@ function EntryDialog({
             title={t('invoice.customerDetails')}
             party={selectedCustomer}
             empty={t('invoice.noCustomer')}
+            choose={t('invoice.chooseCustomer')}
             money={moneyAlways}
           />
 
@@ -2172,6 +2175,7 @@ function EntryDialog({
  * One line, and whatever the product it names needs beyond a quantity and a rate.
  */
 function LineRow({
+  number,
   line,
   products,
   productOptions,
@@ -2192,6 +2196,8 @@ function LineRow({
   onChange,
   onRemove,
 }: {
+  /** Its place on the document, from 1. */
+  readonly number: number;
   readonly line: DraftLine;
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
@@ -2408,6 +2414,7 @@ function LineRow({
   return (
     <>
       <tr data-line-row className="border-t border-line">
+        <LineNumberCell number={number} />
         <td data-label={t('sales.product')} className="min-w-40 px-2 py-1 lg:min-w-64">
           <SearchSelect
             value={line.productId}
@@ -3013,7 +3020,8 @@ function NumberCell({
         )}
       />
       {subtitle && (
-        <span className="mt-0.5 block text-[10px] tabular-nums text-ink-muted text-end">
+        // Under its box on a phone's card too, not in the captions' column.
+        <span className="col-start-2 mt-0.5 block text-[10px] tabular-nums text-ink-muted text-end">
           {subtitle}
         </span>
       )}

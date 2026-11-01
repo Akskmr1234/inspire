@@ -8,12 +8,12 @@ import {
   IconBox,
   IconDocument,
   IconPercent,
-  IconPlus,
   IconPrinter,
   IconTruck,
   IconUser,
 } from '@/components/icons';
 import {
+  AddLineButton,
   BillCard,
   FooterSection,
   formatQuantity,
@@ -25,10 +25,14 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LineNumberCell,
+  LineNumberHeader,
+  LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
+  useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -875,6 +879,16 @@ function OrderEntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  // A line just added, or just scanned onto, is scrolled to and picked out; Add item
+  // leaves the cursor in the new line's product.
+  const lineAttention = useLineAttention();
+
+  /** A new, empty line at the foot, with the cursor in its product. */
+  const addLine = (): void => {
+    setLines((previous) => [...previous, emptyLine(defaultTaxRate)]);
+    lineAttention.attend('last', { focus: true });
+  };
+
   const documentTitle = kind === 'purchase' ? t('orders.newPurchase') : words('newSales');
   const chargesAmount = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
   const orderTotal = totals.gross - totals.discount + totals.tax + chargesAmount;
@@ -921,7 +935,7 @@ function OrderEntryDialog({
         <InvoiceCard>
           {/* Two lines on a wide screen: who, when, the numbers, and the scan. */}
           <InvoiceFields>
-            <div className="min-w-0 sm:col-span-2">
+            <div className="col-span-2 min-w-0" data-party-field>
               <Field
                 label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
                 required
@@ -999,9 +1013,9 @@ function OrderEntryDialog({
               value={draft.narration}
               onChange={(value) => set('narration', value)}
               label={t('invoice.narration')}
-              className={'sm:col-span-2 lg:col-span-3 xl:col-span-6'}
+              className="col-span-2 lg:col-span-3 xl:col-span-6"
             />
-            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
               <BarcodeScan
                 asField
                 products={products.data ?? []}
@@ -1018,6 +1032,9 @@ function OrderEntryDialog({
                       : {}),
                   }));
                   setLines(next.lines);
+                  lineAttention.attend(
+                    next.lines.findIndex((line) => line.productId === product.id),
+                  );
                   return next.quantity;
                 }}
               />
@@ -1030,7 +1047,12 @@ function OrderEntryDialog({
           icon={<IconBox className="size-5" />}
           title={t('invoice.items')}
           meta={t('invoice.itemCount', { count: itemCount })}
-          actions={columns.picker}
+          actions={
+            <>
+              <AddLineButton onClick={addLine} />
+              {columns.picker}
+            </>
+          }
         >
           {errors['lines'] && (
             <p className="field-message-error mb-2">{errors['lines']}</p>
@@ -1040,7 +1062,8 @@ function OrderEntryDialog({
             <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
               <thead className="sticky top-0 z-10 bg-surface-2 text-[13px] text-ink-muted">
                 <tr>
-                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                  <LineNumberHeader />
+                  <th className="px-3 py-2.5 text-start font-medium">
                     {t('orders.product')}
                   </th>
                   <ProductDetailHeaders shows={columns.shows} labels={t} />
@@ -1068,12 +1091,13 @@ function OrderEntryDialog({
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody ref={lineAttention.bodyRef}>
                 {lines.map((line, index) => {
                   const errorsForLine = lineErrors[index] ?? {};
 
                   return (
-                    <tr key={line.key} className="border-t border-line">
+                    <tr key={line.key} data-line-row className="border-t border-line">
+                      <LineNumberCell number={index + 1} />
                       <td
                         data-label={t('orders.product')}
                         className="min-w-40 px-2 py-1 lg:min-w-64"
@@ -1202,7 +1226,7 @@ function OrderEntryDialog({
               </tbody>
               <LinesTotalRow
                 label={t('invoice.linesTotal')}
-                span={1 + shownProductDetails(columns.shows)}
+                span={2 + shownProductDetails(columns.shows)}
                 cells={[
                   {
                     key: 'quantity',
@@ -1243,17 +1267,7 @@ function OrderEntryDialog({
               />
             </table>
 
-            <button
-              {...shortcutProps('add-line')}
-              type="button"
-              onClick={() =>
-                setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
-              }
-              className="btn-secondary mt-3 mb-1"
-            >
-              <IconPlus className="size-4" />
-              {t('invoice.addItem')}
-            </button>
+            {itemCount === 0 && <LinesEmptyHint />}
           </InvoiceLines>
         </InvoiceCard>
 
@@ -1285,6 +1299,11 @@ function OrderEntryDialog({
             }
             empty={
               kind === 'purchase' ? t('invoice.noSupplier') : t('invoice.noCustomer')
+            }
+            choose={
+              kind === 'purchase'
+                ? t('invoice.chooseSupplier')
+                : t('invoice.chooseCustomer')
             }
             money={moneyAlways}
           />

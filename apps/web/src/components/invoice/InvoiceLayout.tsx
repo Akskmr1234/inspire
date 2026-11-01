@@ -3,8 +3,22 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Field } from '@/components/Form';
-import { IconClose, IconReceipt, IconTrash } from '@/components/icons';
-import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
+import {
+  IconBarcode,
+  IconClose,
+  IconPlus,
+  IconReceipt,
+  IconSearch,
+  IconTrash,
+} from '@/components/icons';
+import {
+  activeDialog,
+  actOn,
+  buttonFor,
+  shortcutFor,
+  shortcutProps,
+  type EntryAction,
+} from '@/lib/shortcuts';
 
 /*
   The pieces every invoice is built from - sales and purchase, their returns, orders
@@ -54,7 +68,7 @@ export function InvoiceWindow({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-md dark:bg-black/80" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="animate-rise fixed inset-0 z-50 flex flex-col bg-canvas outline-none"
+          className="invoice-window animate-rise fixed inset-0 z-50 flex flex-col bg-canvas outline-none"
           onFocusCapture={(event) => {
             const field = event.target;
             if (
@@ -161,7 +175,7 @@ export function InvoiceHeader({
 
   return (
     <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas">
-      <div className="flex w-full items-center gap-3 px-3 py-2 sm:px-4">
+      <div className="flex w-full items-center gap-3 px-3 py-2 sm:px-4 short:py-1.5">
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
           {icon}
         </span>
@@ -191,7 +205,8 @@ export function InvoiceHeader({
  * its own button, its key on it, the main one last and coloured.
  *
  * On a phone or a tablet, where the bill's card may be a scroll away, the total is
- * on the bar beside the buttons that save it.
+ * on the bar beside the buttons that save it - and on a wide screen too, whenever
+ * the window is too short for the bill's own total to be in view.
  */
 export function InvoiceActions({
   primary,
@@ -206,6 +221,8 @@ export function InvoiceActions({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const onCancel = useContext(RequestClose);
+  const bar = useRef<HTMLElement>(null);
+  const billInView = useBillTotalInView(bar);
 
   const button = (action: InvoiceAction, main: boolean): React.JSX.Element => (
     <button
@@ -236,10 +253,18 @@ export function InvoiceActions({
   );
 
   return (
-    <footer className="sticky bottom-0 z-20 border-t border-line/70 bg-canvas shadow-[0_-4px_12px_-8px_rgb(15_23_42/0.15)]">
+    <footer
+      ref={bar}
+      className="sticky bottom-0 z-20 border-t border-line/70 bg-canvas shadow-[0_-4px_12px_-8px_rgb(15_23_42/0.15)]"
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:flex-nowrap sm:px-4">
         {total && (
-          <div className="flex min-w-0 basis-full items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0 lg:hidden">
+          <div
+            className={clsx(
+              'flex min-w-0 basis-full items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0',
+              billInView && 'lg:hidden',
+            )}
+          >
             <span className="text-xs text-ink-muted">{total.label}</span>
             <span className="text-lg leading-tight font-bold text-brand-600 tabular-nums dark:text-brand-300">
               {total.amount}
@@ -264,6 +289,40 @@ export function InvoiceActions({
 }
 
 /**
+ * Whether the bill's total, in its card at the bottom right, is in view: not
+ * scrolled away, and not under the bar along the window's foot. Assumed so until the
+ * browser says otherwise, and always so where it cannot say.
+ */
+function useBillTotalInView(bar: React.RefObject<HTMLElement | null>): boolean {
+  const [inView, setInView] = useState(true);
+
+  useEffect(() => {
+    const footer = bar.current;
+    const scroller = footer?.parentElement;
+    const figure = scroller?.querySelector('[data-bill-total]');
+
+    if (!footer || !scroller || !figure || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+
+    const watcher = new IntersectionObserver(
+      ([entry]) => setInView(entry !== undefined && entry.intersectionRatio > 0.99),
+      {
+        root: scroller,
+        // The bar sits over the foot of the scroll; under it is out of view.
+        rootMargin: `0px 0px -${footer.offsetHeight}px 0px`,
+        threshold: [0, 1],
+      },
+    );
+
+    watcher.observe(figure);
+    return () => watcher.disconnect();
+  }, [bar]);
+
+  return inView;
+}
+
+/**
  * The body of an invoice, the window's full width: the party, the items, and the
  * money along the foot.
  *
@@ -278,7 +337,7 @@ export function InvoiceBody({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex w-full flex-1 flex-col gap-2.5 px-3 py-2.5 sm:px-4">
+    <div className="flex w-full flex-1 flex-col gap-2.5 px-3 py-2.5 sm:px-4 short:gap-2 short:py-2">
       {children}
     </div>
   );
@@ -314,7 +373,7 @@ export function InvoiceCard({
       )}
     >
       {title && (
-        <div className="flex items-center gap-2.5 border-b border-line/70 px-3 py-1.5 sm:px-4">
+        <div className="flex items-center gap-2.5 border-b border-line/70 px-3 py-1.5 sm:px-4 short:py-1">
           <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
           <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
           {meta && <span className="text-xs text-ink-muted">{meta}</span>}
@@ -323,7 +382,7 @@ export function InvoiceCard({
       )}
       <div
         className={clsx(
-          'p-3 sm:p-3.5',
+          'p-3 sm:p-3.5 short:p-2.5',
           fill && 'lg:flex lg:min-h-0 lg:flex-1 lg:flex-col',
         )}
       >
@@ -335,7 +394,8 @@ export function InvoiceCard({
 
 /**
  * The party's fields, in two lines on a wide screen: eight columns, the party
- * itself two of them wide. Narrower screens take four, then two, then one.
+ * itself two of them wide. Narrower screens take six, then four, then two - two even
+ * on a phone, where one to a row put the lines a dozen boxes down the screen.
  */
 export function InvoiceFields({
   children,
@@ -343,7 +403,7 @@ export function InvoiceFields({
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+    <div className="invoice-fields grid grid-cols-2 gap-x-3 gap-y-3.5 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 short:gap-y-2.5">
       {children}
     </div>
   );
@@ -354,19 +414,272 @@ export function InvoiceFields({
  *
  * On a wide screen it stretches to the card's height and scrolls inside it, under a
  * header row that stays put - laid out of the flow, so a long bill grows the
- * scroll rather than the window. On a narrow one it is as long as its lines.
+ * scroll rather than the window. It keeps room for what it holds, up to four lines
+ * or so: in a window too short for that and the money under it, the window scrolls
+ * as a whole, rather than leave the lines a slot one line high - while a bill of a
+ * line or two leaves the money in view. On a narrow screen it is as long as its
+ * lines.
+ *
+ * Enter moves on, as Tab does, through a line's boxes and on to the next line's
+ * product - adding a line after the last one, once it names a product. Its
+ * picker's Enter is its own until it has chosen; then it moves on too.
  */
 export function InvoiceLines({
   children,
 }: {
   readonly children: React.ReactNode;
 }): React.JSX.Element {
+  const content = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState<number | null>(null);
+
+  useEffect(() => {
+    const box = content.current;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+
+    const watcher = new ResizeObserver(() =>
+      setRoom(Math.min(box.offsetHeight, LINES_ROOM)),
+    );
+    watcher.observe(box);
+    return () => watcher.disconnect();
+  }, []);
+
   return (
-    <div className="relative lg:min-h-40 lg:flex-1">
+    <div
+      className="relative lg:min-h-[max(10rem,var(--lines-room,10rem))] lg:flex-1"
+      style={
+        room === null
+          ? undefined
+          : ({ '--lines-room': `${room}px` } as React.CSSProperties)
+      }
+      onKeyDown={moveOnEnter}
+    >
       <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:px-0 lg:absolute lg:inset-0 lg:overflow-auto">
-        {children}
+        <div ref={content}>{children}</div>
       </div>
     </div>
+  );
+}
+
+/** The most the lines keep for themselves, in pixels: the header, four lines, the totals. */
+const LINES_ROOM = 288;
+
+/** The boxes a line is typed into, its own row and the batch row under it. */
+function lineBoxes(row: Element): HTMLInputElement[] {
+  const rows: Element[] = [row];
+
+  for (
+    let next = row.nextElementSibling;
+    next && !next.matches('[data-line-row]');
+    next = next.nextElementSibling
+  ) {
+    rows.push(next);
+  }
+
+  return rows.flatMap((part) =>
+    Array.from(
+      part.querySelectorAll<HTMLInputElement>(
+        'input:not([disabled]):not([readonly]):not([type="checkbox"]):not([type="hidden"])',
+      ),
+    ),
+  );
+}
+
+/** The line a box belongs to: the row it is in, or the one over its batch row. */
+function lineOf(box: HTMLElement): Element | null {
+  let row: Element | null = box.closest('tr');
+
+  while (row && !row.matches('[data-line-row]')) {
+    row = row.previousElementSibling;
+  }
+
+  return row;
+}
+
+/** Enter in a line: the next box, the next line's product, or a new line. */
+function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
+  if (
+    event.key !== 'Enter' ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    event.nativeEvent.isComposing
+  ) {
+    return;
+  }
+
+  const box = event.target;
+  const row = box instanceof HTMLInputElement ? lineOf(box) : null;
+  if (!(box instanceof HTMLInputElement) || !row) return;
+
+  // A picker chose something only if it took the key for itself.
+  if (box.getAttribute('role') === 'combobox' && !event.defaultPrevented) return;
+
+  const boxes = lineBoxes(row);
+  const next = boxes[boxes.indexOf(box) + 1];
+
+  if (next) {
+    next.focus();
+    return;
+  }
+
+  let following = row.nextElementSibling;
+  while (following && !following.matches('[data-line-row]')) {
+    following = following.nextElementSibling;
+  }
+
+  if (following) {
+    lineBoxes(following)[0]?.focus();
+    return;
+  }
+
+  // The last box of the last line: another line, unless this one is still empty.
+  const product = row.querySelector<HTMLInputElement>('[role="combobox"]');
+  if (product && product.value.trim() !== '') buttonFor('add-line')?.click();
+}
+
+/**
+ * Picks out a line once it is on screen - scrolled to, where the lines scroll, and
+ * lit up for a moment - and, asked to, puts the cursor in its product: the line a
+ * scan just added to, or the one Add item just made. `bodyRef` goes on the lines'
+ * `<tbody>`, whose rows carry `data-line-row`.
+ */
+export function useLineAttention(): {
+  readonly bodyRef: React.RefObject<HTMLTableSectionElement | null>;
+  readonly attend: (
+    line: number | 'last',
+    options?: { readonly focus?: boolean },
+  ) => void;
+} {
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const [wanted, setWanted] = useState<{
+    readonly line: number | 'last';
+    readonly focus: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!wanted) return;
+    setWanted(null);
+
+    const rows = bodyRef.current?.querySelectorAll<HTMLElement>('[data-line-row]');
+    if (!rows || rows.length === 0) return;
+
+    const row = wanted.line === 'last' ? rows[rows.length - 1] : rows[wanted.line];
+    if (!row) return;
+
+    // Only where the lines scroll inside their card; on a phone the page would jump
+    // away from the scan box the next scan is typed into.
+    if (window.matchMedia('(min-width: 64rem)').matches) {
+      row.scrollIntoView({ block: 'nearest' });
+    }
+
+    row.classList.remove('line-flash');
+    // Read back, so the browser starts the animation again for a line lit twice.
+    void row.offsetWidth;
+    row.classList.add('line-flash');
+
+    if (wanted.focus) {
+      row.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
+    }
+  }, [wanted]);
+
+  return {
+    bodyRef,
+    attend: (line, options) => setWanted({ line, focus: options?.focus ?? false }),
+  };
+}
+
+/** Adds a line: in the items card's heading, where it stays in view, with its key. */
+export function AddLineButton({
+  onClick,
+}: {
+  readonly onClick: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      {...shortcutProps('add-line')}
+      type="button"
+      onClick={onClick}
+      title={`${t('invoice.addItem')} (${shortcutFor('add-line')})`}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500/30 bg-brand-50 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-brand-700 transition hover:border-brand-500/50 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-200 dark:hover:bg-brand-500/25"
+    >
+      <IconPlus className="size-3.5" />
+      {t('invoice.addItem')}
+      <kbd className="hidden rounded bg-white/70 px-1 py-px font-mono text-[10px] font-medium text-brand-700/80 md:inline dark:bg-white/10 dark:text-brand-200/80">
+        {shortcutFor('add-line')}
+      </kbd>
+    </button>
+  );
+}
+
+/**
+ * Under the lines while none of them names a product yet: the two ways to start,
+ * with their keys, where the first item will appear.
+ */
+export function LinesEmptyHint({
+  scan = true,
+}: {
+  /** Whether the screen has a scan box to point at. */
+  readonly scan?: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 rounded-xl border border-dashed border-line-strong/70 px-4 py-3 text-center text-sm text-ink-muted">
+      <p className="inline-flex items-center gap-2 font-medium text-ink">
+        <IconBarcode className="size-5 text-brand-600 dark:text-brand-300" />
+        {t('invoice.emptyLinesTitle')}
+      </p>
+      <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+        {scan && (
+          <span className="inline-flex items-center gap-1">
+            <kbd className="rounded border border-line bg-surface-2 px-1.5 py-px font-mono text-[10px]">
+              {shortcutFor('scan')}
+            </kbd>
+            {t('invoice.emptyLinesScan')}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1">
+          <kbd className="rounded border border-line bg-surface-2 px-1.5 py-px font-mono text-[10px]">
+            {shortcutFor('add-line')}
+          </kbd>
+          {t('invoice.emptyLinesAdd')}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <kbd className="rounded border border-line bg-surface-2 px-1.5 py-px font-mono text-[10px]">
+            Enter
+          </kbd>
+          {t('invoice.emptyLinesEnter')}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/** The heading over the lines' numbers. */
+export function LineNumberHeader(): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <th className="line-number-column rounded-s-lg py-2.5 ps-3 pe-1 text-start font-medium">
+      <span aria-hidden="true">#</span>
+      <span className="sr-only">{t('invoice.lineNumber')}</span>
+    </th>
+  );
+}
+
+/** A line's number, so "the third one" can be found and said. */
+export function LineNumberCell({
+  number,
+}: {
+  readonly number: number;
+}): React.JSX.Element {
+  return (
+    <td className="line-number-cell py-1 ps-3 pe-1 text-start text-xs font-medium text-ink-subtle tabular-nums">
+      {number}
+    </td>
   );
 }
 
@@ -409,7 +722,7 @@ export function FooterSection({
   return (
     <section
       className={clsx(
-        'flex min-w-0 flex-col rounded-2xl border p-3.5 shadow-card',
+        'flex min-w-0 flex-col rounded-2xl border p-3.5 shadow-card short:p-3',
         highlight
           ? 'border-brand-500/35 bg-brand-50 dark:bg-brand-500/10'
           : 'border-line bg-surface',
@@ -417,7 +730,7 @@ export function FooterSection({
       )}
     >
       {title && (
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex items-center gap-2 short:mb-1.5">
           {icon && (
             <span className="shrink-0 text-brand-600 dark:text-brand-300">{icon}</span>
           )}
@@ -572,9 +885,12 @@ export function BillCard({
           </div>
         )}
       </div>
-      <div className="mt-auto flex items-baseline justify-between gap-3 border-t border-brand-500/25 pt-2">
+      <div
+        data-bill-total
+        className="mt-auto flex items-baseline justify-between gap-3 border-t border-brand-500/25 pt-2"
+      >
         <span className="text-sm font-semibold text-ink">{label}</span>
-        <span className="truncate text-2xl leading-tight font-bold text-brand-600 tabular-nums sm:text-3xl dark:text-brand-300">
+        <span className="truncate text-2xl leading-tight font-bold text-brand-600 tabular-nums sm:text-3xl short:text-2xl dark:text-brand-300">
           {money(total)}
         </span>
       </div>
@@ -647,14 +963,25 @@ export interface PartyDetails {
 }
 
 /**
+ * Puts the cursor in the open invoice's party picker - the customer or supplier box,
+ * marked `data-party-field` - with its list open.
+ */
+export function focusPartyField(): void {
+  const field = activeDialog()?.querySelector<HTMLElement>('[data-party-field]');
+  if (field) actOn(field);
+}
+
+/**
  * Who the document is for, at a glance: the party's name and code, how to reach
- * them, their tax registration, and the credit they are allowed.
+ * them, their tax registration, and the credit they are allowed. With nobody chosen,
+ * a button that goes to the box to choose them in.
  */
 export function PartyCard({
   icon,
   title,
   party,
   empty,
+  choose,
   money,
   className,
 }: {
@@ -663,6 +990,8 @@ export function PartyCard({
   readonly party: PartyDetails | undefined;
   /** Said when nobody is chosen yet. */
   readonly empty: string;
+  /** The button's caption when nobody is chosen: "Choose customer". */
+  readonly choose?: string;
   readonly money: (value: number) => string;
   readonly className?: string;
 }): React.JSX.Element {
@@ -715,7 +1044,19 @@ export function PartyCard({
           </dl>
         </>
       ) : (
-        <p className="text-sm text-ink-muted">{empty}</p>
+        <div className="flex flex-1 flex-col items-start gap-2.5">
+          <p className="text-sm text-ink-muted">{empty}</p>
+          {choose && (
+            <button
+              type="button"
+              onClick={focusPartyField}
+              className="btn-secondary btn-sm"
+            >
+              <IconSearch className="size-3.5" />
+              {choose}
+            </button>
+          )}
+        </div>
       )}
     </FooterSection>
   );
@@ -732,7 +1073,7 @@ function FigureRow({
   readonly muted?: boolean;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-3 py-0.5 text-sm">
+    <div className="flex items-center justify-between gap-3 py-0.5 text-sm short:py-px">
       <span className={muted ? 'text-ink-muted' : 'font-medium text-ink'}>{label}</span>
       <span className="font-medium text-ink tabular-nums">{value}</span>
     </div>
