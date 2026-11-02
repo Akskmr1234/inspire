@@ -483,6 +483,16 @@ export function SalesSettings(): React.JSX.Element {
 
       <div className="space-y-4">
         <SettingsCard title={t('prefs.salesRulesTitle')} hint={t('policies.hint')}>
+          <DefaultPicker
+            label={t('prefs.walkInCustomer')}
+            value={settings.walkInCustomerId}
+            onChange={(id) => settings.update({ walkInCustomerId: id })}
+            options={(customers.data ?? []).map((customer) => ({
+              value: customer.customerId,
+              label: `${customer.code} — ${customer.name}`,
+            }))}
+            placeholder={t('prefs.primaryCustomer')}
+          />
           <CheckField
             label={t('prefs.namedCustomerForNonCash')}
             checked={settings.namedCustomerForNonCash !== false}

@@ -237,6 +237,12 @@ export interface AppSettings {
   readonly allowRateChange: boolean;
   /** Whether a card, online or credit sale has to name a customer other than the Primary one. */
   readonly namedCustomerForNonCash: boolean;
+  /**
+   * The customer walk-in sales go to, where it is not the firm's Primary customer: a firm
+   * that brought its customers in from another system has its cash customer among them,
+   * and is given no Primary one. Blank, the Primary customer is the walk-in account.
+   */
+  readonly walkInCustomerId: string;
   /** The unit a sale's total is rounded to - 0.25, 1 - with the difference to Round Off. */
   readonly salesRoundTo: number;
   /**
@@ -327,6 +333,7 @@ const DEFAULTS: AppSettings = {
   allowHold: true,
   allowRateChange: true,
   namedCustomerForNonCash: true,
+  walkInCustomerId: '',
   salesRoundTo: 0,
   defaultSalesPaymentMode: 0,
   onlinePaymentTypes: [],

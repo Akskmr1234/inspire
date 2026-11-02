@@ -1059,9 +1059,13 @@ function EntryDialog({
     () => customers.data?.find((c) => c.customerId === customerId),
     [customers.data, customerId],
   );
-  // The firm's Primary customer: the account a walk-in sale goes to, whose bill is made
-  // out to whatever name the counter types.
-  const isWalkIn = selectedCustomer?.isPrimary === true;
+  // The account a walk-in sale goes to - the firm's Primary customer, or the one
+  // Settings › Sales names - whose bill is made out to whatever name the counter types.
+  const isWalkIn =
+    selectedCustomer !== undefined &&
+    (selectedCustomer.isPrimary === true ||
+      (settings.walkInCustomerId !== '' &&
+        selectedCustomer.customerId === settings.walkInCustomerId));
 
   // What the customer owes before this sale: their balance across everything posted to
   // them. It used to be their opening balance, which is what they owed the day the firm
