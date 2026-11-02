@@ -9,7 +9,7 @@ import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
 import { moneyAlways, useMoney } from '@/lib/money';
 import { setupName, type ChargeDocument, type ChargeSetup } from '@/lib/charges';
-import { useSettings, useTaxOn } from '@/stores/settings';
+import { useChargesShown, useSettings, useTaxOn } from '@/stores/settings';
 import { shortcutProps } from '@/lib/shortcuts';
 
 /**
@@ -349,6 +349,8 @@ export function useDefaultCharges(
   setup?: readonly ChargeSetup[],
 ): void {
   const defaults = useSettings((state) => state.defaultAdditionalLedgers);
+  // A document the firm keeps additional ledgers off starts with none.
+  const shown = useChargesShown(setupName(document));
   const seeded = useRef(false);
 
   useEffect(() => {
@@ -358,7 +360,7 @@ export function useDefaultCharges(
 
     seeded.current = true;
 
-    if (document === 'salesReturn' || document === 'purchaseReturn') {
+    if (document === 'salesReturn' || document === 'purchaseReturn' || !shown) {
       return;
     }
 
@@ -380,7 +382,7 @@ export function useDefaultCharges(
     if (rows.length > 0) {
       apply(rows);
     }
-  }, [document, defaults, ledgers, setup, apply]);
+  }, [document, defaults, ledgers, setup, apply, shown]);
 }
 
 /**

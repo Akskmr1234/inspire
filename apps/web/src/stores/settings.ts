@@ -24,6 +24,22 @@ import { NO_DEFAULT_CHARGES, type DefaultCharge } from '@/lib/charges';
 export type SalesRateType =
   'retail' | 'wholesale' | 'mrp' | 'lastQuotation' | 'customerRate' | 'batch';
 
+/**
+ * One way a customer pays online - Google Pay, PhonePe, Talabat - offered on a sale paid
+ * online. The firm's own list, kept with its settings and named on each invoice it paid.
+ */
+export interface OnlinePaymentType {
+  readonly id: string;
+  readonly name: string;
+  /** The bank account it settles into; blank uses the default bank account. */
+  readonly ledgerId: string;
+  /** Offered on new sales. Off, it stays on the bills already paid with it. */
+  readonly active: boolean;
+}
+
+/** The units a sale's total can be rounded to. Zero rounds to the currency alone. */
+export const ROUND_TO_CHOICES: readonly number[] = [0, 0.05, 0.1, 0.25, 0.5, 1, 5, 10];
+
 export interface AppSettings {
   /**
    * Whether an Arabic name is filled in automatically from the English one.
@@ -197,6 +213,45 @@ export interface AppSettings {
    * default cleared afterwards is somebody's choice, not a gap to fill again.
    */
   readonly primaryDefaultsApplied: boolean;
+  /**
+   * Whether a sale shows the reference number box. Off, a sale takes its own number as
+   * its reference, and one loaded from a quotation or an order keeps that one's.
+   */
+  readonly showSalesReference: boolean;
+  /**
+   * Whether a sale asks for its salesman and billing man. Off, nobody is asked: the sale
+   * is credited to whoever is signed in and entered it.
+   */
+  readonly pickSalesmen: boolean;
+  /** Whether a sale shows the name it is billed to, under the customer's details. */
+  readonly showBillingName: boolean;
+  /** Whether a sale shows the narration box, under the customer's details. */
+  readonly showSalesNarration: boolean;
+  /** Whether a sale shows the barcode box. */
+  readonly showSalesScan: boolean;
+  /** Whether a sale can be filled from a quotation, an order or a purchase. */
+  readonly allowLoadFrom: boolean;
+  /** Whether a sale can be put on hold and taken up again later in the day. */
+  readonly allowHold: boolean;
+  /** Whether the rate of a line, and the rate type of the bill, can be changed on a sale. */
+  readonly allowRateChange: boolean;
+  /** Whether a card, online or credit sale has to name a customer other than the Primary one. */
+  readonly namedCustomerForNonCash: boolean;
+  /** The unit a sale's total is rounded to - 0.25, 1 - with the difference to Round Off. */
+  readonly salesRoundTo: number;
+  /**
+   * How a new sale is paid, as the server numbers the modes: 2 cash, 4 card, 3 online,
+   * 1 credit. Zero follows the vouchers' default: credit there is credit here, and
+   * anything else is cash.
+   */
+  readonly defaultSalesPaymentMode: number;
+  /** The ways a sale paid online can have been paid. */
+  readonly onlinePaymentTypes: readonly OnlinePaymentType[];
+  /**
+   * The additional-ledger setups whose documents do not show additional ledgers at all,
+   * by setup name: `Sales` for sales and returns, `SalesOrder`, `Purchase`, `PurchaseOrder`.
+   */
+  readonly hiddenChargeSetups: readonly string[];
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -263,6 +318,19 @@ const DEFAULTS: AppSettings = {
   defaultAdditionalLedgers: [],
   firmTheme: '',
   gulfMode: true,
+  showSalesReference: false,
+  pickSalesmen: false,
+  showBillingName: true,
+  showSalesNarration: true,
+  showSalesScan: true,
+  allowLoadFrom: true,
+  allowHold: true,
+  allowRateChange: true,
+  namedCustomerForNonCash: true,
+  salesRoundTo: 0,
+  defaultSalesPaymentMode: 0,
+  onlinePaymentTypes: [],
+  hiddenChargeSetups: [],
 };
 
 /**
@@ -560,4 +628,26 @@ export function useGodownColumns<T extends { readonly key: string }>(
 /** Whether a transaction is final the moment it is saved, with no draft or confirm step. */
 export function useDirectSave(): boolean {
   return useSettings((state) => state.directSave === true);
+}
+
+/**
+ * How a new sale is paid, as the server numbers the modes: the firm's choice, or - where
+ * it has made none - credit when its receipts default to credit, and cash otherwise.
+ */
+export function salesPaymentModeOf(
+  settings: Pick<AppSettings, 'defaultSalesPaymentMode' | 'defaultPaymentMode'>,
+): number {
+  if ([1, 2, 3, 4].includes(settings.defaultSalesPaymentMode)) {
+    return settings.defaultSalesPaymentMode;
+  }
+
+  return settings.defaultPaymentMode === 'Credit' ? 1 : 2;
+}
+
+/**
+ * Whether a kind of document shows its additional ledgers, by the name of the setup it
+ * draws on: `Sales` for sales and their returns, `SalesOrder`, `Purchase`, `PurchaseOrder`.
+ */
+export function useChargesShown(setup: string): boolean {
+  return useSettings((state) => !(state.hiddenChargeSetups ?? []).includes(setup));
 }

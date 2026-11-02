@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Field } from '@/components/Form';
+import { IconDownload } from '@/components/icons';
 import { SearchSelect } from '@/components/SearchSelect';
 import type { ApiError } from '@/lib/api';
 import { moneyAlways } from '@/lib/money';
@@ -131,5 +133,58 @@ export function ReferenceLoader({
       <div className="min-w-56 flex-1">{picker}</div>
       {problem && <span className="text-xs text-red-600">{problem}</span>}
     </div>
+  );
+}
+
+/**
+ * Load from, as a button: the loader opens above it, for the bar along the foot of an
+ * entry - out of the way of the fields until somebody wants it - and closes once the
+ * document is filled.
+ */
+export function LoadFromButton({
+  sources,
+  onLoad,
+  disabled = false,
+}: {
+  readonly sources: readonly ReferenceSource[];
+  readonly onLoad: (sourceKey: string, id: string) => Promise<void>;
+  readonly disabled?: boolean;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={t('references.loadFrom')}
+          title={t('references.loadFrom')}
+          className="btn-secondary px-3"
+        >
+          <IconDownload className="size-4" />
+          <span className="hidden sm:inline">{t('references.loadFrom')}</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={8}
+          collisionPadding={12}
+          className="animate-pop z-50 w-[min(30rem,calc(100vw-1.5rem))] rounded-2xl border border-line bg-surface p-3 shadow-float outline-none"
+        >
+          <ReferenceLoader
+            asField
+            sources={sources}
+            onLoad={async (sourceKey, id) => {
+              await onLoad(sourceKey, id);
+              setOpen(false);
+            }}
+          />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

@@ -6,7 +6,6 @@ import {
   AccountsSettings,
   AdditionalLedgerSettings,
   DataSettings,
-  DefaultSettings,
   GeneralSettings,
   InventorySettings,
   NumberingTab,
@@ -16,10 +15,13 @@ import {
 } from '@/components/settings/SettingsSections';
 import { useSettings } from '@/stores/settings';
 
-/** The tabs, in the order a firm setting itself up works through them. */
+/**
+ * The tabs, in the order a firm setting itself up works through them. What a new
+ * document starts with sits with the documents it is for - the default customer under
+ * Sales, the default supplier under Purchase - rather than in a tab of defaults of its own.
+ */
 const TABS = [
   'general',
-  'defaults',
   'sales',
   'purchase',
   'inventory',
@@ -69,7 +71,6 @@ export function SettingsPage(): React.JSX.Element {
       />
 
       {tab === 'general' && <GeneralSettings />}
-      {tab === 'defaults' && <DefaultSettings />}
       {tab === 'sales' && <SalesSettings />}
       {tab === 'purchase' && <PurchaseSettings />}
       {tab === 'inventory' && <InventorySettings />}

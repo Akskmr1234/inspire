@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Modal, ModalButton } from '@/components/Modal';
 import type { ApiError } from '@/lib/api';
 import { fetchProductSerials, SerialStatus, type SerialNumberView } from '@/lib/stock';
-import { useSettings } from '@/stores/settings';
+import { useGodownsOn, useSettings } from '@/stores/settings';
 
 /**
  * Whether serial numbers are offered at all.
@@ -101,6 +101,8 @@ export function SerialPickerDialog({
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  // With one godown, every unit is in it: saying so on each would be noise.
+  const godownsOn = useGodownsOn();
   const [picked, setPicked] = useState<readonly string[]>(chosen);
   const [typed, setTyped] = useState('');
   const [filter, setFilter] = useState('');
@@ -285,7 +287,7 @@ export function SerialPickerDialog({
                     <span className="ms-auto text-xs text-ink-muted">
                       {[
                         unit.batchNumber,
-                        unit.warehouseName,
+                        godownsOn ? unit.warehouseName : null,
                         unit.warrantyUntil &&
                           t('serials.warrantyTo', { date: unit.warrantyUntil }),
                       ]

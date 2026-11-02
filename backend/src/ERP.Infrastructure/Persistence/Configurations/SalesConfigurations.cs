@@ -99,6 +99,20 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         builder.Property(invoice => invoice.PaymentReference)
             .HasMaxLength(SalesInvoice.MaximumPaymentReferenceLength);
 
+        // How an online payment was made, and the name the bill is made out to: empty for
+        // every sale entered before the columns existed, which said neither.
+        builder.Property(invoice => invoice.OnlinePaymentType)
+            .HasMaxLength(SalesInvoice.MaximumOnlinePaymentTypeLength);
+        builder.Property(invoice => invoice.BillingName)
+            .HasMaxLength(SalesInvoice.MaximumBillingNameLength);
+
+        // Zero - the currency's own rounding, and nothing more - for every sale entered
+        // before a firm could round to a unit of its own.
+        builder.Property(invoice => invoice.RoundTo)
+            .HasPrecision(19, 4)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
         builder.HasOne<Ledger>()
             .WithMany()
             .HasForeignKey(invoice => invoice.ReceivedIntoLedgerId)

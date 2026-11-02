@@ -88,7 +88,13 @@ import {
   type OrderLineInput,
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
+import {
+  useChargesShown,
+  useDirectSave,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+} from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { chargeAmounts, useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
@@ -656,6 +662,11 @@ function OrderEntryDialog({
   const chargeSetup = useChargeSetup(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
   );
+  // Additional ledgers only where the firm uses them on this kind of order.
+  const chargesShown = useChargesShown(
+    kind === 'purchase' ? 'PurchaseOrder' : 'SalesOrder',
+  );
+  const activeCharges = chargesShown ? charges : [];
   useDefaultCharges(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
     ledgers.data ?? [],
@@ -813,7 +824,7 @@ function OrderEntryDialog({
           discount: Number(line.discount || 0),
         }));
 
-      const chargeInput = charges
+      const chargeInput = activeCharges
         .filter((charge) => charge.ledgerId && Number(charge.amount) > 0)
         .map((charge) => ({
           ledgerId: charge.ledgerId,
@@ -890,7 +901,7 @@ function OrderEntryDialog({
   };
 
   const documentTitle = kind === 'purchase' ? t('orders.newPurchase') : words('newSales');
-  const chargesAmount = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
+  const chargesAmount = chargeTotal(activeCharges, ledgers.data ?? [], chargeSetup);
   const orderTotal = totals.gross - totals.discount + totals.tax + chargesAmount;
   const itemCount = lines.filter((line) => line.productId !== '').length;
   // What the lines add up to, column by column, for the row of totals under them.
@@ -1274,7 +1285,13 @@ function OrderEntryDialog({
         {/* Along the foot: who the document is with; everything that changes what
             it comes to - the tax treatment and the additional ledgers - in one
             card; and the bill set out line by line. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <InvoiceFooter
+          className={
+            taxOn || chargesShown
+              ? 'lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]'
+              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+          }
+        >
           <PartyCard
             icon={
               kind === 'purchase' ? (
@@ -1308,37 +1325,41 @@ function OrderEntryDialog({
             money={moneyAlways}
           />
 
-          <FooterSection
-            icon={<IconPercent className="size-[18px]" />}
-            title={t('invoice.ratesAndCharges')}
-          >
-            {taxOn && (
-              <div className="mb-3">
-                <SelectField
-                  size="sm"
-                  label={t('purchase.taxMode')}
-                  value={mode}
-                  onChange={setMode}
-                  options={[
-                    { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-                    { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-                    { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-                  ]}
+          {(taxOn || chargesShown) && (
+            <FooterSection
+              icon={<IconPercent className="size-[18px]" />}
+              title={t('invoice.ratesAndCharges')}
+            >
+              {taxOn && (
+                <div className={chargesShown ? 'mb-3' : undefined}>
+                  <SelectField
+                    size="sm"
+                    label={t('purchase.taxMode')}
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                      { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                      { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                    ]}
+                  />
+                </div>
+              )}
+              {chargesShown && (
+                <ChargesPanel
+                  inline
+                  charges={charges}
+                  ledgers={ledgers.data ?? []}
+                  onChange={setCharges}
+                  setup={chargeSetup}
+                  nonTax={mode === PurchaseTaxMode.nonTax}
                 />
-              </div>
-            )}
-            <ChargesPanel
-              inline
-              charges={charges}
-              ledgers={ledgers.data ?? []}
-              onChange={setCharges}
-              setup={chargeSetup}
-              nonTax={mode === PurchaseTaxMode.nonTax}
-            />
-          </FooterSection>
+              )}
+            </FooterSection>
+          )}
 
           <BillCard
-            className="md:col-span-2 lg:col-span-1"
+            className={taxOn || chargesShown ? 'md:col-span-2 lg:col-span-1' : ''}
             label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
             total={orderTotal}
             money={moneyAlways}
@@ -1353,7 +1374,7 @@ function OrderEntryDialog({
               charges: chargeAmounts(
                 chargeSetup,
                 mode === PurchaseTaxMode.nonTax,
-                charges,
+                activeCharges,
                 ledgers.data ?? [],
               ),
             }}
@@ -1362,7 +1383,15 @@ function OrderEntryDialog({
       </InvoiceBody>
 
       <InvoiceActions
-        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        hints={
+          <ShortcutHints
+            actions={[
+              'scan',
+              'add-line',
+              ...(chargesShown ? (['charges'] as const) : []),
+            ]}
+          />
+        }
         total={{
           label: quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal'),
           amount: moneyAlways(orderTotal),

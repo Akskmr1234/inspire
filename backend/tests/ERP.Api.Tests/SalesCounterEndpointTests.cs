@@ -98,6 +98,72 @@ public sealed class SalesCounterEndpointTests
     }
 
     [Fact]
+    public async Task A_walk_in_sale_keeps_its_billing_name_and_online_type_and_rounds_to_the_firms_unit()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+        await BuyAsync(client, masters);
+
+        // One at 15.10, rounded to the nearest quarter: the bill is 15.00, and the ten
+        // fils go to Round Off.
+        HttpResponseMessage sold = await client.PostAsJsonAsync(Invoices, Sale(masters, new
+        {
+            Lines = new[] { new { masters.ProductId, Quantity = 1m, Rate = 15.10m, TaxPercentage = 0m } },
+            PaymentMode = SalesPaymentMode.Online,
+            OnlinePaymentType = "Google Pay",
+            BillingName = "  Rashid Khan ",
+            RoundTo = 0.25m,
+            Post = true,
+        }));
+        sold.StatusCode.ShouldBe(HttpStatusCode.Created, await sold.Content.ReadAsStringAsync());
+        SalesInvoiceResponse invoice = (await sold.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!;
+        invoice.Status.ShouldBe(SalesInvoiceStatus.Posted);
+        invoice.Total.ShouldBe(15.00m);
+        invoice.RoundingDifference.ShouldBe(-0.10m);
+
+        SalesInvoiceDetail detail = (await client.GetFromJsonAsync<SalesInvoiceDetail>(
+            $"{Invoices}/{invoice.SalesInvoiceId}"))!;
+        detail.BillingName.ShouldBe("Rashid Khan");
+        detail.OnlinePaymentType.ShouldBe("Google Pay");
+        detail.RoundTo.ShouldBe(0.25m);
+
+        // The list says who it was billed to, how it was paid, and who entered it - the
+        // salesman, on a counter that names nobody else.
+        SalesInvoiceSummary row = (await client.GetFromJsonAsync<PagedResult<SalesInvoiceSummary>>(
+            $"{Invoices}?search=Rashid"))!.Items.Single(item => item.SalesInvoiceId == invoice.SalesInvoiceId);
+        row.BillingName.ShouldBe("Rashid Khan");
+        row.OnlinePaymentType.ShouldBe("Google Pay");
+        row.EnteredByName.ShouldNotBeNullOrWhiteSpace();
+        row.Total.ShouldBe(15.00m);
+
+        // Paid in full in cash takes the rounded total, not the figure before rounding.
+        HttpResponseMessage paid = await client.PostAsJsonAsync(Invoices, Sale(masters, new
+        {
+            Lines = new[] { new { masters.ProductId, Quantity = 1m, Rate = 15.13m, TaxPercentage = 0m } },
+            PaymentMode = SalesPaymentMode.Cash,
+            OnlinePaymentType = "Google Pay",
+            PaidInFull = true,
+            ReceivedIntoLedgerId = await CashLedgerAsync(client),
+            RoundTo = 0.25m,
+            Post = true,
+        }));
+        paid.StatusCode.ShouldBe(HttpStatusCode.Created, await paid.Content.ReadAsStringAsync());
+        SalesInvoiceResponse cash = (await paid.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!;
+        cash.Total.ShouldBe(15.25m);
+
+        SalesInvoiceDetail settled = (await client.GetFromJsonAsync<SalesInvoiceDetail>(
+            $"{Invoices}/{cash.SalesInvoiceId}"))!;
+        settled.AmountReceived.ShouldBe(15.25m);
+
+        // An online type means nothing on a cash sale, so none is kept.
+        settled.OnlinePaymentType.ShouldBeNull();
+
+        // A unit no firm rounds to is refused.
+        HttpResponseMessage silly = await client.PostAsJsonAsync(Invoices, Sale(masters, new { RoundTo = -1m }));
+        silly.StatusCode.ShouldBe(HttpStatusCode.BadRequest, await silly.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Any_expense_ledger_can_be_set_up_as_an_additional_ledger_and_used_on_a_sale()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
@@ -250,6 +316,11 @@ public sealed class SalesCounterEndpointTests
 
         return body;
     }
+
+    private static async Task<Guid> CashLedgerAsync(HttpClient client) =>
+        (await client.GetFromJsonAsync<List<LedgerSummary>>(Ledgers))!
+            .First(ledger => ledger.Kind == LedgerKind.Cash)
+            .LedgerId;
 
     private static async Task<Guid> GroupAsync(HttpClient client, string code) =>
         (await client.GetFromJsonAsync<List<AccountGroupSummary>>(Groups))!

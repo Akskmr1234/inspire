@@ -65,7 +65,13 @@ import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import type { PagedResult } from '@/lib/sales';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
+import {
+  useChargesShown,
+  useDirectSave,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+} from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { chargeAmounts, useChargeSetup } from '@/lib/charges';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -593,6 +599,10 @@ function EntryDialog({
   });
 
   const chargeSetup = useChargeSetup(isReturn ? 'purchaseReturn' : 'purchase');
+  // Additional ledgers only where the firm uses them on purchases - or where a purchase
+  // being corrected already carries some, which it keeps.
+  const chargesShown = useChargesShown('Purchase') || (editing?.charges.length ?? 0) > 0;
+  const activeCharges = chargesShown ? charges : [];
   useDefaultCharges(
     isReturn ? 'purchaseReturn' : 'purchase',
     editing ? [] : (ledgers.data ?? []),
@@ -706,7 +716,7 @@ function EntryDialog({
     };
   }, [lines, taxOn]);
 
-  const chargesTotal = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
+  const chargesTotal = chargeTotal(activeCharges, ledgers.data ?? [], chargeSetup);
 
   const change = (index: number, patch: Partial<DraftLine>): void =>
     setLines((previous) =>
@@ -793,7 +803,7 @@ function EntryDialog({
         lines: payload,
         kind,
         mode,
-        charges: charges
+        charges: activeCharges
           .filter((charge) => charge.ledgerId && Number(charge.amount) > 0)
           .map((charge) => ({
             ledgerId: charge.ledgerId,
@@ -1298,7 +1308,13 @@ function EntryDialog({
         {/* Along the foot: who the document is with; everything that changes what
             it comes to - the tax treatment and the additional ledgers - in one
             card; and the bill set out line by line. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <InvoiceFooter
+          className={
+            taxOn || chargesShown
+              ? 'lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]'
+              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+          }
+        >
           <PartyCard
             icon={<IconTruck className="size-[18px]" />}
             title={t('invoice.supplierDetails')}
@@ -1310,37 +1326,41 @@ function EntryDialog({
             money={moneyAlways}
           />
 
-          <FooterSection
-            icon={<IconPercent className="size-[18px]" />}
-            title={t('invoice.ratesAndCharges')}
-          >
-            {taxOn && (
-              <div className="mb-3">
-                <SelectField
-                  size="sm"
-                  label={t('purchase.taxMode')}
-                  value={mode}
-                  onChange={setMode}
-                  options={[
-                    { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-                    { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-                    { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-                  ]}
+          {(taxOn || chargesShown) && (
+            <FooterSection
+              icon={<IconPercent className="size-[18px]" />}
+              title={t('invoice.ratesAndCharges')}
+            >
+              {taxOn && (
+                <div className={chargesShown ? 'mb-3' : undefined}>
+                  <SelectField
+                    size="sm"
+                    label={t('purchase.taxMode')}
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                      { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                      { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                    ]}
+                  />
+                </div>
+              )}
+              {chargesShown && (
+                <ChargesPanel
+                  inline
+                  charges={charges}
+                  ledgers={ledgers.data ?? []}
+                  onChange={setCharges}
+                  setup={chargeSetup}
+                  nonTax={mode === PurchaseTaxMode.nonTax}
                 />
-              </div>
-            )}
-            <ChargesPanel
-              inline
-              charges={charges}
-              ledgers={ledgers.data ?? []}
-              onChange={setCharges}
-              setup={chargeSetup}
-              nonTax={mode === PurchaseTaxMode.nonTax}
-            />
-          </FooterSection>
+              )}
+            </FooterSection>
+          )}
 
           <BillCard
-            className="md:col-span-2 lg:col-span-1"
+            className={taxOn || chargesShown ? 'md:col-span-2 lg:col-span-1' : ''}
             label={totalLabel}
             total={billTotal}
             money={moneyAlways}
@@ -1355,7 +1375,7 @@ function EntryDialog({
               charges: chargeAmounts(
                 chargeSetup,
                 mode === PurchaseTaxMode.nonTax,
-                charges,
+                activeCharges,
                 ledgers.data ?? [],
               ),
             }}
@@ -1364,7 +1384,15 @@ function EntryDialog({
       </InvoiceBody>
 
       <InvoiceActions
-        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        hints={
+          <ShortcutHints
+            actions={[
+              'scan',
+              'add-line',
+              ...(chargesShown ? (['charges'] as const) : []),
+            ]}
+          />
+        }
         total={{ label: totalLabel, amount: moneyAlways(billTotal) }}
         secondary={
           !editing && allowDrafts

@@ -6,6 +6,7 @@ using ERP.Domain.Parties;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.SharedKernel.Tenancy;
+using ERP.SharedKernel.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Persistence.Reporting;
@@ -179,10 +180,15 @@ public sealed class TransactionReportReader : ITransactionReportReader
             invoices = invoices.Where(invoice => invoice.CustomerLedgerId == id);
         }
 
+        // A sale with no salesman named is the work of whoever entered it, which is how a
+        // counter that does not pick one credits its sales: the row the report shows for
+        // that user is the one this filter is asked for.
         if (query.SalesmanLedgerId is { } salesman)
         {
             LedgerId id = LedgerId.From(salesman);
-            invoices = invoices.Where(invoice => invoice.SalesmanLedgerId == id);
+            UserId user = UserId.From(salesman);
+            invoices = invoices.Where(invoice => invoice.SalesmanLedgerId == id
+                || (invoice.SalesmanLedgerId == null && invoice.CreatedBy == user));
         }
 
         if (query.Mode is { } mode)
@@ -224,6 +230,7 @@ public sealed class TransactionReportReader : ITransactionReportReader
                     invoice.Kind,
                     invoice.CustomerLedgerId,
                     invoice.SalesmanLedgerId,
+                    invoice.CreatedBy,
                     Stock = invoice.StockDocumentId ?? invoice.DeliveryNoteId,
                     line.ProductId,
                     product.BrandId,
@@ -241,7 +248,7 @@ public sealed class TransactionReportReader : ITransactionReportReader
                 row.Number,
                 row.Date,
                 row.CustomerLedgerId.Value,
-                row.SalesmanLedgerId?.Value,
+                row.SalesmanLedgerId?.Value ?? row.CreatedBy.Value,
                 row.Stock?.Value,
                 row.ProductId.Value,
                 row.BrandId?.Value,
@@ -417,11 +424,64 @@ public sealed class TransactionReportReader : ITransactionReportReader
             charges = [.. found.Select(charge => (charge.PurchaseInvoiceId.Value, charge.Amount, charge.IsAddition))];
         }
 
-        return charges
+        Dictionary<Guid, decimal> others = charges
             .GroupBy(charge => charge.Bill)
             .ToDictionary(
                 group => group.Key,
-                group => signs[group.Key] * group.Sum(charge => charge.Adds ? charge.Amount : -charge.Amount));
+                group => group.Sum(charge => charge.Adds ? charge.Amount : -charge.Amount));
+
+        if (sales)
+        {
+            await AddRoundOffAsync(others, [.. signs.Keys], cancellationToken);
+        }
+
+        return others.ToDictionary(other => other.Key, other => signs[other.Key] * other.Value);
+    }
+
+    /// <summary>
+    /// Adds what rounding to the firm's unit moved each sale by, so a bill's row comes to
+    /// what the bill does. Bills rounded to the currency alone are left as they are: the
+    /// fraction of a cent that leaves is not a figure anybody reads.
+    /// </summary>
+    private async Task AddRoundOffAsync(
+        Dictionary<Guid, decimal> others,
+        List<Guid> bills,
+        CancellationToken cancellationToken)
+    {
+        List<SalesInvoiceId> ids = [.. bills.Select(SalesInvoiceId.From)];
+
+        var rounded = await _context.SalesInvoices.AsNoTracking()
+            .Where(invoice => ids.Contains(invoice.Id) && invoice.RoundTo > 0m)
+            .Select(invoice => new { invoice.Id, invoice.RoundTo, invoice.Currency })
+            .ToListAsync(cancellationToken);
+
+        if (rounded.Count == 0)
+        {
+            return;
+        }
+
+        List<SalesInvoiceId> roundedIds = [.. rounded.Select(invoice => invoice.Id)];
+
+        // The whole of each bill, whatever the report narrowed to: the rounding is the
+        // bill's, worked on its whole total.
+        var goods = await _context.SalesInvoiceLines.AsNoTracking()
+            .Where(line => roundedIds.Contains(line.SalesInvoiceId))
+            .GroupBy(line => line.SalesInvoiceId)
+            .Select(group => new
+            {
+                Bill = group.Key,
+                Amount = group.Sum(line => line.TaxableAmount.Amount + line.TaxAmount.Amount),
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var invoice in rounded)
+        {
+            decimal charged = others.GetValueOrDefault(invoice.Id.Value);
+            decimal gross = (goods.Find(row => row.Bill == invoice.Id)?.Amount ?? 0m) + charged;
+            Money total = SalesInvoice.RoundTotal(Money.Raw(gross, invoice.Currency), invoice.RoundTo);
+
+            others[invoice.Id.Value] = charged + (total.Amount - gross);
+        }
     }
 
     /// <summary>What each sales line's goods cost, from the stock its bill moved.</summary>
@@ -493,11 +553,36 @@ public sealed class TransactionReportReader : ITransactionReportReader
             .Select(row => new { row.Id, row.Name })
             .ToListAsync(cancellationToken);
 
+        Dictionary<Guid, string> ledgerNames = ledgerRows.ToDictionary(row => row.Id.Value, row => row.Name);
+
+        // A sale with no salesman named is credited to the user who entered it, who is
+        // named as they go by now.
+        List<UserId> users =
+        [
+            .. lines
+                .Where(line => line.Salesman is { } man && !ledgerNames.ContainsKey(man))
+                .Select(line => UserId.From(line.Salesman!.Value))
+                .Distinct(),
+        ];
+
+        if (users.Count > 0)
+        {
+            var userRows = await _context.Users.AsNoTracking()
+                .Where(row => users.Contains(row.Id))
+                .Select(row => new { row.Id, row.DisplayName })
+                .ToListAsync(cancellationToken);
+
+            foreach (var user in userRows)
+            {
+                ledgerNames[user.Id.Value] = user.DisplayName;
+            }
+        }
+
         return new Names(
             productRows.ToDictionary(row => row.Id.Value, row => (row.Code, row.Description)),
             brandRows.ToDictionary(row => row.Id.Value, row => row.Name),
             categoryRows.ToDictionary(row => row.Id.Value, row => row.Name),
-            ledgerRows.ToDictionary(row => row.Id.Value, row => row.Name));
+            ledgerNames);
     }
 
     private static decimal Round(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);

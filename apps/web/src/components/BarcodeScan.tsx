@@ -76,7 +76,9 @@ export function addScanned<
 /**
  * A box a barcode scanner types into.
  *
- * A scanner is a keyboard that types the code and presses Enter, so Enter is the scan.
+ * A scanner is a keyboard that types the code and presses Enter, so Enter is the scan -
+ * and the only way to it: a Scan button beside the box was one more thing on the
+ * screen for something no scanner needs, and a phone's keyboard has its own Go key.
  * What it finds is handed to `onScan`, which puts it on the document and says what
  * quantity it now stands at; the box empties and keeps the focus for the next one.
  */
@@ -181,16 +183,9 @@ export function BarcodeScan({
         }}
         aria-label={t('stock.barcodeScanner')}
         placeholder={t('stock.barcodeScanPlaceholder')}
+        enterKeyHint="go"
         className="field-input min-w-40 flex-1"
       />
-      <button
-        type="button"
-        disabled={disabled || code.trim() === ''}
-        onClick={() => void scan()}
-        className="btn-secondary"
-      >
-        {t('stock.scan')}
-      </button>
       {notice && (
         <span
           role="status"
@@ -209,8 +204,8 @@ export function BarcodeScan({
 
 /**
  * The scan box as a field: a caption, what the last scan found at the end of it,
- * and the box with its button underneath - the height of every other field, so it
- * sits in a row of them.
+ * and the box underneath - the height of every other field, so it sits in a row of
+ * them. Enter is the scan, as a scanner sends it.
  */
 export function ScanField({
   value,
@@ -231,38 +226,28 @@ export function ScanField({
   readonly disabled?: boolean;
   readonly className?: string | undefined;
 }): React.JSX.Element {
-  const { t } = useTranslation();
   const id = useId();
 
   return (
     <Field label={label} htmlFor={id} aside={notice} className={className}>
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
-          <IconBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" />
-          <input
-            id={id}
-            type="text"
-            value={value}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                onScan();
-              }
-            }}
-            placeholder={placeholder}
-            className="field-input ps-9"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={disabled || value.trim() === ''}
-          onClick={onScan}
-          className="btn-secondary shrink-0"
-        >
-          {t('stock.scan')}
-        </button>
+      <div className="relative min-w-0">
+        <IconBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" />
+        <input
+          id={id}
+          type="text"
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              onScan();
+            }
+          }}
+          placeholder={placeholder}
+          enterKeyHint="go"
+          className="field-input ps-9"
+        />
       </div>
     </Field>
   );

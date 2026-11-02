@@ -6,11 +6,14 @@ import { Field } from '@/components/Form';
 import {
   IconBarcode,
   IconClose,
+  IconMenu,
+  IconPause,
   IconPlus,
   IconReceipt,
   IconSearch,
   IconTrash,
 } from '@/components/icons';
+import { openMenu } from '@/lib/shell';
 import {
   activeDialog,
   actOn,
@@ -30,6 +33,9 @@ import {
 /** Asks to close the window: straight away, or after asking when there is work in it. */
 const RequestClose = createContext<() => void>(() => {});
 
+/** Whether the window sits beside the sidebar, leaving the menu to be used. */
+const Docked = createContext(false);
+
 /**
  * The whole window an invoice is entered in.
  *
@@ -38,13 +44,21 @@ const RequestClose = createContext<() => void>(() => {});
  * bar along its foot holds the buttons that finish it.
  *
  * With work in it (`dirty`), Escape, the cross and Cancel ask before throwing it
- * away. A box of figures takes the whole of what is in it when it is entered, so a
- * quantity of 1 is typed over rather than typed after.
+ * away - or, where the bill can be held (`onHold`), whether to hold it instead. A box
+ * of figures takes the whole of what is in it when it is entered, so a quantity of 1
+ * is typed over rather than typed after.
+ *
+ * `docked` leaves the application's menu where it can be used: the window sits beside
+ * the sidebar rather than over it, and on a phone its header has the menu button the
+ * window covers. It is for a bill that holds itself when its screen is left, so going
+ * somewhere else from the menu loses nothing.
  */
 export function InvoiceWindow({
   title,
   onClose,
   dirty = false,
+  onHold,
+  docked = false,
   children,
 }: {
   /** What a screen reader announces the window as. */
@@ -52,6 +66,10 @@ export function InvoiceWindow({
   readonly onClose: () => void;
   /** Something has been entered that closing would lose. */
   readonly dirty?: boolean;
+  /** Puts the bill on hold and closes the window; offered beside discarding it. */
+  readonly onHold?: () => void;
+  /** Beside the sidebar, with the menu left usable. */
+  readonly docked?: boolean;
   readonly children: React.ReactNode;
 }): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
@@ -63,12 +81,25 @@ export function InvoiceWindow({
   };
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && requestClose()}>
+    <Dialog.Root open modal={!docked} onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-md dark:bg-black/80" />
+        {!docked && (
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-md dark:bg-black/80" />
+        )}
         <Dialog.Content
           aria-describedby={undefined}
-          className="invoice-window animate-rise fixed inset-0 z-50 flex flex-col bg-canvas outline-none"
+          {...(docked ? { 'data-holds-on-leave': '' } : {})}
+          // Docked, the menu beside it is there to be used: a click or a focus out
+          // there is not a request to close.
+          {...(docked
+            ? { onInteractOutside: (event: Event) => event.preventDefault() }
+            : {})}
+          className={clsx(
+            'invoice-window animate-rise fixed flex flex-col bg-canvas outline-none',
+            docked
+              ? 'inset-y-0 end-0 start-0 z-40 lg:start-[var(--app-sidebar-width,0px)] lg:border-s lg:border-line lg:shadow-float'
+              : 'inset-0 z-50',
+          )}
           onFocusCapture={(event) => {
             const field = event.target;
             if (
@@ -87,13 +118,19 @@ export function InvoiceWindow({
           }}
         >
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
-          <RequestClose.Provider value={requestClose}>
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-              {children}
-            </div>
-          </RequestClose.Provider>
+          <Docked.Provider value={docked}>
+            <RequestClose.Provider value={requestClose}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                {children}
+              </div>
+            </RequestClose.Provider>
+          </Docked.Provider>
           {confirming && (
-            <DiscardPrompt onKeep={() => setConfirming(false)} onDiscard={onClose} />
+            <DiscardPrompt
+              onKeep={() => setConfirming(false)}
+              onDiscard={onClose}
+              {...(onHold ? { onHold } : {})}
+            />
           )}
         </Dialog.Content>
       </Dialog.Portal>
@@ -101,13 +138,18 @@ export function InvoiceWindow({
   );
 }
 
-/** Whether to throw away an invoice with work in it. Keeping it is the default. */
+/**
+ * Whether to throw away an invoice with work in it - or hold it, where it can be held.
+ * Keeping it is the default.
+ */
 function DiscardPrompt({
   onKeep,
   onDiscard,
+  onHold,
 }: {
   readonly onKeep: () => void;
   readonly onDiscard: () => void;
+  readonly onHold?: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -135,10 +177,16 @@ function DiscardPrompt({
           {t('invoice.discardTitle')}
         </h3>
         <p className="mt-1.5 text-sm text-ink-muted">{t('invoice.discardBody')}</p>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button type="button" onClick={onKeep} className="btn-secondary" autoFocus>
             {t('invoice.keepEditing')}
           </button>
+          {onHold && (
+            <button type="button" onClick={onHold} className="btn-secondary">
+              <IconPause className="size-4" />
+              {t('invoice.hold')}
+            </button>
+          )}
           <button type="button" onClick={onDiscard} className="btn-danger">
             {t('invoice.discard')}
           </button>
@@ -172,10 +220,24 @@ export function InvoiceHeader({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const onCancel = useContext(RequestClose);
+  const docked = useContext(Docked);
 
   return (
     <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas">
       <div className="flex w-full items-center gap-3 px-3 py-2 sm:px-4 short:py-1.5">
+        {/* The window covers the bar's menu button; on a wide screen the sidebar is
+            beside it instead. */}
+        {docked && (
+          <button
+            type="button"
+            onClick={openMenu}
+            aria-label={t('nav.openMenu')}
+            title={t('invoice.menuHolds')}
+            className="btn-icon -ms-1 size-9 shrink-0 lg:hidden"
+          >
+            <IconMenu />
+          </button>
+        )}
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-300">
           {icon}
         </span>
@@ -213,11 +275,14 @@ export function InvoiceActions({
   secondary = [],
   hints,
   total,
+  start,
 }: {
   readonly primary: InvoiceAction;
   readonly secondary?: readonly InvoiceAction[];
   readonly hints?: React.ReactNode;
   readonly total?: { readonly label: string; readonly amount: string };
+  /** At the bar's start, away from the buttons that save: Hold, and Load from. */
+  readonly start?: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const onCancel = useContext(RequestClose);
@@ -258,10 +323,13 @@ export function InvoiceActions({
       className="sticky bottom-0 z-20 border-t border-line/70 bg-canvas shadow-[0_-4px_12px_-8px_rgb(15_23_42/0.15)]"
     >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:flex-nowrap sm:px-4">
+        {start && <div className="flex shrink-0 items-center gap-2">{start}</div>}
         {total && (
           <div
             className={clsx(
-              'flex min-w-0 basis-full items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0',
+              'flex min-w-0 items-baseline justify-between gap-2 sm:basis-auto sm:flex-col sm:items-start sm:gap-0',
+              // Beside the buttons at the start on a phone, rather than a row of its own.
+              start ? 'flex-1 sm:flex-none' : 'basis-full',
               billInView && 'lg:hidden',
             )}
           >
@@ -817,6 +885,14 @@ export interface BillBreakdown {
   readonly taxLabel?: string;
   /** Each additional ledger with an amount, signed the way it moves the total. */
   readonly charges: readonly { readonly label: string; readonly amount: number }[];
+  /**
+   * The goods' total - after their discounts, with their tax - set out as a total of its
+   * own before the additional ledgers and the round off, as a sale's bill reads: Total,
+   * the ledgers, Round off, Grand total.
+   */
+  readonly subtotal?: boolean;
+  /** What rounding moved the total by; absent where the document is not rounded. */
+  readonly roundOff?: number;
 }
 
 /**
@@ -839,8 +915,19 @@ export function BillCard({
   readonly className?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const { items, quantity, gross, discount, taxable, tax, showTax, taxLabel, charges } =
-    breakdown;
+  const {
+    items,
+    quantity,
+    gross,
+    discount,
+    taxable,
+    tax,
+    showTax,
+    taxLabel,
+    charges,
+    subtotal = false,
+    roundOff,
+  } = breakdown;
   const signed = (value: number): string =>
     `${value < 0 ? '−' : '+'}${money(Math.abs(value))}`;
 
@@ -869,7 +956,16 @@ export function BillCard({
             <FigureRow label={taxLabel ?? t('documents.tax')} value={money(tax)} />
           )}
         </div>
-        {charges.length > 0 && (
+        {subtotal && (
+          <div className="py-1">
+            <FigureRow
+              label={t('invoice.total')}
+              value={money(taxable + tax)}
+              muted={false}
+            />
+          </div>
+        )}
+        {(charges.length > 0 || roundOff !== undefined) && (
           <div className="pt-1">
             {charges.map((charge) => (
               <FigureRow
@@ -882,6 +978,9 @@ export function BillCard({
                 value={signed(charge.amount)}
               />
             ))}
+            {roundOff !== undefined && (
+              <FigureRow label={t('invoice.roundOff')} value={signed(roundOff)} />
+            )}
           </div>
         )}
       </div>
@@ -984,6 +1083,7 @@ export function PartyCard({
   choose,
   money,
   className,
+  children,
 }: {
   readonly icon: React.ReactNode;
   readonly title: string;
@@ -994,6 +1094,8 @@ export function PartyCard({
   readonly choose?: string;
   readonly money: (value: number) => string;
   readonly className?: string;
+  /** Fields that belong with the party, under its details: the billing name, the narration. */
+  readonly children?: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -1058,6 +1160,11 @@ export function PartyCard({
           )}
         </div>
       )}
+      {children && (
+        <div className="mt-3 space-y-2.5 border-t border-line pt-3 short:mt-2 short:pt-2">
+          {children}
+        </div>
+      )}
     </FooterSection>
   );
 }
@@ -1092,11 +1199,14 @@ export function NarrationInput({
   onChange,
   label,
   className,
+  compact = false,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly label: string;
   readonly className?: string;
+  /** The small box of a card in the foot, rather than the full height of the fields. */
+  readonly compact?: boolean;
 }): React.JSX.Element {
   const id = useId();
 
@@ -1113,7 +1223,7 @@ export function NarrationInput({
         maxLength={NARRATION_LIMIT}
         onChange={(event) => onChange(event.target.value)}
         placeholder={label}
-        className="field-input"
+        className={compact ? 'field-input-sm' : 'field-input'}
       />
     </Field>
   );

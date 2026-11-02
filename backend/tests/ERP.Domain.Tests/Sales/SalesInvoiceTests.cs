@@ -164,6 +164,88 @@ public sealed class SalesInvoiceTests
         invoice.RoundingDifference.Amount.ShouldBe(0m);
     }
 
+    [Theory]
+    [InlineData(0.25, 10.10, 10.00)]
+    [InlineData(0.25, 10.13, 10.25)]
+    [InlineData(0.50, 10.10, 10.00)]
+    [InlineData(1, 10.49, 10)]
+    [InlineData(1, 10.50, 11)]
+    [InlineData(5, 12.40, 10)]
+    public void A_total_rounds_to_the_firms_own_unit_nearest_and_half_away_from_zero(
+        double unit,
+        double rate,
+        double expected)
+    {
+        // A counter that takes quarters, or whole dirhams: the bill is what the customer
+        // actually hands over, and the difference goes to Round Off like any other.
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+        decimal price = (decimal)rate;
+
+        invoice.AddLine(Stocked(each), each, 1m, 1m, price, Assessed(price, 0m))
+            .IsSuccess.ShouldBeTrue();
+        invoice.SetRounding((decimal)unit).IsSuccess.ShouldBeTrue();
+
+        invoice.Total.Amount.ShouldBe((decimal)expected);
+        invoice.RoundingDifference.Amount.ShouldBe((decimal)expected - price);
+        SalesInvoice.RoundTotal(invoice.GrossTotal, (decimal)unit).ShouldBe(invoice.Total);
+    }
+
+    [Fact]
+    public void Without_a_unit_the_total_is_rounded_to_the_currency_alone()
+    {
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+
+        invoice.AddLine(Stocked(each), each, 1m, 1m, 10.13m, Assessed(10.13m, 0m))
+            .IsSuccess.ShouldBeTrue();
+        invoice.SetRounding(0m).IsSuccess.ShouldBeTrue();
+
+        invoice.Total.Amount.ShouldBe(10.13m);
+        invoice.RoundingDifference.Amount.ShouldBe(0m);
+    }
+
+    [Theory]
+    [InlineData(-0.25)]
+    [InlineData(1000.01)]
+    public void A_rounding_unit_out_of_range_is_refused(double unit)
+    {
+        SalesInvoice invoice = Draft().Value;
+
+        invoice.SetRounding((decimal)unit).Error.Code.ShouldBe("SalesInvoice.RoundToInvalid");
+        invoice.RoundTo.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void A_billing_name_is_kept_as_typed_within_its_length()
+    {
+        // A walk-in customer billed under the firm's Primary account, by the name they gave.
+        SalesInvoice invoice = Draft().Value;
+
+        invoice.SetDetails(null, null, "  Rashid Khan  ").IsSuccess.ShouldBeTrue();
+        invoice.BillingName.ShouldBe("Rashid Khan");
+
+        invoice.SetDetails(null, null, new string('x', SalesInvoice.MaximumBillingNameLength + 1))
+            .Error.Code.ShouldBe("SalesInvoice.BillingNameTooLong");
+        invoice.BillingName.ShouldBe("Rashid Khan");
+
+        invoice.SetDetails(null, null, "   ").IsSuccess.ShouldBeTrue();
+        invoice.BillingName.ShouldBeNull();
+    }
+
+    [Fact]
+    public void An_online_payment_type_is_kept_for_an_online_sale_only()
+    {
+        SalesInvoice invoice = Draft().Value;
+
+        invoice.SetSaleTerms(SalesPaymentMode.Online, null, null, " Google Pay ").IsSuccess.ShouldBeTrue();
+        invoice.OnlinePaymentType.ShouldBe("Google Pay");
+
+        // Changed to cash, the type goes with the mode it described.
+        invoice.SetSaleTerms(SalesPaymentMode.Cash, null, null, "Google Pay").IsSuccess.ShouldBeTrue();
+        invoice.OnlinePaymentType.ShouldBeNull();
+    }
+
     [Fact]
     public void A_line_priced_finer_than_its_currency_is_stated_at_the_currency()
     {

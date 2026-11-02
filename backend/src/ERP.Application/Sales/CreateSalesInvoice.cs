@@ -71,6 +71,15 @@ public sealed record SalesInvoiceChargeInput(Guid LedgerId, decimal Amount);
 /// A counter's figure can differ from the rounded total by a fraction, and a payment in
 /// full refused for being a fils over the bill is a sale the counter cannot make.
 /// </param>
+/// <param name="BillingName">
+/// The name the invoice is made out to: the walk-in customer's, typed at the counter, on a
+/// sale to the firm's Primary customer.
+/// </param>
+/// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe, Talabat.</param>
+/// <param name="RoundTo">
+/// The unit the total is rounded to - 0.25, 1, 5 - as the firm's settings say. Zero, the
+/// default, rounds to the currency's own precision alone.
+/// </param>
 /// <remarks>
 /// A draft, and only a draft. Nothing moves until it is posted, which is a command of its
 /// own - so an invoice can be corrected while it is being typed, and a mistake found at
@@ -94,7 +103,10 @@ public sealed record CreateSalesInvoiceCommand(
     decimal AmountReceived = 0m,
     Guid? ReceivedIntoLedgerId = null,
     string? PaymentReference = null,
-    bool PaidInFull = false) : ICommand<SalesInvoiceResponse>, ITransactional;
+    bool PaidInFull = false,
+    string? BillingName = null,
+    string? OnlinePaymentType = null,
+    decimal RoundTo = 0m) : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>An invoice as it now stands.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
@@ -153,6 +165,16 @@ public sealed class CreateSalesInvoiceCommandValidator
 
         RuleFor(c => c.PaymentReference)
             .MaximumLength(SalesInvoice.MaximumPaymentReferenceLength);
+
+        RuleFor(c => c.BillingName)
+            .MaximumLength(SalesInvoice.MaximumBillingNameLength);
+
+        RuleFor(c => c.OnlinePaymentType)
+            .MaximumLength(SalesInvoice.MaximumOnlinePaymentTypeLength);
+
+        RuleFor(c => c.RoundTo)
+            .InclusiveBetween(0m, SalesInvoice.MaximumRoundTo)
+            .WithMessage($"A total is rounded to a unit from 0 to {SalesInvoice.MaximumRoundTo:0}.");
 
         RuleFor(c => c.Lines)
             .NotEmpty()

@@ -15,10 +15,13 @@ import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import {
   IconBox,
+  IconClock,
   IconCreditCard,
   IconDocument,
+  IconPause,
   IconPercent,
   IconPrinter,
+  IconTrash,
   IconUser,
 } from '@/components/icons';
 import {
@@ -63,6 +66,8 @@ import { LedgerKind, listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import {
+  salesPaymentModeOf,
+  useChargesShown,
   useDirectSave,
   useGodownsOn,
   useSettings,
@@ -102,6 +107,7 @@ import {
   SalesInvoiceStatus,
   SalesPaymentMode,
   paidThroughBank,
+  roundTotal,
   TaxMode,
   updateSalesInvoice,
   type CustomerAccount,
@@ -118,10 +124,18 @@ import {
   listPurchaseInvoices,
   PurchaseDocumentKind,
 } from '@/lib/purchase';
-import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
+import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
-import { shortcutProps } from '@/lib/shortcuts';
+import { shortcutFor, shortcutProps } from '@/lib/shortcuts';
 import { ShortcutHints } from '@/components/ShortcutHints';
+import {
+  discardHeldSale,
+  holdSale,
+  takeHeldSale,
+  useHeldSales,
+  type HeldSale,
+} from '@/lib/heldSales';
+import { MENU_CHOSEN_EVENT } from '@/lib/shell';
 
 const PAGE_SIZE = 25;
 
@@ -257,6 +271,11 @@ export function SalesPage({
 
   const [entering, setEntering] = useState(false);
   const [viewing, setViewing] = useState<{ id: string; print?: boolean } | null>(null);
+  // A bill taken off hold to finish, and the list of them, open over the sales list.
+  const [resumed, setResumed] = useState<HeldSale<SaleDraft> | null>(null);
+  const [showingHeld, setShowingHeld] = useState(false);
+  const holdOn = useSettings((state) => state.allowHold !== false);
+  const held = useHeldSales<SaleDraft>(kindFilter);
 
   // Opened on a particular invoice by another screen - a delivery note raising the
   // invoice that bills it - and the parameter dropped so a refresh lands on the list.
@@ -321,11 +340,17 @@ export function SalesPage({
       header: t('sales.time'),
       value: (row) => timeOfSale(row.createdAtUtc),
     },
-    { key: 'customer', header: t('sales.customer'), value: (row) => row.customerName },
+    {
+      key: 'customer',
+      header: t('sales.customer'),
+      // A walk-in sale names the customer it was billed to, under the Primary account.
+      value: (row) =>
+        row.billingName ? `${row.billingName} (${row.customerName})` : row.customerName,
+    },
     {
       key: 'paymentMode',
       header: t('sales.paymentMode'),
-      value: (row) => paymentModeLabel(row.paymentMode, t),
+      value: (row) => paymentModeLabel(row.paymentMode, t, row.onlinePaymentType),
       render: (row) => (
         <StatusBadge
           tone={
@@ -335,7 +360,7 @@ export function SalesPage({
                 ? 'info'
                 : 'neutral'
           }
-          label={paymentModeLabel(row.paymentMode, t)}
+          label={paymentModeLabel(row.paymentMode, t, row.onlinePaymentType)}
         />
       ),
     },
@@ -353,15 +378,17 @@ export function SalesPage({
       value: (row) => row.paymentReference ?? '',
       hiddenByDefault: true,
     },
+    // Nobody named, the sale is whoever entered it: a counter that does not pick a
+    // salesman credits the user signed in.
     {
       key: 'salesman',
       header: t('sales.salesman'),
-      value: (row) => row.salesmanName ?? '',
+      value: (row) => row.salesmanName ?? row.enteredByName ?? '',
     },
     {
       key: 'billingMan',
       header: t('sales.billingman'),
-      value: (row) => row.billingManName ?? '',
+      value: (row) => row.billingManName ?? row.enteredByName ?? '',
       hiddenByDefault: true,
     },
     {
@@ -506,14 +533,26 @@ export function SalesPage({
                   : t('sales.none')
               }
               actions={
-                <GridAction
-                  label={
-                    isSalesReturn
-                      ? t('sales.newSalesReturn') || 'New return'
-                      : t('sales.newInvoice')
-                  }
-                  onClick={() => setEntering(true)}
-                />
+                <>
+                  {holdOn && held.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowingHeld(true)}
+                      className="btn-secondary btn-sm shrink-0 max-sm:min-h-9"
+                    >
+                      <IconClock className="size-3.5" />
+                      {t('sales.heldBills', { count: held.length })}
+                    </button>
+                  )}
+                  <GridAction
+                    label={
+                      isSalesReturn
+                        ? t('sales.newSalesReturn') || 'New return'
+                        : t('sales.newInvoice')
+                    }
+                    onClick={() => setEntering(true)}
+                  />
+                </>
               }
               paging={{
                 page: result.page,
@@ -530,22 +569,54 @@ export function SalesPage({
       {/* Outside the frame on purpose: it replaces its children with a skeleton
           whenever the list goes back to pending — a page change or a filter — and an
           invoice half entered should not go with them. */}
-      {(entering || editing) && (
+      {(entering || editing || resumed) && (
         <EntryDialog
+          // A bill taken off hold is a fresh window: everything it starts with is its own.
+          key={resumed?.id ?? (editing ? editing.header.salesInvoiceId : 'new')}
           initialKind={editing?.kind ?? kindFilter}
           {...(editing ? { editing } : {})}
+          {...(resumed ? { held: resumed } : {})}
           onClose={() => {
             setEntering(false);
             setEditing(null);
+            setResumed(null);
           }}
+          onHeld={(message) => {
+            setEntering(false);
+            setEditing(null);
+            setResumed(null);
+            setNotice(message);
+          }}
+          onShowHeld={() => setShowingHeld(true)}
           onSaved={(message, printId) => {
             setEntering(false);
             setEditing(null);
+            setResumed(null);
             setNotice(message);
             // Save and print: the posted document opens straight onto its print.
             if (printId) setViewing({ id: printId, print: true });
             void queryClient.invalidateQueries({ queryKey: ['sales-invoices'] });
             void queryClient.invalidateQueries({ queryKey: ['sales-invoice'] });
+          }}
+        />
+      )}
+
+      {showingHeld && (
+        <HeldSalesDialog
+          held={held}
+          onClose={() => setShowingHeld(false)}
+          onOpen={(id) => {
+            // The bill on screen, if any, goes on hold as this one is taken up: the
+            // window it is in says so as it closes.
+            window.dispatchEvent(new Event(HOLD_OPEN_SALE_EVENT));
+            const taken = takeHeldSale<SaleDraft>(id);
+            setShowingHeld(false);
+
+            if (taken) {
+              setEntering(false);
+              setEditing(null);
+              setResumed(taken);
+            }
           }}
         />
       )}
@@ -594,19 +665,126 @@ interface AdditionalLedgerItem {
   readonly amount: string;
 }
 
+/**
+ * A sale as the entry screen holds it, put on hold: everything typed into it, so it opens
+ * again exactly as it was left.
+ */
+interface SaleDraft {
+  readonly date: string;
+  readonly customerId: string;
+  readonly warehouseId: string;
+  readonly reference: string;
+  readonly returnsInvoiceId: string;
+  readonly paymentMode: number;
+  readonly onlineType: string;
+  readonly salesman: string;
+  readonly billingman: string;
+  readonly taxMode: 'NT' | 'TAX' | 'GST';
+  readonly rateType: SalesRateType;
+  readonly narration: string;
+  readonly billingName: string;
+  readonly paidAmount: string;
+  readonly paymentReference: string;
+  readonly additionalLedgers: readonly AdditionalLedgerItem[];
+  readonly lines: readonly DraftLine[];
+}
+
+/** Said to the open sale when another is taken off hold: it holds itself and makes way. */
+const HOLD_OPEN_SALE_EVENT = 'erp:hold-open-sale';
+
+/** Today's held bills, to take one up again or throw it away. */
+function HeldSalesDialog({
+  held,
+  onOpen,
+  onClose,
+}: {
+  readonly held: readonly HeldSale<SaleDraft>[];
+  readonly onOpen: (id: string) => void;
+  readonly onClose: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <Modal
+      title={t('sales.heldTitle')}
+      subtitle={t('sales.heldSubtitle')}
+      icon={<IconClock className="size-5" />}
+      onClose={onClose}
+      size="form"
+    >
+      {held.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-ink-muted">
+          {t('sales.noHeldBills')}
+        </p>
+      ) : (
+        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+          {held.map((bill) => (
+            <li key={bill.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <span className="shrink-0 text-sm font-semibold whitespace-nowrap tabular-nums text-ink">
+                {timeOfSale(bill.heldAt)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-ink">
+                  {bill.party || '—'}
+                </span>
+                <span className="block text-xs text-ink-muted">
+                  {t('invoice.itemCount', { count: bill.items })}
+                </span>
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-ink">
+                {moneyAlways(bill.total)}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpen(bill.id)}
+                  className="btn-primary btn-sm"
+                >
+                  {t('sales.openHeld')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => discardHeldSale(bill.id)}
+                  aria-label={`${t('sales.discardHeld')}: ${bill.party}`}
+                  title={t('sales.discardHeld')}
+                  className="btn-icon size-8 text-ink-muted hover:text-red-600"
+                >
+                  <IconTrash className="size-4" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="form-actions">
+        <ModalButton onClick={onClose}>{t('sales.close')}</ModalButton>
+      </div>
+    </Modal>
+  );
+}
+
 /** Enters a draft: the header, then the lines. */
 function EntryDialog({
   initialKind = SalesDocumentKind.invoice,
   editing,
+  held,
   onClose,
   onSaved,
+  onHeld,
+  onShowHeld,
 }: {
   readonly initialKind?: number;
   /** A saved document being corrected. Absent, a new one is being entered. */
   readonly editing?: SalesInvoiceDetail;
+  /** A bill taken off hold, to finish. */
+  readonly held?: HeldSale<SaleDraft>;
   readonly onClose: () => void;
   /** With the document's id when it should open for printing. */
   readonly onSaved: (message: string, printId?: string) => void;
+  /** The bill went on hold, and the window closes. */
+  readonly onHeld: (message: string) => void;
+  /** Shows today's held bills, to take another up. */
+  readonly onShowHeld: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
@@ -615,10 +793,30 @@ function EntryDialog({
   const directSave = useDirectSave();
   const preferredWarehouseId = settings.preferredWarehouseId;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // What the sales screen shows: each its own switch in Settings › Sales, so a counter
+  // sees what it uses and nothing else.
+  const showReference = settings.showSalesReference === true;
+  const pickSalesmen = settings.pickSalesmen === true;
+  const showBillingName = settings.showBillingName !== false;
+  const showNarration = settings.showSalesNarration !== false;
+  const showScan = settings.showSalesScan !== false;
+  const loadFromOn = settings.allowLoadFrom !== false;
+  const rateChange = settings.allowRateChange !== false;
+  // A document being corrected keeps the additional ledgers it carries, shown or not.
+  const chargesOn = useChargesShown('Sales');
+  const showCharges = chargesOn || (editing?.charges.length ?? 0) > 0;
+  // Rounded as the firm rounds - or, for a document being corrected, as it was.
+  const roundTo = editing ? (editing.roundTo ?? 0) : settings.salesRoundTo;
+  // A new bill can be held; a saved one being corrected is the document itself.
+  const holdable = settings.allowHold !== false && !editing;
+  const heldCount = useHeldSales(initialKind).length;
 
-  const [kind] = useState<number>(initialKind);
-  const [date, setDate] = useState(editing?.date ?? today);
+  const today = new Date().toISOString().slice(0, 10);
+  // Where a held bill was left, it opens again.
+  const start = held?.draft;
+
+  const [kind] = useState<number>(held?.kind ?? initialKind);
+  const [date, setDate] = useState(editing?.date ?? start?.date ?? today);
 
   // The number the server will give this document, read from its own series. A
   // document being corrected already has its number and keeps it.
@@ -633,41 +831,51 @@ function EntryDialog({
   const nextInvoiceNo =
     editing?.header.number ?? nextNumber ?? t('numbering.issuedOnSave');
   const [customerId, setCustomerId] = useState(
-    editing?.customerLedgerId ?? (settings.defaultCustomerId || ''),
+    editing?.customerLedgerId ?? start?.customerId ?? (settings.defaultCustomerId || ''),
   );
-  const [warehouseId, setWarehouseId] = useState(editing?.warehouseId ?? '');
-  const [reference, setReference] = useState(editing?.referenceNumber ?? '');
+  const [warehouseId, setWarehouseId] = useState(
+    editing?.warehouseId ?? start?.warehouseId ?? '',
+  );
+  const [reference, setReference] = useState(
+    editing?.referenceNumber ?? start?.reference ?? '',
+  );
   const [returnsInvoiceId, setReturnsInvoiceId] = useState(
-    editing?.returnsInvoiceId ?? '',
+    editing?.returnsInvoiceId ?? start?.returnsInvoiceId ?? '',
   );
   const [editReason, setEditReason] = useState('');
-  // Cash unless the counter's own default is credit: most of what a shop sells is
-  // paid for there and then.
+  // As Settings › Sales starts a sale: cash, unless the firm chose otherwise - most of
+  // what a shop sells is paid for there and then.
   const [paymentMode, setPaymentMode] = useState<number>(
-    editing?.paymentMode ??
-      (settings.defaultPaymentMode === 'Credit'
-        ? SalesPaymentMode.credit
-        : SalesPaymentMode.cash),
+    editing?.paymentMode ?? start?.paymentMode ?? salesPaymentModeOf(settings),
+  );
+  // How an online sale was paid: one of the firm's online payment types, by name.
+  const [onlineType, setOnlineType] = useState(
+    editing?.onlinePaymentType ?? start?.onlineType ?? '',
   );
   // Employee ledgers. A default saved before these were pickers holds a name rather
   // than an id, and is dropped below for want of an employee to match.
   const [salesman, setSalesman] = useState<string>(
-    editing ? (editing.salesmanLedgerId ?? '') : settings.defaultSalesman,
+    editing
+      ? (editing.salesmanLedgerId ?? '')
+      : (start?.salesman ?? settings.defaultSalesman),
   );
   const [billingman, setBillingman] = useState<string>(
-    editing ? (editing.billingManLedgerId ?? '') : settings.defaultBillingman,
+    editing
+      ? (editing.billingManLedgerId ?? '')
+      : (start?.billingman ?? settings.defaultBillingman),
   );
   const [taxMode, setTaxMode] = useState<'NT' | 'TAX' | 'GST'>(() => {
     const fallback = (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX';
 
     // A firm that charges no tax enters every sale without it.
     if (!taxOn) return 'NT';
+    if (start) return start.taxMode;
     if (!editing) return fallback;
 
     return editing.mode === TaxMode.nonTax ? 'NT' : fallback === 'NT' ? 'TAX' : fallback;
   });
   const [rateType, setRateType] = useState<SalesRateType>(
-    settings.defaultSalesRateType || 'retail',
+    start?.rateType ?? (settings.defaultSalesRateType || 'retail'),
   );
   const reverseCalc = settings.enableReverseCalculation ?? false;
   const autoBatch = settings.enableAutoBatch ?? true;
@@ -677,24 +885,36 @@ function EntryDialog({
   const [barcodeInput, setBarcodeInput] = useState('');
   const [barcodeNotice, setBarcodeNotice] = useState<string | null>(null);
 
-  const [narration, setNarration] = useState(editing?.narration ?? '');
+  const [narration, setNarration] = useState(
+    editing?.narration ?? start?.narration ?? '',
+  );
+  // The name the bill is made out to, typed for a walk-in customer on the Primary
+  // account; a named customer's bill carries their own.
+  const [billingName, setBillingName] = useState(
+    editing?.billingName ?? start?.billingName ?? '',
+  );
   // Blank means the whole bill for a cash or online sale and nothing for one on account;
   // a figure typed here is a part payment. A posted sale being corrected shows what it
   // took, unless that was the whole of it.
   const [paidAmount, setPaidAmount] = useState<string>(() =>
-    editing && editing.amountReceived > 0 && editing.amountReceived < editing.header.total
-      ? String(editing.amountReceived)
-      : '',
+    start
+      ? start.paidAmount
+      : editing &&
+          editing.amountReceived > 0 &&
+          editing.amountReceived < editing.header.total
+        ? String(editing.amountReceived)
+        : '',
   );
   // Where the money paid with the sale goes: the settings' default cash or bank
   // account for the mode, or the one a corrected document already named.
   const [receivedInto] = useState(editing?.receivedIntoLedgerId ?? '');
   const [paymentReference, setPaymentReference] = useState(
-    editing?.paymentReference ?? '',
+    editing?.paymentReference ?? start?.paymentReference ?? '',
   );
   const [additionalLedgers, setAdditionalLedgers] = useState<
     readonly AdditionalLedgerItem[]
   >(() => {
+    if (start) return start.additionalLedgers;
     if (editing) {
       return editing.charges.map((charge) => ({
         id: Math.random().toString(36).slice(2, 9),
@@ -705,8 +925,9 @@ function EntryDialog({
     }
 
     // A return starts with none; a sale with the amounts Settings gives its additional
-    // ledgers. One no longer set up for a sale is dropped when the setup arrives.
-    if (isReturn(initialKind)) return [];
+    // ledgers - unless the firm keeps them off its sales. One no longer set up for a
+    // sale is dropped when the setup arrives.
+    if (isReturn(initialKind) || !chargesOn) return [];
     return (settings.defaultAdditionalLedgers ?? [])
       .filter(
         (l) =>
@@ -742,19 +963,21 @@ function EntryDialog({
   // filled the rate in when the line had none — but '0' is a string, so it always
   // had one, and every line of a taxed invoice went out at zero per cent.
   const [lines, setLines] = useState<readonly DraftLine[]>(() =>
-    editing
-      ? editing.lines.map((line) => linesFrom(line))
-      : [
-          {
-            ...emptyLine,
-            taxPercentage: String(
-              modeTaxRate(
-                (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
-                settings.defaultTaxRate,
+    start
+      ? start.lines
+      : editing
+        ? editing.lines.map((line) => linesFrom(line))
+        : [
+            {
+              ...emptyLine,
+              taxPercentage: String(
+                modeTaxRate(
+                  (settings.defaultTaxMode as 'NT' | 'TAX' | 'GST') || 'TAX',
+                  settings.defaultTaxRate,
+                ),
               ),
-            ),
-          },
-        ],
+            },
+          ],
   );
   const [busy, setBusy] = useState(false);
   // Why the last save was refused, shown in the window the user is still in.
@@ -763,6 +986,69 @@ function EntryDialog({
   // A line just added, or just scanned onto, is scrolled to and picked out; Alt+A, or
   // Add item, leaves the cursor in the new line's product.
   const lineAttention = useLineAttention();
+
+  // ---- Holding the bill.
+  // Set once the bill is saved, thrown away or held, so that leaving the screen
+  // afterwards does not hold it again.
+  const finished = useRef(false);
+  // The name a bill taken off hold was held under, which it goes back under.
+  const heldId = useRef(held?.id);
+  // Holds the bill as it stands now, if there is anything to hold; replaced on every
+  // render, for the effects below that outlive the render that set them up.
+  const holdNow = useRef<() => boolean>(() => false);
+  const onHeldNow = useRef(onHeld);
+  onHeldNow.current = onHeld;
+  const onCloseNow = useRef(onClose);
+  onCloseNow.current = onClose;
+
+  /** The bill is done with: whatever was held of it goes from the list. */
+  const finish = (): void => {
+    finished.current = true;
+    if (heldId.current) discardHeldSale(heldId.current);
+  };
+
+  /** Throws the bill away. */
+  const close = (): void => {
+    finish();
+    onClose();
+  };
+
+  // Taken off hold, it is off the list while it is open; it goes back on only if it is
+  // left unfinished.
+  useEffect(() => {
+    if (heldId.current) discardHeldSale(heldId.current);
+  }, []);
+
+  // Leaving the screen any way at all - the back button, a shortcut to another entry -
+  // holds the bill rather than losing what was typed into it.
+  useEffect(
+    () => () => {
+      if (!finished.current) holdNow.current();
+    },
+    [],
+  );
+
+  // The menu used, or another held bill taken up: this one goes on hold - or, with
+  // nothing in it to hold, simply closes - and makes way.
+  useEffect(() => {
+    if (!holdable) return undefined;
+
+    const leave = (): void => {
+      if (finished.current) return;
+      finished.current = true;
+
+      if (holdNow.current()) onHeldNow.current(t('sales.heldNotice'));
+      else onCloseNow.current();
+    };
+
+    window.addEventListener(MENU_CHOSEN_EVENT, leave);
+    window.addEventListener(HOLD_OPEN_SALE_EVENT, leave);
+
+    return () => {
+      window.removeEventListener(MENU_CHOSEN_EVENT, leave);
+      window.removeEventListener(HOLD_OPEN_SALE_EVENT, leave);
+    };
+  }, [holdable, t]);
 
   const customers = useQuery<readonly CustomerSummary[], ApiError>({
     queryKey: ['customers', 'picker'],
@@ -773,6 +1059,9 @@ function EntryDialog({
     () => customers.data?.find((c) => c.customerId === customerId),
     [customers.data, customerId],
   );
+  // The firm's Primary customer: the account a walk-in sale goes to, whose bill is made
+  // out to whatever name the counter types.
+  const isWalkIn = selectedCustomer?.isPrimary === true;
 
   // What the customer owes before this sale: their balance across everything posted to
   // them. It used to be their opening balance, which is what they owed the day the firm
@@ -829,20 +1118,42 @@ function EntryDialog({
     : paymentMode === SalesPaymentMode.cash
       ? cashAccounts
       : [...cashAccounts, ...bankAccounts];
-  // The account chosen, or the firm's default for the mode, or the first there is.
+
+  // The online payment types offered - the active ones, and the one a corrected sale
+  // already names - and the bank the one chosen settles into.
+  const onlineOn = paymentMode === SalesPaymentMode.online;
+  const onlineTypes = settings.onlinePaymentTypes.filter(
+    (type) => type.active || type.name === (editing?.onlinePaymentType ?? ''),
+  );
+  const onlineChoices = onlineTypes.filter((type) => type.name.trim() !== '');
+  const onlineLedger = onlineOn
+    ? onlineChoices.find((type) => type.name === onlineType)?.ledgerId
+    : undefined;
+
+  // With one way to be paid online there is nothing to choose: it is that one.
+  useEffect(() => {
+    const only = onlineChoices.length === 1 ? onlineChoices[0] : undefined;
+
+    if (onlineOn && only && onlineType === '') setOnlineType(only.name);
+  }, [onlineOn, onlineChoices, onlineType]);
+
+  // The account chosen, or the bank the online type settles into, or the firm's
+  // default for the mode, or the first there is.
   const receivingAccountId = receivingAccounts.some(
     (ledger) => ledger.ledgerId === receivedInto,
   )
     ? receivedInto
-    : (receivingAccounts.find(
-        (ledger) =>
-          ledger.ledgerId ===
-          (paidThroughBank(paymentMode)
-            ? settings.defaultBankLedgerId
-            : settings.defaultCashLedgerId),
-      )?.ledgerId ??
-      receivingAccounts[0]?.ledgerId ??
-      '');
+    : onlineLedger && receivingAccounts.some((ledger) => ledger.ledgerId === onlineLedger)
+      ? onlineLedger
+      : (receivingAccounts.find(
+          (ledger) =>
+            ledger.ledgerId ===
+            (paidThroughBank(paymentMode)
+              ? settings.defaultBankLedgerId
+              : settings.defaultCashLedgerId),
+        )?.ledgerId ??
+        receivingAccounts[0]?.ledgerId ??
+        '');
 
   // The salesman and the billing man come from the employee master, so a sale is
   // credited to somebody a commission report can find.
@@ -953,8 +1264,11 @@ function EntryDialog({
     );
   }, [editing, chargeSetup]);
 
+  // The additional ledgers that count: none where the firm keeps them off its sales.
+  const activeCharges = showCharges ? additionalLedgers : [];
+
   const additionalLedgersTotal = useMemo(() => {
-    return additionalLedgers.reduce((acc, row) => {
+    return activeCharges.reduce((acc, row) => {
       const amt = Number(row.amount);
       // A row with no account is not sent, so it is not counted either.
       if (row.ledgerId === '' || !Number.isFinite(amt) || amt <= 0) return acc;
@@ -964,7 +1278,7 @@ function EntryDialog({
         row.isAddition;
       return adds ? acc + amt : acc - amt;
     }, 0);
-  }, [additionalLedgers, chargeSetup]);
+  }, [activeCharges, chargeSetup]);
 
   const totals = useMemo(() => {
     let gross = 0;
@@ -1005,10 +1319,14 @@ function EntryDialog({
     };
   }, [lines, enableDiscount]);
 
-  const grandTotal = useMemo(() => {
+  // Rounded as the server rounds it - to the firm's unit, then to the currency - with
+  // what rounding moved it by set out as the round off.
+  const unrounded = useMemo(() => {
     const raw = totals.total + additionalLedgersTotal;
     return Number.isFinite(raw) ? Math.max(0, raw) : 0;
   }, [totals.total, additionalLedgersTotal]);
+  const grandTotal = roundTotal(unrounded, roundTo);
+  const roundOff = roundMoney(grandTotal - unrounded);
 
   // What the customer is paying now. Blank is the whole bill for cash or online and
   // nothing on account; more than the bill is cash tendered, and only the bill is
@@ -1370,6 +1688,23 @@ function EntryDialog({
     );
   };
 
+  // A card, online or credit sale is billed to somebody the firm can name - not the
+  // walk-in account - where Settings › Sales asks for it: a card slip, a transfer or a
+  // debt with nobody's name on it cannot be traced back to anyone.
+  const namedCustomerWanted =
+    settings.namedCustomerForNonCash !== false &&
+    !isReturn(kind) &&
+    paymentMode !== SalesPaymentMode.cash &&
+    isWalkIn;
+  const namedCustomerProblem = namedCustomerWanted
+    ? t('sales.namedCustomerRequired', { mode: paymentModeLabel(paymentMode, t) })
+    : null;
+  // Paid online, it says how, where the firm has said which ways there are.
+  const onlineTypeProblem =
+    onlineOn && !isReturn(kind) && onlineChoices.length > 0 && onlineType === ''
+      ? t('sales.onlineTypeRequired')
+      : null;
+
   const { errors, submit } = useValidation<{
     date: string;
     customerId: string;
@@ -1377,8 +1712,10 @@ function EntryDialog({
   }>((values) =>
     collect({
       date: required(values.date, t('sales.dateRequired')),
-      customerId: required(values.customerId, t('sales.customerRequired')),
+      customerId:
+        required(values.customerId, t('sales.customerRequired')) ?? namedCustomerProblem,
       warehouseId: required(values.warehouseId, t('sales.warehouseRequired')),
+      onlineType: onlineTypeProblem,
       lines: lines.some((line) => line.productId && Number(line.quantity) > 0)
         ? null
         : t('sales.linesRequired'),
@@ -1456,8 +1793,8 @@ function EntryDialog({
       // number the server's series will issue, never one made up on this screen.
       const finalReference = reference.trim() || (editing ? '' : nextNumber || '');
 
-      // Requirement 7: addition ledgers mapped into charges
-      const chargesPayload: readonly SalesChargeInput[] = additionalLedgers
+      // The additional ledgers with an amount, as the server's charges.
+      const chargesPayload: readonly SalesChargeInput[] = activeCharges
         .filter((row) => row.ledgerId !== '' && Number(row.amount) > 0)
         .map((row) => ({
           ledgerId: row.ledgerId,
@@ -1473,6 +1810,10 @@ function EntryDialog({
         returnsInvoiceId: isReturn(kind) && returnsInvoiceId ? returnsInvoiceId : null,
         referenceNumber: finalReference || null,
         narration: narration.trim() || null,
+        // The name typed for a walk-in customer; a named one's bill carries their own.
+        billingName: isWalkIn && showBillingName ? billingName.trim() || null : null,
+        onlinePaymentType: onlineOn ? onlineType.trim() || null : null,
+        roundTo,
         charges: chargesPayload,
         // Non-tax is the exception somebody chooses, so it is the one sent; otherwise
         // the server takes the mode from the firm's regime, or keeps the document's.
@@ -1485,8 +1826,14 @@ function EntryDialog({
                 ? TaxMode.tax
                 : null,
         paymentMode,
-        salesmanLedgerId: employeeId(salesman),
-        billingManLedgerId: employeeId(billingman),
+        // Not asked for, nobody is named: the sale is the user's who entered it. A
+        // corrected sale keeps whoever it named.
+        salesmanLedgerId: pickSalesmen
+          ? employeeId(salesman)
+          : (editing?.salesmanLedgerId ?? null),
+        billingManLedgerId: pickSalesmen
+          ? employeeId(billingman)
+          : (editing?.billingManLedgerId ?? null),
         ...payment,
       };
 
@@ -1496,6 +1843,8 @@ function EntryDialog({
           post,
           reason: editReason.trim() || null,
         });
+
+        finish();
 
         if (isHeldForApproval(header)) {
           onSaved(t('approvals.heldNotice', { number: header.documentNumber }));
@@ -1511,6 +1860,7 @@ function EntryDialog({
 
       const header = await createSalesInvoice({ ...input, post });
 
+      finish();
       onSaved(
         post
           ? t('sales.savedPostedNotice', { number: header.number })
@@ -1530,7 +1880,7 @@ function EntryDialog({
     : isReturn(kind)
       ? t('sales.newReturn')
       : t('sales.newInvoice');
-  const totalLabel = isReturn(kind) ? t('invoice.returnTotal') : t('invoice.billTotal');
+  const totalLabel = isReturn(kind) ? t('invoice.returnTotal') : t('invoice.grandTotal');
   const draftAllowed =
     editing?.header.status !== SalesInvoiceStatus.posted &&
     ((settings.allowSaveDraft !== false && !directSave) || editing !== undefined);
@@ -1550,11 +1900,60 @@ function EntryDialog({
     { quantity: 0, free: 0, rate: 0 },
   );
 
+  // Who the bill is for, as the list of held bills names it.
+  const partyName =
+    (isWalkIn && billingName.trim()) || selectedCustomer?.name || t('invoice.noCustomer');
+
+  holdNow.current = (): boolean => {
+    if (!holdable || itemCount === 0) return false;
+
+    const kept = holdSale<SaleDraft>({
+      ...(heldId.current ? { id: heldId.current } : {}),
+      kind,
+      party: partyName,
+      items: itemCount,
+      total: grandTotal,
+      draft: {
+        date,
+        customerId,
+        warehouseId,
+        reference,
+        returnsInvoiceId,
+        paymentMode,
+        onlineType,
+        salesman,
+        billingman,
+        taxMode,
+        rateType,
+        narration,
+        billingName,
+        paidAmount,
+        paymentReference,
+        additionalLedgers,
+        lines,
+      },
+    });
+    heldId.current = kept.id;
+
+    return true;
+  };
+
+  /** Puts the bill on hold - Hold, or Alt+H - and closes the window for the next one. */
+  const hold = (): void => {
+    if (finished.current || !holdNow.current()) return;
+    finished.current = true;
+    onHeld(t('sales.heldNotice'));
+  };
+
+  const ratesCard = rateChange || taxOn || showCharges;
+
   return (
     <InvoiceWindow
       title={documentTitle}
-      onClose={onClose}
+      onClose={close}
       dirty={!editing && (itemCount > 0 || narration.trim() !== '')}
+      docked={holdable}
+      {...(holdable && itemCount > 0 ? { onHold: hold } : {})}
     >
       <InvoiceHeader
         icon={<IconDocument className="size-5" />}
@@ -1562,9 +1961,11 @@ function EntryDialog({
         subtitle={
           editing
             ? t('invoice.editing', { number: editing.header.number })
-            : isReturn(kind)
-              ? t('invoice.newSalesReturn')
-              : t('invoice.newSales')
+            : held
+              ? t('sales.resumedFrom', { time: timeOfSale(held.heldAt) })
+              : isReturn(kind)
+                ? t('invoice.newSalesReturn')
+                : t('invoice.newSales')
         }
       />
 
@@ -1590,10 +1991,10 @@ function EntryDialog({
         )}
 
         <InvoiceCard>
-          {/* Two lines on a wide screen: who, when, how they pay and the numbers; then
-              what a counter sets once and seldom touches, and the two ways to fill the
-              lines without typing them - scan the goods, or bring them in from a
-              quotation or an order (for a return, from the invoice). */}
+          {/* Who, when, how they pay and the number; whatever else the firm turned on
+              in Settings › Sales; and, at the end of the row, the box a scanner types
+              into. The narration and the billing name are with the customer's details
+              at the foot, and Load from is in the bar along the very bottom. */}
           <InvoiceFields>
             <div
               className="col-span-2 min-w-0"
@@ -1603,7 +2004,7 @@ function EntryDialog({
               <FormField
                 label={t('sales.customer')}
                 required
-                error={errors['customerId']}
+                error={errors['customerId'] ?? namedCustomerProblem ?? undefined}
               >
                 <QuickAdd kind="customer" onCreated={setCustomerId}>
                   <SearchSelect
@@ -1616,7 +2017,9 @@ function EntryDialog({
                         ? { detail: customer.contact.mobileNumber }
                         : {}),
                     }))}
-                    invalid={errors['customerId'] !== undefined}
+                    invalid={
+                      errors['customerId'] !== undefined || namedCustomerProblem !== null
+                    }
                     label={t('sales.customer')}
                     placeholder={`${t('sales.chooseCustomer')} (F2)`}
                   />
@@ -1644,6 +2047,26 @@ function EntryDialog({
               ]}
             />
 
+            {/* Paid online: which of the firm's ways - beside the mode it belongs to. */}
+            {onlineOn && !isReturn(kind) && onlineChoices.length > 0 && (
+              <SelectField<string>
+                label={t('sales.onlineType')}
+                required
+                value={onlineType}
+                onChange={setOnlineType}
+                error={errors['onlineType']}
+                options={[
+                  ...(onlineType === ''
+                    ? [{ value: '', label: t('sales.chooseOnlineType') }]
+                    : []),
+                  ...onlineChoices.map((type) => ({
+                    value: type.name,
+                    label: type.name,
+                  })),
+                ]}
+              />
+            )}
+
             <TextField
               label={
                 isReturn(kind) ? t('sales.returnNo') || 'Return No' : t('sales.invoiceNo')
@@ -1652,12 +2075,14 @@ function EntryDialog({
               disabled
               onChange={() => {}}
             />
-            <TextField
-              label={t('sales.referenceNo')}
-              value={reference}
-              onChange={setReference}
-              placeholder={nextNumber ?? ''}
-            />
+            {showReference && (
+              <TextField
+                label={t('sales.referenceNo')}
+                value={reference}
+                onChange={setReference}
+                placeholder={nextNumber ?? ''}
+              />
+            )}
             {godownsOn && (
               <FormField
                 label={t('sales.warehouse')}
@@ -1683,34 +2108,42 @@ function EntryDialog({
               </FormField>
             )}
 
-            <FormField label={t('sales.salesman')}>
-              <QuickAdd kind="employee" onCreated={setSalesman}>
-                <SearchSelect
-                  value={employeeId(salesman) ?? ''}
-                  onChange={setSalesman}
-                  options={employeeOptions}
-                  clearable
-                  label={t('sales.salesman')}
-                  placeholder={
-                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                  }
-                />
-              </QuickAdd>
-            </FormField>
-            <FormField label={t('sales.billingman')}>
-              <QuickAdd kind="employee" onCreated={setBillingman}>
-                <SearchSelect
-                  value={employeeId(billingman) ?? ''}
-                  onChange={setBillingman}
-                  options={employeeOptions}
-                  clearable
-                  label={t('sales.billingman')}
-                  placeholder={
-                    employees.length === 0 ? t('sales.noEmployees') : t('common.choose')
-                  }
-                />
-              </QuickAdd>
-            </FormField>
+            {pickSalesmen && (
+              <>
+                <FormField label={t('sales.salesman')}>
+                  <QuickAdd kind="employee" onCreated={setSalesman}>
+                    <SearchSelect
+                      value={employeeId(salesman) ?? ''}
+                      onChange={setSalesman}
+                      options={employeeOptions}
+                      clearable
+                      label={t('sales.salesman')}
+                      placeholder={
+                        employees.length === 0
+                          ? t('sales.noEmployees')
+                          : t('common.choose')
+                      }
+                    />
+                  </QuickAdd>
+                </FormField>
+                <FormField label={t('sales.billingman')}>
+                  <QuickAdd kind="employee" onCreated={setBillingman}>
+                    <SearchSelect
+                      value={employeeId(billingman) ?? ''}
+                      onChange={setBillingman}
+                      options={employeeOptions}
+                      clearable
+                      label={t('sales.billingman')}
+                      placeholder={
+                        employees.length === 0
+                          ? t('sales.noEmployees')
+                          : t('common.choose')
+                      }
+                    />
+                  </QuickAdd>
+                </FormField>
+              </>
+            )}
 
             {isReturn(kind) && (
               <FormField
@@ -1733,49 +2166,31 @@ function EntryDialog({
               </FormField>
             )}
 
-            {!editing && (
-              <ReferenceLoader
-                asField
-                sources={referenceSources}
-                onLoad={loadReference}
-                className="col-span-2 lg:col-span-3 xl:col-span-2"
-              />
+            {/* At the end of its row, however many fields come before it. */}
+            {showScan && (
+              <div
+                className="col-span-2 min-w-0 md:col-end-[-1]"
+                {...shortcutProps('scan')}
+              >
+                <ScanField
+                  value={barcodeInput}
+                  onChange={setBarcodeInput}
+                  onScan={() => void handleBarcodeScan(barcodeInput)}
+                  label={t('invoice.scanLabel')}
+                  placeholder={`${t('sales.barcodePlaceholder')} (F4)`}
+                  notice={
+                    barcodeNotice && (
+                      <span
+                        role="status"
+                        className="font-medium text-brand-700 dark:text-brand-300"
+                      >
+                        {barcodeNotice}
+                      </span>
+                    )
+                  }
+                />
+              </div>
             )}
-            <NarrationInput
-              value={narration}
-              onChange={setNarration}
-              label={t('invoice.narration')}
-              className={clsx(
-                'col-span-2 lg:col-span-3',
-                // Wide enough that the scan box lands at the end of the row.
-                editing
-                  ? isReturn(kind)
-                    ? 'xl:col-span-4'
-                    : 'xl:col-span-5'
-                  : isReturn(kind)
-                    ? 'xl:col-span-2'
-                    : 'xl:col-span-3',
-              )}
-            />
-            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
-              <ScanField
-                value={barcodeInput}
-                onChange={setBarcodeInput}
-                onScan={() => void handleBarcodeScan(barcodeInput)}
-                label={t('invoice.scanLabel')}
-                placeholder={`${t('sales.barcodePlaceholder')} (F4)`}
-                notice={
-                  barcodeNotice && (
-                    <span
-                      role="status"
-                      className="font-medium text-brand-700 dark:text-brand-300"
-                    >
-                      {barcodeNotice}
-                    </span>
-                  )
-                }
-              />
-            </div>
           </InvoiceFields>
         </InvoiceCard>
 
@@ -1794,6 +2209,9 @@ function EntryDialog({
             </>
           }
         >
+          {errors['lines'] && (
+            <p className="field-message-error mb-2">{errors['lines']}</p>
+          )}
           <InvoiceLines>
             <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
               <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
@@ -1858,6 +2276,7 @@ function EntryDialog({
                     autoBatch={autoBatch}
                     enableFreeQty={enableFreeQty}
                     enableDiscount={enableDiscount}
+                    rateLocked={!rateChange}
                     shows={lineColumns.shows}
                     columnCount={
                       4 +
@@ -1942,10 +2361,17 @@ function EntryDialog({
           </InvoiceLines>
         </InvoiceCard>
 
-        {/* Along the foot: who the bill is for; everything that changes what it
-            comes to - the rates, the tax, the additional ledgers - in one card; the
-            payment, with what it leaves owing; and the bill set out line by line. */}
-        <InvoiceFooter className="xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.05fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        {/* Along the foot: who the bill is for, with the name it is made out to and
+            its narration; whatever changes what it comes to - the rate, the tax, the
+            additional ledgers - where the firm uses them; the payment, with what it
+            leaves owing; and the bill: Total, the ledgers, Round off, Grand total. */}
+        <InvoiceFooter
+          className={
+            ratesCard
+              ? 'xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.05fr)_minmax(0,1.2fr)_minmax(0,1fr)]'
+              : 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)]'
+          }
+        >
           <PartyCard
             icon={<IconUser className="size-[18px]" />}
             title={t('invoice.customerDetails')}
@@ -1953,59 +2379,102 @@ function EntryDialog({
             empty={t('invoice.noCustomer')}
             choose={t('invoice.chooseCustomer')}
             money={moneyAlways}
-          />
-
-          <FooterSection
-            icon={<IconPercent className="size-[18px]" />}
-            title={t('invoice.ratesAndCharges')}
           >
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField<SalesRateType>
-                size="sm"
-                label={t('sales.salesRateType')}
-                value={rateType}
-                onChange={(val) => handleRateTypeChange(val as SalesRateType)}
-                options={[
-                  { value: 'retail', label: t('prefs.rateRetail') },
-                  { value: 'wholesale', label: t('prefs.rateWholesale') },
-                  { value: 'mrp', label: t('prefs.rateMrp') },
-                  { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
-                  { value: 'customerRate', label: t('prefs.rateCustomer') },
-                  { value: 'batch', label: t('prefs.rateBatch') },
-                ]}
+            {showBillingName && selectedCustomer && (
+              <CompactField label={t('sales.billingName')}>
+                {isWalkIn ? (
+                  <input
+                    value={billingName}
+                    maxLength={120}
+                    aria-label={t('sales.billingName')}
+                    onChange={(event) => setBillingName(event.target.value)}
+                    placeholder={t('sales.billingNamePlaceholder')}
+                    className="field-input-sm"
+                  />
+                ) : (
+                  // A named customer's bill is made out to them.
+                  <input
+                    value={selectedCustomer.name}
+                    readOnly
+                    tabIndex={-1}
+                    aria-label={t('sales.billingName')}
+                    className="field-input-sm bg-surface-2 text-ink-muted"
+                  />
+                )}
+              </CompactField>
+            )}
+            {showNarration && (
+              <NarrationInput
+                compact
+                value={narration}
+                onChange={setNarration}
+                label={t('invoice.narration')}
               />
-              {taxOn && (
-                <SelectField<'NT' | 'TAX' | 'GST'>
-                  size="sm"
-                  label={t('sales.taxMode')}
-                  value={taxMode}
-                  onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
-                  options={[
-                    { value: 'NT', label: 'NT (0%)' },
-                    { value: 'TAX', label: 'TAX (5%)' },
-                    { value: 'GST', label: 'GST (18%)' },
-                  ]}
-                />
+            )}
+          </PartyCard>
+
+          {ratesCard && (
+            <FooterSection
+              icon={<IconPercent className="size-[18px]" />}
+              title={t('invoice.ratesAndCharges')}
+            >
+              {(rateChange || taxOn) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {rateChange && (
+                    <SelectField<SalesRateType>
+                      size="sm"
+                      label={t('sales.salesRateType')}
+                      value={rateType}
+                      onChange={(val) => handleRateTypeChange(val as SalesRateType)}
+                      options={[
+                        { value: 'retail', label: t('prefs.rateRetail') },
+                        { value: 'wholesale', label: t('prefs.rateWholesale') },
+                        { value: 'mrp', label: t('prefs.rateMrp') },
+                        { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+                        { value: 'customerRate', label: t('prefs.rateCustomer') },
+                        { value: 'batch', label: t('prefs.rateBatch') },
+                      ]}
+                    />
+                  )}
+                  {taxOn && (
+                    <SelectField<'NT' | 'TAX' | 'GST'>
+                      size="sm"
+                      label={t('sales.taxMode')}
+                      value={taxMode}
+                      onChange={(val) => handleTaxModeChange(val as 'NT' | 'TAX' | 'GST')}
+                      options={[
+                        { value: 'NT', label: 'NT (0%)' },
+                        { value: 'TAX', label: 'TAX (5%)' },
+                        { value: 'GST', label: 'GST (18%)' },
+                      ]}
+                    />
+                  )}
+                </div>
               )}
-            </div>
-            <div className="mt-3 space-y-1.5" {...shortcutProps('charges')}>
-              <span className="block text-[13px] font-medium text-ink/80">
-                {t('sales.additionalLedgers')}
-              </span>
-              <AdditionalLedgerList
-                carried={additionalLedgers}
-                setup={chargeSetup}
-                nonTax={taxMode === 'NT'}
-                ledgers={ledgers.data ?? []}
-                onAmount={setChargeAmount}
-                onRemove={(ledgerId) =>
-                  setAdditionalLedgers((rows) =>
-                    rows.filter((row) => row.ledgerId !== ledgerId),
-                  )
-                }
-              />
-            </div>
-          </FooterSection>
+              {showCharges && (
+                <div
+                  className={clsx('space-y-1.5', (rateChange || taxOn) && 'mt-3')}
+                  {...shortcutProps('charges')}
+                >
+                  <span className="block text-[13px] font-medium text-ink/80">
+                    {t('sales.additionalLedgers')}
+                  </span>
+                  <AdditionalLedgerList
+                    carried={additionalLedgers}
+                    setup={chargeSetup}
+                    nonTax={taxMode === 'NT'}
+                    ledgers={ledgers.data ?? []}
+                    onAmount={setChargeAmount}
+                    onRemove={(ledgerId) =>
+                      setAdditionalLedgers((rows) =>
+                        rows.filter((row) => row.ledgerId !== ledgerId),
+                      )
+                    }
+                  />
+                </div>
+              )}
+            </FooterSection>
+          )}
 
           <FooterSection
             icon={<IconCreditCard className="size-[18px]" />}
@@ -2014,59 +2483,62 @@ function EntryDialog({
             }
           >
             <div className="grid grid-cols-2 gap-x-3 gap-y-3 xl:grid-cols-3">
+              {/* What is paid, and beside it - never under it - what proves it: the
+                  card's approval code, the transfer's ID, or the change to hand back. */}
               {!isReturn(kind) && (
-                <CompactField label={t('sales.receivedNow')}>
-                  <input
-                    {...shortcutProps('payment')}
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    aria-label={t('sales.receivedNow')}
-                    value={paidAmount}
-                    placeholder={
-                      paymentMode === SalesPaymentMode.credit
-                        ? '0.00'
-                        : moneyAlways(grandTotal)
-                    }
-                    onChange={(e) => setPaidAmount(e.target.value)}
-                    className="field-input-sm text-end font-semibold tabular-nums"
-                  />
-                </CompactField>
-              )}
-              {!isReturn(kind) && paidThroughBank(paymentMode) && (
-                <CompactField
-                  label={
-                    paymentMode === SalesPaymentMode.card
-                      ? t('sales.cardApproval')
-                      : t('sales.transactionId')
-                  }
-                >
-                  <input
-                    value={paymentReference}
-                    maxLength={60}
-                    aria-label={
-                      paymentMode === SalesPaymentMode.card
-                        ? t('sales.cardApproval')
-                        : t('sales.transactionId')
-                    }
-                    onChange={(e) => setPaymentReference(e.target.value)}
-                    placeholder={
-                      paymentMode === SalesPaymentMode.card
-                        ? t('sales.cardApprovalPlaceholder')
-                        : t('sales.transactionIdPlaceholder')
-                    }
-                    className="field-input-sm tabular-nums"
-                  />
-                </CompactField>
-              )}
-              {!isReturn(kind) && paymentMode === SalesPaymentMode.cash && (
-                <>
-                  <ValueField
-                    label={t('sales.changeBack')}
-                    value={moneyAlways(changeBack)}
-                    tone="good"
-                  />
-                </>
+                <div className="col-span-2 grid grid-cols-2 gap-3 xl:col-span-3">
+                  <CompactField label={t('sales.receivedNow')}>
+                    <input
+                      {...shortcutProps('payment')}
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      aria-label={t('sales.receivedNow')}
+                      value={paidAmount}
+                      placeholder={
+                        paymentMode === SalesPaymentMode.credit
+                          ? '0.00'
+                          : moneyAlways(grandTotal)
+                      }
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                      className="field-input-sm text-end font-semibold tabular-nums"
+                    />
+                  </CompactField>
+                  {paidThroughBank(paymentMode) ? (
+                    <CompactField
+                      label={
+                        paymentMode === SalesPaymentMode.card
+                          ? t('sales.cardApproval')
+                          : t('sales.transactionId')
+                      }
+                    >
+                      <input
+                        value={paymentReference}
+                        maxLength={60}
+                        aria-label={
+                          paymentMode === SalesPaymentMode.card
+                            ? t('sales.cardApproval')
+                            : t('sales.transactionId')
+                        }
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                        placeholder={
+                          paymentMode === SalesPaymentMode.card
+                            ? t('sales.cardApprovalPlaceholder')
+                            : t('sales.transactionIdPlaceholder')
+                        }
+                        className="field-input-sm tabular-nums"
+                      />
+                    </CompactField>
+                  ) : (
+                    paymentMode === SalesPaymentMode.cash && (
+                      <ValueField
+                        label={t('sales.changeBack')}
+                        value={moneyAlways(changeBack)}
+                        tone="good"
+                      />
+                    )
+                  )}
+                </div>
               )}
               {isReturn(kind) ? (
                 <ValueField
@@ -2110,7 +2582,7 @@ function EntryDialog({
           </FooterSection>
 
           <BillCard
-            className="md:col-span-2 xl:col-span-1"
+            {...(ratesCard ? { className: 'md:col-span-2 xl:col-span-1' } : {})}
             label={totalLabel}
             total={grandTotal}
             money={moneyAlways}
@@ -2123,21 +2595,66 @@ function EntryDialog({
               tax: totals.tax,
               showTax: taxOn,
               taxLabel: `${t('sales.tax')} (${taxMode})`,
-              charges: chargeAmounts(
-                chargeSetup,
-                taxMode === 'NT',
-                additionalLedgers,
-                ledgers.data ?? [],
-              ),
+              charges: showCharges
+                ? chargeAmounts(
+                    chargeSetup,
+                    taxMode === 'NT',
+                    additionalLedgers,
+                    ledgers.data ?? [],
+                  )
+                : [],
+              subtotal: true,
+              // Shown where the firm rounds, or where rounding moved anything at all.
+              ...(roundTo > 0 || Math.abs(roundOff) > 0.004 ? { roundOff } : {}),
             }}
           />
         </InvoiceFooter>
       </InvoiceBody>
 
       <InvoiceActions
+        start={
+          (holdable || (loadFromOn && !editing)) && (
+            <>
+              {holdable && (
+                <button
+                  type="button"
+                  onClick={hold}
+                  disabled={busy || itemCount === 0}
+                  {...shortcutProps('hold')}
+                  title={`${t('invoice.hold')} (${shortcutFor('hold')})`}
+                  className="btn-secondary px-3"
+                >
+                  <IconPause className="size-4" />
+                  <span className="hidden sm:inline">{t('invoice.hold')}</span>
+                </button>
+              )}
+              {holdable && heldCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onShowHeld}
+                  aria-label={t('sales.heldBills', { count: heldCount })}
+                  title={t('sales.heldBills', { count: heldCount })}
+                  className="btn-ghost relative px-2.5 text-ink-muted"
+                >
+                  <IconClock className="size-4" />
+                  <span className="tabular-nums">{heldCount}</span>
+                </button>
+              )}
+              {loadFromOn && !editing && (
+                <LoadFromButton sources={referenceSources} onLoad={loadReference} />
+              )}
+            </>
+          )
+        }
         hints={
           <ShortcutHints
-            actions={['customer', 'scan', 'add-line', 'charges', 'payment']}
+            actions={[
+              'customer',
+              ...(showScan ? (['scan'] as const) : []),
+              'add-line',
+              ...(showCharges ? (['charges'] as const) : []),
+              'payment',
+            ]}
           />
         }
         total={{ label: totalLabel, amount: moneyAlways(grandTotal) }}
@@ -2189,6 +2706,7 @@ function LineRow({
   autoBatch,
   enableFreeQty,
   enableDiscount,
+  rateLocked = false,
   shows,
   columnCount,
   errors,
@@ -2215,6 +2733,8 @@ function LineRow({
   readonly autoBatch: boolean;
   readonly enableFreeQty: boolean;
   readonly enableDiscount: boolean;
+  /** The rate is the product's, and cannot be typed over: Settings › Sales says so. */
+  readonly rateLocked?: boolean;
   /** Whether the user has the column on. */
   readonly shows: (key: string) => boolean;
   /** How many columns the row has, for the batch and serial row beneath it. */
@@ -2443,6 +2963,7 @@ function LineRow({
           <NumberCell
             label={`${t('sales.rate')} (${t('sales.inclusiveRate')})`}
             value={line.inclusiveRate ?? ''}
+            readOnly={rateLocked}
             error={errors['rate']}
             subtitle={line.rate ? `Excl: ${moneyAlways(Number(line.rate))}` : undefined}
             onChange={(val) => {
@@ -2459,6 +2980,7 @@ function LineRow({
           <NumberCell
             label={t('sales.rate')}
             value={line.rate}
+            readOnly={rateLocked}
             error={errors['rate']}
             subtitle={
               line.inclusiveRate
@@ -2762,9 +3284,16 @@ function DocumentDialog({
                   </div>
                 </div>
                 <Detail label={t('sales.currency')} value={document.currency} />
+                {document.billingName && (
+                  <Detail label={t('sales.billingName')} value={document.billingName} />
+                )}
                 <Detail
                   label={t('sales.paymentMode')}
-                  value={paymentModeLabel(document.paymentMode, t)}
+                  value={paymentModeLabel(
+                    document.paymentMode,
+                    t,
+                    document.onlinePaymentType,
+                  )}
                 />
                 {document.amountReceived > 0 && (
                   <Detail
@@ -2936,10 +3465,19 @@ function timeOfSale(createdAtUtc: string): string {
     : at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function paymentModeLabel(mode: number, t: (key: string) => string): string {
+/** How a sale was paid, as the counter says it: "Online · Google Pay" where it says how. */
+function paymentModeLabel(
+  mode: number,
+  t: (key: string) => string,
+  onlineType?: string | null,
+): string {
   if (mode === SalesPaymentMode.cash) return t('paymentModes.cash');
   if (mode === SalesPaymentMode.card) return t('paymentModes.card');
-  if (mode === SalesPaymentMode.online) return t('paymentModes.online');
+  if (mode === SalesPaymentMode.online) {
+    return onlineType
+      ? `${t('paymentModes.online')} · ${onlineType}`
+      : t('paymentModes.online');
+  }
 
   return t('paymentModes.credit');
 }
@@ -2996,6 +3534,7 @@ function NumberCell({
   error,
   subtitle,
   placeholder,
+  readOnly = false,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
@@ -3003,6 +3542,8 @@ function NumberCell({
   readonly error?: string | undefined;
   readonly subtitle?: string | undefined;
   readonly placeholder?: string | undefined;
+  /** Shown, not typed into - and passed over by Enter and Tab. */
+  readonly readOnly?: boolean;
 }): React.JSX.Element {
   return (
     <td data-label={label} className="px-2 py-1 text-end">
@@ -3012,10 +3553,13 @@ function NumberCell({
         aria-label={label}
         value={value}
         placeholder={placeholder}
+        readOnly={readOnly}
+        tabIndex={readOnly ? -1 : undefined}
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
           'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
+          readOnly && 'bg-surface-2 text-ink-muted',
           error && 'field-invalid',
         )}
       />

@@ -629,6 +629,26 @@ export function IconKeyboard({ className }: IconProps): React.JSX.Element {
   );
 }
 
+/** Hold: a bill put aside, to be taken up again. */
+export function IconPause({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10 9v6M14 9v6" />
+    </Svg>
+  );
+}
+
+/** Held bills: the time each was put aside. */
+export function IconClock({ className }: IconProps): React.JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Svg>
+  );
+}
+
 /** The picture beside each top-level heading, by the heading's catalogue code. */
 const BY_HEADING: Record<string, (props: IconProps) => React.JSX.Element> = {
   masters: IconLayers,

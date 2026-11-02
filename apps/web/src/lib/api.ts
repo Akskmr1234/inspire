@@ -16,7 +16,7 @@
  *   because reuse cannot be distinguished from theft.
  */
 
-import { branchOf, displayNameOf } from '@/lib/branch';
+import { branchOf, claim, displayNameOf } from '@/lib/branch';
 
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
@@ -107,6 +107,16 @@ export function setSession(auth: AuthenticationResponse, tenantCode?: string): v
  */
 export function currentBranchId(): string | null {
   return branchOf(accessToken);
+}
+
+/** The signed-in user, by the identifier the server knows them by; null before sign-in. */
+export function currentUserId(): string | null {
+  return claim(accessToken, 'sub');
+}
+
+/** The firm the session works in - the token's first, as the server takes it. */
+export function currentFirmId(): string | null {
+  return claim(accessToken, 'firm_id');
 }
 
 /**
