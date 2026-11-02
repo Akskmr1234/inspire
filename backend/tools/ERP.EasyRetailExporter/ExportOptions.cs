@@ -1,6 +1,6 @@
 namespace ERP.EasyRetailExporter;
 
-/// <summary>What the command line answered in advance; anything left out is asked for.</summary>
+/// <summary>What the command line gave; anything left out takes its default.</summary>
 /// <param name="Server">The SQL Server, such as <c>.\SQLEXPRESS</c>.</param>
 /// <param name="Database">The EasyRetail database.</param>
 /// <param name="User">A SQL Server login; left out to sign in with Windows.</param>
@@ -17,17 +17,23 @@ internal sealed record ExportOptions(
 {
     /// <summary>How the command line is written, for <c>--help</c> and for a mistake.</summary>
     public const string Usage = """
+        easyretail-export
+            Opens the export window.
+
         easyretail-export [--server NAME] [--database NAME] [--as-at yyyy-mm-dd]
                           [--user LOGIN --password PASSWORD] [--out FILE]
+            Exports without the window.
 
-          --server     SQL Server, for example .\SQLEXPRESS
+          --server     SQL Server, for example .\SQLEXPRESS (default: .\SQLEXPRESS)
           --database   EasyRetail database, for example EasyRetail2025
+                       (default: the only EasyRetail database on the server)
           --as-at      Balances as at this date (default: today)
           --user       SQL Server login (default: sign in with Windows)
           --password   The login's password
           --out        Where to save (default: easyretail-export.json on the Desktop)
 
-        Anything left out is asked for.
+        From a Command Prompt, start it with "start /wait easyretail-export ..." to wait
+        for it to finish and read its exit code: 0 saved, 1 not saved, 2 a mistake here.
         """;
 
     /// <summary>Reads the command line.</summary>

@@ -6,6 +6,9 @@
     Settings > Import data. It compiles in the server's own queries and writer, so the
     file it saves is the document the server reads when it reaches the database itself.
 
+    Double-clicked, it opens a window that walks through the export. Given options on
+    the command line, it runs without one (see ExportOptions).
+
     Published for Windows into the API image (see the Dockerfile) and downloaded from
     GET /api/v1/platform/import/easyretail/exporter:
 
@@ -15,29 +18,44 @@
   -->
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- A window, so Windows opens no console behind it when it is double-clicked. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Builds on Linux too, as CI and the image's build stage both do. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- The console a command-line run attaches to is asked of Windows directly. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationVisualStyles>true</ApplicationVisualStyles>
+    <ApplicationIcon>exporter.ico</ApplicationIcon>
     <RootNamespace>ERP.EasyRetailExporter</RootNamespace>
     <AssemblyName>easyretail-export</AssemblyName>
     <Product>Aider ERP EasyRetail exporter</Product>
+    <!--
+      Built on Linux for Windows, the program's icon and version cannot be written into
+      the Windows launcher; the SDK says so with NETSDK1074, which is expected here. The
+      window still shows the icon: it reads it from the resource below.
+    -->
+    <NoWarn>$(NoWarn);NETSDK1074</NoWarn>
   </PropertyGroup>
 
-  <!-- Applies when published for a runtime; a plain build stays an ordinary console app. -->
+  <!-- Applies when published for a runtime; a plain build stays an ordinary program. -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
-    <!--
-      Built on Linux for Windows, the program's icon and version cannot be written into
-      the Windows launcher; the SDK says so with NETSDK1074, which is expected here.
-    -->
-    <NoWarn>$(NoWarn);NETSDK1074</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="..\..\src\ERP.Infrastructure\Import\EasyRetailQueries.cs" Link="Import\EasyRetailQueries.cs" />
     <Compile Include="..\..\src\ERP.Infrastructure\Import\EasyRetailExport.cs" Link="Import\EasyRetailExport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="exporter.ico" LogicalName="ERP.EasyRetailExporter.exporter.ico" />
   </ItemGroup>
 
   <ItemGroup>
