@@ -536,6 +536,7 @@ export function printableSale(
     (c) => c.customerId === invoice.customerLedgerId,
   );
   const warehouse = lookups.warehouses.find((w) => w.id === invoice.warehouseId);
+  const billedTo = partyOf(customer, '—');
 
   return {
     type: invoice.kind === 2 ? 'salesReturn' : 'salesInvoice',
@@ -546,7 +547,11 @@ export function printableSale(
     narration: invoice.narration,
     currency: invoice.currency,
     partyLabel: 'billTo',
-    party: partyOf(customer, '—'),
+    // A walk-in sale is made out to the name the counter typed, not to the account
+    // every walk-in customer shares.
+    party: invoice.billingName
+      ? { name: invoice.billingName, code: null, lines: [], taxNumber: null }
+      : billedTo,
     warehouse: warehouse ? warehouse.name : null,
     goods: invoice.lines.map((line) => {
       const product = products.get(line.productId);

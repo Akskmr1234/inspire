@@ -5343,6 +5343,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("billing_man_ledger_id");
 
+                    b.Property<string>("BillingName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("billing_name");
+
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid")
                         .HasColumnName("branch_id");
@@ -5430,6 +5435,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("number");
 
+                    b.Property<string>("OnlinePaymentType")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("online_payment_type");
+
                     b.Property<int>("PaymentMode")
                         .HasColumnType("integer")
                         .HasColumnName("payment_mode");
@@ -5463,6 +5473,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReturnsInvoiceId")
                         .HasColumnType("uuid")
                         .HasColumnName("returns_invoice_id");
+
+                    b.Property<decimal>("RoundTo")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("round_to");
 
                     b.Property<Guid?>("SalesOrderId")
                         .HasColumnType("uuid")

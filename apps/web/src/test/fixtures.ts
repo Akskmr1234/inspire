@@ -527,6 +527,25 @@ export const fixtures: Readonly<Record<string, unknown>> = {
     ],
   },
 
+  // Two days and one month are enough to draw every chart; the rest are null, as
+  // they come back to a reader who may not open the reports behind them.
+  '/dashboards/charts': {
+    asAt: '2026-08-17',
+    currency: 'AED',
+    dailySales: [
+      { date: '2026-08-16', sales: 120, bills: 2 },
+      { date: '2026-08-17', sales: 80, bills: 1 },
+    ],
+    months: [{ month: '2026-08', sales: 200, purchases: 150, profit: -10 }],
+    paymentModes: [{ mode: 2, amount: 200, bills: 3 }],
+    topProducts: [{ label: 'Widget', detail: 'W-1', amount: 200, quantity: 2 }],
+    topCategories: null,
+    receivables: [
+      { fromDays: 0, toDays: 0, amount: 50 },
+      { fromDays: 91, toDays: null, amount: 25 },
+    ],
+  },
+
   '/admin/menu': {
     items: [
       {

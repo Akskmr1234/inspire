@@ -108,6 +108,15 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>The longest a payment reference may be: room for any UPI or card reference.</summary>
     public const int MaximumPaymentReferenceLength = 60;
 
+    /// <summary>The longest the name billed may be.</summary>
+    public const int MaximumBillingNameLength = 120;
+
+    /// <summary>The longest an online payment's type may be: "Google Pay", "PhonePe".</summary>
+    public const int MaximumOnlinePaymentTypeLength = 60;
+
+    /// <summary>The largest unit a total may be rounded to.</summary>
+    public const decimal MaximumRoundTo = 1000m;
+
     private readonly List<SalesInvoiceLine> _lines = [];
     private readonly List<SalesInvoiceCharge> _charges = [];
 
@@ -223,6 +232,14 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>Gets the payment's own reference: an online payment's transaction ID.</summary>
     public string? PaymentReference { get; private set; }
 
+    /// <summary>Gets how an online payment was made - Google Pay, PhonePe, Talabat - as the counter named it.</summary>
+    /// <remarks>
+    /// The type's name rather than a reference to it: the firm keeps its list of types in its
+    /// settings and renames or retires them as it likes, and an old invoice has to go on
+    /// saying what the customer paid with.
+    /// </remarks>
+    public string? OnlinePaymentType { get; private set; }
+
     /// <summary>Gets the receipt posting raised for the payment, if there was one.</summary>
     public VoucherId? ReceiptVoucherId { get; private set; }
 
@@ -237,6 +254,17 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>Gets the narration printed on it.</summary>
     public string? Narration { get; private set; }
+
+    /// <summary>Gets the name the invoice is made out to, where it says one.</summary>
+    /// <remarks>
+    /// The customer's own name, usually. On a sale to the firm's walk-in account it is the
+    /// name the counter typed - the one account stands for every customer nobody opens an
+    /// account for, and the printed bill has to say who this one was.
+    /// </remarks>
+    public string? BillingName { get; private set; }
+
+    /// <summary>Gets the unit the total is rounded to: 0.25, 1, 5. Zero rounds to the currency alone.</summary>
+    public decimal RoundTo { get; private set; }
 
     /// <summary>Gets where the invoice stands.</summary>
     public SalesInvoiceStatus Status { get; private set; }
@@ -342,11 +370,36 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// the remainder that rounding produced, and rounding it again to the same scale
     /// would collapse it to nothing.
     /// </para>
+    /// <para>
+    /// A firm can round further, to a unit of its own - the nearest quarter, the nearest
+    /// whole dirham - which is <see cref="RoundTo"/>: nearest, half away from zero, as the
+    /// currency's own rounding is, and posted to Round Off all the same.
+    /// </para>
     /// </remarks>
-    public Money RoundingDifference => GrossTotal.Rounded() - GrossTotal;
+    public Money RoundingDifference => RoundedTotal() - GrossTotal;
 
     /// <summary>Gets what the customer owes.</summary>
     public Money Total => GrossTotal + RoundingDifference;
+
+    /// <summary>Rounds a total as a sale rounds it: to a unit where one is set, to the currency always.</summary>
+    /// <param name="gross">The total before rounding.</param>
+    /// <param name="roundTo">The unit - 0.25, 1, 5 - or zero for the currency's precision alone.</param>
+    /// <returns>The rounded total: nearest, half away from zero.</returns>
+    /// <remarks>
+    /// Public so a report that adds bills up from their lines rounds them exactly as the
+    /// bills themselves were rounded, rather than with a second spelling of the rule.
+    /// </remarks>
+    public static Money RoundTotal(Money gross, decimal roundTo)
+    {
+        if (roundTo <= 0m)
+        {
+            return gross.Rounded();
+        }
+
+        decimal units = decimal.Round(gross.Amount / roundTo, 0, MidpointRounding.AwayFromZero);
+
+        return Money.Of(units * roundTo, gross.Currency);
+    }
 
     /// <summary>Starts a draft sales document.</summary>
     /// <param name="tenantId">The owning tenant.</param>
@@ -720,8 +773,9 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>Sets the descriptive fields.</summary>
     /// <param name="referenceNumber">The customer's own reference.</param>
     /// <param name="narration">What is printed on the invoice.</param>
+    /// <param name="billingName">The name the invoice is made out to, where it says one.</param>
     /// <returns>Success, or the reason it was refused.</returns>
-    public Result SetDetails(string? referenceNumber, string? narration)
+    public Result SetDetails(string? referenceNumber, string? narration, string? billingName = null)
     {
         if (!IsEditable)
         {
@@ -730,8 +784,46 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 $"Invoice '{Number}' is {Status} and can no longer be changed."));
         }
 
+        string? name = Trimmed(billingName);
+
+        if (name is { Length: > MaximumBillingNameLength })
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.BillingNameTooLong",
+                $"A billing name is at most {MaximumBillingNameLength} characters."));
+        }
+
         ReferenceNumber = Trimmed(referenceNumber);
         Narration = Trimmed(narration);
+        BillingName = name;
+
+        return Result.Success();
+    }
+
+    /// <summary>Sets the unit the total is rounded to.</summary>
+    /// <param name="roundTo">The unit: 0.25, 1, 5. Zero rounds to the currency's own precision alone.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Kept on the invoice rather than read from the firm each time the total is worked out,
+    /// so a firm that changes how it rounds does not change what yesterday's bills came to.
+    /// </remarks>
+    public Result SetRounding(decimal roundTo)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        if (roundTo < 0m || roundTo > MaximumRoundTo)
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.RoundToInvalid",
+                $"A total is rounded to a unit from 0 to {MaximumRoundTo:0}."));
+        }
+
+        RoundTo = roundTo;
 
         return Result.Success();
     }
@@ -740,12 +832,19 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <param name="paymentMode">Cash at the counter, or on account.</param>
     /// <param name="salesman">The employee who made the sale, if one is recorded.</param>
     /// <param name="billingMan">The employee who billed it, if one is recorded.</param>
+    /// <param name="onlinePaymentType">
+    /// How an online payment was made - Google Pay, PhonePe. Kept for an online sale only.
+    /// </param>
     /// <returns>Success, or the reason it was refused.</returns>
     /// <remarks>
     /// Both people are employee ledgers of this firm. A salesman picked from the customer
     /// list would put a commission report's sales against somebody the firm sells to.
     /// </remarks>
-    public Result SetSaleTerms(SalesPaymentMode paymentMode, Ledger? salesman, Ledger? billingMan)
+    public Result SetSaleTerms(
+        SalesPaymentMode paymentMode,
+        Ledger? salesman,
+        Ledger? billingMan,
+        string? onlinePaymentType = null)
     {
         if (!IsEditable)
         {
@@ -771,9 +870,19 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 $"'{stranger.Name}' is not an employee of this firm."));
         }
 
+        string? online = paymentMode == SalesPaymentMode.Online ? Trimmed(onlinePaymentType) : null;
+
+        if (online is { Length: > MaximumOnlinePaymentTypeLength })
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.OnlinePaymentTypeTooLong",
+                $"An online payment type is at most {MaximumOnlinePaymentTypeLength} characters."));
+        }
+
         PaymentMode = paymentMode;
         SalesmanLedgerId = salesman?.Id;
         BillingManLedgerId = billingMan?.Id;
+        OnlinePaymentType = online;
 
         return Result.Success();
     }
@@ -1185,6 +1294,9 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     private Money Sum(IEnumerable<Money> amounts) =>
         amounts.Aggregate(Money.Zero(Currency), (running, amount) => running + amount);
+
+    /// <summary>The total rounded: to the firm's unit where it set one, and to the currency always.</summary>
+    private Money RoundedTotal() => RoundTotal(GrossTotal, RoundTo);
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

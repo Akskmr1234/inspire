@@ -58,6 +58,12 @@ public sealed record ListSalesInvoicesQuery(
 /// <param name="Narration">What is printed on it.</param>
 /// <param name="AmountReceived">What was paid with the sale.</param>
 /// <param name="PaymentReference">An online payment's transaction ID.</param>
+/// <param name="BillingName">The name it is made out to, where it says one.</param>
+/// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe.</param>
+/// <param name="EnteredByName">
+/// The user who entered it - the salesman and the billing man, on a counter that does not
+/// name them separately.
+/// </param>
 public sealed record SalesInvoiceSummary(
     Guid SalesInvoiceId,
     string Number,
@@ -81,7 +87,10 @@ public sealed record SalesInvoiceSummary(
     decimal ChargeTotal,
     string? Narration,
     decimal AmountReceived = 0m,
-    string? PaymentReference = null);
+    string? PaymentReference = null,
+    string? BillingName = null,
+    string? OnlinePaymentType = null,
+    string? EnteredByName = null);
 
 /// <summary>Validates <see cref="ListSalesInvoicesQuery"/>.</summary>
 public sealed class ListSalesInvoicesQueryValidator : AbstractValidator<ListSalesInvoicesQuery>

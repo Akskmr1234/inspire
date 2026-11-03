@@ -53,7 +53,16 @@ import { populateSampleTransactions } from '@/lib/sampleData';
 import { statesFor, TaxRegime } from '@/lib/states';
 import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { setDefaultAppTheme, useSession } from '@/stores/session';
-import { DECIMAL_CHOICES, ratesFor, useSettings } from '@/stores/settings';
+import {
+  DECIMAL_CHOICES,
+  ratesFor,
+  ROUND_TO_CHOICES,
+  salesPaymentModeOf,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+  type OnlinePaymentType,
+} from '@/stores/settings';
 
 /** The figure the decimal places are demonstrated on. Big enough to show a grouping separator. */
 const SAMPLE = 1234.5678;
@@ -143,7 +152,7 @@ export function GeneralSettings(): React.JSX.Element {
                 key={choice}
                 type="button"
                 onClick={() => {
-                  settings.update({ defaultTheme: choice });
+                  settings.update({ firmTheme: choice });
                   setDefaultAppTheme(choice);
                 }}
                 aria-pressed={theme === choice}
@@ -347,12 +356,18 @@ export function GeneralSettings(): React.JSX.Element {
           placeholder={t('settings.apiKeyOptional')}
         />
       </SettingsCard>
-      <SettingsCard title={t('prefs.approvalsTitle')} hint={t('policies.hint')}>
+      <SettingsCard title={t('prefs.savingTitle')} hint={t('policies.hint')}>
         <CheckField
           label={t('settings.directSave')}
           hint={t('settings.directSaveHint')}
           checked={settings.directSave === true}
           onChange={(directSave) => settings.update({ directSave })}
+        />
+        <CheckField
+          label={t('settings.allowSaveDraft')}
+          checked={settings.allowSaveDraft !== false}
+          disabled={settings.directSave === true}
+          onChange={(allowSaveDraft) => settings.update({ allowSaveDraft })}
         />
         <PolicySettings only={['editsRequireApproval']} />
       </SettingsCard>
@@ -360,12 +375,419 @@ export function GeneralSettings(): React.JSX.Element {
   );
 }
 
-// ------------------------------------------------------------------------- defaults
+// ------------------------------------------------------------------------- shared
 
-/** What a new document or master starts with: who, where, and which accounts. */
-export function DefaultSettings(): React.JSX.Element {
+/** A choice of a master record a new document or master starts with; blank asks each time. */
+function DefaultPicker({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly placeholder?: string;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <Field label={label}>
+      <SearchSelect
+        value={value}
+        onChange={onChange}
+        clearable
+        placeholder={placeholder ?? t('settings.askEachTime')}
+        label={label}
+        options={options}
+      />
+    </Field>
+  );
+}
+
+/** The firm's ledgers, every one, for the pickers that choose a default account. */
+function useAllLedgers(): readonly LedgerSummary[] {
+  const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
+    queryKey: ['ledgers', false],
+    queryFn: () => listLedgers(false),
+  });
+
+  return ledgers.data ?? [];
+}
+
+/** Ledgers of a kind, as picker options: code and name. */
+function ledgerOptions(
+  ledgers: readonly LedgerSummary[],
+  kind?: number,
+): readonly { value: string; label: string }[] {
+  return ledgers
+    .filter((ledger) => kind === undefined || ledger.kind === kind)
+    .map((ledger) => ({
+      value: ledger.ledgerId,
+      label: `${ledger.code} — ${ledger.name}`,
+    }));
+}
+
+// ------------------------------------------------------------------------- sales
+
+/**
+ * Everything about a sale, in the order somebody setting up a counter thinks of it:
+ * what the sales screen shows, the rules a sale is held to, how it is paid and rounded,
+ * the ways a customer pays online, and what a new sale starts with.
+ */
+export function SalesSettings(): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
+  const taxOn = useTaxOn();
+  const ledgers = useAllLedgers();
+  const { moneyAlways } = useMoney();
+
+  const customers = useQuery<readonly CustomerSummary[], ApiError>({
+    queryKey: ['customers', false],
+    queryFn: () => listCustomers('', false),
+  });
+
+  // What the sales screen shows, each its own switch: a firm turns on what its
+  // counter uses and nothing else is in the way.
+  const screen: readonly {
+    readonly key: SalesScreenSetting;
+    readonly label: string;
+  }[] = [
+    { key: 'showSalesScan', label: t('prefs.showSalesScan') },
+    { key: 'showSalesReference', label: t('prefs.showSalesReference') },
+    { key: 'pickSalesmen', label: t('prefs.pickSalesmen') },
+    { key: 'showBillingName', label: t('prefs.showBillingName') },
+    { key: 'showSalesNarration', label: t('prefs.showSalesNarration') },
+    { key: 'allowRateChange', label: t('prefs.allowRateChange') },
+    { key: 'enableItemDiscount', label: t('prefs.itemDiscountColumn') },
+    { key: 'enableFreeQuantity', label: t('prefs.freeQuantityColumn') },
+    { key: 'enableReverseCalculation', label: t('prefs.inclusiveRates') },
+    { key: 'allowLoadFrom', label: t('prefs.allowLoadFrom') },
+    { key: 'allowHold', label: t('prefs.allowHold') },
+  ];
+
+  return (
+    <Cards>
+      <SettingsCard title={t('prefs.salesScreenTitle')}>
+        {screen.map((option) => (
+          <CheckField
+            key={option.key}
+            label={option.label}
+            checked={settings[option.key] !== false}
+            onChange={(checked) => settings.update({ [option.key]: checked })}
+          />
+        ))}
+      </SettingsCard>
+
+      <div className="space-y-4">
+        <SettingsCard title={t('prefs.salesRulesTitle')} hint={t('policies.hint')}>
+          <DefaultPicker
+            label={t('prefs.walkInCustomer')}
+            value={settings.walkInCustomerId}
+            onChange={(id) => settings.update({ walkInCustomerId: id })}
+            options={(customers.data ?? []).map((customer) => ({
+              value: customer.customerId,
+              label: `${customer.code} — ${customer.name}`,
+            }))}
+            placeholder={t('prefs.primaryCustomer')}
+          />
+          <CheckField
+            label={t('prefs.namedCustomerForNonCash')}
+            checked={settings.namedCustomerForNonCash !== false}
+            onChange={(namedCustomerForNonCash) =>
+              settings.update({ namedCustomerForNonCash })
+            }
+          />
+          <PolicySettings only={['creditLimit']} />
+        </SettingsCard>
+
+        <SettingsCard title={t('prefs.salesPaymentTitle')}>
+          <SelectField<number>
+            label={t('prefs.defaultSalesPaymentMode')}
+            value={salesPaymentModeOf(settings)}
+            onChange={(mode) => settings.update({ defaultSalesPaymentMode: mode })}
+            options={[
+              { value: 2, label: t('paymentModes.cash') },
+              { value: 4, label: t('paymentModes.card') },
+              { value: 3, label: t('paymentModes.online') },
+              { value: 1, label: t('paymentModes.credit') },
+            ]}
+          />
+          <SelectField<number>
+            label={t('prefs.salesRoundTo')}
+            value={settings.salesRoundTo}
+            onChange={(unit) => settings.update({ salesRoundTo: unit })}
+            options={ROUND_TO_CHOICES.map((unit) => ({
+              value: unit,
+              label:
+                unit === 0
+                  ? t('prefs.noRounding')
+                  : t('prefs.roundToNearest', { unit: moneyAlways(unit) }),
+            }))}
+          />
+        </SettingsCard>
+      </div>
+
+      <SettingsCard title={t('prefs.onlineTypesTitle')} wide>
+        <OnlinePaymentTypes ledgers={ledgers} />
+      </SettingsCard>
+
+      <SettingsCard title={t('prefs.salesDefaultsTitle')}>
+        <DefaultPicker
+          label={t('settings.defaultCustomer')}
+          value={settings.defaultCustomerId}
+          onChange={(id) => settings.update({ defaultCustomerId: id })}
+          options={(customers.data ?? []).map((customer) => ({
+            value: customer.customerId,
+            label: `${customer.code} — ${customer.name}`,
+          }))}
+        />
+        {taxOn && (
+          <SelectField
+            label={t('settings.defaultTaxMode')}
+            value={settings.defaultTaxMode}
+            onChange={(mode) => settings.update({ defaultTaxMode: mode })}
+            options={[
+              { value: 'NT', label: t('prefs.taxModeNone') },
+              { value: 'TAX', label: t('prefs.taxModeVat') },
+              { value: 'GST', label: t('prefs.taxModeGst') },
+            ]}
+          />
+        )}
+        <SelectField
+          label={t('settings.defaultSalesRateType')}
+          value={settings.defaultSalesRateType}
+          onChange={(type) => settings.update({ defaultSalesRateType: type })}
+          options={[
+            { value: 'retail', label: t('prefs.rateRetail') },
+            { value: 'wholesale', label: t('prefs.rateWholesale') },
+            { value: 'mrp', label: t('prefs.rateMrp') },
+            { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
+            { value: 'customerRate', label: t('prefs.rateCustomer') },
+            { value: 'batch', label: t('prefs.rateBatch') },
+          ]}
+        />
+        {settings.pickSalesmen && (
+          <>
+            <DefaultPicker
+              label={t('settings.defaultSalesman')}
+              value={settings.defaultSalesman}
+              onChange={(id) => settings.update({ defaultSalesman: id })}
+              options={ledgerOptions(ledgers, LedgerKind.employee)}
+            />
+            <DefaultPicker
+              label={t('settings.defaultBillingman')}
+              value={settings.defaultBillingman}
+              onChange={(id) => settings.update({ defaultBillingman: id })}
+              options={ledgerOptions(ledgers, LedgerKind.employee)}
+            />
+          </>
+        )}
+      </SettingsCard>
+    </Cards>
+  );
+}
+
+/** The switches on the sales screen card: every one a yes or no. */
+type SalesScreenSetting =
+  | 'showSalesScan'
+  | 'showSalesReference'
+  | 'pickSalesmen'
+  | 'showBillingName'
+  | 'showSalesNarration'
+  | 'allowRateChange'
+  | 'enableItemDiscount'
+  | 'enableFreeQuantity'
+  | 'enableReverseCalculation'
+  | 'allowLoadFrom'
+  | 'allowHold';
+
+/**
+ * The ways a customer pays online - Google Pay, PhonePe, Talabat - kept as a list the
+ * firm adds to, renames and retires: a sale paid online offers the active ones, and
+ * each can name the bank account it settles into.
+ */
+function OnlinePaymentTypes({
+  ledgers,
+}: {
+  readonly ledgers: readonly LedgerSummary[];
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const types = useSettings((state) => state.onlinePaymentTypes);
+  const update = useSettings((state) => state.update);
+  const [name, setName] = useState('');
+  const [ledgerId, setLedgerId] = useState('');
+
+  const banks = ledgerOptions(ledgers, LedgerKind.bank);
+  const save = (next: readonly OnlinePaymentType[]): void =>
+    update({ onlinePaymentTypes: next });
+  const change = (id: string, patch: Partial<OnlinePaymentType>): void =>
+    save(types.map((type) => (type.id === id ? { ...type, ...patch } : type)));
+
+  const typed = name.trim();
+  const taken = types.some(
+    (type) => type.name.trim().toLowerCase() === typed.toLowerCase(),
+  );
+
+  const add = (): void => {
+    if (typed === '' || taken) return;
+    save([...types, { id: crypto.randomUUID(), name: typed, ledgerId, active: true }]);
+    setName('');
+    setLedgerId('');
+  };
+
+  return (
+    <>
+      {types.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-ink-muted">
+          {t('prefs.noOnlineTypes')}
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table text-sm">
+            <thead>
+              <tr>
+                <th className="text-start">{t('prefs.onlineTypeName')}</th>
+                <th className="text-start">{t('prefs.onlineTypeBank')}</th>
+                <th className="text-center">{t('prefs.onlineTypeActive')}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {types.map((type) => (
+                <tr key={type.id}>
+                  <td className="py-1.5">
+                    <input
+                      value={type.name}
+                      maxLength={60}
+                      aria-label={t('prefs.onlineTypeName')}
+                      onChange={(event) => change(type.id, { name: event.target.value })}
+                      className="field-input-sm w-full min-w-36"
+                    />
+                  </td>
+                  <td className="min-w-56 py-1.5">
+                    <SearchSelect
+                      value={type.ledgerId}
+                      onChange={(id) => change(type.id, { ledgerId: id })}
+                      options={banks}
+                      clearable
+                      size="sm"
+                      label={t('prefs.onlineTypeBank')}
+                      placeholder={t('prefs.defaultBankAccount')}
+                    />
+                  </td>
+                  <td className="py-1.5 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label={`${t('prefs.onlineTypeActive')}: ${type.name}`}
+                      checked={type.active}
+                      onChange={(event) =>
+                        change(type.id, { active: event.target.checked })
+                      }
+                    />
+                  </td>
+                  <td className="py-1.5 text-end">
+                    <button
+                      type="button"
+                      onClick={() => save(types.filter((other) => other.id !== type.id))}
+                      aria-label={`${t('common.remove')}: ${type.name}`}
+                      title={t('common.remove')}
+                      className="rounded p-1 text-ink-muted transition hover:text-red-600"
+                    >
+                      <IconClose className="size-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
+        <input
+          value={name}
+          maxLength={60}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              add();
+            }
+          }}
+          aria-label={t('prefs.onlineTypeName')}
+          placeholder={t('prefs.onlineTypePlaceholder')}
+          aria-invalid={taken ? true : undefined}
+          className={clsx('field-input-sm min-w-44 flex-1', taken && 'field-invalid')}
+        />
+        <div className="min-w-56 flex-1">
+          <SearchSelect
+            value={ledgerId}
+            onChange={setLedgerId}
+            options={banks}
+            clearable
+            size="sm"
+            label={t('prefs.onlineTypeBank')}
+            placeholder={t('prefs.defaultBankAccount')}
+          />
+        </div>
+        <button
+          type="button"
+          disabled={typed === '' || taken}
+          onClick={add}
+          className="btn-secondary btn-sm flex items-center gap-1"
+        >
+          <IconPlus className="size-3.5" />
+          {t('prefs.addOnlineType')}
+        </button>
+      </div>
+      {taken && <p className="text-xs text-red-600">{t('prefs.onlineTypeTaken')}</p>}
+    </>
+  );
+}
+
+// ------------------------------------------------------------------------- purchase
+
+/** What a purchase does to the product master, and what a new one starts with. */
+export function PurchaseSettings(): React.JSX.Element {
+  const { t } = useTranslation();
+  const settings = useSettings();
+
+  const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
+    queryKey: ['suppliers', false],
+    queryFn: () => listSuppliers('', false),
+  });
+
+  return (
+    <Cards>
+      <SettingsCard title={t('prefs.purchaseRulesTitle')} hint={t('policies.hint')}>
+        <PolicySettings only={['purchasesUpdateProductRates']} />
+      </SettingsCard>
+
+      <SettingsCard title={t('prefs.purchaseDefaultsTitle')}>
+        <DefaultPicker
+          label={t('settings.defaultSupplier')}
+          value={settings.defaultSupplierId}
+          onChange={(id) => settings.update({ defaultSupplierId: id })}
+          options={(suppliers.data ?? []).map((supplier) => ({
+            value: supplier.supplierId,
+            label: `${supplier.code} — ${supplier.name}`,
+          }))}
+        />
+      </SettingsCard>
+    </Cards>
+  );
+}
+
+// ------------------------------------------------------------------------- inventory
+
+/** The rules stock moves under, what the firm tracks, and what a new product starts with. */
+export function InventorySettings(): React.JSX.Element {
+  const { t } = useTranslation();
+  const settings = useSettings();
+  const godownsOn = useGodownsOn();
 
   const warehouses = useQuery<readonly WarehouseSummary[], ApiError>({
     queryKey: ['warehouses', false],
@@ -383,279 +805,14 @@ export function DefaultSettings(): React.JSX.Element {
     queryKey: ['brands', false],
     queryFn: () => listMaster<BrandSummary>('brands', false),
   });
-  const customers = useQuery<readonly CustomerSummary[], ApiError>({
-    queryKey: ['customers', false],
-    queryFn: () => listCustomers('', false),
-  });
-  const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
-    queryKey: ['suppliers', false],
-    queryFn: () => listSuppliers('', false),
-  });
-  const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
-    queryKey: ['ledgers', false],
-    queryFn: () => listLedgers(false),
-  });
 
-  const ofKind = (kind: number): readonly { value: string; label: string }[] =>
-    (ledgers.data ?? [])
-      .filter((ledger) => ledger.kind === kind)
-      .map((ledger) => ({
-        value: ledger.ledgerId,
-        label: `${ledger.code} — ${ledger.name}`,
-      }));
-
-  const allLedgers = (ledgers.data ?? []).map((ledger) => ({
-    value: ledger.ledgerId,
-    label: `${ledger.code} — ${ledger.name}`,
-  }));
-
-  const picker = (
-    label: string,
-    value: string,
-    onChange: (value: string) => void,
-    options: readonly { value: string; label: string }[],
-    placeholder = t('settings.askEachTime'),
-  ): React.JSX.Element => (
-    <Field label={label}>
-      <SearchSelect
-        value={value}
-        onChange={onChange}
-        clearable
-        placeholder={placeholder}
-        label={label}
-        options={options}
-      />
-    </Field>
-  );
+  const coded = (
+    rows: readonly { id: string; code: string; name: string }[] | undefined,
+  ): readonly { value: string; label: string }[] =>
+    (rows ?? []).map((row) => ({ value: row.id, label: `${row.code} — ${row.name}` }));
 
   return (
     <Cards>
-      <SettingsCard title={t('prefs.partiesTitle')} hint={t('prefs.partiesHint')}>
-        {picker(
-          t('settings.defaultCustomer'),
-          settings.defaultCustomerId,
-          (id) => settings.update({ defaultCustomerId: id }),
-          (customers.data ?? []).map((customer) => ({
-            value: customer.customerId,
-            label: `${customer.code} — ${customer.name}`,
-          })),
-        )}
-        {picker(
-          t('settings.defaultSupplier'),
-          settings.defaultSupplierId,
-          (id) => settings.update({ defaultSupplierId: id }),
-          (suppliers.data ?? []).map((supplier) => ({
-            value: supplier.supplierId,
-            label: `${supplier.code} — ${supplier.name}`,
-          })),
-        )}
-        {picker(
-          t('settings.preferredWarehouse'),
-          settings.preferredWarehouseId,
-          (id) => settings.update({ preferredWarehouseId: id }),
-          (warehouses.data ?? [])
-            .filter((warehouse) => !warehouse.isTransit)
-            .map((warehouse) => ({
-              value: warehouse.id,
-              label: `${warehouse.code} — ${warehouse.name}`,
-            })),
-          t('settings.warehouseFromMaster'),
-        )}
-        {picker(
-          t('settings.defaultSalesman'),
-          settings.defaultSalesman,
-          (id) => settings.update({ defaultSalesman: id }),
-          ofKind(LedgerKind.employee),
-        )}
-        {picker(
-          t('settings.defaultBillingman'),
-          settings.defaultBillingman,
-          (id) => settings.update({ defaultBillingman: id }),
-          ofKind(LedgerKind.employee),
-        )}
-      </SettingsCard>
-
-      <SettingsCard title={t('settings.productsTitle')} hint={t('settings.productsHint')}>
-        {picker(
-          t('settings.defaultCategory'),
-          settings.defaultCategoryId,
-          (id) => settings.update({ defaultCategoryId: id }),
-          (categories.data ?? []).map((row) => ({
-            value: row.id,
-            label: `${row.code} — ${row.name}`,
-          })),
-        )}
-        {picker(
-          t('settings.defaultStockUnit'),
-          settings.defaultStockUnitId,
-          (id) => settings.update({ defaultStockUnitId: id }),
-          (units.data ?? []).map((row) => ({
-            value: row.id,
-            label: `${row.code} — ${row.name}`,
-          })),
-        )}
-        {picker(
-          t('settings.defaultBrand'),
-          settings.defaultBrandId,
-          (id) => settings.update({ defaultBrandId: id }),
-          (brands.data ?? []).map((row) => ({
-            value: row.id,
-            label: `${row.code} — ${row.name}`,
-          })),
-        )}
-        <SelectField
-          label={t('products.itemType')}
-          value={String(settings.defaultItemType ?? 1)}
-          onChange={(value) => settings.update({ defaultItemType: Number(value) })}
-          options={[
-            { value: '1', label: t('products.itemStock') },
-            { value: '2', label: t('products.itemService') },
-            { value: '3', label: t('products.itemNonStock') },
-          ]}
-        />
-      </SettingsCard>
-
-      <SettingsCard title={t('prefs.accountsTitle')} hint={t('prefs.accountsHint')}>
-        {picker(
-          t('prefs.defaultCash'),
-          settings.defaultCashLedgerId,
-          (id) => settings.update({ defaultCashLedgerId: id }),
-          ofKind(LedgerKind.cash),
-          t('prefs.firstCash'),
-        )}
-        {picker(
-          t('prefs.defaultBank'),
-          settings.defaultBankLedgerId,
-          (id) => settings.update({ defaultBankLedgerId: id }),
-          ofKind(LedgerKind.bank),
-          t('prefs.firstBank'),
-        )}
-        <Field
-          label={t('settings.defaultPaymentMode')}
-          hint={t('settings.defaultPaymentModeHint')}
-        >
-          <SearchSelect
-            value={settings.defaultPaymentMode}
-            onChange={(mode) => settings.update({ defaultPaymentMode: mode })}
-            clearable
-            placeholder={t('settings.askEachTime')}
-            label={t('settings.defaultPaymentMode')}
-            options={PAYMENT_MODES.map((mode) => ({
-              value: mode.value,
-              label: t(mode.labelKey),
-            }))}
-          />
-        </Field>
-        {picker(
-          t('vouchers.debitAccount'),
-          settings.defaultDebitAccountId,
-          (id) => settings.update({ defaultDebitAccountId: id }),
-          allLedgers,
-        )}
-        {picker(
-          t('vouchers.creditAccount'),
-          settings.defaultCreditAccountId,
-          (id) => settings.update({ defaultCreditAccountId: id }),
-          allLedgers,
-        )}
-      </SettingsCard>
-    </Cards>
-  );
-}
-
-// ------------------------------------------------------------------------- sales
-
-/** How a sale is entered, and the rule the server holds a sale on credit to. */
-export function SalesSettings(): React.JSX.Element {
-  const { t } = useTranslation();
-  const settings = useSettings();
-
-  return (
-    <Cards>
-      <SettingsCard title={t('prefs.salesRulesTitle')} hint={t('policies.hint')}>
-        <PolicySettings only={['creditLimit']} />
-      </SettingsCard>
-
-      <SettingsCard title={t('prefs.salesEntryTitle')} hint={t('prefs.salesEntryHint')}>
-        <CheckField
-          label={t('settings.allowSaveDraft')}
-          checked={settings.allowSaveDraft !== false}
-          onChange={(allowSaveDraft) => settings.update({ allowSaveDraft })}
-        />
-        <SelectField
-          label={t('settings.defaultTaxMode')}
-          value={settings.defaultTaxMode}
-          onChange={(mode) => settings.update({ defaultTaxMode: mode })}
-          options={[
-            { value: 'NT', label: t('prefs.taxModeNone') },
-            { value: 'TAX', label: t('prefs.taxModeVat') },
-            { value: 'GST', label: t('prefs.taxModeGst') },
-          ]}
-        />
-        <SelectField
-          label={t('settings.defaultSalesRateType')}
-          value={settings.defaultSalesRateType}
-          onChange={(type) => settings.update({ defaultSalesRateType: type })}
-          options={[
-            { value: 'retail', label: t('prefs.rateRetail') },
-            { value: 'wholesale', label: t('prefs.rateWholesale') },
-            { value: 'mrp', label: t('prefs.rateMrp') },
-            { value: 'lastQuotation', label: t('prefs.rateLastQuotation') },
-            { value: 'customerRate', label: t('prefs.rateCustomer') },
-            { value: 'batch', label: t('prefs.rateBatch') },
-          ]}
-        />
-        <CheckField
-          label={t('settings.enableReverseCalculation')}
-          hint={t('settings.enableReverseCalculationHint')}
-          checked={settings.enableReverseCalculation}
-          onChange={(checked) => settings.update({ enableReverseCalculation: checked })}
-        />
-        <CheckField
-          label={t('settings.enableFreeQuantity')}
-          hint={t('settings.enableFreeQuantityHint')}
-          checked={settings.enableFreeQuantity}
-          onChange={(checked) => settings.update({ enableFreeQuantity: checked })}
-        />
-        <CheckField
-          label={t('settings.enableItemDiscount')}
-          hint={t('settings.enableItemDiscountHint')}
-          checked={settings.enableItemDiscount}
-          onChange={(checked) => settings.update({ enableItemDiscount: checked })}
-        />
-      </SettingsCard>
-    </Cards>
-  );
-}
-
-// ------------------------------------------------------------------------- purchase
-
-/** What a purchase does to the product master. */
-export function PurchaseSettings(): React.JSX.Element {
-  const { t } = useTranslation();
-
-  return (
-    <Cards>
-      <SettingsCard title={t('prefs.purchaseRulesTitle')} hint={t('policies.hint')}>
-        <PolicySettings only={['purchasesUpdateProductRates']} />
-      </SettingsCard>
-    </Cards>
-  );
-}
-
-// ------------------------------------------------------------------------- inventory
-
-/** The rules stock moves under, and what the firm tracks. */
-export function InventorySettings(): React.JSX.Element {
-  const { t } = useTranslation();
-  const settings = useSettings();
-
-  return (
-    <Cards>
-      <SettingsCard title={t('prefs.stockRulesTitle')} hint={t('policies.hint')}>
-        <PolicySettings only={['negativeStock', 'transfersRequireApproval']} />
-      </SettingsCard>
-
       <SettingsCard title={t('prefs.trackingTitle')} hint={t('prefs.trackingHint')}>
         <CheckField
           label={t('settings.enableGodowns')}
@@ -663,6 +820,20 @@ export function InventorySettings(): React.JSX.Element {
           checked={settings.enableGodowns !== false}
           onChange={(enableGodowns) => settings.update({ enableGodowns })}
         />
+        {godownsOn && (
+          <DefaultPicker
+            label={t('settings.preferredWarehouse')}
+            value={settings.preferredWarehouseId}
+            onChange={(id) => settings.update({ preferredWarehouseId: id })}
+            options={(warehouses.data ?? [])
+              .filter((warehouse) => !warehouse.isTransit)
+              .map((warehouse) => ({
+                value: warehouse.id,
+                label: `${warehouse.code} — ${warehouse.name}`,
+              }))}
+            placeholder={t('settings.warehouseFromMaster')}
+          />
+        )}
         <CheckField
           label={t('settings.enableAutoBatch')}
           hint={t('settings.enableAutoBatchHint')}
@@ -682,56 +853,139 @@ export function InventorySettings(): React.JSX.Element {
           onChange={(checked) => settings.update({ enableDeviceAttributes: checked })}
         />
       </SettingsCard>
+
+      <SettingsCard title={t('prefs.stockRulesTitle')} hint={t('policies.hint')}>
+        <PolicySettings only={['negativeStock', 'transfersRequireApproval']} />
+      </SettingsCard>
+
+      <SettingsCard title={t('settings.productsTitle')} hint={t('settings.productsHint')}>
+        <DefaultPicker
+          label={t('settings.defaultCategory')}
+          value={settings.defaultCategoryId}
+          onChange={(id) => settings.update({ defaultCategoryId: id })}
+          options={coded(categories.data)}
+        />
+        <DefaultPicker
+          label={t('settings.defaultStockUnit')}
+          value={settings.defaultStockUnitId}
+          onChange={(id) => settings.update({ defaultStockUnitId: id })}
+          options={coded(units.data)}
+        />
+        <DefaultPicker
+          label={t('settings.defaultBrand')}
+          value={settings.defaultBrandId}
+          onChange={(id) => settings.update({ defaultBrandId: id })}
+          options={coded(brands.data)}
+        />
+        <SelectField
+          label={t('products.itemType')}
+          value={String(settings.defaultItemType ?? 1)}
+          onChange={(value) => settings.update({ defaultItemType: Number(value) })}
+          options={[
+            { value: '1', label: t('products.itemStock') },
+            { value: '2', label: t('products.itemService') },
+            { value: '3', label: t('products.itemNonStock') },
+          ]}
+        />
+      </SettingsCard>
     </Cards>
   );
 }
 
 // ------------------------------------------------------------------------- accounts
 
-/** The periods the books are kept in. */
+/** The accounts money moves through unless another is chosen, bill-wise settlement, and the years. */
 export function AccountsSettings(): React.JSX.Element {
   const { t } = useTranslation();
   const settings = useSettings();
+  const ledgers = useAllLedgers();
 
   return (
     <Cards>
-      <SettingsCard
-        title={t('prefs.billWiseReceiptsTitle')}
-        hint={t('prefs.billWiseHint')}
-      >
-        <CheckField
-          label={t('prefs.billWise')}
-          hint={t('prefs.billWiseReceiptsHint')}
-          checked={settings.billWiseReceipts}
-          onChange={(billWiseReceipts) => settings.update({ billWiseReceipts })}
+      <SettingsCard title={t('prefs.accountsTitle')} hint={t('prefs.accountsHint')}>
+        <DefaultPicker
+          label={t('prefs.defaultCash')}
+          value={settings.defaultCashLedgerId}
+          onChange={(id) => settings.update({ defaultCashLedgerId: id })}
+          options={ledgerOptions(ledgers, LedgerKind.cash)}
+          placeholder={t('prefs.firstCash')}
         />
-        <CheckField
-          label={t('prefs.fillBills')}
-          hint={t('prefs.fillBillsHint')}
-          checked={settings.fillBillsOnReceipts}
-          disabled={!settings.billWiseReceipts}
-          onChange={(fillBillsOnReceipts) => settings.update({ fillBillsOnReceipts })}
+        <DefaultPicker
+          label={t('prefs.defaultBank')}
+          value={settings.defaultBankLedgerId}
+          onChange={(id) => settings.update({ defaultBankLedgerId: id })}
+          options={ledgerOptions(ledgers, LedgerKind.bank)}
+          placeholder={t('prefs.firstBank')}
+        />
+        <Field
+          label={t('prefs.voucherPaymentMode')}
+          hint={t('settings.defaultPaymentModeHint')}
+        >
+          <SearchSelect
+            value={settings.defaultPaymentMode}
+            onChange={(mode) => settings.update({ defaultPaymentMode: mode })}
+            clearable
+            placeholder={t('settings.askEachTime')}
+            label={t('prefs.voucherPaymentMode')}
+            options={PAYMENT_MODES.map((mode) => ({
+              value: mode.value,
+              label: t(mode.labelKey),
+            }))}
+          />
+        </Field>
+        <DefaultPicker
+          label={t('prefs.paymentDebitAccount')}
+          value={settings.defaultDebitAccountId}
+          onChange={(id) => settings.update({ defaultDebitAccountId: id })}
+          options={ledgerOptions(ledgers)}
+        />
+        <DefaultPicker
+          label={t('prefs.receiptCreditAccount')}
+          value={settings.defaultCreditAccountId}
+          onChange={(id) => settings.update({ defaultCreditAccountId: id })}
+          options={ledgerOptions(ledgers)}
         />
       </SettingsCard>
 
-      <SettingsCard
-        title={t('prefs.billWisePaymentsTitle')}
-        hint={t('prefs.billWiseHint')}
-      >
-        <CheckField
-          label={t('prefs.billWise')}
-          hint={t('prefs.billWisePaymentsHint')}
-          checked={settings.billWisePayments}
-          onChange={(billWisePayments) => settings.update({ billWisePayments })}
-        />
-        <CheckField
-          label={t('prefs.fillBills')}
-          hint={t('prefs.fillBillsHint')}
-          checked={settings.fillBillsOnPayments}
-          disabled={!settings.billWisePayments}
-          onChange={(fillBillsOnPayments) => settings.update({ fillBillsOnPayments })}
-        />
-      </SettingsCard>
+      <div className="space-y-4">
+        <SettingsCard
+          title={t('prefs.billWiseReceiptsTitle')}
+          hint={t('prefs.billWiseHint')}
+        >
+          <CheckField
+            label={t('prefs.billWise')}
+            hint={t('prefs.billWiseReceiptsHint')}
+            checked={settings.billWiseReceipts}
+            onChange={(billWiseReceipts) => settings.update({ billWiseReceipts })}
+          />
+          <CheckField
+            label={t('prefs.fillBills')}
+            hint={t('prefs.fillBillsHint')}
+            checked={settings.fillBillsOnReceipts}
+            disabled={!settings.billWiseReceipts}
+            onChange={(fillBillsOnReceipts) => settings.update({ fillBillsOnReceipts })}
+          />
+        </SettingsCard>
+
+        <SettingsCard
+          title={t('prefs.billWisePaymentsTitle')}
+          hint={t('prefs.billWiseHint')}
+        >
+          <CheckField
+            label={t('prefs.billWise')}
+            hint={t('prefs.billWisePaymentsHint')}
+            checked={settings.billWisePayments}
+            onChange={(billWisePayments) => settings.update({ billWisePayments })}
+          />
+          <CheckField
+            label={t('prefs.fillBills')}
+            hint={t('prefs.fillBillsHint')}
+            checked={settings.fillBillsOnPayments}
+            disabled={!settings.billWisePayments}
+            onChange={(fillBillsOnPayments) => settings.update({ fillBillsOnPayments })}
+          />
+        </SettingsCard>
+      </div>
 
       <SettingsCard title={t('years.title')} hint={t('years.hint')} wide>
         <FinancialYearsSettings />
@@ -883,6 +1137,20 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
             </button>
           ))}
         </div>
+
+        <CheckField
+          label={t('prefs.showChargesOn', {
+            document: t(`settings.chargeTabs.${document}`),
+          })}
+          checked={!(settings.hiddenChargeSetups ?? []).includes(type)}
+          onChange={(shown) =>
+            settings.update({
+              hiddenChargeSetups: shown
+                ? (settings.hiddenChargeSetups ?? []).filter((name) => name !== type)
+                : [...(settings.hiddenChargeSetups ?? []), type],
+            })
+          }
+        />
 
         {failure && <p className="alert-error">{failure.detail || failure.code}</p>}
 

@@ -305,7 +305,10 @@ public sealed class SalesController : ApiControllerBase
             AmountReceived: request.AmountReceived,
             ReceivedIntoLedgerId: request.ReceivedIntoLedgerId,
             PaymentReference: request.PaymentReference,
-            PaidInFull: request.PaidInFull);
+            PaidInFull: request.PaidInFull,
+            BillingName: request.BillingName,
+            OnlinePaymentType: request.OnlinePaymentType,
+            RoundTo: request.RoundTo);
 
         return new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason);
     }
@@ -330,6 +333,9 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
 /// <param name="PaymentReference">An online payment's transaction ID.</param>
 /// <param name="PaidInFull">The customer paid the whole bill, whatever it rounds to.</param>
+/// <param name="BillingName">The name the invoice is made out to.</param>
+/// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe.</param>
+/// <param name="RoundTo">The unit the total is rounded to. Zero rounds to the currency alone.</param>
 public sealed record UpdateSalesInvoiceRequest(
     [property: JsonRequired] DateOnly Date,
     [property: JsonRequired] Guid CustomerLedgerId,
@@ -348,7 +354,10 @@ public sealed record UpdateSalesInvoiceRequest(
     decimal AmountReceived = 0m,
     Guid? ReceivedIntoLedgerId = null,
     string? PaymentReference = null,
-    bool PaidInFull = false);
+    bool PaidInFull = false,
+    string? BillingName = null,
+    string? OnlinePaymentType = null,
+    decimal RoundTo = 0m);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

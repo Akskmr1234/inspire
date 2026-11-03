@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useGodownsOn } from '@/stores/settings';
 import clsx from 'clsx';
 import { moneyAlways } from '@/lib/money';
 import { amountInWords, amountInWordsArabic } from '@/lib/amountInWords';
@@ -82,6 +83,9 @@ export function PrintedDocument({
   const { t, i18n } = useTranslation();
   const en = useMemo(() => i18n.getFixedT('en'), [i18n]);
   const ar = useMemo(() => i18n.getFixedT('ar'), [i18n]);
+  // With one godown there is nothing to say about where the goods came from.
+  const godownsOn = useGodownsOn();
+  const warehouse = godownsOn && template.show.warehouse ? document.warehouse : null;
 
   /** A fixed label: in the screen's language, or in Arabic over English. */
   const label = (key: string): React.ReactNode =>
@@ -225,7 +229,7 @@ export function PrintedDocument({
       </header>
 
       {/* Party */}
-      {(document.party || (template.show.warehouse && document.warehouse)) && (
+      {(document.party || warehouse) && (
         <section
           className={clsx(
             roll
@@ -254,12 +258,12 @@ export function PrintedDocument({
                 labelled('printing.taxNumber', document.party.taxNumber)}
             </div>
           )}
-          {template.show.warehouse && document.warehouse && (
+          {warehouse && (
             <div className={clsx(!roll && 'text-end')}>
               <div className="text-[0.85em] font-bold tracking-wider uppercase opacity-70">
                 {label('printing.warehouse')}
               </div>
-              <div>{document.warehouse}</div>
+              <div>{warehouse}</div>
             </div>
           )}
         </section>

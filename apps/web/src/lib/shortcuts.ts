@@ -18,6 +18,7 @@ export type EntryAction =
   | 'print'
   | 'bill'
   | 'add-line'
+  | 'hold'
   | 'customer'
   | 'scan'
   | 'payment'
@@ -111,6 +112,7 @@ export const ENTRY_SHORTCUTS: readonly EntryShortcut[] = [
   { action: 'print', code: 'KeyP', mod: true, labelKey: 'shortcuts.print' },
   { action: 'bill', code: 'KeyB', mod: true, labelKey: 'shortcuts.bill' },
   { action: 'add-line', code: 'KeyA', alt: true, labelKey: 'shortcuts.addLine' },
+  { action: 'hold', code: 'KeyH', alt: true, labelKey: 'shortcuts.hold' },
   // Function keys type nothing, so they work from inside any field. F1, F3, F5-F7 and
   // F10-F12 are the browser's own and are left to it.
   { action: 'customer', code: 'F2', labelKey: 'shortcuts.goCustomer' },
@@ -224,9 +226,17 @@ export function actOn(target: HTMLElement): void {
   if (field instanceof HTMLInputElement) field.select();
 }
 
-/** Whether an entry is open - a window, or an entry screen with its Save - so leaving it would lose work. */
+/**
+ * Whether an entry is open - a window, or an entry screen with its Save - so leaving it
+ * would lose work. A window marked `data-holds-on-leave` - a sale, which puts itself on
+ * hold as its screen goes - loses nothing, so it does not count.
+ */
 export function entryOpen(): boolean {
-  return activeDialog() !== null || buttonFor('save') !== null;
+  const dialog = activeDialog();
+
+  if (dialog) return !dialog.hasAttribute('data-holds-on-leave');
+
+  return buttonFor('save') !== null;
 }
 
 /** Asks the shell to open the list of shortcuts, from a menu or a button anywhere. */

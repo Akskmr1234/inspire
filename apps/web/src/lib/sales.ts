@@ -67,6 +67,12 @@ export interface SalesInvoiceSummary {
   readonly amountReceived: number;
   /** An online payment's transaction ID. */
   readonly paymentReference: string | null;
+  /** The name it is made out to: a walk-in customer's, on a sale to the Primary customer. */
+  readonly billingName?: string | null;
+  /** How an online payment was made: Google Pay, PhonePe, Talabat. */
+  readonly onlinePaymentType?: string | null;
+  /** The user who entered it: the salesman, on a counter that names nobody else. */
+  readonly enteredByName?: string | null;
 }
 
 /** One tax head as it was charged on a line. */
@@ -149,6 +155,12 @@ export interface SalesInvoiceDetail {
   readonly paymentReference: string | null;
   /** The receipt posting raised for the payment. */
   readonly receiptVoucherId: string | null;
+  /** The name it is made out to, where it says one. */
+  readonly billingName?: string | null;
+  /** How an online payment was made. */
+  readonly onlinePaymentType?: string | null;
+  /** The unit its total was rounded to; zero for the currency alone. */
+  readonly roundTo?: number;
 }
 
 /** What posting produced. */
@@ -258,6 +270,25 @@ export interface SalesInvoiceInput {
    * own total, so a payment in full is never refused for a fraction.
    */
   readonly paidInFull?: boolean;
+  /** The name it is made out to: the walk-in customer's, on a sale to the Primary customer. */
+  readonly billingName?: string | null;
+  /** How an online payment was made: Google Pay, PhonePe, Talabat. */
+  readonly onlinePaymentType?: string | null;
+  /** The unit the total is rounded to - 0.25, 1 - or zero for the currency alone. */
+  readonly roundTo?: number;
+}
+
+/**
+ * Rounds a total as a sale's is rounded: to the unit where one is set, nearest and half
+ * away from zero, and then to the currency - the server's rule, so the screen's grand
+ * total is the bill's.
+ */
+export function roundTotal(total: number, unit: number): number {
+  const units =
+    unit > 0 ? Math.sign(total) * Math.round(Math.abs(total) / unit + 1e-9) : 0;
+  const rounded = unit > 0 ? units * unit : total;
+
+  return Math.sign(rounded) * (Math.round(Math.abs(rounded) * 100 + 1e-9) / 100);
 }
 
 /** Where a customer stands, for the counter selling to them. */

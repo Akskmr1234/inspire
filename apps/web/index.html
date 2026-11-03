@@ -36,36 +36,45 @@
         Wrapped in a try/catch because localStorage throws rather than returning null
         when a browser is set to block site data, and a theme preference is not worth
         failing to boot over.
+
+        The order is the session store's: the person's own choice, then the firm's,
+        then the build's VITE_DEFAULT_THEME (see src/lib/theme.ts), then light.
       */
       (function () {
+        var deployment = '%VITE_DEFAULT_THEME%'.trim().toLowerCase();
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme =
+          deployment === 'dark' || (deployment === 'system' && prefersDark)
+            ? 'dark'
+            : 'light';
+
         try {
-          var theme =
+          var chosen =
             localStorage.getItem('erp.theme') || localStorage.getItem('erp.defaultTheme');
 
-          if (!theme) {
+          if (!chosen) {
             try {
               var s = JSON.parse(localStorage.getItem('erp.settings') || '{}');
-              if (s.defaultTheme === 'light' || s.defaultTheme === 'dark') {
-                theme = s.defaultTheme;
-              }
+              // An earlier release kept the firm's choice as defaultTheme, where only
+              // dark is sure to have been chosen: see withFirmTheme in the settings.
+              chosen = s.firmTheme || (s.defaultTheme === 'dark' ? 'dark' : '');
             } catch (_) {}
           }
 
-          if (theme !== 'light' && theme !== 'dark') {
-            theme = window.matchMedia('(prefers-color-scheme: dark)').matches
-              ? 'dark'
-              : 'light';
+          if (chosen === 'light' || chosen === 'dark') {
+            theme = chosen;
           }
 
           var language = localStorage.getItem('erp.language') === 'ar' ? 'ar' : 'en';
           var root = document.documentElement;
 
-          root.classList.toggle('dark', theme === 'dark');
           root.lang = language;
           root.dir = language === 'ar' ? 'rtl' : 'ltr';
         } catch (error) {
-          /* No stored preference is reachable; the defaults in the markup stand. */
+          /* No stored preference is reachable; the deployment's theme stands. */
         }
+
+        document.documentElement.classList.toggle('dark', theme === 'dark');
       })();
     </script>
   </head>

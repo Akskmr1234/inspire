@@ -8,12 +8,12 @@ import {
   IconBox,
   IconDocument,
   IconPercent,
-  IconPlus,
   IconPrinter,
   IconTruck,
   IconUser,
 } from '@/components/icons';
 import {
+  AddLineButton,
   BillCard,
   FooterSection,
   formatQuantity,
@@ -25,10 +25,14 @@ import {
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LineNumberCell,
+  LineNumberHeader,
+  LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
   PartyCard,
   RemoveLineButton,
+  useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -84,7 +88,13 @@ import {
   type OrderLineInput,
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
-import { useDirectSave, useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
+import {
+  useChargesShown,
+  useDirectSave,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+} from '@/stores/settings';
 import { DocumentType, useNextNumber } from '@/lib/numbering';
 import { chargeAmounts, useChargeSetup } from '@/lib/charges';
 import { moneyAlways } from '@/lib/money';
@@ -652,6 +662,11 @@ function OrderEntryDialog({
   const chargeSetup = useChargeSetup(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
   );
+  // Additional ledgers only where the firm uses them on this kind of order.
+  const chargesShown = useChargesShown(
+    kind === 'purchase' ? 'PurchaseOrder' : 'SalesOrder',
+  );
+  const activeCharges = chargesShown ? charges : [];
   useDefaultCharges(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
     ledgers.data ?? [],
@@ -809,7 +824,7 @@ function OrderEntryDialog({
           discount: Number(line.discount || 0),
         }));
 
-      const chargeInput = charges
+      const chargeInput = activeCharges
         .filter((charge) => charge.ledgerId && Number(charge.amount) > 0)
         .map((charge) => ({
           ledgerId: charge.ledgerId,
@@ -875,8 +890,18 @@ function OrderEntryDialog({
       previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
     );
 
+  // A line just added, or just scanned onto, is scrolled to and picked out; Add item
+  // leaves the cursor in the new line's product.
+  const lineAttention = useLineAttention();
+
+  /** A new, empty line at the foot, with the cursor in its product. */
+  const addLine = (): void => {
+    setLines((previous) => [...previous, emptyLine(defaultTaxRate)]);
+    lineAttention.attend('last', { focus: true });
+  };
+
   const documentTitle = kind === 'purchase' ? t('orders.newPurchase') : words('newSales');
-  const chargesAmount = chargeTotal(charges, ledgers.data ?? [], chargeSetup);
+  const chargesAmount = chargeTotal(activeCharges, ledgers.data ?? [], chargeSetup);
   const orderTotal = totals.gross - totals.discount + totals.tax + chargesAmount;
   const itemCount = lines.filter((line) => line.productId !== '').length;
   // What the lines add up to, column by column, for the row of totals under them.
@@ -921,7 +946,7 @@ function OrderEntryDialog({
         <InvoiceCard>
           {/* Two lines on a wide screen: who, when, the numbers, and the scan. */}
           <InvoiceFields>
-            <div className="min-w-0 sm:col-span-2">
+            <div className="col-span-2 min-w-0" data-party-field>
               <Field
                 label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
                 required
@@ -999,9 +1024,9 @@ function OrderEntryDialog({
               value={draft.narration}
               onChange={(value) => set('narration', value)}
               label={t('invoice.narration')}
-              className={'sm:col-span-2 lg:col-span-3 xl:col-span-6'}
+              className="col-span-2 lg:col-span-3 xl:col-span-6"
             />
-            <div className="min-w-0 sm:col-span-2" {...shortcutProps('scan')}>
+            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
               <BarcodeScan
                 asField
                 products={products.data ?? []}
@@ -1018,6 +1043,9 @@ function OrderEntryDialog({
                       : {}),
                   }));
                   setLines(next.lines);
+                  lineAttention.attend(
+                    next.lines.findIndex((line) => line.productId === product.id),
+                  );
                   return next.quantity;
                 }}
               />
@@ -1030,7 +1058,12 @@ function OrderEntryDialog({
           icon={<IconBox className="size-5" />}
           title={t('invoice.items')}
           meta={t('invoice.itemCount', { count: itemCount })}
-          actions={columns.picker}
+          actions={
+            <>
+              <AddLineButton onClick={addLine} />
+              {columns.picker}
+            </>
+          }
         >
           {errors['lines'] && (
             <p className="field-message-error mb-2">{errors['lines']}</p>
@@ -1040,7 +1073,8 @@ function OrderEntryDialog({
             <table className="line-table sm:min-w-[40rem] lg:min-w-[42rem]">
               <thead className="sticky top-0 z-10 bg-surface-2 text-[13px] text-ink-muted">
                 <tr>
-                  <th className="rounded-s-lg px-3 py-2.5 text-start font-medium">
+                  <LineNumberHeader />
+                  <th className="px-3 py-2.5 text-start font-medium">
                     {t('orders.product')}
                   </th>
                   <ProductDetailHeaders shows={columns.shows} labels={t} />
@@ -1068,12 +1102,13 @@ function OrderEntryDialog({
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody ref={lineAttention.bodyRef}>
                 {lines.map((line, index) => {
                   const errorsForLine = lineErrors[index] ?? {};
 
                   return (
-                    <tr key={line.key} className="border-t border-line">
+                    <tr key={line.key} data-line-row className="border-t border-line">
+                      <LineNumberCell number={index + 1} />
                       <td
                         data-label={t('orders.product')}
                         className="min-w-40 px-2 py-1 lg:min-w-64"
@@ -1202,7 +1237,7 @@ function OrderEntryDialog({
               </tbody>
               <LinesTotalRow
                 label={t('invoice.linesTotal')}
-                span={1 + shownProductDetails(columns.shows)}
+                span={2 + shownProductDetails(columns.shows)}
                 cells={[
                   {
                     key: 'quantity',
@@ -1243,24 +1278,20 @@ function OrderEntryDialog({
               />
             </table>
 
-            <button
-              {...shortcutProps('add-line')}
-              type="button"
-              onClick={() =>
-                setLines((previous) => [...previous, emptyLine(defaultTaxRate)])
-              }
-              className="btn-secondary mt-3 mb-1"
-            >
-              <IconPlus className="size-4" />
-              {t('invoice.addItem')}
-            </button>
+            {itemCount === 0 && <LinesEmptyHint />}
           </InvoiceLines>
         </InvoiceCard>
 
         {/* Along the foot: who the document is with; everything that changes what
             it comes to - the tax treatment and the additional ledgers - in one
             card; and the bill set out line by line. */}
-        <InvoiceFooter className="lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <InvoiceFooter
+          className={
+            taxOn || chargesShown
+              ? 'lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)_minmax(0,1fr)]'
+              : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'
+          }
+        >
           <PartyCard
             icon={
               kind === 'purchase' ? (
@@ -1286,40 +1317,49 @@ function OrderEntryDialog({
             empty={
               kind === 'purchase' ? t('invoice.noSupplier') : t('invoice.noCustomer')
             }
+            choose={
+              kind === 'purchase'
+                ? t('invoice.chooseSupplier')
+                : t('invoice.chooseCustomer')
+            }
             money={moneyAlways}
           />
 
-          <FooterSection
-            icon={<IconPercent className="size-[18px]" />}
-            title={t('invoice.ratesAndCharges')}
-          >
-            {taxOn && (
-              <div className="mb-3">
-                <SelectField
-                  size="sm"
-                  label={t('purchase.taxMode')}
-                  value={mode}
-                  onChange={setMode}
-                  options={[
-                    { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
-                    { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
-                    { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
-                  ]}
+          {(taxOn || chargesShown) && (
+            <FooterSection
+              icon={<IconPercent className="size-[18px]" />}
+              title={t('invoice.ratesAndCharges')}
+            >
+              {taxOn && (
+                <div className={chargesShown ? 'mb-3' : undefined}>
+                  <SelectField
+                    size="sm"
+                    label={t('purchase.taxMode')}
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      { value: PurchaseTaxMode.tax, label: t('purchase.modeTax') },
+                      { value: PurchaseTaxMode.nonTax, label: t('purchase.modeNonTax') },
+                      { value: PurchaseTaxMode.cst, label: t('purchase.modeCst') },
+                    ]}
+                  />
+                </div>
+              )}
+              {chargesShown && (
+                <ChargesPanel
+                  inline
+                  charges={charges}
+                  ledgers={ledgers.data ?? []}
+                  onChange={setCharges}
+                  setup={chargeSetup}
+                  nonTax={mode === PurchaseTaxMode.nonTax}
                 />
-              </div>
-            )}
-            <ChargesPanel
-              inline
-              charges={charges}
-              ledgers={ledgers.data ?? []}
-              onChange={setCharges}
-              setup={chargeSetup}
-              nonTax={mode === PurchaseTaxMode.nonTax}
-            />
-          </FooterSection>
+              )}
+            </FooterSection>
+          )}
 
           <BillCard
-            className="md:col-span-2 lg:col-span-1"
+            className={taxOn || chargesShown ? 'md:col-span-2 lg:col-span-1' : ''}
             label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
             total={orderTotal}
             money={moneyAlways}
@@ -1334,7 +1374,7 @@ function OrderEntryDialog({
               charges: chargeAmounts(
                 chargeSetup,
                 mode === PurchaseTaxMode.nonTax,
-                charges,
+                activeCharges,
                 ledgers.data ?? [],
               ),
             }}
@@ -1343,7 +1383,15 @@ function OrderEntryDialog({
       </InvoiceBody>
 
       <InvoiceActions
-        hints={<ShortcutHints actions={['scan', 'add-line', 'charges']} />}
+        hints={
+          <ShortcutHints
+            actions={[
+              'scan',
+              'add-line',
+              ...(chargesShown ? (['charges'] as const) : []),
+            ]}
+          />
+        }
         total={{
           label: quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal'),
           amount: moneyAlways(orderTotal),

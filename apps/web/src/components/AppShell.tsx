@@ -16,6 +16,7 @@ import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { CommandPalette, opensPalette } from '@/components/CommandPalette';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { SHOW_SHORTCUTS_EVENT } from '@/lib/shortcuts';
+import { menuChosen, OPEN_MENU_EVENT } from '@/lib/shell';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import { brand } from '@/lib/brand';
 import {
@@ -176,6 +177,23 @@ export function AppShell(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // A window that leaves the sidebar in view - a sale, which holds itself when the menu
+  // is used - sits beside it, so it is told how wide the sidebar is.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--app-sidebar-width',
+      collapsed ? '4.5rem' : '16rem',
+    );
+  }, [collapsed]);
+
+  // Asked for by a window that covers the menu button in the bar.
+  useEffect(() => {
+    const open = (): void => setDrawerOpen(true);
+
+    window.addEventListener(OPEN_MENU_EVENT, open);
+    return () => window.removeEventListener(OPEN_MENU_EVENT, open);
+  }, []);
+
   // A drawer that survives a rotation to landscape would sit as a permanent overlay
   // beside the sidebar it duplicates, so crossing into desktop width dismisses it.
   useEffect(() => {
@@ -217,7 +235,10 @@ export function AppShell(): React.JSX.Element {
       menu={menu}
       language={language}
       collapsed={folded}
-      onNavigate={() => setDrawerOpen(false)}
+      onNavigate={() => {
+        setDrawerOpen(false);
+        menuChosen();
+      }}
     />
   );
 
@@ -744,7 +765,10 @@ function NavDrawer({
           <div className="mt-auto border-t border-line p-3">
             <NavLink
               to="/profile"
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                menuChosen();
+              }}
               className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-2.5 transition hover:bg-surface-3"
             >
               <span className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-xs">

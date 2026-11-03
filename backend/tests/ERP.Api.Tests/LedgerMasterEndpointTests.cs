@@ -177,15 +177,17 @@ public sealed class LedgerMasterEndpointTests
         category.StatusCode.ShouldBe(HttpStatusCode.Created);
         Guid categoryId = await category.Content.ReadFromJsonAsync<Guid>();
 
+        // Tagged like every other name here: a firm's category names are unique, and
+        // another test has its own "Phones" in the same database.
         (await client.PutAsJsonAsync($"/api/v1/inventory/Category/{categoryId}", new
         {
-            Name = "Phones",
+            Name = $"Phones {tag}",
             NameArabic = "هواتف",
         })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
         CategorySummary corrected = (await client.GetFromJsonAsync<List<CategorySummary>>(
             "/api/v1/inventory/categories"))!.Single(c => c.Id == categoryId);
-        corrected.Name.ShouldBe("Phones");
+        corrected.Name.ShouldBe($"Phones {tag}");
         corrected.NameArabic.ShouldBe("هواتف");
         corrected.Code.ShouldBe($"C{tag}");
 

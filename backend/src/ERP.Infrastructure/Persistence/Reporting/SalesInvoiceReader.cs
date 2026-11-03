@@ -81,6 +81,14 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             .Where(ledger => named.Contains(ledger.Id))
             .ToDictionaryAsync(ledger => ledger.Id, cancellationToken);
 
+        // Who entered each one, by the name they go by now: the salesman and the billing
+        // man, on a counter that does not name them separately.
+        List<UserId> enteredBy = [.. documents.Select(document => document.CreatedBy).Distinct()];
+
+        Dictionary<UserId, string> users = await _context.Users
+            .Where(user => enteredBy.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
+
         // Ordered by the page's own order rather than by whatever the second query
         // returned, which is unordered by definition.
         List<SalesInvoiceSummary> rows =
@@ -88,7 +96,7 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             .. ids
                 .Select(id => documents.Find(document => document.Id == id))
                 .Where(document => document is not null)
-                .Select(document => Describe(document!, customers)),
+                .Select(document => Describe(document!, customers, users)),
         ];
 
         return new PagedResult<SalesInvoiceSummary>(rows, page, pageSize, total);
@@ -130,7 +138,9 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             invoices = invoices.Where(invoice =>
                 EF.Functions.ILike(invoice.Number, $"%{term}%")
                 || (invoice.ReferenceNumber != null
-                    && EF.Functions.ILike(invoice.ReferenceNumber, $"%{term}%")));
+                    && EF.Functions.ILike(invoice.ReferenceNumber, $"%{term}%"))
+                || (invoice.BillingName != null
+                    && EF.Functions.ILike(invoice.BillingName, $"%{term}%")));
         }
 
         return invoices;
@@ -138,7 +148,8 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
 
     private static SalesInvoiceSummary Describe(
         SalesInvoice document,
-        IReadOnlyDictionary<LedgerId, Ledger> customers)
+        IReadOnlyDictionary<LedgerId, Ledger> customers,
+        IReadOnlyDictionary<UserId, string> users)
     {
         Ledger? customer = customers.GetValueOrDefault(document.CustomerLedgerId);
 
@@ -165,7 +176,10 @@ public sealed class SalesInvoiceReader : ISalesInvoiceReader
             document.ChargeTotal.Amount,
             document.Narration,
             document.AmountReceived,
-            document.PaymentReference);
+            document.PaymentReference,
+            document.BillingName,
+            document.OnlinePaymentType,
+            users.GetValueOrDefault(document.CreatedBy));
 
         string? PersonName(LedgerId? id) =>
             id is { } ledger ? customers.GetValueOrDefault(ledger)?.Name : null;

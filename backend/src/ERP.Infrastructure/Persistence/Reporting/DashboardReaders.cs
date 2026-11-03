@@ -113,12 +113,6 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
     /// <summary>How many months of history a trend covers.</summary>
     private const int TrendMonths = 12;
 
-    /// <summary>The group the sales ledgers sit under.</summary>
-    private const string SalesAccounts = "4100";
-
-    /// <summary>The group the purchase and cost-of-goods ledgers sit under.</summary>
-    private const string PurchaseAccounts = "5100";
-
     private readonly ErpDbContext _context;
     private readonly IOutstandingBillsReader _bills;
     private readonly IChequeReportReader _cheques;
@@ -334,36 +328,11 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
             return;
         }
 
-        var groups = await _context.AccountGroups
-            .Where(group => group.FirmId == firmId)
-            .Select(group => new { group.Id, group.Code, group.ParentId })
-            .ToListAsync(cancellationToken);
+        TradingClassifier trading = await TradingClassifier.LoadAsync(_context, firmId, cancellationToken);
 
-        Dictionary<AccountGroupId, string> codes = groups.ToDictionary(group => group.Id, group => group.Code);
-        Dictionary<string, AccountGroupId?> parents = groups.ToDictionary(
-            group => group.Code, group => group.ParentId, StringComparer.Ordinal);
-
-        bool Under(string groupCode, string headCode)
-        {
-            string? code = groupCode;
-
-            for (int depth = 0; code is not null && depth < 20; depth++)
-            {
-                if (string.Equals(code, headCode, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-
-                code = parents.TryGetValue(code, out AccountGroupId? parent) && parent is { } id
-                    ? codes.GetValueOrDefault(id)
-                    : null;
-            }
-
-            return false;
-        }
-
-        Trading today = Summarise(await _balances.GetMovementsAsync(firmId, asAt, asAt, cancellationToken));
-        Trading month = Summarise(await _balances.GetMovementsAsync(
+        Trading today = trading.Summarise(
+            await _balances.GetMovementsAsync(firmId, asAt, asAt, cancellationToken));
+        Trading month = trading.Summarise(await _balances.GetMovementsAsync(
             firmId, new DateOnly(asAt.Year, asAt.Month, 1), asAt, cancellationToken));
 
         foreach ((string code, bool isMonth, Func<Trading, decimal> figure) in wanted)
@@ -373,37 +342,6 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
                 results[code] = new DashboardMetric(
                     Guid.Empty, code, figure(isMonth ? month : today), 0, [], IsPermitted: true);
             }
-        }
-
-        Trading Summarise(IReadOnlyList<LedgerMovement> movements)
-        {
-            decimal sales = 0m, expenses = 0m, income = 0m, spent = 0m;
-
-            foreach (LedgerMovement movement in movements)
-            {
-                decimal debit = movement.PeriodDebit - movement.PeriodCredit;
-
-                if (movement.Nature == AccountNature.Income)
-                {
-                    income -= debit;
-
-                    if (Under(movement.GroupCode, SalesAccounts))
-                    {
-                        sales -= debit;
-                    }
-                }
-                else if (movement.Nature == AccountNature.Expense)
-                {
-                    spent += debit;
-
-                    if (!Under(movement.GroupCode, PurchaseAccounts))
-                    {
-                        expenses += debit;
-                    }
-                }
-            }
-
-            return new Trading(sales, expenses, income - spent);
         }
     }
 
@@ -702,9 +640,3 @@ public sealed class DashboardMetricReader : IDashboardMetricReader
             IsPermitted: true);
     }
 }
-
-/// <summary>A period's trading in the three figures the dashboard shows.</summary>
-/// <param name="Sales">Net sales.</param>
-/// <param name="Expenses">Running expenses.</param>
-/// <param name="Profit">Net profit.</param>
-internal sealed record Trading(decimal Sales, decimal Expenses, decimal Profit);

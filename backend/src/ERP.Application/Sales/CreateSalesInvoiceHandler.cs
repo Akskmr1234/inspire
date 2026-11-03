@@ -338,15 +338,25 @@ public sealed class CreateSalesInvoiceCommandHandler
         CreateSalesInvoiceCommand request,
         Context context)
     {
-        Result details = invoice.SetDetails(request.ReferenceNumber, request.Narration);
+        Result details = invoice.SetDetails(
+            request.ReferenceNumber, request.Narration, request.BillingName);
 
         if (details.IsFailure)
         {
             return details;
         }
 
+        // Before the payment: paid in full takes the total, and the total is what it
+        // rounds to.
+        Result rounding = invoice.SetRounding(request.RoundTo);
+
+        if (rounding.IsFailure)
+        {
+            return rounding;
+        }
+
         Result terms = invoice.SetSaleTerms(
-            request.PaymentMode, context.Salesman, context.BillingMan);
+            request.PaymentMode, context.Salesman, context.BillingMan, request.OnlinePaymentType);
 
         // Lines and charges are on by now, so the total is the one posting will see.
         decimal received = request.PaidInFull && !invoice.IsReturn

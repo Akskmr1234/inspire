@@ -114,8 +114,9 @@ public sealed class InventoryMasterEndpointTests
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();
         string suffix = Suffix();
 
-        Guid parentId = await CreateCategoryAsync(client, $"PHONE{suffix}", "Phones");
-        await CreateCategoryAsync(client, $"ANDR{suffix}", "Android", parentId);
+        // Names tagged as the codes are: a firm's category names are unique.
+        Guid parentId = await CreateCategoryAsync(client, $"PHONE{suffix}", $"Phones {suffix}");
+        await CreateCategoryAsync(client, $"ANDR{suffix}", $"Android {suffix}", parentId);
 
         IReadOnlyList<CategorySummary> categories =
             (await client.GetFromJsonAsync<IReadOnlyList<CategorySummary>>(
@@ -123,7 +124,7 @@ public sealed class InventoryMasterEndpointTests
 
         CategorySummary child = categories.Single(row => row.Code == $"ANDR{suffix}");
         child.ParentId.ShouldBe(parentId);
-        child.ParentName.ShouldBe("Phones");
+        child.ParentName.ShouldBe($"Phones {suffix}");
 
         // The parent itself has none, which the left join has to preserve.
         categories.Single(row => row.Code == $"PHONE{suffix}").ParentId.ShouldBeNull();

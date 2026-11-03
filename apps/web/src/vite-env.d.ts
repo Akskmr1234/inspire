@@ -25,6 +25,13 @@ interface ImportMetaEnv {
    * Inspire ERP whatever this says. Unset, it is Aider.
    */
   readonly VITE_APP_BRAND?: string;
+
+  /**
+   * The theme the application opens in for anybody who has not picked one: `light`,
+   * `dark`, or `system` to follow the device. Unset, it is light. A theme the firm
+   * picks in Settings, or a person picks for themselves, still wins.
+   */
+  readonly VITE_DEFAULT_THEME?: string;
 }
 
 interface ImportMeta {

@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      // Always defined, if only as blank, so index.html's %VITE_DEFAULT_THEME% is
+      // replaced in every build rather than left in place with a warning when unset.
+      'import.meta.env.VITE_DEFAULT_THEME': JSON.stringify(env.VITE_DEFAULT_THEME ?? ''),
+    },
     resolve: {
       alias: { '@': new URL('./src', import.meta.url).pathname },
     },

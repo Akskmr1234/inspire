@@ -239,6 +239,7 @@ function ShortcutList({ onClose }: { readonly onClose: () => void }): React.JSX.
           </h3>
           <ul className="divide-y divide-line">
             {inside.map((shortcut) => row(describe(shortcut), t(shortcut.labelKey)))}
+            {row('Enter', t('shortcuts.nextBox'))}
             {row('Esc', t('shortcuts.close'))}
           </ul>
           <h3 className="mt-4 mb-1 text-xs font-bold tracking-wide text-ink-muted uppercase">

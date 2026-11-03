@@ -81,6 +81,29 @@ public sealed class DashboardsController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Reads the charts under the dashboard: how trading has gone over time.</summary>
+    /// <param name="asAt">The last day the charts cover. Defaults to today.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Every chart the caller may read.</returns>
+    /// <remarks>
+    /// One fixed set for every caller rather than panels somebody arranges. Each chart is
+    /// drawn from the report it summarises and comes back only to a caller who may open
+    /// that report; one they may not is null rather than empty, so it is left out rather
+    /// than drawn as a flat line that reads as "nothing was sold".
+    /// </remarks>
+    /// <response code="200">The charts.</response>
+    [HttpGet("charts")]
+    [ProducesResponseType(typeof(DashboardChartsResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChartsAsync(
+        [FromQuery] DateOnly? asAt,
+        CancellationToken cancellationToken)
+    {
+        Result<DashboardChartsResponse> result = await _sender.Send(
+            new GetDashboardChartsQuery(asAt), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Lists every widget a dashboard can be made of.</summary>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The widgets, in the order they are offered.</returns>
