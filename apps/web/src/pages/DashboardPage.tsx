@@ -8,8 +8,11 @@ import { NeedsAttention } from '@/components/NeedsAttention';
 import { EmptyState, moneyAlways } from '@/components/ReportFrame';
 import { IconCash, IconChart, IconLayers } from '@/components/icons';
 import { DashboardCustomizer } from '@/components/DashboardCustomizer';
+import { DashboardCharts } from '@/components/DashboardCharts';
+import { ColumnChart } from '@/components/charts/ColumnChart';
 import { request, type ApiError } from '@/lib/api';
 import { QUANTITY_METRICS, WIDGET_KIND as KIND } from '@/lib/dashboards';
+import { formatKey } from '@/lib/dashboardCharts';
 import { useSession } from '@/stores/session';
 
 interface DashboardWidget {
@@ -124,6 +127,8 @@ export function DashboardPage(): React.JSX.Element {
       <>
         <div className="flex">{customizeButton}</div>
         <EmptyState message={t('dashboard.none')} />
+        {/* The charts are nobody's arrangement, so a reader with no dashboard still has them. */}
+        <DashboardCharts />
         {customizer}
       </>
     );
@@ -210,6 +215,12 @@ export function DashboardPage(): React.JSX.Element {
           />
         ))}
       </div>
+
+      {/*
+        How trading has gone, under where it stands: the same figures over time, each
+        chart drawn from the report it summarises.
+      */}
+      <DashboardCharts />
 
       {/*
         What is waiting, under what is true.
@@ -305,7 +316,7 @@ function Panel({
           // make the second look like the first.
           <p className="mt-3 text-sm text-ink-subtle italic">{t('dashboard.withheld')}</p>
         ) : widget.kind === KIND.Series ? (
-          <Series points={metric.series} />
+          <Series points={metric.series} title={title} language={language} />
         ) : widget.kind === KIND.Breakdown ? (
           <Breakdown points={metric.series} currency={currency} />
         ) : widget.kind === KIND.List ? (
@@ -357,10 +368,46 @@ function shortLabel(label: string): string {
   return month ? (month[1] ?? label) : label;
 }
 
+/** A series label on the axis: a month by its name, a day by its date, a name as it is. */
+function axisLabel(label: string, language: string): string {
+  return /^\d{4}-\d{2}$/.test(label)
+    ? formatKey(label, language, { month: 'short' })
+    : shortLabel(label);
+}
+
+/** The year of a month on the axis, written where it changes; nothing for anything else. */
+function axisYear(label: string, language: string): string | null {
+  return /^\d{4}-\d{2}$/.test(label)
+    ? formatKey(label, language, { year: 'numeric' })
+    : null;
+}
+
+/**
+ * A series label in full, for the readout: `2026-07` as July 2026, a day as its date,
+ * and anything else - a name the server sends - as it is.
+ */
+function longLabel(label: string, language: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+    return formatKey(label, language, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  return /^\d{4}-\d{2}$/.test(label)
+    ? formatKey(label, language, { month: 'long', year: 'numeric' })
+    : label;
+}
+
 function Series({
   points,
+  title,
+  language,
 }: {
   readonly points: readonly MetricPoint[];
+  readonly title: string;
+  readonly language: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -368,49 +415,26 @@ function Series({
     return <p className="mt-3 text-sm text-ink-subtle">{t('dashboard.noData')}</p>;
   }
 
-  // Scaled against the tallest bar rather than the total, so the shape of the trend
-  // is readable whatever the absolute figures are. A floor of 1 keeps an all-zero
-  // series from dividing by nothing.
-  const peak = Math.max(...points.map((point) => Math.abs(point.value)), 1);
-
-  // No `items-end` on the row below. The columns have to stretch to its full height,
-  // because each bar is sized as a percentage of the track above its label — and a
-  // percentage height against a parent that has shrunk to fit its content resolves
-  // to zero, which is a chart of invisible bars.
+  // Drawn by the same column chart as the charts under the tiles, so a trend reads
+  // the same wherever it is: an axis to read it by, a readout under the pointer.
   return (
-    <div className="mt-3 flex h-28 gap-1">
-      {points.map((point, index) => (
-        <div
-          key={point.label}
-          className="group/bar flex min-w-0 flex-1 flex-col items-center gap-1"
-        >
-          <div className="flex w-full flex-1 items-end">
-            {/*
-              Each bar grows from the axis on first paint, left to right. The delay
-              is capped so a twelve-month series finishes in about half a second
-              rather than making the reader watch it fill.
-            */}
-            <div
-              title={`${point.label}: ${moneyAlways(point.value)}`}
-              className="w-full origin-bottom animate-grow-bar rounded-t bg-gradient-to-t from-brand-600 to-brand-400 transition-[filter] duration-200 group-hover/bar:brightness-110 dark:from-brand-500 dark:to-brand-300"
-              style={{
-                height: `${Math.max((Math.abs(point.value) / peak) * 100, 2)}%`,
-                animationDelay: `${Math.min(index * 45, 500)}ms`,
-              }}
-            />
-          </div>
-          {/*
-            Only the month where the label is a month. `label.slice(5)` was doing
-            that unconditionally, which is right for the `2026-07` the monthly
-            series sends and wrong for everything else — a label the server sends
-            as a name came out empty, so the chart lost its axis entirely and
-            became three unlabelled bars.
-          */}
-          <span className="truncate text-[10px] text-ink-subtle">
-            {shortLabel(point.label)}
-          </span>
-        </div>
-      ))}
+    <div className="mt-3">
+      <ColumnChart
+        label={title}
+        labels={points.map((point) => axisLabel(point.label, language))}
+        sublabels={points.map((point) => axisYear(point.label, language))}
+        titles={points.map((point) => longLabel(point.label, language))}
+        series={[
+          {
+            key: 'value',
+            name: '',
+            color: 'var(--app-chart-1)',
+            values: points.map((point) => point.value),
+          },
+        ]}
+        format={(value) => moneyAlways(value)}
+        height={136}
+      />
     </div>
   );
 }

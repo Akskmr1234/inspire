@@ -79,6 +79,17 @@
   --color-ink-muted: var(--app-ink-muted);
   --color-ink-subtle: var(--app-ink-subtle);
 
+  /* Chart colours, by the job each one does. See `--app-chart-1` below. */
+  --color-chart-1: var(--app-chart-1);
+  --color-chart-2: var(--app-chart-2);
+  --color-chart-loss: var(--app-chart-loss);
+  --color-chart-track: var(--app-chart-track);
+  --color-chart-age-1: var(--app-chart-age-1);
+  --color-chart-age-2: var(--app-chart-age-2);
+  --color-chart-age-3: var(--app-chart-age-3);
+  --color-chart-age-4: var(--app-chart-age-4);
+  --color-chart-age-5: var(--app-chart-age-5);
+
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -268,6 +279,22 @@
 
     /* The shade at the edge of a table that has more columns behind it. */
     --app-scroll-shade: oklch(0.28 0.02 260 / 0.25);
+
+    /* Chart colours. Each does one job, and each set was checked for colour-blind
+       separation and for contrast against this theme's card surface:
+       1 and 2 tell two series apart - sales, purchases; loss is the opposite pole
+       of profit, across from 1; the track is a meter's unfilled part, a lighter
+       step of 1's own hue; and age 1 to 5 step through one hue as a debt gets
+       older, so the order reads in the colour. */
+    --app-chart-1: #2a78d6;
+    --app-chart-2: #eb6834;
+    --app-chart-loss: #e34948;
+    --app-chart-track: #cde2fb;
+    --app-chart-age-1: #86b6ef;
+    --app-chart-age-2: #5598e7;
+    --app-chart-age-3: #2a78d6;
+    --app-chart-age-4: #1c5cab;
+    --app-chart-age-5: #104281;
   }
 
   :root.dark {
@@ -287,6 +314,19 @@
 
     /* Lighter on a dark surface: a black shadow on near-black is not a shadow. */
     --app-scroll-shade: oklch(0.02 0 0 / 0.55);
+
+    /* Chosen for the dark surface, not the light ones turned over: a debt gets
+       lighter rather than darker as it ages, because here lighter is what stands
+       out, and the track sinks toward the surface instead of rising from it. */
+    --app-chart-1: #3987e5;
+    --app-chart-2: #d95926;
+    --app-chart-loss: #e66767;
+    --app-chart-track: #104281;
+    --app-chart-age-1: #184f95;
+    --app-chart-age-2: #256abf;
+    --app-chart-age-3: #3987e5;
+    --app-chart-age-4: #6da7ec;
+    --app-chart-age-5: #9ec5f4;
   }
 
   html {
@@ -1410,6 +1450,16 @@
     --app-ink-muted: #374151;
     --app-ink-subtle: #4b5563;
     --app-glass: #fff;
+
+    --app-chart-1: #2a78d6;
+    --app-chart-2: #eb6834;
+    --app-chart-loss: #e34948;
+    --app-chart-track: #cde2fb;
+    --app-chart-age-1: #86b6ef;
+    --app-chart-age-2: #5598e7;
+    --app-chart-age-3: #2a78d6;
+    --app-chart-age-4: #1c5cab;
+    --app-chart-age-5: #104281;
   }
 
   @page {

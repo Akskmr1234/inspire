@@ -109,6 +109,7 @@ public static class DependencyInjection
         services.AddScoped<IFirmSettingRepository, FirmSettingRepository>();
         services.AddScoped<IDashboardReader, DashboardReader>();
         services.AddScoped<IDashboardMetricReader, DashboardMetricReader>();
+        services.AddScoped<IDashboardChartReader, DashboardChartReader>();
         services.AddScoped<ICustomWidgetExecutor, CustomWidgetExecutor>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<IRoleDashboardRepository, RoleDashboardRepository>();
