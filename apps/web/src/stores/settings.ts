@@ -258,6 +258,16 @@ export interface AppSettings {
    * by setup name: `Sales` for sales and returns, `SalesOrder`, `Purchase`, `PurchaseOrder`.
    */
   readonly hiddenChargeSetups: readonly string[];
+  /**
+   * The setups whose documents show only the ledgers set up as defaults, with no
+   * picker on the bill to add another. Named as `hiddenChargeSetups` names them.
+   */
+  readonly fixedChargeSetups: readonly string[];
+  /**
+   * Whether the additional ledgers are entered inside the bill card, among its
+   * figures, rather than in a card of their own beside it.
+   */
+  readonly chargesInBill: boolean;
 }
 
 export interface DefaultAdditionalLedgerConfig {
@@ -338,6 +348,8 @@ const DEFAULTS: AppSettings = {
   defaultSalesPaymentMode: 0,
   onlinePaymentTypes: [],
   hiddenChargeSetups: [],
+  fixedChargeSetups: [],
+  chargesInBill: false,
 };
 
 /**
@@ -657,4 +669,14 @@ export function salesPaymentModeOf(
  */
 export function useChargesShown(setup: string): boolean {
   return useSettings((state) => !(state.hiddenChargeSetups ?? []).includes(setup));
+}
+
+/** Whether a kind of document lets the bill add a ledger beyond its defaults. */
+export function useChargesAddable(setup: string): boolean {
+  return useSettings((state) => !(state.fixedChargeSetups ?? []).includes(setup));
+}
+
+/** Whether the additional ledgers are entered inside the bill card. */
+export function useChargesInBill(): boolean {
+  return useSettings((state) => state.chargesInBill ?? false);
 }

@@ -89,6 +89,8 @@ import {
 } from '@/lib/orders';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import {
+  useChargesAddable,
+  useChargesInBill,
   useChargesShown,
   useDirectSave,
   useGodownsOn,
@@ -659,8 +661,25 @@ function OrderEntryDialog({
     staleTime: 5 * 60 * 1000,
   });
 
+  const chargesAddable = useChargesAddable(
+    kind === 'purchase' ? 'PurchaseOrder' : 'SalesOrder',
+  );
+  const chargesInBill = useChargesInBill();
   const chargeSetup = useChargeSetup(
     kind === 'purchase' ? 'purchaseOrder' : 'salesOrder',
+  );
+  // The ledgers' boxes, in the rates card or - where the firm keeps them there - in
+  // the bill card among its figures.
+  const chargePanel = (
+    <ChargesPanel
+      inline
+      charges={charges}
+      ledgers={ledgers.data ?? []}
+      onChange={setCharges}
+      setup={chargeSetup}
+      nonTax={mode === PurchaseTaxMode.nonTax}
+      allowAdd={chargesAddable}
+    />
   );
   // Additional ledgers only where the firm uses them on this kind of order.
   const chargesShown = useChargesShown(
@@ -1325,13 +1344,13 @@ function OrderEntryDialog({
             money={moneyAlways}
           />
 
-          {(taxOn || chargesShown) && (
+          {(taxOn || (chargesShown && !chargesInBill)) && (
             <FooterSection
               icon={<IconPercent className="size-[18px]" />}
               title={t('invoice.ratesAndCharges')}
             >
               {taxOn && (
-                <div className={chargesShown ? 'mb-3' : undefined}>
+                <div className={chargesShown && !chargesInBill ? 'mb-3' : undefined}>
                   <SelectField
                     size="sm"
                     label={t('purchase.taxMode')}
@@ -1345,21 +1364,17 @@ function OrderEntryDialog({
                   />
                 </div>
               )}
-              {chargesShown && (
-                <ChargesPanel
-                  inline
-                  charges={charges}
-                  ledgers={ledgers.data ?? []}
-                  onChange={setCharges}
-                  setup={chargeSetup}
-                  nonTax={mode === PurchaseTaxMode.nonTax}
-                />
-              )}
+              {chargesShown && !chargesInBill && chargePanel}
             </FooterSection>
           )}
 
           <BillCard
-            className={taxOn || chargesShown ? 'md:col-span-2 lg:col-span-1' : ''}
+            className={
+              taxOn || (chargesShown && !chargesInBill)
+                ? 'md:col-span-2 lg:col-span-1'
+                : ''
+            }
+            {...(chargesShown && chargesInBill ? { charges: chargePanel } : {})}
             label={quotation ? t('invoice.quotationTotal') : t('invoice.orderTotal')}
             total={orderTotal}
             money={moneyAlways}

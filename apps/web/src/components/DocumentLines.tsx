@@ -435,6 +435,7 @@ export function ChargesPanel({
   setup,
   nonTax = false,
   inline = false,
+  allowAdd = true,
 }: {
   readonly charges: readonly DraftCharge[];
   readonly ledgers: readonly LedgerSummary[];
@@ -448,6 +449,8 @@ export function ChargesPanel({
    * they come to is part of the bill's own figures rather than a panel's heading.
    */
   readonly inline?: boolean;
+  /** Whether the bill may add a ledger beyond the defaults. */
+  readonly allowAdd?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
@@ -468,6 +471,7 @@ export function ChargesPanel({
       setup={setup}
       nonTax={nonTax}
       ledgers={ledgers}
+      allowAdd={allowAdd}
       onAmount={setAmount}
       onRemove={(ledgerId) =>
         onChange(charges.filter((charge) => charge.ledgerId !== ledgerId))

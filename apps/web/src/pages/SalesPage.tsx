@@ -67,6 +67,8 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import {
   salesPaymentModeOf,
+  useChargesAddable,
+  useChargesInBill,
   useChargesShown,
   useDirectSave,
   useGodownsOn,
@@ -804,6 +806,8 @@ function EntryDialog({
   const rateChange = settings.allowRateChange !== false;
   // A document being corrected keeps the additional ledgers it carries, shown or not.
   const chargesOn = useChargesShown('Sales');
+  const chargesAddable = useChargesAddable('Sales');
+  const chargesInBill = useChargesInBill();
   const showCharges = chargesOn || (editing?.charges.length ?? 0) > 0;
   // Rounded as the firm rounds - or, for a document being corrected, as it was.
   const roundTo = editing ? (editing.roundTo ?? 0) : settings.salesRoundTo;
@@ -1949,7 +1953,23 @@ function EntryDialog({
     onHeld(t('sales.heldNotice'));
   };
 
-  const ratesCard = rateChange || taxOn || showCharges;
+  // The ledgers' boxes, in the rates card or - where the firm keeps them there - in
+  // the bill card among its figures.
+  const chargeList = (
+    <AdditionalLedgerList
+      carried={additionalLedgers}
+      setup={chargeSetup}
+      nonTax={taxMode === 'NT'}
+      ledgers={ledgers.data ?? []}
+      allowAdd={chargesAddable}
+      onAmount={setChargeAmount}
+      onRemove={(ledgerId) =>
+        setAdditionalLedgers((rows) => rows.filter((row) => row.ledgerId !== ledgerId))
+      }
+    />
+  );
+  const chargesInCard = showCharges && !chargesInBill;
+  const ratesCard = rateChange || taxOn || chargesInCard;
 
   return (
     <InvoiceWindow
@@ -2455,7 +2475,7 @@ function EntryDialog({
                   )}
                 </div>
               )}
-              {showCharges && (
+              {chargesInCard && (
                 <div
                   className={clsx('space-y-1.5', (rateChange || taxOn) && 'mt-3')}
                   {...shortcutProps('charges')}
@@ -2463,18 +2483,7 @@ function EntryDialog({
                   <span className="block text-[13px] font-medium text-ink/80">
                     {t('sales.additionalLedgers')}
                   </span>
-                  <AdditionalLedgerList
-                    carried={additionalLedgers}
-                    setup={chargeSetup}
-                    nonTax={taxMode === 'NT'}
-                    ledgers={ledgers.data ?? []}
-                    onAmount={setChargeAmount}
-                    onRemove={(ledgerId) =>
-                      setAdditionalLedgers((rows) =>
-                        rows.filter((row) => row.ledgerId !== ledgerId),
-                      )
-                    }
-                  />
+                  {chargeList}
                 </div>
               )}
             </FooterSection>
@@ -2590,6 +2599,18 @@ function EntryDialog({
             label={totalLabel}
             total={grandTotal}
             money={moneyAlways}
+            {...(showCharges && chargesInBill
+              ? {
+                  charges: (
+                    <div className="space-y-1.5" {...shortcutProps('charges')}>
+                      <span className="block text-xs font-medium text-ink-muted">
+                        {t('sales.additionalLedgers')}
+                      </span>
+                      {chargeList}
+                    </div>
+                  ),
+                }
+              : {})}
             breakdown={{
               items: itemCount,
               quantity: lineSums.quantity,

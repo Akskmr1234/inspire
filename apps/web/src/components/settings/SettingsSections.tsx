@@ -1119,6 +1119,12 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
   return (
     <Cards>
       <SettingsCard title={t('settings.chargesTitle')} wide>
+        <CheckField
+          label={t('prefs.chargesInBill')}
+          checked={settings.chargesInBill ?? false}
+          onChange={(inBill) => settings.update({ chargesInBill: inBill })}
+        />
+
         <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface-2 p-1">
           {CHARGE_TABS.map((tab) => (
             <button
@@ -1148,6 +1154,19 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
               hiddenChargeSetups: shown
                 ? (settings.hiddenChargeSetups ?? []).filter((name) => name !== type)
                 : [...(settings.hiddenChargeSetups ?? []), type],
+            })
+          }
+        />
+        <CheckField
+          label={t('prefs.addChargesOn', {
+            document: t(`settings.chargeTabs.${document}`),
+          })}
+          checked={!(settings.fixedChargeSetups ?? []).includes(type)}
+          onChange={(addable) =>
+            settings.update({
+              fixedChargeSetups: addable
+                ? (settings.fixedChargeSetups ?? []).filter((name) => name !== type)
+                : [...(settings.fixedChargeSetups ?? []), type],
             })
           }
         />
