@@ -24,6 +24,7 @@ export function AdditionalLedgerList({
   onAmount,
   onRemove,
   disabled = false,
+  allowAdd = true,
 }: {
   /** What the document carries: picked ledgers and typed amounts. */
   readonly carried: readonly { readonly ledgerId: string; readonly amount: string }[];
@@ -35,6 +36,8 @@ export function AdditionalLedgerList({
   /** Takes a picked ledger off the document. */
   readonly onRemove: (ledgerId: string) => void;
   readonly disabled?: boolean;
+  /** Whether the bill may add a ledger beyond the defaults; Settings decides. */
+  readonly allowAdd?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const can = useSession((state) => state.can);
@@ -44,8 +47,8 @@ export function AdditionalLedgerList({
     [setup, nonTax, carried, ledgers],
   );
   const offered = useMemo(
-    () => offeredCharges(setup, nonTax, rows),
-    [setup, nonTax, rows],
+    () => (allowAdd ? offeredCharges(setup, nonTax, rows) : []),
+    [allowAdd, setup, nonTax, rows],
   );
 
   const amountOf = (ledgerId: string): string =>

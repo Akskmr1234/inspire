@@ -42,7 +42,12 @@ import { moneyAlways as money } from '@/lib/money';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { postSalesInvoice, SalesPaymentMode, TaxMode } from '@/lib/sales';
 import { useSession } from '@/stores/session';
-import { useGodownsOn, useSettings, useTaxOn } from '@/stores/settings';
+import {
+  useChargesAddable,
+  useGodownsOn,
+  useSettings,
+  useTaxOn,
+} from '@/stores/settings';
 import { shortcutProps } from '@/lib/shortcuts';
 
 const LIST = '/service/sales';
@@ -305,6 +310,7 @@ function ServiceSaleForm({
     staleTime: 5 * 60 * 1000,
   });
   const chargeSetup = useChargeSetup('sales');
+  const chargesAddable = useChargesAddable('Sales');
 
   const billed = card?.summary.salesInvoiceId != null;
   const locked = billed || card?.summary.status === JobCardStatus.cancelled;
@@ -1255,6 +1261,7 @@ function ServiceSaleForm({
               nonTax={nonTax}
               ledgers={ledgers.data ?? []}
               disabled={locked}
+              allowAdd={chargesAddable}
               onAmount={(ledgerId, amount) =>
                 setCharges((current) =>
                   current.some((charge) => charge.ledgerId === ledgerId)

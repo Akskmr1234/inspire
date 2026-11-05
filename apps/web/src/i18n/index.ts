@@ -1538,6 +1538,9 @@ const en = {
     paymentDebitAccount: 'Debit account of a payment',
     receiptCreditAccount: 'Credit account of a receipt',
     showChargesOn: 'Show additional ledgers on {{document}}',
+    addChargesOn: 'Allow adding other ledgers on {{document}}',
+    chargesInBill:
+      'Enter additional ledgers inside the bill card, not in a card of their own',
     documents: {
       Sales: 'Sales invoice',
       SalesReturn: 'Sales return',
@@ -4543,6 +4546,8 @@ const ar = {
     paymentDebitAccount: 'الحساب المدين لسند الصرف',
     receiptCreditAccount: 'الحساب الدائن لسند القبض',
     showChargesOn: 'عرض الحسابات الإضافية في {{document}}',
+    addChargesOn: 'السماح بإضافة حسابات أخرى في {{document}}',
+    chargesInBill: 'إدخال الحسابات الإضافية داخل بطاقة الفاتورة بدلًا من بطاقة مستقلة',
     documents: {
       Sales: 'فاتورة مبيعات',
       SalesReturn: 'مرتجع مبيعات',

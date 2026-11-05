@@ -482,11 +482,12 @@ export function InvoiceFields({
  *
  * On a wide screen it stretches to the card's height and scrolls inside it, under a
  * header row that stays put - laid out of the flow, so a long bill grows the
- * scroll rather than the window. It keeps room for what it holds, up to four lines
- * or so: in a window too short for that and the money under it, the window scrolls
- * as a whole, rather than leave the lines a slot one line high - while a bill of a
- * line or two leaves the money in view. On a narrow screen it is as long as its
- * lines.
+ * scroll rather than the window. It keeps at least two-fifths of the screen's height
+ * for the lines, and more for what it holds, up to four lines or so: the items are
+ * what the window is for, and a slot a line or two high had the counter scrolling
+ * a box the size of a receipt. Where that and the money under it do not fit, the
+ * window scrolls as a whole, and the bar along the foot keeps the total in view.
+ * On a narrow screen it is as long as its lines.
  *
  * Enter moves on, as Tab does, through a line's boxes and on to the next line's
  * product - adding a line after the last one, once it names a product. Its
@@ -513,7 +514,7 @@ export function InvoiceLines({
 
   return (
     <div
-      className="relative lg:min-h-[max(10rem,var(--lines-room,10rem))] lg:flex-1"
+      className="relative lg:min-h-[max(15rem,42vh,var(--lines-room,10rem))] lg:flex-1"
       style={
         room === null
           ? undefined
@@ -907,12 +908,19 @@ export function BillCard({
   breakdown,
   money,
   className,
+  charges: chargeEditor,
 }: {
   readonly label: string;
   readonly total: number;
   readonly breakdown: BillBreakdown;
   readonly money: (value: number) => string;
   readonly className?: string;
+  /**
+   * The additional ledgers to enter here, among the bill's figures, where the firm
+   * keeps them in the bill rather than in a card of their own. Drawn in place of
+   * their figures, which the boxes already show.
+   */
+  readonly charges?: React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const {
@@ -965,9 +973,10 @@ export function BillCard({
             />
           </div>
         )}
-        {(charges.length > 0 || roundOff !== undefined) && (
+        {chargeEditor && <div className="py-1.5">{chargeEditor}</div>}
+        {((!chargeEditor && charges.length > 0) || roundOff !== undefined) && (
           <div className="pt-1">
-            {charges.map((charge) => (
+            {(chargeEditor ? [] : charges).map((charge) => (
               <FigureRow
                 key={charge.label}
                 label={
