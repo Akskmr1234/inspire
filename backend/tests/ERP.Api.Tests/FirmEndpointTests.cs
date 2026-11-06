@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ERP.Application.Platform.Branches;
 using ERP.Application.Platform.Firms;
 using ERP.Application.Platform.Users;
 
@@ -87,5 +88,32 @@ public sealed class FirmEndpointTests
         HttpClient clerk = await _factory.CreateAuthenticatedClientAsync(userName, password);
         (await clerk.GetFromJsonAsync<List<FirmSummary>>($"{Firms}/mine"))!
             .Select(firm => firm.FirmId).ShouldBe([other.FirmId]);
+    }
+
+    [Fact]
+    public async Task A_branch_is_added_under_the_firm_chosen_not_the_one_in_session()
+    {
+        HttpClient admin = await _factory.CreateAuthenticatedClientAsync();
+        string suffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+
+        FirmSummary other = (await (await admin.PostAsJsonAsync(
+                Firms, new SaveFirmRequest($"B{suffix}", "Branch Holder", null, "QAR", null)))
+            .Content.ReadFromJsonAsync<FirmSummary>())!;
+
+        HttpResponseMessage added = await admin.PostAsJsonAsync(
+            "/api/v1/platform/branches",
+            new SaveBranchRequest($"S{suffix}", "Souq", null, null, null, null, FirmId: other.FirmId));
+        added.StatusCode.ShouldBe(HttpStatusCode.Created, await added.Content.ReadAsStringAsync());
+        BranchSummary souq = (await added.Content.ReadFromJsonAsync<BranchSummary>())!;
+
+        FirmSummary holder = (await admin.GetFromJsonAsync<List<FirmSummary>>(Firms))!
+            .Single(firm => firm.FirmId == other.FirmId);
+        holder.Branches.Select(branch => branch.BranchId).ShouldContain(souq.BranchId);
+
+        // And it can be corrected from the firm in session, wherever it belongs.
+        HttpResponseMessage renamed = await admin.PutAsJsonAsync(
+            $"/api/v1/platform/branches/{souq.BranchId}",
+            new SaveBranchRequest(souq.Code, "Souq Waqif", null, null, null, null));
+        renamed.StatusCode.ShouldBe(HttpStatusCode.OK, await renamed.Content.ReadAsStringAsync());
     }
 }

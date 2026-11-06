@@ -2,20 +2,23 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Modal, ModalButton } from '@/components/Modal';
-import { CheckField, TextField } from '@/components/Form';
+import { CheckField, SelectField, TextField } from '@/components/Form';
 import { ActiveBadge } from '@/components/StatusBadge';
 import { SettingsCard } from '@/components/settings/SettingsSections';
-import type { ApiError } from '@/lib/api';
-import {
-  createBranch,
-  listBranches,
-  updateBranch,
-  type BranchSummary,
-} from '@/lib/branches';
+import { currentFirmId, type ApiError } from '@/lib/api';
+import { createBranch, updateBranch, type BranchSummary } from '@/lib/branches';
+import { listFirms, type FirmSummary } from '@/lib/firms';
 import { useSession } from '@/stores/session';
 
+/** What the dialog is open on: a branch to correct, or a new one under a firm. */
+interface Editing {
+  readonly branch: BranchSummary | null;
+  readonly firmId: string;
+}
+
 /**
- * The firm's branches: adding one, correcting one, and putting one away.
+ * Every firm's branches, each under its firm: adding one to a firm, correcting one,
+ * and putting one away.
  *
  * Who may work in which branch is set on the users screen; whoever adds a branch may
  * work in it at once, so it is never made out of everybody's reach.
@@ -24,12 +27,13 @@ export function BranchSettings(): React.JSX.Element {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const mayEdit = useSession((state) => state.can)('platform:firm:edit');
-  const [editing, setEditing] = useState<BranchSummary | 'new' | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const current = currentFirmId();
 
-  const branches = useQuery<readonly BranchSummary[], ApiError>({
-    queryKey: ['platform-branches'],
-    queryFn: listBranches,
+  const firms = useQuery<readonly FirmSummary[], ApiError>({
+    queryKey: ['platform-firms'],
+    queryFn: listFirms,
   });
 
   return (
@@ -41,7 +45,12 @@ export function BranchSettings(): React.JSX.Element {
             <button
               type="button"
               className="btn-primary btn-sm"
-              onClick={() => setEditing('new')}
+              onClick={() =>
+                setEditing({
+                  branch: null,
+                  firmId: current ?? firms.data?.[0]?.firmId ?? '',
+                })
+              }
             >
               + {t('branches.add')}
             </button>
@@ -49,11 +58,11 @@ export function BranchSettings(): React.JSX.Element {
         </div>
 
         {notice && <p className="alert-success">{notice}</p>}
-        {branches.isError && (
-          <p className="alert-error">{branches.error.detail || branches.error.code}</p>
+        {firms.isError && (
+          <p className="alert-error">{firms.error.detail || firms.error.code}</p>
         )}
 
-        {branches.isPending ? (
+        {firms.isPending ? (
           <p className="text-xs text-ink-muted">{t('common.loading')}</p>
         ) : (
           <div className="table-wrap">
@@ -68,42 +77,80 @@ export function BranchSettings(): React.JSX.Element {
                   <th />
                 </tr>
               </thead>
-              <tbody>
-                {(branches.data ?? []).map((branch) => (
-                  <tr key={branch.branchId}>
-                    <td className="font-mono text-xs">{branch.code}</td>
-                    <td>
-                      <span className="font-medium text-ink">{branch.name}</span>
-                      {branch.isHeadOffice && (
-                        <span className="ms-2 rounded bg-brand-500/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300">
-                          {t('branches.headOffice')}
+              {(firms.data ?? []).map((firm) => (
+                <tbody key={firm.firmId}>
+                  {/* The firm's name over its branches, with a button to add one to it. */}
+                  <tr className="bg-surface-2">
+                    <th
+                      colSpan={6}
+                      scope="rowgroup"
+                      className="py-1.5 text-start text-xs font-semibold text-ink"
+                    >
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        {firm.name}
+                        <span className="font-mono font-normal text-ink-muted">
+                          {firm.code}
                         </span>
-                      )}
-                      {branch.address && (
-                        <span className="block text-xs text-ink-muted">
-                          {branch.address}
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-ink-muted">{branch.phone ?? '—'}</td>
-                    <td className="text-end tabular-nums">{branch.userCount}</td>
-                    <td>
-                      <ActiveBadge isActive={branch.isActive} />
-                    </td>
-                    <td className="text-end">
-                      {mayEdit && (
-                        <button
-                          type="button"
-                          className="btn-ghost btn-xs"
-                          onClick={() => setEditing(branch)}
-                        >
-                          {t('common.edit')}
-                        </button>
-                      )}
-                    </td>
+                        {firm.firmId === current && (
+                          <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300">
+                            {t('firms.current')}
+                          </span>
+                        )}
+                        {!firm.isActive && (
+                          <span className="font-normal text-ink-muted">
+                            {t('branches.inactive')}
+                          </span>
+                        )}
+                        {mayEdit && firm.isActive && (
+                          <button
+                            type="button"
+                            className="btn-ghost btn-xs"
+                            onClick={() =>
+                              setEditing({ branch: null, firmId: firm.firmId })
+                            }
+                          >
+                            + {t('branches.add')}
+                          </button>
+                        )}
+                      </span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {firm.branches.map((branch) => (
+                    <tr key={branch.branchId}>
+                      <td className="ps-6 font-mono text-xs">{branch.code}</td>
+                      <td>
+                        <span className="font-medium text-ink">{branch.name}</span>
+                        {branch.isHeadOffice && (
+                          <span className="ms-2 rounded bg-brand-500/10 px-1.5 py-0.5 text-[11px] font-medium text-brand-700 dark:text-brand-300">
+                            {t('branches.headOffice')}
+                          </span>
+                        )}
+                        {branch.address && (
+                          <span className="block text-xs text-ink-muted">
+                            {branch.address}
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-ink-muted">{branch.phone ?? '—'}</td>
+                      <td className="text-end tabular-nums">{branch.userCount}</td>
+                      <td>
+                        <ActiveBadge isActive={branch.isActive} />
+                      </td>
+                      <td className="text-end">
+                        {mayEdit && (
+                          <button
+                            type="button"
+                            className="btn-ghost btn-xs"
+                            onClick={() => setEditing({ branch, firmId: firm.firmId })}
+                          >
+                            {t('common.edit')}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         )}
@@ -111,7 +158,9 @@ export function BranchSettings(): React.JSX.Element {
 
       {editing && (
         <BranchDialog
-          branch={editing === 'new' ? null : editing}
+          branch={editing.branch}
+          firmId={editing.firmId}
+          firms={firms.data ?? []}
           onClose={() => setEditing(null)}
           onSaved={(saved, created) => {
             setEditing(null);
@@ -120,8 +169,10 @@ export function BranchSettings(): React.JSX.Element {
                 name: saved.name,
               }),
             );
+            void queryClient.invalidateQueries({ queryKey: ['platform-firms'] });
             void queryClient.invalidateQueries({ queryKey: ['platform-branches'] });
             void queryClient.invalidateQueries({ queryKey: ['my-branches'] });
+            void queryClient.invalidateQueries({ queryKey: ['my-firms'] });
           }}
         />
       )}
@@ -131,14 +182,20 @@ export function BranchSettings(): React.JSX.Element {
 
 function BranchDialog({
   branch,
+  firmId: startingFirm,
+  firms,
   onClose,
   onSaved,
 }: {
   readonly branch: BranchSummary | null;
+  /** The firm a new branch goes under, until another is chosen. */
+  readonly firmId: string;
+  readonly firms: readonly FirmSummary[];
   readonly onClose: () => void;
   readonly onSaved: (saved: BranchSummary, created: boolean) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const [firmId, setFirmId] = useState(startingFirm);
   const [code, setCode] = useState(branch?.code ?? '');
   const [name, setName] = useState(branch?.name ?? '');
   const [nameArabic, setNameArabic] = useState(branch?.nameArabic ?? '');
@@ -157,6 +214,7 @@ function BranchDialog({
         phone: phone.trim() || null,
         email: email.trim() || null,
         isActive: active,
+        firmId: branch ? null : firmId || null,
       };
       return branch ? updateBranch(branch.branchId, body) : createBranch(body);
     },
@@ -170,6 +228,21 @@ function BranchDialog({
       onClose={onClose}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* A branch stays with its firm, so the firm is chosen when it is made. */}
+        <SelectField<string>
+          label={t('branches.firm')}
+          value={firmId}
+          onChange={setFirmId}
+          disabled={branch !== null}
+          required
+          className="sm:col-span-2"
+          options={firms
+            .filter((firm) => firm.isActive || firm.firmId === firmId)
+            .map((firm) => ({
+              value: firm.firmId,
+              label: `${firm.name} (${firm.code})`,
+            }))}
+        />
         <TextField
           label={t('branches.code')}
           value={code}
@@ -228,7 +301,9 @@ function BranchDialog({
         <ModalButton onClick={onClose}>{t('common.cancel')}</ModalButton>
         <ModalButton
           primary
-          disabled={save.isPending || code.trim() === '' || name.trim() === ''}
+          disabled={
+            save.isPending || firmId === '' || code.trim() === '' || name.trim() === ''
+          }
           onClick={() => save.mutate()}
         >
           {save.isPending ? t('common.saving') : t('common.save')}

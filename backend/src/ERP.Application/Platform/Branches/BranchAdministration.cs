@@ -33,6 +33,10 @@ public sealed record BranchSummary(
 /// <param name="Phone">Its phone number.</param>
 /// <param name="Email">Its email address.</param>
 /// <param name="IsActive">Whether it is in use.</param>
+/// <param name="FirmId">
+/// The firm it belongs to, read when it is made; <see langword="null"/> for the firm in
+/// session. A branch stays with its firm.
+/// </param>
 public sealed record SaveBranchRequest(
     string Code,
     string Name,
@@ -40,7 +44,8 @@ public sealed record SaveBranchRequest(
     string? Address,
     string? Phone,
     string? Email,
-    bool IsActive = true);
+    bool IsActive = true,
+    Guid? FirmId = null);
 
 /// <summary>The branches of the firm in session: listing, adding and correcting them.</summary>
 public interface IBranchAdministration
