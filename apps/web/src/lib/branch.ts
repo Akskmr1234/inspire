@@ -65,6 +65,34 @@ export function branchOf(token: string | null): string | null {
   return claim(token, BRANCH_CLAIM);
 }
 
+/** Every branch the token lets its holder work in, in the order it lists them. */
+export function branchesOf(token: string | null): readonly string[] {
+  return claimsOf(token, BRANCH_CLAIM);
+}
+
+/** Every firm the token lets its holder work in, in the order it lists them. */
+export function firmsOf(token: string | null): readonly string[] {
+  return claimsOf(token, 'firm_id');
+}
+
+/** Every value of a claim a token may hold more than once. */
+function claimsOf(token: string | null, name: string): readonly string[] {
+  const payload = token?.split('.')[1];
+  if (!payload) return [];
+
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const value = (JSON.parse(atob(padded)) as Record<string, unknown>)[name];
+    const values = Array.isArray(value) ? value : [value];
+    return values.filter(
+      (item): item is string => typeof item === 'string' && item !== '',
+    );
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Reads the display name claim from the access token.
  */

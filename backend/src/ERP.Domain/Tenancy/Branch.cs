@@ -171,6 +171,21 @@ public sealed class Branch : Entity<BranchId>, IFirmScoped, IAuditable, ISoftDel
     /// <param name="nameArabic">The Arabic name, or <see langword="null"/> to clear it.</param>
     public void SetArabicName(string? nameArabic) => NameArabic = Trimmed(nameArabic);
 
+    /// <summary>Renames the branch. Its code stays: documents are numbered by it.</summary>
+    /// <param name="name">The new name.</param>
+    /// <returns>Success, or why the name was refused.</returns>
+    public Result Rename(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Result.Failure(Error.Validation(
+                "Branch.NameRequired", "A branch name is required."));
+        }
+
+        Name = name.Trim();
+        return Result.Success();
+    }
+
     /// <summary>Overrides the time zone inherited from the firm.</summary>
     /// <param name="timeZoneId">An IANA time-zone identifier.</param>
     /// <returns>Success, or a validation failure.</returns>

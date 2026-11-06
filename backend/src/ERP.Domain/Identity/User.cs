@@ -420,6 +420,12 @@ public sealed class User : AggregateRoot<UserId>, ITenantScoped, IAuditable, ISo
     /// <param name="firmId">The firm.</param>
     public void RevokeFirmAccess(FirmId firmId) => _firmAccess.RemoveAll(a => a.FirmId == firmId);
 
+    /// <summary>Withdraws access to one branch of a firm, leaving the others.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="branchId">The branch.</param>
+    public void RevokeBranchAccess(FirmId firmId, BranchId branchId) =>
+        _firmAccess.RemoveAll(a => a.FirmId == firmId && a.BranchId == branchId);
+
     /// <summary>Disables the account.</summary>
     public void Deactivate()
     {

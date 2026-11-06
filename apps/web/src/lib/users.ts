@@ -12,6 +12,8 @@ export interface UserSummary {
   readonly isLockedOut: boolean;
   readonly lastLoginAtUtc: string | null;
   readonly roleIds: readonly string[];
+  /** The branches they may work in. */
+  readonly branchIds: readonly string[];
 }
 
 /** A role, with what it may do and the menus it shows. */
@@ -46,6 +48,8 @@ export interface SaveUser {
   readonly password: string | null;
   readonly roleIds: readonly string[];
   readonly isActive: boolean;
+  /** The branches they may work in, at least one; null leaves them as they are. */
+  readonly branchIds: readonly string[] | null;
 }
 
 export interface SaveRole {

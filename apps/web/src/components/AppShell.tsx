@@ -15,6 +15,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HeadingSlotProvider, useHeadingSlot } from '@/components/PageHeading';
 import { CommandPalette, opensPalette } from '@/components/CommandPalette';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { BranchSwitcher } from '@/components/BranchSwitcher';
+import { FirmSwitcher } from '@/components/FirmSwitcher';
 import { SHOW_SHORTCUTS_EVENT } from '@/lib/shortcuts';
 import { menuChosen, OPEN_MENU_EVENT } from '@/lib/shell';
 import { useSession, type Language, type Theme } from '@/stores/session';
@@ -397,6 +399,9 @@ export function AppShell(): React.JSX.Element {
               the whole page sideways, and on a 768px tablet they cut every title to
               a few letters and sat on top of the screen's own button.
             */}
+            <FirmSwitcher />
+            <BranchSwitcher />
+
             <UserProfileDropdown
               displayName={displayName}
               tenantCode={tenantCode}

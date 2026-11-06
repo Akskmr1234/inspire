@@ -16,7 +16,7 @@
  *   because reuse cannot be distinguished from theft.
  */
 
-import { branchOf, claim, displayNameOf } from '@/lib/branch';
+import { branchOf, branchesOf, claim, displayNameOf, firmsOf } from '@/lib/branch';
 
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
@@ -106,7 +106,38 @@ export function setSession(auth: AuthenticationResponse, tenantCode?: string): v
  * user who holds no branch.
  */
 export function currentBranchId(): string | null {
-  return branchOf(accessToken);
+  const chosen = chosenBranch();
+  return chosen !== null && branchesOf(accessToken).includes(chosen)
+    ? chosen
+    : branchOf(accessToken);
+}
+
+/** Where the branch somebody switched to is kept, across reloads, on this device. */
+const BRANCH_KEY = 'erp.branch';
+
+function chosenBranch(): string | null {
+  try {
+    return localStorage.getItem(BRANCH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Every branch the session may work in, as the token lists them. */
+export function sessionBranchIds(): readonly string[] {
+  return branchesOf(accessToken);
+}
+
+/**
+ * Switches the branch the session works in. Sent to the server on every request,
+ * which honours it only for a branch the token already grants.
+ */
+export function chooseBranch(branchId: string): void {
+  try {
+    localStorage.setItem(BRANCH_KEY, branchId);
+  } catch {
+    // Storage refused (a private window): the switch lasts until the page reloads.
+  }
 }
 
 /** The signed-in user, by the identifier the server knows them by; null before sign-in. */
@@ -114,9 +145,42 @@ export function currentUserId(): string | null {
   return claim(accessToken, 'sub');
 }
 
-/** The firm the session works in - the token's first, as the server takes it. */
+/** The firm the session works in: the one switched to, else the token's first, as the server takes it. */
 export function currentFirmId(): string | null {
-  return claim(accessToken, 'firm_id');
+  const chosen = chosenFirm();
+  return chosen !== null && firmsOf(accessToken).includes(chosen)
+    ? chosen
+    : claim(accessToken, 'firm_id');
+}
+
+/** Where the firm somebody switched to is kept, across reloads, on this device. */
+const FIRM_KEY = 'erp.firm';
+
+function chosenFirm(): string | null {
+  try {
+    return localStorage.getItem(FIRM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Every firm the session may work in, as the token lists them. */
+export function sessionFirmIds(): readonly string[] {
+  return firmsOf(accessToken);
+}
+
+/**
+ * Switches the firm the session works in, and with it the branch - one of that firm's,
+ * since a branch of the firm left behind would not be the server's to honour.
+ */
+export function chooseFirm(firmId: string, branchId: string | null): void {
+  try {
+    localStorage.setItem(FIRM_KEY, firmId);
+    if (branchId) localStorage.setItem(BRANCH_KEY, branchId);
+    else localStorage.removeItem(BRANCH_KEY);
+  } catch {
+    // Storage refused (a private window): the switch lasts until the page reloads.
+  }
 }
 
 /**
@@ -167,6 +231,17 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+
+    // The firm and branch switched to, where the token grants them; the server checks again.
+    const firm = chosenFirm();
+    if (firm !== null && firmsOf(accessToken).includes(firm)) {
+      headers['X-Erp-Firm'] = firm;
+    }
+
+    const chosen = chosenBranch();
+    if (chosen !== null && branchesOf(accessToken).includes(chosen)) {
+      headers['X-Erp-Branch'] = chosen;
+    }
   }
 
   return fetch(`${API_BASE_URL}/api/v1${path}`, {

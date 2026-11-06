@@ -13,6 +13,7 @@ namespace ERP.Application.Platform.Users;
 /// <param name="IsLockedOut">Whether too many wrong passwords have locked them out for now.</param>
 /// <param name="LastLoginAtUtc">When they last signed in.</param>
 /// <param name="RoleIds">The roles they hold.</param>
+/// <param name="BranchIds">The branches they may work in.</param>
 public sealed record UserSummary(
     Guid UserId,
     string UserName,
@@ -23,7 +24,8 @@ public sealed record UserSummary(
     bool MustChangePassword,
     bool IsLockedOut,
     DateTimeOffset? LastLoginAtUtc,
-    IReadOnlyList<Guid> RoleIds);
+    IReadOnlyList<Guid> RoleIds,
+    IReadOnlyList<Guid> BranchIds);
 
 /// <summary>A role as the administration screen lists it.</summary>
 /// <param name="RoleId">The role.</param>
@@ -70,6 +72,10 @@ public sealed record PermissionDefinition(
 /// </param>
 /// <param name="RoleIds">The roles they hold. At least one.</param>
 /// <param name="IsActive">Whether they may sign in.</param>
+/// <param name="BranchIds">
+/// The branches of the firm in session they may work in, at least one; or
+/// <see langword="null"/> to leave them as they are - every branch, for a new user.
+/// </param>
 public sealed record SaveUserRequest(
     string UserName,
     string Email,
@@ -77,7 +83,8 @@ public sealed record SaveUserRequest(
     string? MobileNumber,
     string? Password,
     IReadOnlyList<Guid> RoleIds,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<Guid>? BranchIds = null);
 
 /// <summary>A role as somebody enters or corrects it.</summary>
 /// <param name="Name">Its name.</param>
