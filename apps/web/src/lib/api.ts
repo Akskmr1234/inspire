@@ -16,7 +16,7 @@
  *   because reuse cannot be distinguished from theft.
  */
 
-import { branchOf, branchesOf, claim, displayNameOf } from '@/lib/branch';
+import { branchOf, branchesOf, claim, displayNameOf, firmsOf } from '@/lib/branch';
 
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
@@ -145,9 +145,42 @@ export function currentUserId(): string | null {
   return claim(accessToken, 'sub');
 }
 
-/** The firm the session works in - the token's first, as the server takes it. */
+/** The firm the session works in: the one switched to, else the token's first, as the server takes it. */
 export function currentFirmId(): string | null {
-  return claim(accessToken, 'firm_id');
+  const chosen = chosenFirm();
+  return chosen !== null && firmsOf(accessToken).includes(chosen)
+    ? chosen
+    : claim(accessToken, 'firm_id');
+}
+
+/** Where the firm somebody switched to is kept, across reloads, on this device. */
+const FIRM_KEY = 'erp.firm';
+
+function chosenFirm(): string | null {
+  try {
+    return localStorage.getItem(FIRM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Every firm the session may work in, as the token lists them. */
+export function sessionFirmIds(): readonly string[] {
+  return firmsOf(accessToken);
+}
+
+/**
+ * Switches the firm the session works in, and with it the branch - one of that firm's,
+ * since a branch of the firm left behind would not be the server's to honour.
+ */
+export function chooseFirm(firmId: string, branchId: string | null): void {
+  try {
+    localStorage.setItem(FIRM_KEY, firmId);
+    if (branchId) localStorage.setItem(BRANCH_KEY, branchId);
+    else localStorage.removeItem(BRANCH_KEY);
+  } catch {
+    // Storage refused (a private window): the switch lasts until the page reloads.
+  }
 }
 
 /**
@@ -199,7 +232,12 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
 
-    // The branch switched to, where the token grants it; the server checks again.
+    // The firm and branch switched to, where the token grants them; the server checks again.
+    const firm = chosenFirm();
+    if (firm !== null && firmsOf(accessToken).includes(firm)) {
+      headers['X-Erp-Firm'] = firm;
+    }
+
     const chosen = chosenBranch();
     if (chosen !== null && branchesOf(accessToken).includes(chosen)) {
       headers['X-Erp-Branch'] = chosen;

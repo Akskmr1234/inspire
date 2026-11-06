@@ -16,7 +16,7 @@ import {
   type RoleSummary,
   type UserSummary,
 } from '@/lib/users';
-import { listBranches, type BranchSummary } from '@/lib/branches';
+import { listFirms, type FirmSummary } from '@/lib/firms';
 
 /**
  * Who may sign in, and with which roles.
@@ -43,9 +43,9 @@ export function UsersPage(): React.JSX.Element {
     queryFn: listRoles,
   });
 
-  const branches = useQuery<readonly BranchSummary[], ApiError>({
-    queryKey: ['platform-branches'],
-    queryFn: listBranches,
+  const firms = useQuery<readonly FirmSummary[], ApiError>({
+    queryKey: ['platform-firms'],
+    queryFn: listFirms,
   });
 
   const roleName = (id: string): string =>
@@ -57,7 +57,7 @@ export function UsersPage(): React.JSX.Element {
     setNotice(message);
     void queryClient.invalidateQueries({ queryKey: ['platform-users'] });
     void queryClient.invalidateQueries({ queryKey: ['platform-roles'] });
-    void queryClient.invalidateQueries({ queryKey: ['platform-branches'] });
+    void queryClient.invalidateQueries({ queryKey: ['platform-firms'] });
   };
 
   const lastLogin = (user: UserSummary): string =>
@@ -215,7 +215,7 @@ export function UsersPage(): React.JSX.Element {
         <UserDialog
           user={editing === 'new' ? null : editing}
           roles={roles.data}
-          branches={branches.data}
+          firms={firms.data}
           onClose={() => setEditing(null)}
           onSaved={done}
         />
@@ -251,14 +251,14 @@ function Flags({ user }: { readonly user: UserSummary }): React.JSX.Element {
 function UserDialog({
   user,
   roles,
-  branches,
+  firms,
   onClose,
   onSaved,
 }: {
   readonly user: UserSummary | null;
   readonly roles: readonly RoleSummary[];
-  /** The firm's branches; undefined while they load, when the user's are left alone. */
-  readonly branches: readonly BranchSummary[] | undefined;
+  /** Every firm with its branches; undefined while they load, when the user's are left alone. */
+  readonly firms: readonly FirmSummary[] | undefined;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
 }): React.JSX.Element {
@@ -271,13 +271,19 @@ function UserDialog({
   const [password, setPassword] = useState('');
   const [roleIds, setRoleIds] = useState<readonly string[]>(user?.roleIds ?? []);
   const [active, setActive] = useState(user?.isActive ?? true);
-  // A new user starts in every active branch, as before; untick the ones they keep out of.
+  // A new user starts in every active branch of every active firm, as before; untick
+  // the ones they keep out of.
   const [branchIds, setBranchIds] = useState<readonly string[] | null>(
     user?.branchIds ?? null,
   );
+  const branches = firms?.flatMap((firm) => firm.branches);
   const chosenBranches =
     branchIds ??
-    (branches ?? []).filter((branch) => branch.isActive).map((branch) => branch.branchId);
+    (firms ?? [])
+      .filter((firm) => firm.isActive)
+      .flatMap((firm) => firm.branches)
+      .filter((branch) => branch.isActive)
+      .map((branch) => branch.branchId);
 
   const save = useMutation<UserSummary, ApiError>({
     mutationFn: () => {
@@ -388,28 +394,38 @@ function UserDialog({
         </div>
       </fieldset>
 
-      {branches && branches.length > 0 && (
+      {firms && branches && branches.length > 0 && (
         <fieldset className="space-y-1.5">
           <legend className="field-label">{t('users.branches')}</legend>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {branches.map((branch) => (
-              <label key={branch.branchId} className="field-check items-start">
-                <input
-                  type="checkbox"
-                  checked={chosenBranches.includes(branch.branchId)}
-                  onChange={() => toggleBranch(branch.branchId)}
-                />
-                <span>
-                  <span className="font-medium">{branch.name}</span>
-                  <span className="block text-xs text-ink-muted">
-                    {branch.code}
-                    {branch.isHeadOffice ? ` · ${t('branches.headOffice')}` : ''}
-                    {!branch.isActive ? ` · ${t('branches.inactive')}` : ''}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
+          {firms.map((firm) => (
+            <div key={firm.firmId} className="space-y-1">
+              {firms.length > 1 && (
+                <p className="text-xs font-semibold text-ink-muted">
+                  {firm.name}
+                  {!firm.isActive ? ` · ${t('branches.inactive')}` : ''}
+                </p>
+              )}
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {firm.branches.map((branch) => (
+                  <label key={branch.branchId} className="field-check items-start">
+                    <input
+                      type="checkbox"
+                      checked={chosenBranches.includes(branch.branchId)}
+                      onChange={() => toggleBranch(branch.branchId)}
+                    />
+                    <span>
+                      <span className="font-medium">{branch.name}</span>
+                      <span className="block text-xs text-ink-muted">
+                        {branch.code}
+                        {branch.isHeadOffice ? ` · ${t('branches.headOffice')}` : ''}
+                        {!branch.isActive ? ` · ${t('branches.inactive')}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
           <span className="field-hint">{t('users.branchesHint')}</span>
         </fieldset>
       )}

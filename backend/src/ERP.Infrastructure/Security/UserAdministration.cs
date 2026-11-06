@@ -426,7 +426,7 @@ public sealed class UserAdministration : IUserAdministration
             .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// Gives a user exactly the chosen branches of the firm in session, by difference:
+    /// Gives a user exactly the chosen branches, across the tenant's firms, by difference:
     /// a branch held before and after is left as it is. Nothing chosen leaves them as
     /// they are; an empty choice is refused, since a user in no branch could do nothing.
     /// </summary>
@@ -446,38 +446,40 @@ public sealed class UserAdministration : IUserAdministration
                 "User.BranchRequired", "Choose at least one branch the user may work in."));
         }
 
-        Firm? firm = await (_tenantContext.FirmId is { } firmId
-                ? _context.Firms.Include(candidate => candidate.Branches)
-                    .Where(candidate => candidate.Id == firmId)
-                : _context.Firms.Include(candidate => candidate.Branches)
-                    .OrderBy(candidate => candidate.Code))
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (firm is null)
-        {
-            return Result.Success();
-        }
+        // Every firm of the tenant: the choice is of branches across all of them, and
+        // a firm left with none is a firm the user no longer works in.
+        List<Firm> firms = await _context.Firms.Include(candidate => candidate.Branches)
+            .ToListAsync(cancellationToken);
 
         HashSet<BranchId> wanted = [.. requested.Select(BranchId.From)];
 
-        if (wanted.Any(id => firm.Branches.All(branch => branch.Id != id)))
+        if (wanted.Any(id => !firms.Exists(firm => firm.Branches.Any(branch => branch.Id == id))))
         {
             return Result.Failure(Error.Validation(
-                "User.UnknownBranch", "One of the branches chosen is not a branch of this firm."));
+                "User.UnknownBranch", "One of the branches chosen is not a branch of any firm."));
         }
 
-        foreach (BranchId branch in firm.Branches.Select(candidate => candidate.Id))
+        foreach (Firm firm in firms)
         {
-            bool holds = user.FirmAccess.Any(
-                access => access.FirmId == firm.Id && access.BranchId == branch);
+            foreach (BranchId branch in firm.Branches.Select(candidate => candidate.Id))
+            {
+                bool holds = user.FirmAccess.Any(
+                    access => access.FirmId == firm.Id && access.BranchId == branch);
 
-            if (wanted.Contains(branch) && !holds)
-            {
-                user.GrantFirmAccess(firm.Id, branch);
+                if (wanted.Contains(branch) && !holds)
+                {
+                    user.GrantFirmAccess(firm.Id, branch);
+                }
+                else if (!wanted.Contains(branch) && holds)
+                {
+                    user.RevokeBranchAccess(firm.Id, branch);
+                }
             }
-            else if (!wanted.Contains(branch) && holds)
+
+            // Access to the firm as a whole, without a branch, goes with its last branch.
+            if (firm.Branches.All(branch => !wanted.Contains(branch.Id)))
             {
-                user.RevokeBranchAccess(firm.Id, branch);
+                user.RevokeFirmAccess(firm.Id);
             }
         }
 

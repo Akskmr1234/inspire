@@ -173,6 +173,27 @@ public sealed partial class DatabaseSeeder
         return Result.Success(summary);
     }
 
+    /// <summary>
+    /// Gives a firm added after installation what the first firm was given at it: a
+    /// financial year covering today, the chart of accounts, the menu, the dashboards,
+    /// the tax slabs and the countries and states. The same steps, so two firms of one
+    /// tenant start alike. Each step leaves alone what the firm already has.
+    /// </summary>
+    /// <param name="firm">The firm, already saved.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the operation.</returns>
+    public async Task SetUpFirmAsync(Firm firm, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(firm);
+
+        await EnsureFinancialYearAsync(firm.TenantId, firm, cancellationToken);
+        await EnsureChartOfAccountsAsync(firm, cancellationToken);
+        await EnsureMenuAsync(firm, cancellationToken);
+        await EnsureDashboardsAsync(firm, cancellationToken);
+        await EnsureTaxSlabsAsync(firm, cancellationToken);
+        await EnsurePlacesAsync(firm, cancellationToken);
+    }
+
     /// <summary>Adds any catalogue permissions not already present.</summary>
     private async Task<int> SeedPermissionsAsync(CancellationToken cancellationToken)
     {

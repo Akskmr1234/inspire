@@ -12,6 +12,7 @@ using ERP.Application.Platform.Audit;
 using ERP.Application.Platform.Branches;
 using ERP.Application.Platform.Dashboards;
 using ERP.Application.Platform.Data;
+using ERP.Application.Platform.Firms;
 using ERP.Application.Platform.Grids;
 using ERP.Application.Platform.Import;
 using ERP.Application.Platform.Menus;
@@ -76,6 +77,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IUserAdministration, UserAdministration>();
         services.AddScoped<IBranchAdministration, BranchAdministration>();
+        services.AddScoped<IFirmAdministration, FirmAdministration>();
         services.AddScoped<IMyAccount, MyAccount>();
         services.AddScoped<IEasyRetailSource, EasyRetailSource>();
         services.AddScoped<IEasyRetailImporter, EasyRetailImporter>();

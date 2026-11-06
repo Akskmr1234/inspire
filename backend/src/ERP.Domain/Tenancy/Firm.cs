@@ -269,6 +269,21 @@ public sealed class Firm : AggregateRoot<FirmId>, ITenantScoped, IAuditable, ISo
     public void SetArabicName(string? nameArabic) =>
         NameArabic = string.IsNullOrWhiteSpace(nameArabic) ? null : nameArabic.Trim();
 
+    /// <summary>Renames the firm. Its code stays.</summary>
+    /// <param name="name">The new name.</param>
+    /// <returns>Success, or why the name was refused.</returns>
+    public Result Rename(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Result.Failure(Error.Validation(
+                "Firm.NameRequired", "A firm name is required."));
+        }
+
+        Name = name.Trim();
+        return Result.Success();
+    }
+
     /// <summary>Deactivates the firm, preventing further transactions.</summary>
     /// <remarks>
     /// Existing data is untouched and remains readable for reporting and audit.
