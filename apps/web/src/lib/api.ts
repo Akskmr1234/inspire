@@ -16,7 +16,7 @@
  *   because reuse cannot be distinguished from theft.
  */
 
-import { branchOf, claim, displayNameOf } from '@/lib/branch';
+import { branchOf, branchesOf, claim, displayNameOf } from '@/lib/branch';
 
 const REFRESH_TOKEN_KEY = 'erp.refreshToken';
 const TENANT_CODE_KEY = 'erp.tenantCode';
@@ -106,7 +106,38 @@ export function setSession(auth: AuthenticationResponse, tenantCode?: string): v
  * user who holds no branch.
  */
 export function currentBranchId(): string | null {
-  return branchOf(accessToken);
+  const chosen = chosenBranch();
+  return chosen !== null && branchesOf(accessToken).includes(chosen)
+    ? chosen
+    : branchOf(accessToken);
+}
+
+/** Where the branch somebody switched to is kept, across reloads, on this device. */
+const BRANCH_KEY = 'erp.branch';
+
+function chosenBranch(): string | null {
+  try {
+    return localStorage.getItem(BRANCH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Every branch the session may work in, as the token lists them. */
+export function sessionBranchIds(): readonly string[] {
+  return branchesOf(accessToken);
+}
+
+/**
+ * Switches the branch the session works in. Sent to the server on every request,
+ * which honours it only for a branch the token already grants.
+ */
+export function chooseBranch(branchId: string): void {
+  try {
+    localStorage.setItem(BRANCH_KEY, branchId);
+  } catch {
+    // Storage refused (a private window): the switch lasts until the page reloads.
+  }
 }
 
 /** The signed-in user, by the identifier the server knows them by; null before sign-in. */
@@ -167,6 +198,12 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+
+    // The branch switched to, where the token grants it; the server checks again.
+    const chosen = chosenBranch();
+    if (chosen !== null && branchesOf(accessToken).includes(chosen)) {
+      headers['X-Erp-Branch'] = chosen;
+    }
   }
 
   return fetch(`${API_BASE_URL}/api/v1${path}`, {

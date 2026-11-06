@@ -63,6 +63,7 @@ public sealed class UserAdministration : IUserAdministration
         List<User> users = await _context.Users
             .AsNoTracking()
             .Include(user => user.Roles)
+            .Include(user => user.FirmAccess)
             .OrderBy(user => user.UserName)
             .ToListAsync(cancellationToken);
 
@@ -118,8 +119,9 @@ public sealed class UserAdministration : IUserAdministration
             user.AssignRole(role.Id);
         }
 
-        // Every firm and branch of the tenant. Most firms have one of each, and a user
-        // who could sign in but reach no firm would see an empty screen with no reason.
+        // Every firm and branch of the tenant, unless the branches were chosen. Most
+        // firms have one of each, and a user who could sign in but reach no firm would
+        // see an empty screen with no reason.
         foreach (Firm firm in await _context.Firms.Include(firm => firm.Branches)
             .ToListAsync(cancellationToken))
         {
@@ -127,6 +129,13 @@ public sealed class UserAdministration : IUserAdministration
             {
                 user.GrantFirmAccess(firm.Id, branch.Id);
             }
+        }
+
+        Result branches = await ApplyBranchesAsync(user, request.BranchIds, cancellationToken);
+
+        if (branches.IsFailure)
+        {
+            return Result.Failure<UserSummary>(branches.Error);
         }
 
         if (!request.IsActive)
@@ -150,6 +159,7 @@ public sealed class UserAdministration : IUserAdministration
 
         User? user = await _context.Users
             .Include(candidate => candidate.Roles)
+            .Include(candidate => candidate.FirmAccess)
             .FirstOrDefaultAsync(candidate => candidate.Id == UserId.From(userId), cancellationToken);
 
         if (user is null)
@@ -216,6 +226,13 @@ public sealed class UserAdministration : IUserAdministration
         if (administered.IsFailure)
         {
             return Result.Failure<UserSummary>(administered.Error);
+        }
+
+        Result branches = await ApplyBranchesAsync(user, request.BranchIds, cancellationToken);
+
+        if (branches.IsFailure)
+        {
+            return Result.Failure<UserSummary>(branches.Error);
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -408,6 +425,65 @@ public sealed class UserAdministration : IUserAdministration
                 permission.Description))
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// Gives a user exactly the chosen branches of the firm in session, by difference:
+    /// a branch held before and after is left as it is. Nothing chosen leaves them as
+    /// they are; an empty choice is refused, since a user in no branch could do nothing.
+    /// </summary>
+    private async Task<Result> ApplyBranchesAsync(
+        User user,
+        IReadOnlyList<Guid>? requested,
+        CancellationToken cancellationToken)
+    {
+        if (requested is null)
+        {
+            return Result.Success();
+        }
+
+        if (requested.Count == 0)
+        {
+            return Result.Failure(Error.Validation(
+                "User.BranchRequired", "Choose at least one branch the user may work in."));
+        }
+
+        Firm? firm = await (_tenantContext.FirmId is { } firmId
+                ? _context.Firms.Include(candidate => candidate.Branches)
+                    .Where(candidate => candidate.Id == firmId)
+                : _context.Firms.Include(candidate => candidate.Branches)
+                    .OrderBy(candidate => candidate.Code))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (firm is null)
+        {
+            return Result.Success();
+        }
+
+        HashSet<BranchId> wanted = [.. requested.Select(BranchId.From)];
+
+        if (wanted.Any(id => firm.Branches.All(branch => branch.Id != id)))
+        {
+            return Result.Failure(Error.Validation(
+                "User.UnknownBranch", "One of the branches chosen is not a branch of this firm."));
+        }
+
+        foreach (BranchId branch in firm.Branches.Select(candidate => candidate.Id))
+        {
+            bool holds = user.FirmAccess.Any(
+                access => access.FirmId == firm.Id && access.BranchId == branch);
+
+            if (wanted.Contains(branch) && !holds)
+            {
+                user.GrantFirmAccess(firm.Id, branch);
+            }
+            else if (!wanted.Contains(branch) && holds)
+            {
+                user.RevokeBranchAccess(firm.Id, branch);
+            }
+        }
+
+        return Result.Success();
+    }
+
     private static UserSummary Describe(User user) =>
         new(
             user.Id.Value,
@@ -419,7 +495,11 @@ public sealed class UserAdministration : IUserAdministration
             user.MustChangePassword,
             user.LockedOutUntilUtc is { } until && until > DateTimeOffset.UtcNow,
             user.LastLoginAtUtc,
-            [.. user.Roles.Select(link => link.RoleId.Value)]);
+            [.. user.Roles.Select(link => link.RoleId.Value)],
+            [.. user.FirmAccess
+                .Where(access => access.BranchId.HasValue)
+                .Select(access => access.BranchId!.Value.Value)
+                .Distinct()]);
 
     private static RoleSummary Describe(
         Role role,

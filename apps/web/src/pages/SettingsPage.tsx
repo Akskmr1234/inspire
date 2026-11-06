@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { BranchSettings } from '@/components/settings/BranchSettings';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeading } from '@/components/PageHeading';
 import { PageTabs } from '@/components/PageTabs';
@@ -27,6 +28,7 @@ const TABS = [
   'inventory',
   'accounts',
   'charges',
+  'branches',
   'printing',
   'numbering',
   'data',
@@ -76,6 +78,7 @@ export function SettingsPage(): React.JSX.Element {
       {tab === 'inventory' && <InventorySettings />}
       {tab === 'accounts' && <AccountsSettings />}
       {tab === 'charges' && <AdditionalLedgerSettings />}
+      {tab === 'branches' && <BranchSettings />}
       {tab === 'printing' && <PrintingSettings />}
       {tab === 'numbering' && <NumberingTab />}
       {tab === 'data' && <DataSettings />}

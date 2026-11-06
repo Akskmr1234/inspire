@@ -16,6 +16,7 @@ import {
   type RoleSummary,
   type UserSummary,
 } from '@/lib/users';
+import { listBranches, type BranchSummary } from '@/lib/branches';
 
 /**
  * Who may sign in, and with which roles.
@@ -42,6 +43,11 @@ export function UsersPage(): React.JSX.Element {
     queryFn: listRoles,
   });
 
+  const branches = useQuery<readonly BranchSummary[], ApiError>({
+    queryKey: ['platform-branches'],
+    queryFn: listBranches,
+  });
+
   const roleName = (id: string): string =>
     roles.data?.find((role) => role.roleId === id)?.name ?? '…';
 
@@ -51,6 +57,7 @@ export function UsersPage(): React.JSX.Element {
     setNotice(message);
     void queryClient.invalidateQueries({ queryKey: ['platform-users'] });
     void queryClient.invalidateQueries({ queryKey: ['platform-roles'] });
+    void queryClient.invalidateQueries({ queryKey: ['platform-branches'] });
   };
 
   const lastLogin = (user: UserSummary): string =>
@@ -208,6 +215,7 @@ export function UsersPage(): React.JSX.Element {
         <UserDialog
           user={editing === 'new' ? null : editing}
           roles={roles.data}
+          branches={branches.data}
           onClose={() => setEditing(null)}
           onSaved={done}
         />
@@ -243,11 +251,14 @@ function Flags({ user }: { readonly user: UserSummary }): React.JSX.Element {
 function UserDialog({
   user,
   roles,
+  branches,
   onClose,
   onSaved,
 }: {
   readonly user: UserSummary | null;
   readonly roles: readonly RoleSummary[];
+  /** The firm's branches; undefined while they load, when the user's are left alone. */
+  readonly branches: readonly BranchSummary[] | undefined;
   readonly onClose: () => void;
   readonly onSaved: (message: string) => void;
 }): React.JSX.Element {
@@ -260,6 +271,13 @@ function UserDialog({
   const [password, setPassword] = useState('');
   const [roleIds, setRoleIds] = useState<readonly string[]>(user?.roleIds ?? []);
   const [active, setActive] = useState(user?.isActive ?? true);
+  // A new user starts in every active branch, as before; untick the ones they keep out of.
+  const [branchIds, setBranchIds] = useState<readonly string[] | null>(
+    user?.branchIds ?? null,
+  );
+  const chosenBranches =
+    branchIds ??
+    (branches ?? []).filter((branch) => branch.isActive).map((branch) => branch.branchId);
 
   const save = useMutation<UserSummary, ApiError>({
     mutationFn: () => {
@@ -271,6 +289,8 @@ function UserDialog({
         password: user ? null : password,
         roleIds,
         isActive: active,
+        // Only once the branches are known: sent blind, a list would take some away.
+        branchIds: branches ? chosenBranches : null,
       };
 
       return user ? updateUser(user.userId, body) : createUser(body);
@@ -286,6 +306,13 @@ function UserDialog({
       current.includes(id)
         ? current.filter((candidate) => candidate !== id)
         : [...current, id],
+    );
+
+  const toggleBranch = (id: string): void =>
+    setBranchIds(
+      chosenBranches.includes(id)
+        ? chosenBranches.filter((candidate) => candidate !== id)
+        : [...chosenBranches, id],
     );
 
   return (
@@ -361,6 +388,32 @@ function UserDialog({
         </div>
       </fieldset>
 
+      {branches && branches.length > 0 && (
+        <fieldset className="space-y-1.5">
+          <legend className="field-label">{t('users.branches')}</legend>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {branches.map((branch) => (
+              <label key={branch.branchId} className="field-check items-start">
+                <input
+                  type="checkbox"
+                  checked={chosenBranches.includes(branch.branchId)}
+                  onChange={() => toggleBranch(branch.branchId)}
+                />
+                <span>
+                  <span className="font-medium">{branch.name}</span>
+                  <span className="block text-xs text-ink-muted">
+                    {branch.code}
+                    {branch.isHeadOffice ? ` · ${t('branches.headOffice')}` : ''}
+                    {!branch.isActive ? ` · ${t('branches.inactive')}` : ''}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <span className="field-hint">{t('users.branchesHint')}</span>
+        </fieldset>
+      )}
+
       <CheckField label={t('users.active')} checked={active} onChange={setActive} />
 
       {save.isError && (
@@ -376,6 +429,9 @@ function UserDialog({
             userName.trim() === '' ||
             email.trim() === '' ||
             roleIds.length === 0 ||
+            (branches !== undefined &&
+              branches.length > 0 &&
+              chosenBranches.length === 0) ||
             (!user && password.length === 0)
           }
           onClick={() => save.mutate()}

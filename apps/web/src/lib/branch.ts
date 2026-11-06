@@ -65,6 +65,24 @@ export function branchOf(token: string | null): string | null {
   return claim(token, BRANCH_CLAIM);
 }
 
+/** Every branch the token lets its holder work in, in the order it lists them. */
+export function branchesOf(token: string | null): readonly string[] {
+  const payload = token?.split('.')[1];
+  if (!payload) return [];
+
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const value = (JSON.parse(atob(padded)) as Record<string, unknown>)[BRANCH_CLAIM];
+    const values = Array.isArray(value) ? value : [value];
+    return values.filter(
+      (item): item is string => typeof item === 'string' && item !== '',
+    );
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Reads the display name claim from the access token.
  */
