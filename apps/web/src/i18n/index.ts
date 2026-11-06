@@ -2630,6 +2630,7 @@ const en = {
   branches: {
     title: 'Branches',
     add: 'Add branch',
+    firm: 'Firm',
     editTitle: 'Edit {{name}}',
     code: 'Code',
     codeFixed: 'A branch keeps its code: documents are numbered by it.',
@@ -2644,7 +2645,8 @@ const en = {
     inactive: 'Inactive',
     headOffice: 'Head office',
     switch: 'Branch',
-    accessHint: 'Choose who may work in each branch under Settings › Users.',
+    accessHint:
+      "Each firm's branches are listed under it. Choose who may work in each under Settings › Users.",
     createdNotice:
       'Branch {{name}} added. You can work in it now; give it to others under Users.',
     updatedNotice: 'Branch {{name}} saved.',
@@ -5666,6 +5668,7 @@ const ar = {
   branches: {
     title: 'الفروع',
     add: 'إضافة فرع',
+    firm: 'الشركة',
     editTitle: 'تعديل {{name}}',
     code: 'الرمز',
     codeFixed: 'يحتفظ الفرع برمزه: تُرقَّم المستندات به.',
@@ -5680,7 +5683,8 @@ const ar = {
     inactive: 'غير نشط',
     headOffice: 'المركز الرئيسي',
     switch: 'الفرع',
-    accessHint: 'اختر من يعمل في كل فرع من الإعدادات › المستخدمون.',
+    accessHint:
+      'تظهر فروع كل شركة تحتها. اختر من يعمل في كل فرع من الإعدادات › المستخدمون.',
     createdNotice:
       'تمت إضافة الفرع {{name}}. يمكنك العمل فيه الآن؛ امنحه للآخرين من المستخدمين.',
     updatedNotice: 'تم حفظ الفرع {{name}}.',

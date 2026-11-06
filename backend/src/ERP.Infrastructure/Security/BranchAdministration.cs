@@ -74,12 +74,16 @@ public sealed class BranchAdministration : IBranchAdministration
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        Firm? firm = await FirmAsync(cancellationToken, tracked: true);
+        // Under the firm chosen, or the one in session.
+        Firm? firm = request.FirmId is { } chosen
+            ? await _context.Firms.Include(candidate => candidate.Branches)
+                .FirstOrDefaultAsync(candidate => candidate.Id == FirmId.From(chosen), cancellationToken)
+            : await FirmAsync(cancellationToken, tracked: true);
 
         if (firm is null)
         {
             return Result.Failure<BranchSummary>(Error.NotFound(
-                "Firm.NotFound", "There is no firm in session to add a branch to."));
+                "Firm.NotFound", "There is no such firm to add a branch to."));
         }
 
         Result<Branch> added = firm.AddBranch(request.Code, request.Name);
@@ -117,9 +121,11 @@ public sealed class BranchAdministration : IBranchAdministration
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        Firm? firm = await FirmAsync(cancellationToken, tracked: true);
-        Branch? branch = firm?.Branches.FirstOrDefault(
-            candidate => candidate.Id == BranchId.From(branchId));
+        // Whichever firm it belongs to: the screen lists every firm's branches.
+        BranchId id = BranchId.From(branchId);
+        Firm? firm = await _context.Firms.Include(candidate => candidate.Branches)
+            .FirstOrDefaultAsync(candidate => candidate.Branches.Any(each => each.Id == id), cancellationToken);
+        Branch? branch = firm?.Branches.FirstOrDefault(candidate => candidate.Id == id);
 
         if (branch is null)
         {

@@ -25,6 +25,8 @@ export interface SaveBranch {
   readonly phone: string | null;
   readonly email: string | null;
   readonly isActive: boolean;
+  /** The firm it belongs to, read when it is made; null for the firm in session. */
+  readonly firmId?: string | null;
 }
 
 const BRANCHES = '/platform/branches';
