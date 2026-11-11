@@ -89,11 +89,13 @@ export function InvoiceWindow({
         <Dialog.Content
           aria-describedby={undefined}
           {...(docked ? { 'data-holds-on-leave': '' } : {})}
-          // Docked, the menu beside it is there to be used: a click or a focus out
-          // there is not a request to close.
-          {...(docked
-            ? { onInteractOutside: (event: Event) => event.preventDefault() }
-            : {})}
+          /*
+            Prevent outside clicks or interactions from closing the window (including
+            when docked beside the menu); it should only close via explicit close
+            actions, Escape, or submission.
+          */
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
           className={clsx(
             'invoice-window animate-rise fixed flex flex-col bg-canvas outline-none',
             docked

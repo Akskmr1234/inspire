@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@/i18n';
-import { InvoiceLines, PartyCard } from '@/components/invoice/InvoiceLayout';
+import {
+  InvoiceLines,
+  InvoiceWindow,
+  PartyCard,
+} from '@/components/invoice/InvoiceLayout';
 
 /*
   Enter moving on through an invoice's lines is behaviour a counter learns once and
@@ -195,5 +200,30 @@ describe("the party's card", () => {
 
     expect(screen.getByText('Rajwa Trading')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Choose customer' })).toBeNull();
+  });
+});
+
+describe('InvoiceWindow', () => {
+  it('stays open when clicked outside the dialog', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <InvoiceWindow title="New invoice" onClose={onClose}>
+        <input aria-label="Reference" />
+      </InvoiceWindow>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const overlay = screen.getByRole('dialog').previousElementSibling;
+    expect(overlay).toBeTruthy();
+
+    if (overlay) {
+      await user.click(overlay);
+      await user.pointer({ keys: '[MouseRight]', target: overlay });
+    }
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
