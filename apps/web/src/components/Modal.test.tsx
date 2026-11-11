@@ -74,6 +74,26 @@ describe('a dialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('stays open when clicked outside the dialog', async () => {
+    const user = userEvent.setup();
+    const { onClose } = open();
+
+    // Radix attaches its outside-pointerdown listener on a zero-delay timer after mount.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const dialog = screen.getByRole('dialog');
+    const overlay = dialog.parentElement?.previousElementSibling;
+
+    expect(overlay).toBeTruthy();
+
+    if (overlay) {
+      await user.click(overlay);
+      await user.pointer({ keys: '[MouseRight]', target: overlay });
+    }
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('cycles Tab within itself rather than walking into the page behind', async () => {
     const user = userEvent.setup();
     open();

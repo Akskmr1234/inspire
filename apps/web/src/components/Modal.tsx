@@ -71,6 +71,12 @@ export function Modal({
         >
           <Dialog.Content
             aria-describedby={undefined}
+            /*
+              Prevent outside clicks or interactions from closing the modal; it
+              should only close via explicit user close actions or submission.
+            */
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
             className={clsx(
               'animate-rise flex w-full flex-col overflow-hidden border border-line/80 bg-surface shadow-2xl ring-1 ring-black/10 dark:border-white/10 dark:ring-white/10 outline-none transition-all duration-200',
               isFullscreen

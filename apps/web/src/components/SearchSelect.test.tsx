@@ -143,6 +143,33 @@ describe('SearchSelect', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('closes its own list when clicked outside, and leaves the dialog around it open', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <Modal title="New purchase" onClose={onClose}>
+        <Picker />
+      </Modal>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await user.click(screen.getByRole('combobox', { name: 'Product' }));
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+
+    const dialog = screen.getByRole('dialog');
+    const overlay = dialog.parentElement?.previousElementSibling;
+    expect(overlay).toBeTruthy();
+
+    if (overlay) {
+      await user.click(overlay);
+    }
+
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('says so rather than showing an empty box when nothing matches', async () => {
     const user = userEvent.setup();
     render(<Picker />);
