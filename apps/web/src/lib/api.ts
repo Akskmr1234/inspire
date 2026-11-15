@@ -183,6 +183,58 @@ export function chooseFirm(firmId: string, branchId: string | null): void {
   }
 }
 
+/** A user's default firm and branch, chosen in Settings. */
+export interface DefaultSelection {
+  readonly firmId: string;
+  readonly branchId: string | null;
+}
+
+const defaultKey = (userId: string): string => `erp.default.${userId}`;
+
+/** The firm and branch a user starts in at sign-in on this device, if they chose one. */
+export function defaultSelection(
+  userId: string | null = currentUserId(),
+): DefaultSelection | null {
+  if (!userId) return null;
+  try {
+    const stored = localStorage.getItem(defaultKey(userId));
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<DefaultSelection>;
+    return typeof parsed.firmId === 'string'
+      ? { firmId: parsed.firmId, branchId: parsed.branchId ?? null }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Saves, or with null clears, the current user's default firm and branch. */
+export function saveDefaultSelection(selection: DefaultSelection | null): void {
+  const userId = currentUserId();
+  if (!userId) return;
+  try {
+    if (selection) localStorage.setItem(defaultKey(userId), JSON.stringify(selection));
+    else localStorage.removeItem(defaultKey(userId));
+  } catch {
+    // Storage refused (a private window): nothing to remember it in.
+  }
+}
+
+/**
+ * Moves the session to the user's default firm and branch, where they chose one and
+ * this sign-in still grants it. Called at sign-in, so whoever used the device before
+ * does not decide where the next person starts.
+ */
+export function applyDefaultSelection(): void {
+  const chosen = defaultSelection();
+  if (!chosen || !firmsOf(accessToken).includes(chosen.firmId)) return;
+  const branch =
+    chosen.branchId !== null && branchesOf(accessToken).includes(chosen.branchId)
+      ? chosen.branchId
+      : null;
+  chooseFirm(chosen.firmId, branch);
+}
+
 /**
  * Reads the current user's display name, either from the active token or from local storage.
  */

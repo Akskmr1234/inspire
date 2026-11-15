@@ -2478,9 +2478,6 @@ function EntryDialog({
                   className={clsx('space-y-1.5', (rateChange || taxOn) && 'mt-3')}
                   {...shortcutProps('charges')}
                 >
-                  <span className="block text-[13px] font-medium text-ink/80">
-                    {t('sales.additionalLedgers')}
-                  </span>
                   {chargeList}
                 </div>
               )}
@@ -2621,6 +2618,7 @@ function EntryDialog({
                     taxMode === 'NT',
                     additionalLedgers,
                     ledgers.data ?? [],
+                    true,
                   )
                 : [],
               subtotal: true,

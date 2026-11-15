@@ -22,6 +22,7 @@ import { menuChosen, OPEN_MENU_EVENT } from '@/lib/shell';
 import { useSession, type Language, type Theme } from '@/stores/session';
 import { brand } from '@/lib/brand';
 import {
+  IconArrowRight,
   IconChevron,
   IconClose,
   IconLogout,
@@ -114,6 +115,40 @@ function initialCollapsed(): boolean {
  * left and right, so switching to Arabic mirrors the whole interface without a second
  * stylesheet.
  */
+/**
+ * One Back button for every screen, in the top bar: the previous screen when the
+ * browser has one within the app, otherwise the dashboard. Hidden on the
+ * dashboard, which has nowhere to go back to.
+ */
+function BackButton(): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  if (pathname === '/' || pathname === '' || pathname === '/dashboard') return null;
+
+  const back = (): void => {
+    const index = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (index > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/dashboard');
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={back}
+      className="btn-icon"
+      aria-label={t('nav.back')}
+      title={t('nav.back')}
+    >
+      <IconArrowRight className="size-5 rotate-180 rtl:rotate-0" />
+    </button>
+  );
+}
+
 export function AppShell(): React.JSX.Element {
   const { t } = useTranslation();
   const location = useLocation();
@@ -329,6 +364,7 @@ export function AppShell(): React.JSX.Element {
           >
             <IconMenu />
           </button>
+          <BackButton />
 
           {/*
             The wordmark rides in the header only where the sidebar is not showing

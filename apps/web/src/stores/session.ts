@@ -202,6 +202,7 @@ export const useSession = create<SessionState>((set, get) => ({
 
   signIn: async (userName, password, tenantCode) => {
     const auth = await api.login(userName, password, tenantCode);
+    api.applyDefaultSelection();
     const permissions = await api.fetchPermissions().catch(() => []);
     const displayName = auth.displayName || api.currentDisplayName() || userName;
 

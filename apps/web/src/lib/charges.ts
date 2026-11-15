@@ -254,8 +254,9 @@ export function chargeAmounts(
   nonTax: boolean,
   carried: readonly { readonly ledgerId: string; readonly amount: string }[],
   ledgers: readonly LedgerSummary[],
+  allConfigured = false,
 ): readonly { readonly label: string; readonly amount: number }[] {
-  return chargeRows(setup, nonTax, carried, ledgers).flatMap((row) => {
+  return chargeRows(setup, nonTax, carried, ledgers, allConfigured).flatMap((row) => {
     const amount = Number(
       carried.find((charge) => charge.ledgerId === row.ledgerId)?.amount ?? '',
     );

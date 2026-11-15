@@ -12,6 +12,7 @@ import {
 } from '@/components/Form';
 import { NumberingSettings } from '@/components/NumberingSettings';
 import { PolicySettings } from '@/components/PolicySettings';
+import { DefaultSelectionSettings } from '@/components/settings/DefaultSelectionSettings';
 import { SearchSelect } from '@/components/SearchSelect';
 import { FinancialYearsSettings } from '@/components/settings/FinancialYearsSettings';
 import {
@@ -138,6 +139,7 @@ export function GeneralSettings(): React.JSX.Element {
 
   return (
     <Cards>
+      <DefaultSelectionSettings card={SettingsCard} />
       <SettingsCard title={t('prefs.regionTitle')} hint={t('prefs.regionHint')}>
         <CheckField
           label={t('prefs.gulfMode')}

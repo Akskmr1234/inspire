@@ -27,7 +27,7 @@ export function FirmSwitcher(): React.JSX.Element | null {
   if (usable.length < 2) return null;
 
   return (
-    <label className="hidden items-center sm:flex">
+    <label className="flex min-w-0 items-center">
       <span className="sr-only">{t('firms.switch')}</span>
       <select
         value={currentFirmId() ?? ''}
@@ -40,7 +40,7 @@ export function FirmSwitcher(): React.JSX.Element | null {
           chooseFirm(firm.firmId, firm.branches[0]?.branchId ?? null);
           window.location.reload();
         }}
-        className="field-input-sm max-w-48 truncate py-1 text-xs font-semibold"
+        className="field-input-sm max-w-24 truncate sm:max-w-48 py-1 text-xs font-semibold"
       >
         {usable.map((firm) => (
           <option key={firm.firmId} value={firm.firmId}>

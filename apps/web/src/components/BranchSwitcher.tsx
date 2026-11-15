@@ -36,7 +36,7 @@ export function BranchSwitcher(): React.JSX.Element | null {
   const current = currentBranchId();
 
   return (
-    <label className="hidden items-center sm:flex">
+    <label className="flex min-w-0 items-center">
       <span className="sr-only">{t('branches.switch')}</span>
       <select
         value={current ?? ''}
@@ -45,7 +45,7 @@ export function BranchSwitcher(): React.JSX.Element | null {
           chooseBranch(event.target.value);
           window.location.reload();
         }}
-        className="field-input-sm max-w-44 truncate py-1 text-xs font-medium"
+        className="field-input-sm max-w-24 truncate sm:max-w-44 py-1 text-xs font-medium"
       >
         {usable.map((branch) => (
           <option key={branch.branchId} value={branch.branchId}>
