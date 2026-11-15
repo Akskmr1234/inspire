@@ -93,7 +93,7 @@ public sealed class RoleDashboardEndpointTests
 
         // A user with the role sees it, and its figures.
         string userName = $"cashier{tag}";
-        string password = $"Cashier-{tag}-Password!";
+        string password = $"K-{tag}!";
         HttpResponseMessage user = await admin.PostAsJsonAsync("/api/v1/platform/users", new
         {
             UserName = userName,

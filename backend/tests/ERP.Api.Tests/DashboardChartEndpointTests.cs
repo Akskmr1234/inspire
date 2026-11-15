@@ -90,7 +90,7 @@ public sealed class DashboardChartEndpointTests
         role.StatusCode.ShouldBe(HttpStatusCode.Created, await role.Content.ReadAsStringAsync());
         RoleSummary created = (await role.Content.ReadFromJsonAsync<RoleSummary>())!;
 
-        const string password = "Counter-Clerk-Password-1!";
+        const string password = "Counter-Pw1!";
         string userName = $"counter{suffix}";
 
         HttpResponseMessage user = await admin.PostAsJsonAsync(

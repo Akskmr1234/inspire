@@ -170,7 +170,8 @@ export interface PostSalesInvoiceResponse {
   readonly stockDocumentId: string;
   readonly stockDocumentNumber: string;
   readonly billId: string | null;
-  readonly journalVoucherId: string;
+  /** Absent on a sale at no value, which raises no journal. */
+  readonly journalVoucherId: string | null;
   readonly total: number;
 }
 

@@ -45,7 +45,7 @@ describe('passwordStrength', () => {
   });
 
   it('rates a long mixed one strong', () => {
-    expect(passwordStrength('Correct-Horse-Battery-9')).toBe(4);
+    expect(passwordStrength('Horse-Bat-9!')).toBe(4);
   });
 
   it('is empty for nothing', () => {

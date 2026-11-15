@@ -192,14 +192,14 @@ public static class AuthenticationErrors
 public static class PasswordPolicy
 {
     /// <summary>The minimum accepted length.</summary>
-    public const int MinimumLength = 12;
+    public const int MinimumLength = 6;
 
     /// <summary>The maximum accepted length.</summary>
     /// <remarks>
-    /// A ceiling exists only to bound the work done by the hash function, so an
-    /// enormous submission cannot be used to exhaust CPU on the sign-in path.
+    /// Applies when a password is set or changed, never at sign-in, so a longer
+    /// password set before this limit still signs in.
     /// </remarks>
-    public const int MaximumLength = 256;
+    public const int MaximumLength = 12;
 
     /// <summary>Checks a proposed password.</summary>
     /// <param name="password">The proposed password.</param>

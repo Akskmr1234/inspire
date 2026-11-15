@@ -112,7 +112,7 @@ public sealed class AccountEndpointTests
 
         string tag = Guid.NewGuid().ToString("N")[..8];
         string userName = $"self{tag}";
-        string password = $"Self-{tag}-Password!";
+        string password = $"S-{tag}!";
 
         HttpResponseMessage created = await admin.PostAsJsonAsync("/api/v1/platform/users", new
         {

@@ -67,7 +67,6 @@ import { fetchStockValuation, type StockValuationReport } from '@/lib/stock';
 import { collect, numeric, required, useValidation } from '@/lib/validation';
 import {
   salesPaymentModeOf,
-  useChargesAddable,
   useChargesInBill,
   useChargesShown,
   useDirectSave,
@@ -806,7 +805,6 @@ function EntryDialog({
   const rateChange = settings.allowRateChange !== false;
   // A document being corrected keeps the additional ledgers it carries, shown or not.
   const chargesOn = useChargesShown('Sales');
-  const chargesAddable = useChargesAddable('Sales');
   const chargesInBill = useChargesInBill();
   const showCharges = chargesOn || (editing?.charges.length ?? 0) > 0;
   // Rounded as the firm rounds - or, for a document being corrected, as it was.
@@ -1961,7 +1959,7 @@ function EntryDialog({
       setup={chargeSetup}
       nonTax={taxMode === 'NT'}
       ledgers={ledgers.data ?? []}
-      allowAdd={chargesAddable}
+      allConfigured
       onAmount={setChargeAmount}
       onRemove={(ledgerId) =>
         setAdditionalLedgers((rows) => rows.filter((row) => row.ledgerId !== ledgerId))
@@ -2603,9 +2601,6 @@ function EntryDialog({
               ? {
                   charges: (
                     <div className="space-y-1.5" {...shortcutProps('charges')}>
-                      <span className="block text-xs font-medium text-ink-muted">
-                        {t('sales.additionalLedgers')}
-                      </span>
                       {chargeList}
                     </div>
                   ),

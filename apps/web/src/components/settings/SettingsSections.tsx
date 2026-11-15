@@ -500,7 +500,7 @@ export function SalesSettings(): React.JSX.Element {
               settings.update({ namedCustomerForNonCash })
             }
           />
-          <PolicySettings only={['creditLimit']} />
+          <PolicySettings only={['creditLimit', 'allowZeroValueSales']} />
         </SettingsCard>
 
         <SettingsCard title={t('prefs.salesPaymentTitle')}>
@@ -1157,19 +1157,22 @@ export function AdditionalLedgerSettings(): React.JSX.Element {
             })
           }
         />
-        <CheckField
-          label={t('prefs.addChargesOn', {
-            document: t(`settings.chargeTabs.${document}`),
-          })}
-          checked={!(settings.fixedChargeSetups ?? []).includes(type)}
-          onChange={(addable) =>
-            settings.update({
-              fixedChargeSetups: addable
-                ? (settings.fixedChargeSetups ?? []).filter((name) => name !== type)
-                : [...(settings.fixedChargeSetups ?? []), type],
-            })
-          }
-        />
+        {/* The sales window shows every ledger set up here, so it has nothing to add. */}
+        {type !== 'Sales' && (
+          <CheckField
+            label={t('prefs.addChargesOn', {
+              document: t(`settings.chargeTabs.${document}`),
+            })}
+            checked={!(settings.fixedChargeSetups ?? []).includes(type)}
+            onChange={(addable) =>
+              settings.update({
+                fixedChargeSetups: addable
+                  ? (settings.fixedChargeSetups ?? []).filter((name) => name !== type)
+                  : [...(settings.fixedChargeSetups ?? []), type],
+              })
+            }
+          />
+        )}
 
         {failure && <p className="alert-error">{failure.detail || failure.code}</p>}
 

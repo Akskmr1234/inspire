@@ -25,6 +25,7 @@ export function AdditionalLedgerList({
   onRemove,
   disabled = false,
   allowAdd = true,
+  allConfigured = false,
 }: {
   /** What the document carries: picked ledgers and typed amounts. */
   readonly carried: readonly { readonly ledgerId: string; readonly amount: string }[];
@@ -38,23 +39,29 @@ export function AdditionalLedgerList({
   readonly disabled?: boolean;
   /** Whether the bill may add a ledger beyond the defaults; Settings decides. */
   readonly allowAdd?: boolean;
-}): React.JSX.Element {
+  /**
+   * Shows every active ledger the master sets up for the document, by name, with its
+   * amount box: nothing to pick, no setup link. The sales window works this way.
+   */
+  readonly allConfigured?: boolean;
+}): React.JSX.Element | null {
   const { t } = useTranslation();
   const can = useSession((state) => state.can);
 
   const rows = useMemo(
-    () => chargeRows(setup, nonTax, carried, ledgers),
-    [setup, nonTax, carried, ledgers],
+    () => chargeRows(setup, nonTax, carried, ledgers, allConfigured),
+    [setup, nonTax, carried, ledgers, allConfigured],
   );
   const offered = useMemo(
-    () => (allowAdd ? offeredCharges(setup, nonTax, rows) : []),
-    [allowAdd, setup, nonTax, rows],
+    () => (allowAdd && !allConfigured ? offeredCharges(setup, nonTax, rows) : []),
+    [allowAdd, allConfigured, setup, nonTax, rows],
   );
 
   const amountOf = (ledgerId: string): string =>
     carried.find((charge) => charge.ledgerId === ledgerId)?.amount ?? '';
 
   if (rows.length === 0 && offered.length === 0) {
+    if (allConfigured) return null;
     return (
       <p className="py-1 text-xs text-ink-muted">
         {setup === undefined ? t('common.loading') : t('documents.noChargesSetUp')}{' '}

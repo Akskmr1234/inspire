@@ -1628,6 +1628,7 @@ const en = {
     editsRequireApproval: 'Edits need approval',
     editsRequireApprovalHint:
       'A correction or cancellation by someone who may not approve it is held until an approver accepts it on the Approvals screen.',
+    allowZeroValueSales: 'Allow sales at zero rate',
     purchasesUpdateProductRates: 'Purchase updates rates',
     purchasesUpdateProductRatesHint:
       "Posting a purchase sets every product's cost to what was paid, and rebuilds the retail rate from its profit percentage (never above the MRP).",
@@ -2561,7 +2562,7 @@ const en = {
       'Your user name cannot be changed. An administrator can reset your password from Settings › Users.',
     samePassword: 'Must differ from current.',
     passwordHint:
-      'Use at least 12 characters. A long phrase is easier to remember and harder to guess.',
+      'Use 6 to 12 characters. Mix letters, numbers and symbols.',
     passwordChangedSignIn: 'Password changed. Sign in again.',
     passwordSignsOut: 'Signs you out everywhere.',
     showPasswords: 'Show passwords',
@@ -2601,7 +2602,7 @@ const en = {
     current: 'Current password',
     new: 'New password',
     confirm: 'Confirm new password',
-    policy: 'At least 12 characters',
+    policy: '6 to 12 characters',
     mismatch: 'Passwords differ.',
     unreachable: 'Server unreachable.',
     submit: 'Update password',
@@ -2664,7 +2665,7 @@ const en = {
     mobile: 'Mobile',
     password: 'Starting password',
     newPassword: 'New starting password',
-    passwordHint: 'Min 12 characters',
+    passwordHint: '6 to 12 characters',
     roles: 'Roles',
     status: 'Status',
     active: 'May sign in',
@@ -4680,6 +4681,7 @@ const ar = {
     editsRequireApproval: 'التعديلات تحتاج موافقة',
     editsRequireApprovalHint:
       'يُحتجز التصحيح أو الإلغاء من شخص لا يملك صلاحية الموافقة حتى يوافق عليه معتمِد في شاشة الموافقات.',
+    allowZeroValueSales: 'السماح بالبيع بسعر صفر',
     purchasesUpdateProductRates: 'الشراء يحدّث الأسعار',
     purchasesUpdateProductRatesHint:
       'ترحيل الشراء يجعل تكلفة كل صنف ما دُفع فيه، ويعيد حساب سعر التجزئة من نسبة الربح (دون تجاوز السعر الأقصى).',
@@ -5600,7 +5602,7 @@ const ar = {
     userNameFixed:
       'لا يمكن تغيير اسم المستخدم. يمكن للمسؤول إعادة تعيين كلمة المرور من الإعدادات › المستخدمون.',
     samePassword: 'يجب أن تختلف عن الحالية.',
-    passwordHint: 'استخدم 12 حرفاً على الأقل. العبارة الطويلة أسهل للتذكر وأصعب للتخمين.',
+    passwordHint: 'استخدم من 6 إلى 12 حرفاً. امزج الحروف والأرقام والرموز.',
     passwordChangedSignIn: 'تم تغيير كلمة المرور. سجّل الدخول مجدداً.',
     passwordSignsOut: 'يُخرجك من كل الأجهزة.',
     showPasswords: 'إظهار كلمات المرور',
@@ -5639,7 +5641,7 @@ const ar = {
     current: 'كلمة المرور الحالية',
     new: 'كلمة المرور الجديدة',
     confirm: 'تأكيد كلمة المرور الجديدة',
-    policy: '12 حرفاً على الأقل',
+    policy: 'من 6 إلى 12 حرفاً',
     mismatch: 'كلمتا المرور مختلفتان.',
     unreachable: 'تعذر الوصول للخادم.',
     submit: 'تحديث كلمة المرور',
@@ -5702,7 +5704,7 @@ const ar = {
     mobile: 'الجوال',
     password: 'كلمة المرور الأولى',
     newPassword: 'كلمة مرور أولى جديدة',
-    passwordHint: '12 حرفاً على الأقل',
+    passwordHint: 'من 6 إلى 12 حرفاً',
     roles: 'الأدوار',
     status: 'الحالة',
     active: 'مسموح بالدخول',

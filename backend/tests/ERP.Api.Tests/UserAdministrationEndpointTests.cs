@@ -45,7 +45,7 @@ public sealed class UserAdministrationEndpointTests
         role.RestrictsMenu.ShouldBeTrue();
         role.PermissionCodes.ShouldContain("sales:invoice:create");
 
-        string password = $"Counter-{tag}-Pass!";
+        string password = $"P-{tag}!";
 
         HttpResponseMessage createdUser = await admin.PostAsJsonAsync(Users, new
         {

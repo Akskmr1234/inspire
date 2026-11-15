@@ -32,7 +32,10 @@ public sealed record PostSalesInvoiceCommand(Guid SalesInvoiceId, int? CreditDay
 /// The bill the customer now owes. Absent on a return, which credits a debt rather than
 /// creating one.
 /// </param>
-/// <param name="JournalVoucherId">The journal raised in the nominal ledger.</param>
+/// <param name="JournalVoucherId">
+/// The journal raised in the nominal ledger. Absent on a sale at no value, which has
+/// nothing to journal.
+/// </param>
 /// <param name="Total">What the customer owes.</param>
 /// <remarks>
 /// All four identifiers, because a sale genuinely produces four things and the caller
@@ -46,5 +49,5 @@ public sealed record PostSalesInvoiceResponse(
     Guid StockDocumentId,
     string StockDocumentNumber,
     Guid? BillId,
-    Guid JournalVoucherId,
+    Guid? JournalVoucherId,
     decimal Total);

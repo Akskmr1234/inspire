@@ -181,7 +181,7 @@ public sealed class TaxAccountSeedingTests
             TimeZoneId = regime == TaxRegime.IndiaGst ? "Asia/Kolkata" : "Asia/Qatar",
             AdministratorUserName = $"{tenantCode}-admin",
             AdministratorEmail = $"{tenantCode}@inspire.local",
-            AdministratorPassword = "Seed-Password-1",
+            AdministratorPassword = "Seed-Pw-1",
         };
 
         await using ErpDbContext context = _fixture.CreateContext(tenantContext);

@@ -365,6 +365,7 @@ function UserDialog({
               type="password"
               autoComplete="new-password"
               value={password}
+              maxLength={12}
               onChange={(event) => setPassword(event.target.value)}
               className="field-input"
             />
@@ -489,6 +490,7 @@ function ResetPasswordDialog({
           autoComplete="new-password"
           autoFocus
           value={password}
+          maxLength={12}
           onChange={(event) => setPassword(event.target.value)}
           className="field-input"
         />

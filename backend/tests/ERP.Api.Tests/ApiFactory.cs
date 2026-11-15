@@ -45,7 +45,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// configuration, exactly as a real deployment's would, and never leaves this
     /// container.
     /// </remarks>
-    public const string AdminPassword = "integration-test-password";
+    public const string AdminPassword = "Integ-Test-1";
 
     /// <summary>The company code supplied at sign-in.</summary>
     public const string TenantCode = "inspire";
