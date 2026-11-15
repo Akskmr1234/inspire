@@ -37,7 +37,13 @@ import {
   type StockTransferSummary,
 } from '@/lib/stockTransfers';
 import { useSession } from '@/stores/session';
-import { Alert, Labelled, StockEntry, trim } from '@/pages/StockOperationsPage';
+import {
+  Alert,
+  Labelled,
+  StockEntry,
+  StockEntryWindow,
+  trim,
+} from '@/pages/StockOperationsPage';
 import { shortcutProps } from '@/lib/shortcuts';
 
 /**
@@ -308,13 +314,11 @@ export function StockTransfersPage(): React.JSX.Element {
       )}
 
       {entering === 'direct' && (
-        <Modal
+        <StockEntryWindow
           title={t('transfers.direct')}
-          icon={<IconTruck className="size-5" />}
-          size="fullscreen"
+          error={error}
           onClose={() => setEntering(null)}
         >
-          {error && <Alert tone="error">{error}</Alert>}
           <StockEntry
             warehouses={places}
             lockedType={StockDocumentType.stockTransfer}
@@ -331,7 +335,7 @@ export function StockTransfersPage(): React.JSX.Element {
               })
             }
           />
-        </Modal>
+        </StockEntryWindow>
       )}
     </>
   );
@@ -626,13 +630,11 @@ function TransferView({
       )}
 
       {dialog === 'dispatch' && (
-        <Modal
+        <StockEntryWindow
           title={t('transfers.dispatch')}
-          icon={<IconTruck className="size-5" />}
-          size="fullscreen"
+          error={error}
           onClose={() => setDialog(null)}
         >
-          {error && <Alert tone="error">{error}</Alert>}
           <StockEntry
             warehouses={warehouses}
             lockedType={StockDocumentType.stockTransfer}
@@ -661,7 +663,7 @@ function TransferView({
               })
             }
           />
-        </Modal>
+        </StockEntryWindow>
       )}
 
       {dialog === 'receive' && (

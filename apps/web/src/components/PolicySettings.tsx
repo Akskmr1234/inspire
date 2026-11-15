@@ -125,6 +125,14 @@ export function PolicySettings({
           />
         </>
       )}
+      {shows('allowZeroValueSales') && (
+        <CheckField
+          label={t('policies.allowZeroValueSales')}
+          checked={policies.allowZeroValueSales}
+          disabled={disabled}
+          onChange={(allowZeroValueSales) => change({ allowZeroValueSales })}
+        />
+      )}
     </div>
   );
 }

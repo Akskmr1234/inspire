@@ -675,7 +675,8 @@ public sealed class BillJobCardCommandHandler : ICommandHandler<BillJobCardComma
         Result terms = invoice.SetSaleTerms(
             card.PaymentMode,
             card.SalesmanLedgerId is { } salesman ? ledgers.GetValueOrDefault(salesman) : null,
-            null);
+            null,
+            request.OnlinePaymentType);
 
         if (terms.IsFailure)
         {

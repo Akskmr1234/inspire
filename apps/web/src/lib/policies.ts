@@ -19,6 +19,8 @@ export interface FirmPolicies {
   readonly transfersRequireApproval: boolean;
   readonly editsRequireApproval: boolean;
   readonly purchasesUpdateProductRates: boolean;
+  /** Whether a sale may be posted at a total of nothing: free samples, replacements. */
+  readonly allowZeroValueSales: boolean;
 }
 
 /** What a firm starts with. */
@@ -28,6 +30,7 @@ export const DEFAULT_POLICIES: FirmPolicies = {
   transfersRequireApproval: false,
   editsRequireApproval: false,
   purchasesUpdateProductRates: false,
+  allowZeroValueSales: false,
 };
 
 /** Reads the firm's policies. */

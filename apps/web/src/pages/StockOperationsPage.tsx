@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconBox } from '@/components/icons';
-import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
+import {
+  InvoiceActions,
+  InvoiceBody,
+  InvoiceCard,
+  InvoiceFields,
+  InvoiceHeader,
+  InvoiceLines,
+  InvoiceWindow,
+  RemoveLineButton,
+} from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
-import { Modal } from '@/components/Modal';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
@@ -410,25 +418,26 @@ export function StockOperationsPage({
         not be lost to a refetch.
       */}
       {entering && (
-        <Modal
+        <StockEntryWindow
           title={
             lockedType === undefined
               ? t('stock.new')
               : t('stock.newOf', { type: t(typeKey(lockedType)).toLowerCase() })
           }
-          icon={<IconBox className="size-5" />}
-          size="fullscreen"
+          error={error}
           onClose={() => setEntering(false)}
         >
-          {error && <Alert tone="error">{error}</Alert>}
-
           {renderEntry ? (
-            renderEntry({
-              warehouses: places,
-              busy: mutation.isPending,
-              onCancel: () => setEntering(false),
-              onSubmit: submit,
-            })
+            <InvoiceBody>
+              <InvoiceCard>
+                {renderEntry({
+                  warehouses: places,
+                  busy: mutation.isPending,
+                  onCancel: () => setEntering(false),
+                  onSubmit: submit,
+                })}
+              </InvoiceCard>
+            </InvoiceBody>
           ) : (
             <StockEntry
               warehouses={places}
@@ -439,7 +448,7 @@ export function StockOperationsPage({
               onSubmit={submit}
             />
           )}
-        </Modal>
+        </StockEntryWindow>
       )}
     </>
   );
@@ -497,7 +506,6 @@ export function StockEntry({
   dispatching = false,
   reasonRequired = false,
   busy,
-  onCancel,
   onSubmit,
 }: {
   readonly warehouses: readonly WarehouseSummary[];
@@ -657,9 +665,12 @@ export function StockEntry({
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
+  const form = useRef<HTMLFormElement>(null);
+
   return (
     <form
-      className="space-y-4"
+      ref={form}
+      className="contents"
       onSubmit={(event) => {
         event.preventDefault();
 
@@ -715,327 +726,381 @@ export function StockEntry({
         });
       }}
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block">
-          <span className="field-label">{t('stock.type')}</span>
-          {/* Shown as text rather than as a select of one where the screen is for
+      <InvoiceBody>
+        <InvoiceCard>
+          <InvoiceFields>
+            <label className="block md:col-span-2">
+              <span className="field-label">{t('stock.type')}</span>
+              {/* Shown as text rather than as a select of one where the screen is for
               one kind: a dropdown that cannot be changed is a control that lies. */}
-          {lockedType === undefined ? (
-            <SearchSelect
-              value={String(type)}
-              onChange={(value) => {
-                const next = Number(value);
-                setType(next);
+              {lockedType === undefined ? (
+                <SearchSelect
+                  value={String(type)}
+                  onChange={(value) => {
+                    const next = Number(value);
+                    setType(next);
 
-                // A destination only means something on a transfer, and the server
-                // refuses one anywhere else.
-                if (!isTransfer(next)) {
-                  setDestinationId('');
-                }
-              }}
-              label={t('stock.type')}
-              // Moving goods between godowns means nothing where there is only one.
-              options={STOCK_TYPES.filter(
-                (candidate) => godownsOn || !isTransfer(candidate),
-              ).map((candidate) => ({
-                value: String(candidate),
-                label: t(typeKey(candidate)),
-              }))}
-            />
-          ) : (
-            <input value={t(typeKey(lockedType))} disabled className="field-input" />
-          )}
-        </label>
+                    // A destination only means something on a transfer, and the server
+                    // refuses one anywhere else.
+                    if (!isTransfer(next)) {
+                      setDestinationId('');
+                    }
+                  }}
+                  label={t('stock.type')}
+                  // Moving goods between godowns means nothing where there is only one.
+                  options={STOCK_TYPES.filter(
+                    (candidate) => godownsOn || !isTransfer(candidate),
+                  ).map((candidate) => ({
+                    value: String(candidate),
+                    label: t(typeKey(candidate)),
+                  }))}
+                />
+              ) : (
+                <input value={t(typeKey(lockedType))} disabled className="field-input" />
+              )}
+            </label>
 
-        <label className="block">
-          <span className="field-label">{t('stock.date')}</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="field-input"
-            required
-          />
-        </label>
-
-        <label
-          className={clsx(
-            'block',
-            !godownsOn && !transfer && !fixedWarehouseId && 'hidden',
-          )}
-        >
-          <span className="field-label">
-            {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
-          </span>
-          {fixedWarehouseId ? (
-            <input
-              value={
-                warehouses.find((warehouse) => warehouse.id === fixedWarehouseId)?.name ??
-                ''
-              }
-              disabled
-              className="field-input"
-            />
-          ) : (
-            <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
-              <SearchSelect
-                value={warehouseId}
-                onChange={setWarehouseId}
-                label={t('stock.warehouse')}
-                placeholder={t('stock.choose')}
-                options={warehouses.map((warehouse) => ({
-                  value: warehouse.id,
-                  label: warehouse.name,
-                }))}
+            <label className="block">
+              <span className="field-label">{t('stock.date')}</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                className="field-input"
+                required
               />
-            </QuickAdd>
-          )}
-        </label>
+            </label>
 
-        {transfer && (
-          <label className="block">
-            <span className="field-label">{t('stock.toWarehouse')}</span>
-            <SearchSelect
-              value={destinationId}
-              onChange={setDestinationId}
-              label={t('stock.toWarehouse')}
-              placeholder={t('stock.choose')}
-              options={warehouses
-                .filter((warehouse) => warehouse.id !== warehouseId)
-                .map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
-            />
-          </label>
-        )}
-
-        {party && (
-          <label className="block">
-            <span className="field-label">
-              {type === StockDocumentType.deliveryNote
-                ? t('notes.customer')
-                : t('notes.supplier')}
-            </span>
-            <QuickAdd
-              kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
-              onCreated={setPartyId}
+            <label
+              className={clsx(
+                'block',
+                !godownsOn && !transfer && !fixedWarehouseId && 'hidden',
+              )}
             >
-              <SearchSelect
-                value={partyId}
-                onChange={setPartyId}
-                label={
-                  type === StockDocumentType.deliveryNote
+              <span className="field-label">
+                {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
+              </span>
+              {fixedWarehouseId ? (
+                <input
+                  value={
+                    warehouses.find((warehouse) => warehouse.id === fixedWarehouseId)
+                      ?.name ?? ''
+                  }
+                  disabled
+                  className="field-input"
+                />
+              ) : (
+                <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+                  <SearchSelect
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                    label={t('stock.warehouse')}
+                    placeholder={t('stock.choose')}
+                    options={warehouses.map((warehouse) => ({
+                      value: warehouse.id,
+                      label: warehouse.name,
+                    }))}
+                  />
+                </QuickAdd>
+              )}
+            </label>
+
+            {transfer && (
+              <label className="block">
+                <span className="field-label">{t('stock.toWarehouse')}</span>
+                <SearchSelect
+                  value={destinationId}
+                  onChange={setDestinationId}
+                  label={t('stock.toWarehouse')}
+                  placeholder={t('stock.choose')}
+                  options={warehouses
+                    .filter((warehouse) => warehouse.id !== warehouseId)
+                    .map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
+                />
+              </label>
+            )}
+
+            {party && (
+              <label className="block md:col-span-2">
+                <span className="field-label">
+                  {type === StockDocumentType.deliveryNote
                     ? t('notes.customer')
-                    : t('notes.supplier')
-                }
-                placeholder={t('stock.choose')}
-                options={(parties.data ?? []).map((candidate) => ({
-                  value: candidate.id,
-                  label: `${candidate.code} — ${candidate.name}`,
-                }))}
+                    : t('notes.supplier')}
+                </span>
+                <QuickAdd
+                  kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
+                  onCreated={setPartyId}
+                >
+                  <SearchSelect
+                    value={partyId}
+                    onChange={setPartyId}
+                    label={
+                      type === StockDocumentType.deliveryNote
+                        ? t('notes.customer')
+                        : t('notes.supplier')
+                    }
+                    placeholder={t('stock.choose')}
+                    options={(parties.data ?? []).map((candidate) => ({
+                      value: candidate.id,
+                      label: `${candidate.code} — ${candidate.name}`,
+                    }))}
+                  />
+                </QuickAdd>
+              </label>
+            )}
+
+            {!dispatching && (
+              <label className="block">
+                <span className="field-label">{t('stock.reference')}</span>
+                <input
+                  value={reference}
+                  onChange={(event) => setReference(event.target.value)}
+                  className="field-input"
+                />
+              </label>
+            )}
+
+            <label className="col-span-2 block">
+              <span className="field-label">
+                {reasonRequired ? t('stock.reason') : t('stock.narration')}
+              </span>
+              <input
+                value={narration}
+                onChange={(event) => setNarration(event.target.value)}
+                required={reasonRequired}
+                placeholder={reasonRequired ? t('stock.reasonPlaceholder') : undefined}
+                className="field-input"
               />
-            </QuickAdd>
-          </label>
-        )}
+            </label>
+          </InvoiceFields>
+        </InvoiceCard>
 
-        {!dispatching && (
-          <label className="block">
-            <span className="field-label">{t('stock.reference')}</span>
-            <input
-              value={reference}
-              onChange={(event) => setReference(event.target.value)}
-              className="field-input"
-            />
-          </label>
-        )}
+        {problem && <Alert tone="error">{problem}</Alert>}
 
-        <label className="block lg:col-span-2">
-          <span className="field-label">
-            {reasonRequired ? t('stock.reason') : t('stock.narration')}
-          </span>
-          <input
-            value={narration}
-            onChange={(event) => setNarration(event.target.value)}
-            required={reasonRequired}
-            placeholder={reasonRequired ? t('stock.reasonPlaceholder') : undefined}
-            className="field-input"
-          />
-        </label>
-      </div>
+        <InvoiceCard
+          fill
+          icon={<IconBox className="size-[18px]" />}
+          title={t('invoice.items')}
+          actions={
+            <button
+              {...shortcutProps('add-line')}
+              type="button"
+              onClick={() => setLines((current) => [...current, emptyLine()])}
+              className="btn-secondary btn-xs"
+            >
+              {t('stock.addLine')}
+            </button>
+          }
+        >
+          <div className="mb-2">
+            <BarcodeScan products={products.data ?? []} onScan={scanned} />
+          </div>
 
-      {problem && <Alert tone="error">{problem}</Alert>}
-
-      <BarcodeScan products={products.data ?? []} onScan={scanned} />
-
-      {/*
+          {/*
         A card a line on a phone, the way the billing screens lay theirs out: the
         table put the product picker across the whole dialog and the quantity behind
         a sideways scroll, with the rate, batch and remarks further off still.
       */}
-      <div className="overflow-x-auto sm:max-h-[60vh] sm:overflow-y-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
-        <table className="line-table">
-          <thead className="bg-surface-2 text-[13px] text-ink-muted">
-            <tr>
-              <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{quantityLabel}</th>
-              {showRate && (
-                <th className="px-3 py-2 text-end font-semibold">{t('stock.rate')}</th>
-              )}
-              {anyBatched && (
-                <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
-              )}
-              {anySerialised && (
-                <th className="px-3 py-2 text-start font-semibold">{t('stock.units')}</th>
-              )}
-              <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
-              <th className="text-end" />
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => (
-              <tr key={line.key} className="border-t border-line">
-                <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
-                  {/*
+          <InvoiceLines>
+            <table className="line-table">
+              <thead className="bg-surface-2 text-[13px] text-ink-muted">
+                <tr>
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.product')}
+                  </th>
+                  <th className="px-3 py-2 text-end font-semibold">{quantityLabel}</th>
+                  {showRate && (
+                    <th className="px-3 py-2 text-end font-semibold">
+                      {t('stock.rate')}
+                    </th>
+                  )}
+                  {anyBatched && (
+                    <th className="px-3 py-2 text-start font-semibold">
+                      {t('stock.batch')}
+                    </th>
+                  )}
+                  {anySerialised && (
+                    <th className="px-3 py-2 text-start font-semibold">
+                      {t('stock.units')}
+                    </th>
+                  )}
+                  <th className="px-3 py-2 text-start font-semibold">
+                    {t('stock.remarks')}
+                  </th>
+                  <th className="text-end" />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line) => (
+                  <tr key={line.key} className="border-t border-line">
+                    <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
+                      {/*
                     A picker that can be typed into, showing what each product is
                     and what is on the shelf. It was a native select of the whole
                     master — tens of thousands of rows that can only be scrolled,
                     with the browser's type-ahead matching the code rather than the
                     name anybody looks a product up by.
                   */}
-                  <SearchSelect
-                    value={line.productId}
-                    onChange={(productId) =>
-                      // The batch goes with the product it belonged to. Keeping it
-                      // would offer a lot of the old product against the new one.
-                      update(line.key, {
-                        productId,
-                        batchId: '',
-                        batchNumber: '',
-                        expiresOn: '',
-                        serialNumbers: '',
-                        warrantyUntil: '',
-                      })
-                    }
-                    options={productOptions}
-                    size="sm"
-                    label={t('stock.product')}
-                    placeholder={t('stock.choose')}
-                  />
-                </td>
-                <td data-label={quantityLabel} className="px-2 py-1">
-                  <input
-                    type="number"
-                    step="any"
-                    value={line.quantity}
-                    onChange={(event) =>
-                      update(line.key, { quantity: event.target.value })
-                    }
-                    className="field-input-sm text-end font-mono tabular-nums"
-                  />
-                </td>
-                {showRate && (
-                  <td data-label={t('stock.rate')} className="px-2 py-1">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={line.rate}
-                      onChange={(event) => update(line.key, { rate: event.target.value })}
-                      placeholder={t('stock.ratePlaceholder')}
-                      className="field-input-sm text-end font-mono tabular-nums"
-                    />
-                  </td>
-                )}
-                {anyBatched && (
-                  <td data-label={t('stock.batch')} className="px-2 py-1">
-                    {batched(line.productId) ? (
-                      <BatchCell
-                        line={line}
-                        type={type}
-                        warehouseId={warehouseId}
-                        onChange={(patch) => update(line.key, patch)}
-                      />
-                    ) : (
-                      <span className="text-xs text-ink-subtle">
-                        {t('stock.batchNone')}
-                      </span>
-                    )}
-                  </td>
-                )}
-                {anySerialised && (
-                  <td data-label={t('stock.units')} className="px-2 py-1">
-                    {serialised(line.productId) ? (
-                      <SerialCell
-                        line={line}
-                        type={type}
-                        warehouseId={warehouseId}
-                        productLabel={
-                          (products.data ?? []).find(
-                            (product) => product.id === line.productId,
-                          )?.description ?? ''
+                      <SearchSelect
+                        value={line.productId}
+                        onChange={(productId) =>
+                          // The batch goes with the product it belonged to. Keeping it
+                          // would offer a lot of the old product against the new one.
+                          update(line.key, {
+                            productId,
+                            batchId: '',
+                            batchNumber: '',
+                            expiresOn: '',
+                            serialNumbers: '',
+                            warrantyUntil: '',
+                          })
                         }
-                        onChange={(patch) => update(line.key, patch)}
+                        options={productOptions}
+                        size="sm"
+                        label={t('stock.product')}
+                        placeholder={t('stock.choose')}
                       />
-                    ) : (
-                      <span className="text-xs text-ink-subtle">
-                        {t('stock.batchNone')}
-                      </span>
+                    </td>
+                    <td data-label={quantityLabel} className="px-2 py-1">
+                      <input
+                        type="number"
+                        step="any"
+                        value={line.quantity}
+                        onChange={(event) =>
+                          update(line.key, { quantity: event.target.value })
+                        }
+                        className="field-input-sm text-end font-mono tabular-nums"
+                      />
+                    </td>
+                    {showRate && (
+                      <td data-label={t('stock.rate')} className="px-2 py-1">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={line.rate}
+                          onChange={(event) =>
+                            update(line.key, { rate: event.target.value })
+                          }
+                          placeholder={t('stock.ratePlaceholder')}
+                          className="field-input-sm text-end font-mono tabular-nums"
+                        />
+                      </td>
                     )}
-                  </td>
-                )}
-                <td data-label={t('stock.remarks')} className="px-2 py-1">
-                  <input
-                    value={line.remarks}
-                    onChange={(event) =>
-                      update(line.key, { remarks: event.target.value })
-                    }
-                    className="field-input-sm"
-                  />
-                </td>
-                <td className="px-2 py-1 text-end">
-                  <RemoveLineButton
-                    disabled={lines.length === 1}
-                    onClick={() =>
-                      setLines((current) =>
-                        current.filter((candidate) => candidate.key !== line.key),
-                      )
-                    }
-                    label={t('stock.removeLine')}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    {anyBatched && (
+                      <td data-label={t('stock.batch')} className="px-2 py-1">
+                        {batched(line.productId) ? (
+                          <BatchCell
+                            line={line}
+                            type={type}
+                            warehouseId={warehouseId}
+                            onChange={(patch) => update(line.key, patch)}
+                          />
+                        ) : (
+                          <span className="text-xs text-ink-subtle">
+                            {t('stock.batchNone')}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {anySerialised && (
+                      <td data-label={t('stock.units')} className="px-2 py-1">
+                        {serialised(line.productId) ? (
+                          <SerialCell
+                            line={line}
+                            type={type}
+                            warehouseId={warehouseId}
+                            productLabel={
+                              (products.data ?? []).find(
+                                (product) => product.id === line.productId,
+                              )?.description ?? ''
+                            }
+                            onChange={(patch) => update(line.key, patch)}
+                          />
+                        ) : (
+                          <span className="text-xs text-ink-subtle">
+                            {t('stock.batchNone')}
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    <td data-label={t('stock.remarks')} className="px-2 py-1">
+                      <input
+                        value={line.remarks}
+                        onChange={(event) =>
+                          update(line.key, { remarks: event.target.value })
+                        }
+                        className="field-input-sm"
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-end">
+                      <RemoveLineButton
+                        disabled={lines.length === 1}
+                        onClick={() =>
+                          setLines((current) =>
+                            current.filter((candidate) => candidate.key !== line.key),
+                          )
+                        }
+                        label={t('stock.removeLine')}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </InvoiceLines>
+        </InvoiceCard>
+      </InvoiceBody>
 
-      <div className="form-actions">
-        <button
-          {...shortcutProps('add-line')}
-          type="button"
-          onClick={() => setLines((current) => [...current, emptyLine()])}
-          className="btn-secondary"
-        >
-          {t('stock.addLine')}
-        </button>
-
-        {!dispatching && !directSave && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={post}
-              onChange={(event) => setPost(event.target.checked)}
-            />
-            {t('stock.postNow')}
-          </label>
-        )}
-
-        <button type="button" onClick={onCancel} className="btn-secondary ms-auto">
-          {t('products.cancel')}
-        </button>
-        <button type="submit" disabled={busy} className="btn-primary">
-          {t('stock.save')}
-        </button>
-      </div>
+      <InvoiceActions
+        start={
+          !dispatching && !directSave ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={post}
+                onChange={(event) => setPost(event.target.checked)}
+              />
+              {t('stock.postNow')}
+            </label>
+          ) : undefined
+        }
+        primary={{
+          label: t('stock.save'),
+          onClick: () => form.current?.requestSubmit(),
+          shortcut: 'save',
+          disabled: busy,
+        }}
+      />
     </form>
+  );
+}
+
+/**
+ * The window a stock document is entered in: the same full-screen window, header and
+ * bar along the foot as a sales invoice, so every transaction reads the same way.
+ */
+export function StockEntryWindow({
+  title,
+  error,
+  onClose,
+  children,
+}: {
+  readonly title: string;
+  readonly error?: string | null;
+  readonly onClose: () => void;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <InvoiceWindow title={title} onClose={onClose}>
+      <InvoiceHeader icon={<IconBox className="size-5" />} title={title} />
+      {error && (
+        <div className="px-3 pt-2.5 sm:px-4">
+          <Alert tone="error">{error}</Alert>
+        </div>
+      )}
+      {children}
+    </InvoiceWindow>
   );
 }
 

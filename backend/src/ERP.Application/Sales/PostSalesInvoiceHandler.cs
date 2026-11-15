@@ -168,18 +168,19 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(loaded.Error);
         }
 
+        FirmPolicies policies = _policies is null
+            ? FirmPolicies.Default
+            : await _policies.GetAsync(firmId, cancellationToken);
+
         // The invoice's own gate first. It is the cheapest of the four checks and the one
         // whose failure means nothing should have been attempted at all.
-        Result posted = invoice.Post(_currentUser.UserId, _clock.UtcNow);
+        Result posted = invoice.Post(
+            _currentUser.UserId, _clock.UtcNow, policies.AllowZeroValueSales);
 
         if (posted.IsFailure)
         {
             return Result.Failure<PostSalesInvoiceResponse>(posted.Error);
         }
-
-        FirmPolicies policies = _policies is null
-            ? FirmPolicies.Default
-            : await _policies.GetAsync(firmId, cancellationToken);
 
         Result withinLimit = await CheckCreditLimitAsync(
             invoice, loaded.Value.Customer, policies, cancellationToken);
@@ -201,16 +202,27 @@ public sealed class PostSalesInvoiceCommandHandler
             return Result.Failure<PostSalesInvoiceResponse>(issued.Error);
         }
 
-        Result<Voucher> journalled = await JournalAsync(
-            invoice, loaded.Value, branchId, cancellationToken);
+        // A sale at no value moves stock and nothing else: the ledger refuses a journal
+        // of nothing, and a bill of nothing could never be settled.
+        Voucher? journal = null;
 
-        if (journalled.IsFailure)
+        if (invoice.Total.Amount > 0m)
         {
-            return Result.Failure<PostSalesInvoiceResponse>(journalled.Error);
+            Result<Voucher> journalled = await JournalAsync(
+                invoice, loaded.Value, branchId, cancellationToken);
+
+            if (journalled.IsFailure)
+            {
+                return Result.Failure<PostSalesInvoiceResponse>(journalled.Error);
+            }
+
+            journal = journalled.Value;
         }
 
-        Result<Bill?> billed = await SettleAsync(
-            invoice, loaded.Value, journalled.Value, request.CreditDays, cancellationToken);
+        Result<Bill?> billed = journal is null
+            ? Result.Success<Bill?>(null)
+            : await SettleAsync(
+                invoice, loaded.Value, journal, request.CreditDays, cancellationToken);
 
         if (billed.IsFailure)
         {
@@ -226,7 +238,7 @@ public sealed class PostSalesInvoiceCommandHandler
         }
 
         Result recorded = invoice.RecordPosting(
-            issued.Value.Id, billed.Value?.Id, journalled.Value.Id);
+            issued.Value.Id, billed.Value?.Id, journal?.Id);
 
         if (recorded.IsFailure)
         {
@@ -251,7 +263,7 @@ public sealed class PostSalesInvoiceCommandHandler
             issued.Value.Id.Value,
             issued.Value.Number,
             billed.Value?.Id.Value,
-            journalled.Value.Id.Value,
+            journal?.Id.Value,
             invoice.Total.Amount));
     }
 

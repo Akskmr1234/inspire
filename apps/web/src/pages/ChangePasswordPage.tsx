@@ -164,7 +164,8 @@ export function ChangePasswordPage(): React.JSX.Element {
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   autoComplete="new-password"
-                  minLength={12}
+                  minLength={6}
+                  maxLength={12}
                   required
                 />
                 <p className="field-hint">{t('changePassword.policy')}</p>
@@ -181,7 +182,8 @@ export function ChangePasswordPage(): React.JSX.Element {
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
-                  minLength={12}
+                  minLength={6}
+                  maxLength={12}
                   required
                 />
               </div>

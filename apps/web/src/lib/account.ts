@@ -100,12 +100,12 @@ export function describeDevice(userAgent: string | null): DeviceDescription {
 export function passwordStrength(password: string): 0 | 1 | 2 | 3 | 4 {
   if (password.length === 0) return 0;
   let score = 0;
+  if (password.length >= 8) score += 1;
   if (password.length >= 12) score += 1;
-  if (password.length >= 16) score += 1;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
   if (/\d/.test(password)) score += 0.5;
   if (/[^A-Za-z0-9]/.test(password)) score += 0.5;
-  if (password.length < 12) score = Math.min(score, 1);
+  if (password.length < 8) score = Math.min(score, 1);
   return Math.max(1, Math.min(4, Math.round(score))) as 1 | 2 | 3 | 4;
 }
 

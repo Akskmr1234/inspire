@@ -202,7 +202,7 @@ public sealed class EditApprovalEndpointTests
         Guid roleId = (await role.Content.ReadFromJsonAsync<RoleSummary>())!.RoleId;
 
         string userName = $"clerk{tag}";
-        string password = $"Clerk-{tag}-Password!";
+        string password = $"C-{tag}!";
 
         HttpResponseMessage user = await admin.PostAsJsonAsync("/api/v1/platform/users", new
         {

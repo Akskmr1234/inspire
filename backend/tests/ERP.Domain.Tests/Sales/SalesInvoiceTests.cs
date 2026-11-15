@@ -287,6 +287,17 @@ public sealed class SalesInvoiceTests
     }
 
     [Fact]
+    public void An_invoice_at_no_value_posts_when_the_firm_allows_it()
+    {
+        SalesInvoice invoice = Draft().Value;
+        UnitOfMeasure each = BaseUnit();
+        invoice.AddLine(Stocked(each), each, 1m, 1m, 0m, Assessed(0m, 0m));
+
+        invoice.Post(User, Now).Error.Code.ShouldBe("SalesInvoice.NothingToBill");
+        invoice.Post(User, Now, allowZeroTotal: true).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
     public void A_posted_invoice_is_closed_to_further_change()
     {
         SalesInvoice invoice = Posted();

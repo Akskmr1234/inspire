@@ -495,6 +495,19 @@ function ServiceSaleForm({
   );
   const wantsBank =
     paymentMode === SalesPaymentMode.card || paymentMode === SalesPaymentMode.online;
+
+  // How an online payment was made, from the online payment master's active types;
+  // picking one moves the money to the bank it settles into.
+  const [onlineType, setOnlineType] = useState('');
+  const onlineOn = paymentMode === SalesPaymentMode.online;
+  const onlineChoices = settings.onlinePaymentTypes.filter(
+    (type) => type.active && type.name.trim() !== '',
+  );
+  const chooseOnline = (name: string): void => {
+    setOnlineType(name);
+    const settles = onlineChoices.find((type) => type.name === name)?.ledgerId;
+    if (settles) setReceivedInto(settles);
+  };
   const intoOptions = moneyAccounts.filter((ledger) =>
     wantsBank ? ledger.kind === LedgerKind.bank : ledger.kind === LedgerKind.cash,
   );
@@ -730,7 +743,13 @@ function ServiceSaleForm({
       const invoice = await billJobCard(
         id,
         account || null,
-        paid ? { paidInFull: true, receivedIntoLedgerId: intoId } : {},
+        paid
+          ? {
+              paidInFull: true,
+              receivedIntoLedgerId: intoId,
+              ...(onlineOn && onlineType !== '' ? { onlinePaymentType: onlineType } : {}),
+            }
+          : {},
       );
 
       try {
@@ -847,6 +866,24 @@ function ServiceSaleForm({
               <option value={SalesPaymentMode.credit}>{t('paymentModes.credit')}</option>
             </select>
           </Field>
+          {onlineOn && onlineChoices.length > 0 && (
+            <Field label={t('sales.onlineType')}>
+              <select
+                aria-label={t('sales.onlineType')}
+                value={onlineType}
+                disabled={locked}
+                onChange={(event) => chooseOnline(event.target.value)}
+                className="field-input-sm"
+              >
+                <option value="">—</option>
+                {onlineChoices.map((type) => (
+                  <option key={type.id} value={type.name}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           {taxOn && (
             <Field label={t('serviceSales.mode')}>
               <select

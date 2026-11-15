@@ -89,7 +89,7 @@ public sealed class BranchEndpointTests
 
         Guid role = (await admin.GetFromJsonAsync<List<RoleSummary>>("/api/v1/platform/roles"))![0].RoleId;
         string userName = $"branch{suffix}";
-        const string password = "Branch-Clerk-Password-1!";
+        const string password = "Branch-Pw1!";
 
         HttpResponseMessage created = await admin.PostAsJsonAsync(
             Users,

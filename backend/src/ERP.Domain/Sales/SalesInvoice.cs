@@ -995,13 +995,14 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <summary>Marks the invoice posted, once every invariant it owns is satisfied.</summary>
     /// <param name="postedBy">The user posting it.</param>
     /// <param name="nowUtc">The current instant.</param>
+    /// <param name="allowZeroTotal">Whether the firm allows a sale at no value.</param>
     /// <returns>Success, or the first invariant that fails.</returns>
     /// <remarks>
     /// The stock, the bill and the journal are the handler's work. This is the gate that
     /// decides whether they may happen: an invoice that cannot pass these checks never
     /// reaches a stock position.
     /// </remarks>
-    public Result Post(UserId postedBy, DateTimeOffset nowUtc)
+    public Result Post(UserId postedBy, DateTimeOffset nowUtc, bool allowZeroTotal = false)
     {
         if (Status != SalesInvoiceStatus.Draft)
         {
@@ -1017,8 +1018,10 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
         // An invoice for nothing is not a sale. It would raise a bill of nothing, issue
         // stock against no consideration, and sit in a debtors report for ever as a
-        // balance nobody can collect or write off.
-        if (Total.Amount <= 0m)
+        // balance nobody can collect or write off. A firm can still choose to allow it
+        // (free samples, replacements given at no charge); it then issues the stock and
+        // raises no bill or journal. Below zero is never allowed.
+        if (Total.Amount < 0m || (Total.Amount == 0m && !allowZeroTotal))
         {
             return Result.Failure(Error.BusinessRule(
                 "SalesInvoice.NothingToBill",
@@ -1066,7 +1069,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     public Result RecordPosting(
         StockDocumentId stockDocumentId,
         BillId? billId,
-        VoucherId journalVoucherId)
+        VoucherId? journalVoucherId)
     {
         if (Status != SalesInvoiceStatus.Posted)
         {

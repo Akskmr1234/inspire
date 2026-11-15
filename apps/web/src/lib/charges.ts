@@ -202,12 +202,20 @@ export function chargeRows(
   nonTax: boolean,
   carried: readonly { readonly ledgerId: string; readonly amount: string }[],
   ledgers: readonly LedgerSummary[],
+  allConfigured = false,
 ): readonly ChargeRow[] {
+  // With `allConfigured`, every ledger set up for the document whose ledger is still
+  // active, under its name alone: the master decides what the bill shows.
+  const active = new Set(ledgers.map((ledger) => ledger.ledgerId));
   const rows: ChargeRow[] = (setup ? enterableCharges(setup, nonTax) : [])
-    .filter((charge) => charge.isDefault)
+    .filter((charge) =>
+      allConfigured
+        ? ledgers.length === 0 || active.has(charge.ledgerId)
+        : charge.isDefault,
+    )
     .map((charge) => ({
       ledgerId: charge.ledgerId,
-      label: `${charge.code} — ${charge.name}`,
+      label: allConfigured ? charge.name : `${charge.code} — ${charge.name}`,
       adds: charge.isAddition,
       removable: false,
     }));
@@ -246,8 +254,9 @@ export function chargeAmounts(
   nonTax: boolean,
   carried: readonly { readonly ledgerId: string; readonly amount: string }[],
   ledgers: readonly LedgerSummary[],
+  allConfigured = false,
 ): readonly { readonly label: string; readonly amount: number }[] {
-  return chargeRows(setup, nonTax, carried, ledgers).flatMap((row) => {
+  return chargeRows(setup, nonTax, carried, ledgers, allConfigured).flatMap((row) => {
     const amount = Number(
       carried.find((charge) => charge.ledgerId === row.ledgerId)?.amount ?? '',
     );

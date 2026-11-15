@@ -76,7 +76,7 @@ public sealed class FirmEndpointTests
 
         Guid role = (await admin.GetFromJsonAsync<List<RoleSummary>>("/api/v1/platform/roles"))![0].RoleId;
         string userName = $"firm{suffix}";
-        const string password = "Firm-Clerk-Password-1!";
+        const string password = "Firm-Pw-1!";
 
         HttpResponseMessage created = await admin.PostAsJsonAsync(
             "/api/v1/platform/users",

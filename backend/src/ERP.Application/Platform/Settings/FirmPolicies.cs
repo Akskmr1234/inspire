@@ -50,6 +50,10 @@ public enum CreditLimitPolicy
 /// product, not only those costed at their last purchase rate - and rebuilds the retail
 /// rate of any product that carries a profit percentage.
 /// </param>
+/// <param name="AllowZeroValueSales">
+/// Whether a sale may be posted at a total of nothing - a free sample or a replacement -
+/// issuing the stock without raising a bill or a journal.
+/// </param>
 /// <remarks>
 /// Kept apart from the screens' preferences, which the server stores without reading. These
 /// change what a document is allowed to do, so the server validates them when they are
@@ -61,7 +65,8 @@ public sealed record FirmPolicies(
     CreditLimitPolicy CreditLimit = CreditLimitPolicy.Warn,
     bool TransfersRequireApproval = false,
     bool EditsRequireApproval = false,
-    bool PurchasesUpdateProductRates = false)
+    bool PurchasesUpdateProductRates = false,
+    bool AllowZeroValueSales = false)
 {
     /// <summary>The key the policies are stored under.</summary>
     public const string Key = "policies";
