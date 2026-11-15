@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { PageHeading } from '@/components/PageHeading';
@@ -50,6 +50,39 @@ export function UsersPage(): React.JSX.Element {
 
   const roleName = (id: string): string =>
     roles.data?.find((role) => role.roleId === id)?.name ?? '…';
+
+  // Each branch's firm, so a user's firms follow from the branches they hold.
+  const [firmFilter, setFirmFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const branchIndex = useMemo(() => {
+    const index = new Map<string, { firmId: string; firm: string; branch: string }>();
+    for (const firm of firms.data ?? []) {
+      for (const branch of firm.branches) {
+        index.set(branch.branchId, {
+          firmId: firm.firmId,
+          firm: firm.name,
+          branch: branch.name,
+        });
+      }
+    }
+    return index;
+  }, [firms.data]);
+  const placesOf = (user: UserSummary): { firms: string; branches: string } => {
+    const held = user.branchIds.flatMap((id) => branchIndex.get(id) ?? []);
+    return {
+      firms: [...new Set(held.map((place) => place.firm))].join(', ') || '—',
+      branches: held.map((place) => place.branch).join(', ') || '—',
+    };
+  };
+  const filterBranches =
+    firms.data?.find((firm) => firm.firmId === firmFilter)?.branches ??
+    (firms.data ?? []).flatMap((firm) => firm.branches);
+  const shown = (users.data ?? []).filter(
+    (user) =>
+      (firmFilter === '' ||
+        user.branchIds.some((id) => branchIndex.get(id)?.firmId === firmFilter)) &&
+      (branchFilter === '' || user.branchIds.includes(branchFilter)),
+  );
 
   const done = (message: string): void => {
     setEditing(null);
@@ -115,6 +148,46 @@ export function UsersPage(): React.JSX.Element {
         <p className="alert-error">{users.error.detail || users.error.code}</p>
       )}
 
+      {users.data && (firms.data?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap items-end gap-3">
+          {(firms.data?.length ?? 0) > 1 && (
+            <label className="field w-full sm:w-56">
+              <span className="field-label">{t('users.firm')}</span>
+              <select
+                value={firmFilter}
+                onChange={(event) => {
+                  setFirmFilter(event.target.value);
+                  setBranchFilter('');
+                }}
+                className="field-input-sm"
+              >
+                <option value="">{t('users.allFirms')}</option>
+                {firms.data?.map((firm) => (
+                  <option key={firm.firmId} value={firm.firmId}>
+                    {firm.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="field w-full sm:w-56">
+            <span className="field-label">{t('users.branch')}</span>
+            <select
+              value={branchFilter}
+              onChange={(event) => setBranchFilter(event.target.value)}
+              className="field-input-sm"
+            >
+              <option value="">{t('users.allBranches')}</option>
+              {filterBranches.map((branch) => (
+                <option key={branch.branchId} value={branch.branchId}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
       {users.data && (
         <>
           {/*
@@ -125,7 +198,7 @@ export function UsersPage(): React.JSX.Element {
             sideways drag to find.
           */}
           <ul className="grid gap-2 sm:grid-cols-2 xl:hidden">
-            {users.data.map((user) => (
+            {shown.map((user) => (
               <li key={user.userId} className="card card-body space-y-3 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -157,6 +230,18 @@ export function UsersPage(): React.JSX.Element {
                     {user.roleIds.map(roleName).join(', ') || '—'}
                   </dd>
                   <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                    {t('users.firm')}
+                  </dt>
+                  <dd className="min-w-0 text-end text-ink [overflow-wrap:anywhere]">
+                    {placesOf(user).firms}
+                  </dd>
+                  <dt className="text-xs tracking-wide text-ink-muted uppercase">
+                    {t('users.branch')}
+                  </dt>
+                  <dd className="min-w-0 text-end text-ink [overflow-wrap:anywhere]">
+                    {placesOf(user).branches}
+                  </dd>
+                  <dt className="text-xs tracking-wide text-ink-muted uppercase">
                     {t('users.lastLogin')}
                   </dt>
                   <dd className="min-w-0 text-end text-ink-muted">{lastLogin(user)}</dd>
@@ -179,18 +264,22 @@ export function UsersPage(): React.JSX.Element {
                   <th className="text-start">{t('users.displayName')}</th>
                   <th className="text-start">{t('users.email')}</th>
                   <th className="text-start">{t('users.roles')}</th>
+                  <th className="text-start">{t('users.firm')}</th>
+                  <th className="text-start">{t('users.branch')}</th>
                   <th className="text-start">{t('users.status')}</th>
                   <th className="text-start">{t('users.lastLogin')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {users.data.map((user) => (
+                {shown.map((user) => (
                   <tr key={user.userId}>
                     <td className="font-mono">{user.userName}</td>
                     <td>{user.displayName}</td>
                     <td className="text-ink-muted">{user.email}</td>
                     <td>{user.roleIds.map(roleName).join(', ')}</td>
+                    <td>{placesOf(user).firms}</td>
+                    <td className="text-ink-muted">{placesOf(user).branches}</td>
                     <td>
                       <span className="inline-flex flex-wrap items-center gap-1">
                         <ActiveBadge isActive={user.isActive} />
@@ -277,6 +366,14 @@ function UserDialog({
     user?.branchIds ?? null,
   );
   const branches = firms?.flatMap((firm) => firm.branches);
+  const [viewFirm, setViewFirm] = useState(
+    () =>
+      firms?.find((firm) =>
+        firm.branches.some((branch) => user?.branchIds.includes(branch.branchId)),
+      )?.firmId ??
+      firms?.[0]?.firmId ??
+      '',
+  );
   const chosenBranches =
     branchIds ??
     (firms ?? [])
@@ -398,35 +495,53 @@ function UserDialog({
       {firms && branches && branches.length > 0 && (
         <fieldset className="space-y-1.5">
           <legend className="field-label">{t('users.branches')}</legend>
-          {firms.map((firm) => (
-            <div key={firm.firmId} className="space-y-1">
-              {firms.length > 1 && (
-                <p className="text-xs font-semibold text-ink-muted">
-                  {firm.name}
-                  {!firm.isActive ? ` · ${t('branches.inactive')}` : ''}
-                </p>
-              )}
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {firm.branches.map((branch) => (
-                  <label key={branch.branchId} className="field-check items-start">
-                    <input
-                      type="checkbox"
-                      checked={chosenBranches.includes(branch.branchId)}
-                      onChange={() => toggleBranch(branch.branchId)}
-                    />
-                    <span>
-                      <span className="font-medium">{branch.name}</span>
-                      <span className="block text-xs text-ink-muted">
-                        {branch.code}
-                        {branch.isHeadOffice ? ` · ${t('branches.headOffice')}` : ''}
-                        {!branch.isActive ? ` · ${t('branches.inactive')}` : ''}
+          {/* Choosing a firm narrows the list to its branches; ticks elsewhere stay. */}
+          {firms.length > 1 && (
+            <select
+              aria-label={t('users.firm')}
+              value={viewFirm}
+              onChange={(event) => setViewFirm(event.target.value)}
+              className="field-input-sm w-full sm:w-64"
+            >
+              {firms.map((firm) => {
+                const held = firm.branches.filter((branch) =>
+                  chosenBranches.includes(branch.branchId),
+                ).length;
+                return (
+                  <option key={firm.firmId} value={firm.firmId}>
+                    {firm.name}
+                    {held > 0 ? ` (${held})` : ''}
+                    {!firm.isActive ? ` · ${t('branches.inactive')}` : ''}
+                  </option>
+                );
+              })}
+            </select>
+          )}
+          {firms
+            .filter((firm) => firms.length < 2 || firm.firmId === viewFirm)
+            .map((firm) => (
+              <div key={firm.firmId} className="space-y-1">
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {firm.branches.map((branch) => (
+                    <label key={branch.branchId} className="field-check items-start">
+                      <input
+                        type="checkbox"
+                        checked={chosenBranches.includes(branch.branchId)}
+                        onChange={() => toggleBranch(branch.branchId)}
+                      />
+                      <span>
+                        <span className="font-medium">{branch.name}</span>
+                        <span className="block text-xs text-ink-muted">
+                          {branch.code}
+                          {branch.isHeadOffice ? ` · ${t('branches.headOffice')}` : ''}
+                          {!branch.isActive ? ` · ${t('branches.inactive')}` : ''}
+                        </span>
                       </span>
-                    </span>
-                  </label>
-                ))}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
           <span className="field-hint">{t('users.branchesHint')}</span>
         </fieldset>
       )}

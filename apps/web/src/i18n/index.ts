@@ -2658,6 +2658,10 @@ const en = {
     updatedNotice: 'Branch {{name}} saved.',
   },
   users: {
+    firm: 'Firm',
+    branch: 'Branch',
+    allFirms: 'All firms',
+    allBranches: 'All branches',
     branches: 'Branches',
     branchesHint: 'The branches this user may sign in to and switch between.',
     title: 'Users',
@@ -5703,6 +5707,10 @@ const ar = {
     updatedNotice: 'تم حفظ الفرع {{name}}.',
   },
   users: {
+    firm: 'الشركة',
+    branch: 'الفرع',
+    allFirms: 'كل الشركات',
+    allBranches: 'كل الفروع',
     branches: 'الفروع',
     branchesHint: 'الفروع التي يمكن لهذا المستخدم الدخول إليها والتنقل بينها.',
     title: 'المستخدمون',
