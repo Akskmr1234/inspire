@@ -248,6 +248,7 @@ export function billJobCard(
     readonly amountReceived?: number;
     readonly receivedIntoLedgerId?: string | null;
     readonly paymentReference?: string | null;
+    readonly onlinePaymentType?: string | null;
   } = {},
 ): Promise<{
   readonly salesInvoiceId: string;

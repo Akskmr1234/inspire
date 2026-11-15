@@ -410,7 +410,7 @@ function DefaultPicker({
 }
 
 /** The firm's ledgers, every one, for the pickers that choose a default account. */
-function useAllLedgers(): readonly LedgerSummary[] {
+export function useAllLedgers(): readonly LedgerSummary[] {
   const ledgers = useQuery<readonly LedgerSummary[], ApiError>({
     queryKey: ['ledgers', false],
     queryFn: () => listLedgers(false),
@@ -533,7 +533,12 @@ export function SalesSettings(): React.JSX.Element {
       </div>
 
       <SettingsCard title={t('prefs.onlineTypesTitle')} wide>
-        <OnlinePaymentTypes ledgers={ledgers} />
+        <Link
+          to="/masters/online-payment-types"
+          className="text-sm font-medium underline"
+        >
+          {t('prefs.manageOnlineTypes')}
+        </Link>
       </SettingsCard>
 
       <SettingsCard title={t('prefs.salesDefaultsTitle')}>
@@ -611,7 +616,16 @@ type SalesScreenSetting =
  * firm adds to, renames and retires: a sale paid online offers the active ones, and
  * each can name the bank account it settles into.
  */
-function OnlinePaymentTypes({
+/** Providers offered with one click on the online payment types master. */
+const COMMON_ONLINE_PROVIDERS = [
+  'Google Pay',
+  'PhonePe',
+  'Paytm',
+  'Talabat Pay',
+  'Apple Pay',
+];
+
+export function OnlinePaymentTypes({
   ledgers,
 }: {
   readonly ledgers: readonly LedgerSummary[];
@@ -632,6 +646,22 @@ function OnlinePaymentTypes({
   const taken = types.some(
     (type) => type.name.trim().toLowerCase() === typed.toLowerCase(),
   );
+
+  // The providers most shops take, added in one go; any already listed are skipped.
+  const missingCommon = COMMON_ONLINE_PROVIDERS.filter(
+    (provider) =>
+      !types.some((type) => type.name.trim().toLowerCase() === provider.toLowerCase()),
+  );
+  const addCommon = (): void =>
+    save([
+      ...types,
+      ...missingCommon.map((provider) => ({
+        id: crypto.randomUUID(),
+        name: provider,
+        ledgerId: '',
+        active: true,
+      })),
+    ]);
 
   const add = (): void => {
     if (typed === '' || taken) return;
@@ -744,6 +774,11 @@ function OnlinePaymentTypes({
           <IconPlus className="size-3.5" />
           {t('prefs.addOnlineType')}
         </button>
+        {missingCommon.length > 0 && (
+          <button type="button" onClick={addCommon} className="btn-ghost btn-sm">
+            {t('prefs.addCommonOnlineTypes')}
+          </button>
+        )}
       </div>
       {taken && <p className="text-xs text-red-600">{t('prefs.onlineTypeTaken')}</p>}
     </>

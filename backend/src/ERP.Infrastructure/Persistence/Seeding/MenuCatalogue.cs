@@ -217,6 +217,16 @@ public static class MenuCatalogue
                             "accounting",
                             "/accounting/employees",
                             "accounting:ledger:view"),
+
+                        // The ways a customer pays online - Google Pay, PhonePe - and
+                        // the bank each settles into, offered when a sale is paid online.
+                        new(
+                            "masters.online-payment-types",
+                            "Online payment types",
+                            "طرق الدفع الإلكتروني",
+                            "accounting",
+                            "/masters/online-payment-types",
+                            "accounting:ledger:view"),
                     ]),
 
                 new(

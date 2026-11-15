@@ -193,7 +193,8 @@ public sealed class JobCardsController : ApiControllerBase
                 request?.PaidInFull ?? false,
                 request?.AmountReceived ?? 0m,
                 request?.ReceivedIntoLedgerId,
-                request?.PaymentReference),
+                request?.PaymentReference,
+                request?.OnlinePaymentType),
             cancellationToken);
 
         return result.IsSuccess
@@ -263,10 +264,12 @@ public sealed record JobCardCancelRequest([property: JsonRequired] string Reason
 /// <param name="AmountReceived">What they paid, where not the whole bill.</param>
 /// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
 /// <param name="PaymentReference">The card slip's approval code or an online payment's ID.</param>
+/// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe.</param>
 public sealed record JobCardBillRequest(
     Guid? CustomerLedgerId = null,
     DateOnly? Date = null,
     bool PaidInFull = false,
     decimal AmountReceived = 0m,
     Guid? ReceivedIntoLedgerId = null,
-    string? PaymentReference = null);
+    string? PaymentReference = null,
+    string? OnlinePaymentType = null);

@@ -86,6 +86,7 @@ public sealed record CancelJobCardCommand(Guid JobCardId, string Reason) : IComm
 /// <param name="AmountReceived">What they paid, where not the whole bill.</param>
 /// <param name="ReceivedIntoLedgerId">The cash or bank account it went into.</param>
 /// <param name="PaymentReference">The card slip's approval code or an online payment's ID.</param>
+/// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe.</param>
 public sealed record BillJobCardCommand(
     Guid JobCardId,
     Guid? CustomerLedgerId = null,
@@ -93,7 +94,8 @@ public sealed record BillJobCardCommand(
     bool PaidInFull = false,
     decimal AmountReceived = 0m,
     Guid? ReceivedIntoLedgerId = null,
-    string? PaymentReference = null)
+    string? PaymentReference = null,
+    string? OnlinePaymentType = null)
     : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>Lists job cards.</summary>
