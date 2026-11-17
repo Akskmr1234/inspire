@@ -229,6 +229,8 @@ export interface AppSettings {
   readonly showSalesNarration: boolean;
   /** Whether a sale shows the barcode box. */
   readonly showSalesScan: boolean;
+  /** Whether the sales window shows the touch product catalog. */
+  readonly showTouchCatalog: boolean;
   /** Whether a sale can be filled from a quotation, an order or a purchase. */
   readonly allowLoadFrom: boolean;
   /** Whether a sale can be put on hold and taken up again later in the day. */
@@ -339,6 +341,7 @@ const DEFAULTS: AppSettings = {
   showBillingName: true,
   showSalesNarration: true,
   showSalesScan: true,
+  showTouchCatalog: false,
   allowLoadFrom: true,
   allowHold: true,
   allowRateChange: true,

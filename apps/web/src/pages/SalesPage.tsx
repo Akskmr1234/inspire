@@ -18,6 +18,7 @@ import {
   IconClock,
   IconCreditCard,
   IconDocument,
+  IconGrid,
   IconPause,
   IconPercent,
   IconPrinter,
@@ -88,6 +89,7 @@ import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
+import { TouchProductGrid } from '@/components/product/TouchProductGrid';
 import {
   fetchProductBatches,
   fetchProductSerials,
@@ -1232,6 +1234,47 @@ function EntryDialog({
     [products.data, onHand, lines, kind],
   );
 
+  const posProducts = useMemo(
+    () =>
+      (products.data ?? []).filter(
+        (product) => product.isActive && (!product.hideInPos || isReturn(kind)),
+      ),
+    [products.data, kind],
+  );
+
+  const quantitiesInCart = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const line of lines) {
+      if (line.productId) {
+        const current = counts.get(line.productId) ?? 0;
+        counts.set(line.productId, current + (Number(line.quantity) || 0));
+      }
+    }
+    return counts;
+  }, [lines]);
+
+  const [showTouchGrid, setShowTouchGrid] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('erp.sales.touchGrid');
+      if (stored !== null) return stored === 'true';
+    } catch {
+      // Fall through to settings
+    }
+    return settings.showTouchCatalog === true;
+  });
+
+  const toggleTouchGrid = (): void => {
+    setShowTouchGrid((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('erp.sales.touchGrid', String(next));
+      } catch {
+        // Ignore storage error
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (warehouseId !== '' || !warehouses.data) {
       return;
@@ -2284,6 +2327,21 @@ function EntryDialog({
           meta={t('invoice.itemCount', { count: itemCount })}
           actions={
             <>
+              <button
+                type="button"
+                onClick={toggleTouchGrid}
+                className={clsx(
+                  'btn-xs flex items-center gap-1.5 transition-colors',
+                  showTouchGrid
+                    ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-500'
+                    : 'btn-secondary',
+                )}
+                title={`${t('sales.touchCatalogTitle')} (${shortcutFor('catalog') || 'Alt+K'})`}
+                {...shortcutProps('catalog')}
+              >
+                <IconGrid className="size-3.5" />
+                <span className="hidden sm:inline">{t('sales.touchCatalog')}</span>
+              </button>
               <AddLineButton onClick={addLine} />
               {lineColumns.picker}
             </>
@@ -2292,153 +2350,179 @@ function EntryDialog({
           {errors['lines'] && (
             <p className="field-message-error mb-2">{errors['lines']}</p>
           )}
-          <InvoiceLines>
-            <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
-              <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
-                <tr>
-                  <LineNumberHeader />
-                  <th className="px-3 py-2.5 text-start font-medium">
-                    {t('sales.product')}
-                  </th>
-                  <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
-                  <th className="px-2 py-2.5 text-end font-medium">
-                    {t('sales.quantity')}
-                  </th>
-                  {enableFreeQty && lineColumns.shows('freeQuantity') && (
-                    <th className="px-2 py-2.5 text-end font-medium">
-                      {t('sales.freeQuantity')}
-                    </th>
-                  )}
-                  <th className="px-2 py-2.5 text-end font-medium">
-                    {t('sales.rate')}
-                    {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
-                  </th>
-                  {enableDiscount && lineColumns.shows('discount') && (
-                    <th className="px-2 py-2.5 text-end font-medium">
-                      {t('sales.itemDiscount')}
-                    </th>
-                  )}
-                  {lineColumns.shows('taxPercent') && (
-                    <th className="px-2 py-2.5 text-end font-medium">
-                      {t('sales.taxPercent')}
-                    </th>
-                  )}
-                  {lineColumns.shows('taxAmount') && (
-                    <th className="px-2 py-2.5 text-end font-medium">
-                      {t('sales.taxAmount')}
-                    </th>
-                  )}
-                  <th className="px-2 py-2.5 text-end font-medium">{t('sales.net')}</th>
-                  {lineColumns.shows('lineTotal') && (
-                    <th className="px-2 py-2.5 text-end font-medium">
-                      {t('sales.lineTotal')}
-                    </th>
-                  )}
-                  <th className="line-action-column rounded-e-lg" />
-                </tr>
-              </thead>
+          <div
+            className={clsx(
+              'min-w-0',
+              showTouchGrid
+                ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_360px] xl:grid-cols-[minmax(0,1.3fr)_440px] 2xl:grid-cols-[minmax(0,1.4fr)_500px] gap-4 items-stretch lg:flex-1 lg:min-h-0'
+                : 'lg:flex lg:flex-1 lg:flex-col lg:min-h-0',
+            )}
+          >
+            <div className="min-w-0 flex flex-col lg:flex-1 lg:min-h-0">
+              <InvoiceLines>
+                <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
+                  <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
+                    <tr>
+                      <LineNumberHeader />
+                      <th className="px-3 py-2.5 text-start font-medium">
+                        {t('sales.product')}
+                      </th>
+                      <ProductDetailHeaders shows={lineColumns.shows} labels={t} />
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('sales.quantity')}
+                      </th>
+                      {enableFreeQty && lineColumns.shows('freeQuantity') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.freeQuantity')}
+                        </th>
+                      )}
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('sales.rate')}
+                        {reverseCalc ? ` (${t('sales.inclusiveRate')})` : ''}
+                      </th>
+                      {enableDiscount && lineColumns.shows('discount') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.itemDiscount')}
+                        </th>
+                      )}
+                      {lineColumns.shows('taxPercent') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.taxPercent')}
+                        </th>
+                      )}
+                      {lineColumns.shows('taxAmount') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.taxAmount')}
+                        </th>
+                      )}
+                      <th className="px-2 py-2.5 text-end font-medium">
+                        {t('sales.net')}
+                      </th>
+                      {lineColumns.shows('lineTotal') && (
+                        <th className="px-2 py-2.5 text-end font-medium">
+                          {t('sales.lineTotal')}
+                        </th>
+                      )}
+                      <th className="line-action-column rounded-e-lg" />
+                    </tr>
+                  </thead>
 
-              <tbody ref={lineAttention.bodyRef}>
-                {lines.map((line, index) => (
-                  <LineRow
-                    key={index}
-                    number={index + 1}
-                    line={line}
-                    products={products.data ?? []}
-                    productOptions={productOptions}
-                    warehouseId={warehouseId}
-                    serialDirection={isReturn(kind) ? 'back' : 'out'}
-                    rateType={rateType}
-                    customerId={customerId}
-                    modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
-                    productTax={taxMode === 'TAX'}
-                    reverseCalc={reverseCalc}
-                    autoBatch={autoBatch}
-                    enableFreeQty={enableFreeQty}
-                    enableDiscount={enableDiscount}
-                    rateLocked={!rateChange}
-                    shows={lineColumns.shows}
-                    columnCount={
-                      4 +
-                      lineColumnList.filter(
-                        (column) =>
-                          column.key !== 'product' &&
-                          column.key !== 'quantity' &&
-                          lineColumns.shows(column.key),
-                      ).length
-                    }
-                    errors={lineErrors[index] ?? {}}
-                    removable={lines.length > 1}
-                    onChange={(patch) => change(index, patch)}
-                    onRemove={() =>
-                      setLines((previous) => previous.filter((_, at) => at !== index))
-                    }
+                  <tbody ref={lineAttention.bodyRef}>
+                    {lines.map((line, index) => (
+                      <LineRow
+                        key={index}
+                        number={index + 1}
+                        line={line}
+                        products={products.data ?? []}
+                        productOptions={productOptions}
+                        warehouseId={warehouseId}
+                        serialDirection={isReturn(kind) ? 'back' : 'out'}
+                        rateType={rateType}
+                        customerId={customerId}
+                        modeRate={modeTaxRate(taxMode, settings.defaultTaxRate)}
+                        productTax={taxMode === 'TAX'}
+                        reverseCalc={reverseCalc}
+                        autoBatch={autoBatch}
+                        enableFreeQty={enableFreeQty}
+                        enableDiscount={enableDiscount}
+                        rateLocked={!rateChange}
+                        shows={lineColumns.shows}
+                        columnCount={
+                          4 +
+                          lineColumnList.filter(
+                            (column) =>
+                              column.key !== 'product' &&
+                              column.key !== 'quantity' &&
+                              lineColumns.shows(column.key),
+                          ).length
+                        }
+                        errors={lineErrors[index] ?? {}}
+                        removable={lines.length > 1}
+                        onChange={(patch) => change(index, patch)}
+                        onRemove={() =>
+                          setLines((previous) => previous.filter((_, at) => at !== index))
+                        }
+                      />
+                    ))}
+                  </tbody>
+                  <LinesTotalRow
+                    label={t('invoice.linesTotal')}
+                    span={2 + shownProductDetails(lineColumns.shows)}
+                    cells={[
+                      {
+                        key: 'quantity',
+                        label: t('sales.quantity'),
+                        value: formatQuantity(lineSums.quantity),
+                      },
+                      ...(enableFreeQty && lineColumns.shows('freeQuantity')
+                        ? [
+                            {
+                              key: 'free',
+                              label: t('sales.freeQuantity'),
+                              value: formatQuantity(lineSums.free),
+                            },
+                          ]
+                        : []),
+                      {
+                        key: 'rate',
+                        label: t('sales.rate'),
+                        value: moneyAlways(lineSums.rate),
+                      },
+                      ...(enableDiscount && lineColumns.shows('discount')
+                        ? [
+                            {
+                              key: 'discount',
+                              label: t('sales.itemDiscount'),
+                              value: moneyAlways(totals.discount),
+                            },
+                          ]
+                        : []),
+                      ...(lineColumns.shows('taxPercent') ? [{ key: 'taxPercent' }] : []),
+                      ...(lineColumns.shows('taxAmount')
+                        ? [
+                            {
+                              key: 'taxAmount',
+                              label: t('sales.taxAmount'),
+                              value: moneyAlways(totals.tax),
+                            },
+                          ]
+                        : []),
+                      {
+                        key: 'net',
+                        label: t('sales.net'),
+                        value: moneyAlways(totals.taxable),
+                      },
+                      ...(lineColumns.shows('lineTotal')
+                        ? [
+                            {
+                              key: 'lineTotal',
+                              label: t('sales.lineTotal'),
+                              value: moneyAlways(totals.taxable + totals.tax),
+                            },
+                          ]
+                        : []),
+                      { key: 'actions' },
+                    ]}
                   />
-                ))}
-              </tbody>
-              <LinesTotalRow
-                label={t('invoice.linesTotal')}
-                span={2 + shownProductDetails(lineColumns.shows)}
-                cells={[
-                  {
-                    key: 'quantity',
-                    label: t('sales.quantity'),
-                    value: formatQuantity(lineSums.quantity),
-                  },
-                  ...(enableFreeQty && lineColumns.shows('freeQuantity')
-                    ? [
-                        {
-                          key: 'free',
-                          label: t('sales.freeQuantity'),
-                          value: formatQuantity(lineSums.free),
-                        },
-                      ]
-                    : []),
-                  {
-                    key: 'rate',
-                    label: t('sales.rate'),
-                    value: moneyAlways(lineSums.rate),
-                  },
-                  ...(enableDiscount && lineColumns.shows('discount')
-                    ? [
-                        {
-                          key: 'discount',
-                          label: t('sales.itemDiscount'),
-                          value: moneyAlways(totals.discount),
-                        },
-                      ]
-                    : []),
-                  ...(lineColumns.shows('taxPercent') ? [{ key: 'taxPercent' }] : []),
-                  ...(lineColumns.shows('taxAmount')
-                    ? [
-                        {
-                          key: 'taxAmount',
-                          label: t('sales.taxAmount'),
-                          value: moneyAlways(totals.tax),
-                        },
-                      ]
-                    : []),
-                  {
-                    key: 'net',
-                    label: t('sales.net'),
-                    value: moneyAlways(totals.taxable),
-                  },
-                  ...(lineColumns.shows('lineTotal')
-                    ? [
-                        {
-                          key: 'lineTotal',
-                          label: t('sales.lineTotal'),
-                          value: moneyAlways(totals.taxable + totals.tax),
-                        },
-                      ]
-                    : []),
-                  { key: 'actions' },
-                ]}
-              />
-            </table>
+                </table>
 
-            {itemCount === 0 && <LinesEmptyHint />}
-          </InvoiceLines>
+                {itemCount === 0 && <LinesEmptyHint />}
+              </InvoiceLines>
+            </div>
+            {showTouchGrid && (
+              <div className="min-w-0 rounded-xl border border-line bg-surface-2/40 p-3 shadow-2xs flex flex-col h-[480px] lg:h-full lg:max-h-full overflow-hidden">
+                <TouchProductGrid
+                  products={posProducts}
+                  onSelectProduct={(product) => addScanned(product, null)}
+                  quantitiesInCart={quantitiesInCart}
+                  currency={products.data?.[0]?.currency ?? ''}
+                  rateType={rateType}
+                  masterRate={masterRate}
+                  onHand={onHand}
+                />
+              </div>
+            )}
+          </div>
         </InvoiceCard>
 
         {/* Along the foot: who the bill is for, with the name it is made out to and
@@ -2728,6 +2812,7 @@ function EntryDialog({
               'customer',
               ...(showScan ? (['scan'] as const) : []),
               'add-line',
+              'catalog',
               ...(showCharges ? (['charges'] as const) : []),
               'payment',
             ]}

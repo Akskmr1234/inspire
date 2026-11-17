@@ -22,7 +22,8 @@ export type EntryAction =
   | 'customer'
   | 'scan'
   | 'payment'
-  | 'charges';
+  | 'charges'
+  | 'catalog';
 
 /** A shortcut that opens a new entry from anywhere. */
 export interface NewEntryShortcut {
@@ -117,6 +118,7 @@ export const ENTRY_SHORTCUTS: readonly EntryShortcut[] = [
   // F10-F12 are the browser's own and are left to it.
   { action: 'customer', code: 'F2', labelKey: 'shortcuts.goCustomer' },
   { action: 'scan', code: 'F4', labelKey: 'shortcuts.goScan' },
+  { action: 'catalog', code: 'KeyK', alt: true, labelKey: 'shortcuts.goCatalog' },
   { action: 'payment', code: 'F8', labelKey: 'shortcuts.goPayment' },
   { action: 'charges', code: 'F9', labelKey: 'shortcuts.goCharges' },
 ];
