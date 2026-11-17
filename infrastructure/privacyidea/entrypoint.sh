@@ -1,14 +1,14 @@
 #!/bin/sh
 # Prepares privacyIDEA, then serves it.
 #
-# Two ways to run it:
+# Ways to run it:
 #
-#  - Without a volume (recommended on a hosting platform): set PI_ENCKEY and point
-#    PI_DATABASE_URI at PostgreSQL. Everything privacyIDEA keeps is then in that
-#    database, and the container can be replaced at will.
-#  - With a volume on /data: leave PI_ENCKEY unset. The encryption key, audit keys
-#    and (by default) a SQLite database are created there once. Losing /data then
-#    loses every enrolled factor.
+#  - SQLite kept in S3 / Cloudflare R2 (no volume): set PI_ENCKEY and the PI_S3_*
+#    variables. The database is downloaded on start and uploaded as it changes
+#    (s3sync.py), so the container can be replaced at will.
+#  - PostgreSQL (no volume): set PI_ENCKEY and point PI_DATABASE_URI at it.
+#  - A volume on /data: leave PI_ENCKEY unset. The encryption key, audit keys and
+#    a SQLite database are created there once. Losing /data loses every factor.
 set -eu
 
 # Started as root: make /data ours, then run everything else as the unprivileged
@@ -39,10 +39,23 @@ fi
 PY=/opt/privacyidea/bin/python
 PI=/opt/privacyidea/bin/pi-manage
 
+S3=""
+if [ -n "${PI_S3_BUCKET:-}" ]; then
+    S3=1
+    : "${PI_S3_ENDPOINT:?Set PI_S3_ENDPOINT, e.g. https://<account-id>.r2.cloudflarestorage.com}"
+    : "${PI_S3_ACCESS_KEY_ID:?Set PI_S3_ACCESS_KEY_ID}"
+    : "${PI_S3_SECRET_ACCESS_KEY:?Set PI_S3_SECRET_ACCESS_KEY}"
+    : "${PI_ENCKEY:?Set PI_ENCKEY: with the database in S3 there is no volume to keep the key in}"
+    if [ -n "${PI_DATABASE_URI:-}" ]; then
+        echo "PI_S3_* keeps the SQLite database in S3; unset PI_DATABASE_URI." >&2
+        exit 1
+    fi
+fi
+
 if [ -n "${PI_ENCKEY:-}" ]; then
     "$PY" /opt/privacyidea/prepare.py enckey
     export PI_AUDIT_NO_SIGN=1
-    case "${PI_DATABASE_URI:-sqlite}" in
+    case "${S3:-}${PI_DATABASE_URI:-sqlite}" in
         sqlite*) echo "WARNING: PI_ENCKEY is set but the database is SQLite in /data." \
                       "Without a volume, enrolled factors are lost on restart." \
                       "Set PI_DATABASE_URI to PostgreSQL." >&2 ;;
@@ -58,6 +71,7 @@ else
 fi
 
 "$PY" /opt/privacyidea/prepare.py database
+[ -z "$S3" ] || "$PY" /opt/privacyidea/s3sync.py restore
 
 # Creates any missing tables and leaves existing ones alone, so a restart or an
 # upgrade of the image is safe.
@@ -67,9 +81,15 @@ if ! "$PI" admin list 2>/dev/null | grep -q "^${PI_ADMIN_USER}\b"; then
     "$PI" admin add "$PI_ADMIN_USER" -p "$PI_ADMIN_PASSWORD"
 fi
 
-exec /opt/privacyidea/bin/gunicorn \
+# With S3, s3sync runs gunicorn and uploads the database as it changes.
+set -- /opt/privacyidea/bin/gunicorn \
     --bind 0.0.0.0:8080 \
     --workers "$PI_WORKERS" \
     --chdir /opt/privacyidea \
     --access-logfile - \
     app:application
+
+if [ -n "$S3" ]; then
+    exec "$PY" /opt/privacyidea/s3sync.py run -- "$@"
+fi
+exec "$@"

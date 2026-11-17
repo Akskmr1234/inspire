@@ -15,14 +15,14 @@ ENV PI_HOME=/opt/privacyidea \
 
 RUN python -m venv "$PI_HOME" \
     && "$PI_HOME/bin/pip" install --no-cache-dir --upgrade pip \
-    && "$PI_HOME/bin/pip" install --no-cache-dir "privacyIDEA==${PI_VERSION}" gunicorn psycopg2-binary \
+    && "$PI_HOME/bin/pip" install --no-cache-dir "privacyIDEA==${PI_VERSION}" gunicorn psycopg2-binary boto3 \
     && useradd --system --home "$PI_DATA" --shell /usr/sbin/nologin privacyidea \
     && mkdir -p "$PI_DATA" \
     && chown privacyidea "$PI_DATA"
 
 # Plain COPY + chmod (not COPY --chmod) so the image also builds without BuildKit.
 COPY entrypoint.sh /usr/local/bin/privacyidea-entrypoint
-COPY app.py pi.cfg prepare.py "$PI_HOME/"
+COPY app.py pi.cfg prepare.py s3sync.py "$PI_HOME/"
 RUN chmod 0755 /usr/local/bin/privacyidea-entrypoint
 
 # Starts as root only to take ownership of /data - hosting platforms often mount
