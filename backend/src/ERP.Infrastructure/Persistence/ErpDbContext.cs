@@ -315,6 +315,9 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the issued refresh tokens.</summary>
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    /// <summary>Gets the second factors users have enrolled.</summary>
+    public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
+
     /// <summary>Gets the document numbering series.</summary>
     public DbSet<NumberingSeries> NumberingSeries => Set<NumberingSeries>();
 
@@ -495,6 +498,8 @@ public class ErpDbContext : DbContext
             .HaveConversion<BatchBalanceIdConverter>();
         configurationBuilder.Properties<RefreshTokenId>()
             .HaveConversion<RefreshTokenIdConverter>();
+        configurationBuilder.Properties<MfaFactorId>()
+            .HaveConversion<MfaFactorIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
             .HaveConversion<AccountGroupIdConverter>();
         configurationBuilder.Properties<LedgerId>().HaveConversion<LedgerIdConverter>();

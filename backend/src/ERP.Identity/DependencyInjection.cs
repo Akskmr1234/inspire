@@ -36,6 +36,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher>(_ => new Pbkdf2PasswordHasher());
         services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddSingleton<IMfaTicketProtector, MfaTicketProtector>();
 
         JwtOptions options = configuration
             .GetSection(JwtOptions.SectionName)

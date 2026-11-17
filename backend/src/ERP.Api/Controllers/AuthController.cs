@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Asp.Versioning;
 using ERP.Application.Abstractions.Security;
 using ERP.SharedKernel.Results;
@@ -54,6 +55,90 @@ public sealed class AuthController : ApiControllerBase
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Finishes a sign-in with a code from the user's second factor.</summary>
+    /// <param name="request">The ticket from the password step, the factor, and its code.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The tokens.</returns>
+    /// <response code="200">Signed in.</response>
+    /// <response code="401">The ticket expired or the code was wrong.</response>
+    [HttpPost("mfa/verify")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthenticationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> VerifyMfaAsync(
+        [FromBody] MfaVerifyRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<AuthenticationResponse> result = await _authentication.VerifyMfaCodeAsync(
+            new MfaCodeRequest(
+                Ticket: request.Ticket,
+                FactorId: request.FactorId,
+                Code: request.Code,
+                UserAgent: Request.Headers.UserAgent.ToString(),
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString()),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Sends a sign-in request to the user's phone.</summary>
+    /// <param name="request">The ticket from the password step and the push factor.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>What to poll with.</returns>
+    /// <response code="200">Sent.</response>
+    /// <response code="401">The ticket expired.</response>
+    [HttpPost("mfa/push")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MfaPushStarted), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SendMfaPushAsync(
+        [FromBody] MfaPushRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<MfaPushStarted> result = await _authentication.SendMfaPushAsync(
+            request.Ticket, request.FactorId, cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    /// <summary>Asks whether the phone approved the sign-in.</summary>
+    /// <param name="request">The two tickets.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The tokens once approved.</returns>
+    /// <response code="200">Approved: signed in.</response>
+    /// <response code="202">Not answered yet: ask again in a moment.</response>
+    /// <response code="401">A ticket expired.</response>
+    [HttpPost("mfa/push/poll")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthenticationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PollMfaPushAsync(
+        [FromBody] MfaPollRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        Result<AuthenticationResponse?> result = await _authentication.PollMfaPushAsync(
+            new MfaPushPollRequest(
+                Ticket: request.Ticket,
+                PushTicket: request.PushTicket,
+                UserAgent: Request.Headers.UserAgent.ToString(),
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString()),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return Problem(result.Error);
+        }
+
+        return result.Value is { } signedIn ? Ok(signedIn) : Accepted();
     }
 
     /// <summary>Exchanges a refresh token for a new token pair.</summary>
@@ -279,3 +364,19 @@ public sealed record UserProfileResponse(
     Guid? BranchId,
     IReadOnlyCollection<string> Roles,
     bool MustChangePassword);
+
+/// <summary>A code to finish signing in with.</summary>
+/// <param name="Ticket">The ticket from the password step.</param>
+/// <param name="FactorId">The factor the code comes from.</param>
+/// <param name="Code">The code.</param>
+public sealed record MfaVerifyRequest(string Ticket, [property: JsonRequired] Guid FactorId, string Code);
+
+/// <summary>A push to send.</summary>
+/// <param name="Ticket">The ticket from the password step.</param>
+/// <param name="FactorId">The push factor.</param>
+public sealed record MfaPushRequest(string Ticket, [property: JsonRequired] Guid FactorId);
+
+/// <summary>A push to ask about.</summary>
+/// <param name="Ticket">The ticket from the password step.</param>
+/// <param name="PushTicket">The ticket from sending the push.</param>
+public sealed record MfaPollRequest(string Ticket, string PushTicket);

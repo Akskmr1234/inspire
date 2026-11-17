@@ -72,6 +72,10 @@ export const createUser = (body: SaveUser): Promise<UserSummary> =>
 export const updateUser = (id: string, body: SaveUser): Promise<UserSummary> =>
   request<UserSummary>(`${USERS}/${id}`, { method: 'PUT', body });
 
+/** Removes every second factor a user has, for one who lost their phone. */
+export const resetMfa = (id: string): Promise<{ readonly removed: number }> =>
+  request(`/platform/users/${id}/reset-mfa`, { method: 'POST', body: {} });
+
 export const resetPassword = (id: string, password: string): Promise<void> =>
   request<void>(`${USERS}/${id}/reset-password`, { method: 'POST', body: { password } });
 

@@ -71,6 +71,25 @@ export interface AuthenticationResponse {
   readonly refreshToken: string;
   readonly mustChangePassword: boolean;
   readonly displayName: string;
+  /** Set when the password was right but a second factor is still needed. */
+  readonly mfa?: MfaChallenge | null;
+}
+
+/** The kinds of second factor, as the server numbers them. */
+export const MfaFactorKind = { authenticator: 1, push: 2, backupCodes: 3 } as const;
+
+/** A second factor sign-in can finish with. */
+export interface MfaFactorChoice {
+  readonly factorId: string;
+  readonly kind: number;
+  readonly label: string;
+}
+
+/** What finishing a sign-in with a second factor needs. */
+export interface MfaChallenge {
+  readonly ticket: string;
+  readonly expiresAtUtc: string;
+  readonly factors: readonly MfaFactorChoice[];
 }
 
 /** Reads the persisted refresh token, if a previous session left one. */
@@ -364,9 +383,12 @@ export async function request<TResponse>(
     throw await toApiError(response);
   }
 
-  return response.status === 204
-    ? (undefined as TResponse)
-    : ((await response.json()) as TResponse);
+  if (response.status === 204) return undefined as TResponse;
+
+  // A 202 can come back empty (a push still waiting for the phone), so an empty
+  // body reads as nothing rather than failing to parse.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as TResponse;
 }
 
 /** Issues a request for a binary body - a program to download - renewing the token once if needed. */
@@ -397,6 +419,56 @@ export async function login(
     body: { userName, password, tenantCode: tenantCode || null },
     skipRefresh: true,
   });
+
+  // A second factor still to pass: no tokens yet, only the ticket.
+  if (auth.mfa) return auth;
+
+  setSession(auth, tenantCode);
+  return auth;
+}
+
+/** Finishes a sign-in with a code from an authenticator app or a backup code. */
+export async function verifyMfaCode(
+  challenge: MfaChallenge,
+  factorId: string,
+  code: string,
+  tenantCode: string,
+): Promise<AuthenticationResponse> {
+  const auth = await request<AuthenticationResponse>('/auth/mfa/verify', {
+    method: 'POST',
+    body: { ticket: challenge.ticket, factorId, code },
+    skipRefresh: true,
+  });
+
+  setSession(auth, tenantCode);
+  return auth;
+}
+
+/** Sends a sign-in request to the phone behind a push factor. */
+export function sendMfaPush(
+  challenge: MfaChallenge,
+  factorId: string,
+): Promise<{ readonly pushTicket: string; readonly expiresAtUtc: string }> {
+  return request('/auth/mfa/push', {
+    method: 'POST',
+    body: { ticket: challenge.ticket, factorId },
+    skipRefresh: true,
+  });
+}
+
+/** Asks whether the phone approved; signs in once it has. Null while still waiting. */
+export async function pollMfaPush(
+  challenge: MfaChallenge,
+  pushTicket: string,
+  tenantCode: string,
+): Promise<AuthenticationResponse | null> {
+  const auth = await request<AuthenticationResponse | undefined>('/auth/mfa/push/poll', {
+    method: 'POST',
+    body: { ticket: challenge.ticket, pushTicket },
+    skipRefresh: true,
+  });
+
+  if (!auth?.accessToken) return null;
 
   setSession(auth, tenantCode);
   return auth;

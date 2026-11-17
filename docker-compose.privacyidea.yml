@@ -1,0 +1,34 @@
+# ============================================================================
+# Optional: privacyIDEA, the free two-factor server, beside the ERP.
+#
+# Kept out of docker-compose.yml on purpose, so nothing changes for an
+# installation that does not use two-step sign-in. Start it with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.privacyidea.yml up -d privacyidea
+#
+# then give the API the Erp__Mfa__PrivacyIdea__* settings described in
+# docs/TWO_FACTOR.md. Set the three secrets below in a .env file next to this
+# one - never commit them.
+# ============================================================================
+
+services:
+  privacyidea:
+    build:
+      context: ./infrastructure/privacyidea
+    image: inspire-erp/privacyidea:3.14
+    container_name: erp-privacyidea
+    restart: unless-stopped
+    environment:
+      PI_ADMIN_USER: ${PI_ADMIN_USER:-admin}
+      PI_ADMIN_PASSWORD: ${PI_ADMIN_PASSWORD:?Set PI_ADMIN_PASSWORD in .env}
+      PI_SECRET_KEY: ${PI_SECRET_KEY:?Set PI_SECRET_KEY in .env}
+      PI_PEPPER: ${PI_PEPPER:?Set PI_PEPPER in .env}
+    volumes:
+      - privacyidea-data:/data
+    # Only on the server itself: the API talks to it directly, and phones reach
+    # its /ttype/push address through the public web server (docs/TWO_FACTOR.md).
+    ports:
+      - '127.0.0.1:5100:8080'
+
+volumes:
+  privacyidea-data:

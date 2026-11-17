@@ -79,6 +79,15 @@ public static class DependencyInjection
         services.AddScoped<IBranchAdministration, BranchAdministration>();
         services.AddScoped<IFirmAdministration, FirmAdministration>();
         services.AddScoped<IMyAccount, MyAccount>();
+
+        // Second factors through privacyIDEA. Off unless configured, in which case
+        // sign-in stays password only, exactly as before.
+        services.AddOptions<PrivacyIdeaOptions>()
+            .Bind(configuration.GetSection(PrivacyIdeaOptions.SectionName));
+        services.AddSingleton<PrivacyIdeaSession>();
+        services.AddHttpClient<IMfaProvider, PrivacyIdeaMfaProvider>(client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddScoped<IMfaAdministration, MfaAdministration>();
         services.AddScoped<IEasyRetailSource, EasyRetailSource>();
         services.AddScoped<IEasyRetailImporter, EasyRetailImporter>();
         services.AddScoped<IDataReset, DataReset>();

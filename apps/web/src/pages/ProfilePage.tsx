@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { TwoFactorCard } from '@/components/TwoFactorCard';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -423,6 +424,7 @@ function ReadOnly({
 function SecurityTab({ account }: { readonly account: MyAccount }): React.JSX.Element {
   return (
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+      <TwoFactorCard icon={<IconShield className="size-4" />} title={SectionTitle} />
       <PasswordCard />
       <SessionsCard sessions={account.sessions} />
     </div>
