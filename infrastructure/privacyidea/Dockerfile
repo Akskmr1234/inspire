@@ -20,10 +20,13 @@ RUN python -m venv "$PI_HOME" \
     && mkdir -p "$PI_DATA" \
     && chown privacyidea "$PI_DATA"
 
-COPY --chmod=0755 entrypoint.sh /usr/local/bin/privacyidea-entrypoint
+# Plain COPY + chmod (not COPY --chmod) so the image also builds without BuildKit.
+COPY entrypoint.sh /usr/local/bin/privacyidea-entrypoint
 COPY app.py "$PI_HOME/app.py"
+RUN chmod 0755 /usr/local/bin/privacyidea-entrypoint
 
-USER privacyidea
+# Starts as root only to take ownership of /data - hosting platforms often mount
+# volumes owned by root - then the entrypoint drops to the privacyidea user.
 WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 8080

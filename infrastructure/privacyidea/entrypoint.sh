@@ -7,6 +7,14 @@
 # back it up with the ERP's own data.
 set -eu
 
+# Started as root: make the volume ours, then run everything else as the
+# unprivileged privacyidea user.
+if [ "$(id -u)" = "0" ]; then
+    chown -R privacyidea:privacyidea /data
+    export HOME=/data
+    exec setpriv --reuid=privacyidea --regid=privacyidea --init-groups "$0" "$@"
+fi
+
 : "${PI_ADMIN_USER:=admin}"
 : "${PI_ADMIN_PASSWORD:?Set PI_ADMIN_PASSWORD}"
 : "${PI_SECRET_KEY:?Set PI_SECRET_KEY to a long random string}"
