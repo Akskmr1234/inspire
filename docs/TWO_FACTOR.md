@@ -48,36 +48,75 @@ Security tab says two-step sign-in is not offered.
 ## Running privacyIDEA
 
 The image is built from `infrastructure/privacyidea` — privacyIDEA 3.14 from PyPI,
-the version the ERP was tested against. On first start it writes its configuration,
-creates its encryption and audit keys and its tables, and creates the admin account.
-Restarts and image upgrades are safe: existing keys, tables and the admin are kept.
+the version the ERP was tested against. On start it creates its tables and the
+admin account if missing. Restarts and image upgrades are safe.
+
+It keeps its data one of three ways:
+
+| Mode                                      | Set                             | Volume  |
+| ----------------------------------------- | ------------------------------- | ------- |
+| **SQLite in Cloudflare R2** (recommended) | `PI_ENCKEY` + `PI_S3_*`         | none    |
+| PostgreSQL                                | `PI_ENCKEY` + `PI_DATABASE_URI` | none    |
+| SQLite on a volume                        | nothing extra; mount `/data`    | `/data` |
+
+### SQLite in Cloudflare R2
+
+privacyIDEA's SQLite database lives in an R2 bucket (any S3-compatible storage
+works). On start the container downloads it; while running it uploads a
+consistent copy within `PI_S3_SYNC_SECONDS` (default 5) of every change, and once
+more on shutdown. A dated copy is also kept once a day under `…/daily/`. R2's free
+tier covers this easily.
+
+- If the bucket cannot be reached at start, the container **stops instead of
+  starting empty**, so a network problem can never replace the stored database.
+- A crash loses at most the last few seconds of changes (a factor enrolled in that
+  moment would need enrolling again).
+- **Run one instance only.** Two containers on the same object would overwrite
+  each other's uploads.
+- The encryption key is **not** stored in the bucket: it comes from `PI_ENCKEY`,
+  so the bucket alone cannot decrypt anything.
+
+To set up R2: in Cloudflare, **R2 → Create bucket** (e.g. `erp-2fa`), then
+**R2 → Manage API tokens → Create API token** with _Object Read & Write_ on that
+bucket. It shows the access key id, the secret and the endpoint
+`https://<account-id>.r2.cloudflarestorage.com`.
 
 ### Its variables
 
-| Variable            | Required | Notes                                                                                                |
-| ------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `PI_ADMIN_PASSWORD` | yes      | The privacyIDEA admin's password. The ERP API signs in with it.                                      |
-| `PI_SECRET_KEY`     | yes      | Long random string, e.g. `openssl rand -hex 32`. Generate once and keep.                             |
-| `PI_PEPPER`         | yes      | Long random string, generated the same way. **Never change it** once users have enrolled.            |
-| `PI_ADMIN_USER`     | no       | Default `admin`.                                                                                     |
-| `PI_DATABASE_URI`   | no       | Default: SQLite in `/data`. A PostgreSQL URI (`postgresql+psycopg2://user:pass@host/db`) also works. |
-| `PI_WORKERS`        | no       | Default `2`.                                                                                         |
+| Variable                  | Required                | Notes                                                                                                                                      |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PI_ADMIN_PASSWORD`       | yes                     | The privacyIDEA admin's password. The ERP API signs in with it.                                                                            |
+| `PI_SECRET_KEY`           | yes                     | `openssl rand -hex 32`. Generate once and keep.                                                                                            |
+| `PI_PEPPER`               | yes                     | `openssl rand -hex 32`. **Never change it** once users have enrolled.                                                                      |
+| `PI_ENCKEY`               | R2 and PostgreSQL modes | `openssl rand -base64 96`. Encrypts every factor's secret. **Never change or lose it**: without it no enrolled factor can be read.         |
+| `PI_S3_ENDPOINT`          | R2 mode                 | `https://<account-id>.r2.cloudflarestorage.com`                                                                                            |
+| `PI_S3_BUCKET`            | R2 mode                 | The bucket, e.g. `erp-2fa`. Setting it turns R2 mode on.                                                                                   |
+| `PI_S3_ACCESS_KEY_ID`     | R2 mode                 | From the R2 API token.                                                                                                                     |
+| `PI_S3_SECRET_ACCESS_KEY` | R2 mode                 | From the R2 API token.                                                                                                                     |
+| `PI_S3_KEY`               | no                      | Object name. Default `privacyidea/privacyidea.sqlite`.                                                                                     |
+| `PI_S3_SYNC_SECONDS`      | no                      | Default `5`.                                                                                                                               |
+| `PI_S3_REGION`            | no                      | Default `auto` (what R2 expects).                                                                                                          |
+| `PI_DATABASE_URI`         | PostgreSQL mode         | `postgresql://user:password@host:5432/privacyidea` (a database of its own, created on start if missing; add `?sslmode=require` if needed). |
+| `PI_ADMIN_USER`           | no                      | Default `admin`.                                                                                                                           |
+| `PI_WORKERS`              | no                      | Default `2`.                                                                                                                               |
 
-> **`/data` must be persistent storage.** It holds the encryption key and, by
-> default, the database. Losing it loses every enrolled factor — users would then
-> need **Reset 2FA**. Back it up with the ERP's database.
+> Keep `PI_ENCKEY`, `PI_PEPPER` and `PI_SECRET_KEY` with your other secrets.
+> Losing any of them means every user needs **Reset 2FA**. In the R2 and
+> PostgreSQL modes privacyIDEA's own audit log is not signed; everything else is
+> the same.
 
 ### On OneDeploy or a similar platform
 
-Add a third service beside the API and web services:
+Add a third service beside the API and web services. No volume is needed:
 
-| Service     | Root directory               | Dockerfile   | Container port | Volume  |
-| ----------- | ---------------------------- | ------------ | -------------- | ------- |
-| privacyIDEA | `infrastructure/privacyidea` | `Dockerfile` | 8080           | `/data` |
+| Service     | Root directory               | Dockerfile   | Container port | Health check    |
+| ----------- | ---------------------------- | ------------ | -------------- | --------------- |
+| privacyIDEA | `infrastructure/privacyidea` | `Dockerfile` | 8080           | `/healthcheck/` |
 
-Give it a public HTTPS hostname if you want **Approve on phone** (see below);
-codes and backup codes work over a private address alone. The health check path
-is `/healthcheck/`.
+Set `PI_ADMIN_PASSWORD`, `PI_SECRET_KEY`, `PI_PEPPER`, `PI_ENCKEY` and the four
+required `PI_S3_*` variables, with **one instance**. Give it a public HTTPS
+hostname if you want **Approve on phone** (see below); codes and backup codes work
+over a private address alone.
 
 ### With Docker Compose
 
@@ -145,10 +184,15 @@ minutes; _Send again_ sends a fresh one.
 
 ## Checked
 
-Verified against the container built from `infrastructure/privacyidea`, with the
-API pointed at it: enrolling each kind (a wrong first authenticator code is
+Verified against the container built from `infrastructure/privacyidea` (with the
+legacy, non-BuildKit builder too), with the API pointed at it: enrolling each kind (a wrong first authenticator code is
 refused), sign-in asking for the second step, a wrong code refused and a fresh code
 accepted, a replayed code refused, push approved from a simulated privacyIDEA
 Authenticator (signed registration, poll and answer — the same protocol the app
-uses), a backup code accepted once and refused the second time, and the container
-restarting with every key and factor intact.
+uses), a backup code accepted once and refused the second time, the container
+restarting with every key and factor intact, and — without a volume, with the
+database in S3-compatible storage and with it in PostgreSQL — the container
+destroyed and replaced with an enrolled authenticator still accepted. With S3
+storage, a factor enrolled seconds before a hard kill (no shutdown upload) was
+still there, and an unreachable bucket stopped the start rather than starting
+empty.
