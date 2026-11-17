@@ -103,6 +103,10 @@ user`, password omitted — before the first attempt, and reports the actual fai
 | `Erp__Hosting__HttpsRedirection`          | off behind a proxy | Off automatically wherever the platform assigns `PORT`, because TLS is terminated in front of the container. Redirecting there would send the health probe to a URL the container does not serve.                     |
 | `ASPNETCORE_ENVIRONMENT`                  | `Production`       | Setting `Development` also exposes Swagger at `/swagger`.                                                                                                                                                             |
 
+Two-step sign-in (authenticator app, approve on phone, backup codes) is off unless
+the `Erp__Mfa__PrivacyIdea__*` variables are set. It needs one more service,
+privacyIDEA — free and open source. See [TWO_FACTOR.md](TWO_FACTOR.md).
+
 ---
 
 ## Web variables

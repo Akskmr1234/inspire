@@ -16,7 +16,17 @@ interface SessionState {
   readonly language: Language;
 
   restore: () => Promise<void>;
-  signIn: (userName: string, password: string, tenantCode: string) => Promise<void>;
+  /**
+   * Signs in with a password. Returns the second-factor challenge where one is still
+   * needed; the sign-in then finishes with {@link completeSignIn}.
+   */
+  signIn: (
+    userName: string,
+    password: string,
+    tenantCode: string,
+  ) => Promise<api.MfaChallenge | null>;
+  /** Finishes a sign-in whose second factor has passed. */
+  completeSignIn: (auth: api.AuthenticationResponse, tenantCode: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   setTheme: (theme: Theme) => void;
@@ -202,9 +212,16 @@ export const useSession = create<SessionState>((set, get) => ({
 
   signIn: async (userName, password, tenantCode) => {
     const auth = await api.login(userName, password, tenantCode);
+    if (auth.mfa) return auth.mfa;
+
+    await get().completeSignIn(auth, tenantCode);
+    return null;
+  },
+
+  completeSignIn: async (auth, tenantCode) => {
     api.applyDefaultSelection();
     const permissions = await api.fetchPermissions().catch(() => []);
-    const displayName = auth.displayName || api.currentDisplayName() || userName;
+    const displayName = auth.displayName || api.currentDisplayName() || '';
 
     set({
       status: 'signedIn',

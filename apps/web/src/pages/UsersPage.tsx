@@ -11,6 +11,7 @@ import {
   createUser,
   listRoles,
   listUsers,
+  resetMfa,
   resetPassword,
   updateUser,
   type RoleSummary,
@@ -111,6 +112,21 @@ export function UsersPage(): React.JSX.Element {
         className="row-action row-action-neutral"
       >
         {t('users.resetPassword')}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!window.confirm(t('users.resetMfaConfirm', { name: user.displayName })))
+            return;
+          void resetMfa(user.userId).then(
+            ({ removed }) => setNotice(t('users.resetMfaDone', { count: removed })),
+            (cause: unknown) =>
+              setNotice(cause instanceof Error ? cause.message : String(cause)),
+          );
+        }}
+        className="row-action row-action-neutral"
+      >
+        {t('users.resetMfa')}
       </button>
     </>
   );

@@ -9,7 +9,8 @@ import {
   IconLock,
   IconUser,
 } from '@/components/icons';
-import { ApiError, getStoredTenantCode } from '@/lib/api';
+import { MfaSignInStep } from '@/components/MfaSignInStep';
+import { ApiError, getStoredTenantCode, type MfaChallenge } from '@/lib/api';
 import { brand } from '@/lib/brand';
 import { useSession } from '@/stores/session';
 
@@ -27,6 +28,8 @@ export function LoginPage(): React.JSX.Element {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set when the password was right and a second factor is still to pass.
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -34,7 +37,11 @@ export function LoginPage(): React.JSX.Element {
     setBusy(true);
 
     try {
-      await signIn(userName, password, tenantCode);
+      const pending = await signIn(userName, password, tenantCode);
+      if (pending) {
+        setPassword('');
+        setChallenge(pending);
+      }
     } catch (cause) {
       // The API deliberately returns the same message for an unknown user, a
       // wrong password, a disabled account, and a locked one - so it is shown
@@ -66,134 +73,149 @@ export function LoginPage(): React.JSX.Element {
         <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 size-96 rounded-full bg-indigo-500/5 blur-2xl" />
       </div>
 
-      <form
-        onSubmit={(event) => void submit(event)}
-        className="card animate-rise relative w-full max-w-sm rounded-2xl border border-line p-6 shadow-float sm:p-8"
-      >
-        <div className="mb-7 flex items-center gap-3">
-          <div className="relative grid size-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 font-bold text-white shadow-card ring-1 ring-white/20">
-            {brand.initials}
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h1 className="truncate text-lg font-bold tracking-tight text-ink">
-                {t('app.name')}
-              </h1>
-              <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[9px] font-bold text-brand-600 uppercase tracking-wider dark:bg-brand-500/20 dark:text-brand-300">
-                ERP
-              </span>
+      {challenge ? (
+        <MfaSignInStep
+          challenge={challenge}
+          tenantCode={tenantCode}
+          onCancel={(message) => {
+            setChallenge(null);
+            setError(message ?? null);
+          }}
+        />
+      ) : (
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="card animate-rise relative w-full max-w-sm rounded-2xl border border-line p-6 shadow-float sm:p-8"
+        >
+          <div className="mb-7 flex items-center gap-3">
+            <div className="relative grid size-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 font-bold text-white shadow-card ring-1 ring-white/20">
+              {brand.initials}
             </div>
-            <p className="text-xs text-ink-muted">{t('signIn.subtitle')}</p>
-          </div>
-        </div>
-
-        {error !== null && (
-          <p role="alert" className="alert-error mb-4">
-            {error}
-          </p>
-        )}
-
-        {error === null && searchParams.get('passwordChanged') === '1' && (
-          <p role="status" className="alert-success mb-4">
-            {t('signIn.passwordChanged')}
-          </p>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="tenantCode" className="field-label">
-              {t('signIn.company')}
-            </label>
-            <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
-              >
-                <IconBuilding className="size-4" />
-              </span>
-              <input
-                id="tenantCode"
-                className="field-input ps-9"
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                autoComplete="organization"
-                spellCheck={false}
-              />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h1 className="truncate text-lg font-bold tracking-tight text-ink">
+                  {t('app.name')}
+                </h1>
+                <span className="rounded bg-brand-500/10 px-1.5 py-0.5 text-[9px] font-bold text-brand-600 uppercase tracking-wider dark:bg-brand-500/20 dark:text-brand-300">
+                  ERP
+                </span>
+              </div>
+              <p className="text-xs text-ink-muted">{t('signIn.subtitle')}</p>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="userName" className="field-label">
-              {t('signIn.userName')}
-            </label>
-            <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
-              >
-                <IconUser className="size-4" />
-              </span>
-              <input
-                id="userName"
-                className="field-input ps-9"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-                autoComplete="username"
-                spellCheck={false}
-                required
-              />
+          {error !== null && (
+            <p role="alert" className="alert-error mb-4">
+              {error}
+            </p>
+          )}
+
+          {error === null && searchParams.get('passwordChanged') === '1' && (
+            <p role="status" className="alert-success mb-4">
+              {t('signIn.passwordChanged')}
+            </p>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="tenantCode" className="field-label">
+                {t('signIn.company')}
+              </label>
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
+                >
+                  <IconBuilding className="size-4" />
+                </span>
+                <input
+                  id="tenantCode"
+                  className="field-input ps-9"
+                  value={tenantCode}
+                  onChange={(e) => setTenantCode(e.target.value)}
+                  autoComplete="organization"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="userName" className="field-label">
+                {t('signIn.userName')}
+              </label>
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
+                >
+                  <IconUser className="size-4" />
+                </span>
+                <input
+                  id="userName"
+                  className="field-input ps-9"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  autoComplete="username"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="field-label">
+                {t('signIn.password')}
+              </label>
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
+                >
+                  <IconLock className="size-4" />
+                </span>
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  className="field-input ps-9 pe-10"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 end-2 my-auto grid size-7 place-items-center rounded text-ink-subtle transition hover:text-ink"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <IconEyeOff className="size-4" />
+                  ) : (
+                    <IconEye className="size-4" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="password" className="field-label">
-              {t('signIn.password')}
-            </label>
-            <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-ink-subtle"
-              >
-                <IconLock className="size-4" />
-              </span>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                className="field-input ps-9 pe-10"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="absolute inset-y-0 end-2 my-auto grid size-7 place-items-center rounded text-ink-subtle transition hover:text-ink"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? (
-                  <IconEyeOff className="size-4" />
-                ) : (
-                  <IconEye className="size-4" />
-                )}
-              </button>
-            </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn-primary mt-6 w-full py-2.5"
+          >
+            {busy && <Spinner />}
+            {busy ? t('signIn.working') : t('signIn.submit')}
+          </button>
+
+          <div className="mt-6 border-t border-line/60 pt-4 text-center">
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-ink-subtle">
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              256-bit TLS encrypted session
+            </p>
           </div>
-        </div>
-
-        <button type="submit" disabled={busy} className="btn-primary mt-6 w-full py-2.5">
-          {busy && <Spinner />}
-          {busy ? t('signIn.working') : t('signIn.submit')}
-        </button>
-
-        <div className="mt-6 border-t border-line/60 pt-4 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-[11px] text-ink-subtle">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            256-bit TLS encrypted session
-          </p>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

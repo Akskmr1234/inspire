@@ -145,3 +145,60 @@ export function humanise(code: string): string {
   const words = code.replace(/[-_]/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/** One of the user's second factors. */
+export interface MfaFactorView {
+  readonly factorId: string;
+  /** See `MfaFactorKind` in `@/lib/api`. */
+  readonly kind: number;
+  readonly label: string;
+  readonly isActive: boolean;
+  readonly createdAtUtc: string;
+  readonly lastUsedAtUtc: string | null;
+}
+
+/** The user's second factors, and which kinds this server offers. */
+export interface MfaOverview {
+  readonly available: boolean;
+  readonly pushAvailable: boolean;
+  readonly factors: readonly MfaFactorView[];
+}
+
+/** A factor being set up. */
+export interface MfaEnrolmentStarted {
+  readonly factorId: string;
+  readonly kind: number;
+  readonly qrImage: string | null;
+  readonly setupUrl: string | null;
+  readonly backupCodes: readonly string[] | null;
+  readonly isActive: boolean;
+}
+
+const MFA = `${ACCOUNT}/mfa`;
+
+export const fetchMfa = (): Promise<MfaOverview> => request<MfaOverview>(MFA);
+
+export const beginMfa = (kind: number, label?: string): Promise<MfaEnrolmentStarted> =>
+  request<MfaEnrolmentStarted>(MFA, {
+    method: 'POST',
+    body: { kind, label: label || null },
+  });
+
+export const confirmMfa = (
+  factorId: string,
+  code?: string,
+): Promise<{ readonly active: boolean }> =>
+  request(`${MFA}/${factorId}/confirm`, { method: 'POST', body: { code: code ?? null } });
+
+export const removeMfa = (factorId: string): Promise<void> =>
+  request<void>(`${MFA}/${factorId}`, { method: 'DELETE' });
+
+/** The secret inside an authenticator link, for typing in by hand. */
+export function secretOf(setupUrl: string | null): string | null {
+  if (!setupUrl) return null;
+  try {
+    return new URL(setupUrl).searchParams.get('secret');
+  } catch {
+    return null;
+  }
+}

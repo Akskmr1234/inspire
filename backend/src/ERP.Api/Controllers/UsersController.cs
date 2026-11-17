@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
 using Asp.Versioning;
+using ERP.Application.Abstractions.Security;
 using ERP.Application.Platform.Users;
 using ERP.Identity.Authorization;
 using ERP.SharedKernel.Results;
+using ERP.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,10 +23,16 @@ namespace ERP.Api.Controllers;
 public sealed class UsersController : ApiControllerBase
 {
     private readonly IUserAdministration _administration;
+    private readonly IMfaAdministration _mfa;
 
     /// <summary>Initialises a new instance of the <see cref="UsersController"/> class.</summary>
     /// <param name="administration">User and role administration.</param>
-    public UsersController(IUserAdministration administration) => _administration = administration;
+    /// <param name="mfa">Users' second factors.</param>
+    public UsersController(IUserAdministration administration, IMfaAdministration mfa)
+    {
+        _administration = administration;
+        _mfa = mfa;
+    }
 
     /// <summary>Lists the users.</summary>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -95,7 +103,25 @@ public sealed class UsersController : ApiControllerBase
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
+
+    /// <summary>Removes every second factor a user has, for one who lost their phone.</summary>
+    /// <param name="id">The user.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>How many factors were removed.</returns>
+    [HttpPost("{id:guid}/reset-mfa")]
+    [RequiresPermission("platform", "user", "edit")]
+    [ProducesResponseType(typeof(MfaResetResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResetMfaAsync(Guid id, CancellationToken cancellationToken)
+    {
+        Result<int> result = await _mfa.ResetAsync(UserId.From(id), cancellationToken);
+
+        return result.IsSuccess ? Ok(new MfaResetResponse(result.Value)) : Problem(result.Error);
+    }
 }
+
+/// <summary>What resetting a user's second factors did.</summary>
+/// <param name="Removed">How many factors were removed.</param>
+public sealed record MfaResetResponse(int Removed);
 
 /// <summary>A new starting password.</summary>
 /// <param name="Password">The password, to be changed at the next sign-in.</param>

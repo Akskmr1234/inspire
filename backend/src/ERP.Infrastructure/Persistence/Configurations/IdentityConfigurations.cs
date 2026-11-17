@@ -246,3 +246,35 @@ public sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refresh
         ConfigurationConventions.ApplyAggregateConventions(builder);
     }
 }
+
+/// <summary>Maps <see cref="MfaFactor"/> to the <c>user_mfa_factors</c> table.</summary>
+public sealed class MfaFactorConfiguration : IEntityTypeConfiguration<MfaFactor>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<MfaFactor> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("user_mfa_factors");
+        builder.HasKey(f => f.Id);
+        builder.Property(f => f.Id).ValueGeneratedNever();
+
+        builder.Property(f => f.Kind).HasConversion<int>().IsRequired();
+        builder.Property(f => f.Serial).HasMaxLength(MfaFactor.MaximumSerialLength).IsRequired();
+        builder.Property(f => f.Label).HasMaxLength(MfaFactor.MaximumLabelLength).IsRequired();
+        builder.Ignore(f => f.IsActive);
+
+        // Sign-in asks for a user's active factors on every attempt.
+        builder.HasIndex(f => new { f.UserId, f.ActivatedAtUtc })
+            .HasDatabaseName("ix_user_mfa_factors_user");
+
+        builder.HasIndex(f => f.Serial).IsUnique().HasDatabaseName("ix_user_mfa_factors_serial");
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(f => f.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        ConfigurationConventions.ApplyAggregateConventions(builder);
+    }
+}

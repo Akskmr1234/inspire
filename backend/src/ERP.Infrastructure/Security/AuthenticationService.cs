@@ -46,6 +46,8 @@ public sealed partial class AuthenticationService : IAuthenticationService
     private readonly ITenantContext _tenantContext;
     private readonly IClock _clock;
     private readonly ILogger<AuthenticationService> _logger;
+    private readonly IMfaProvider? _mfa;
+    private readonly IMfaTicketProtector? _tickets;
 
     /// <summary>Initialises a new instance of the <see cref="AuthenticationService"/> class.</summary>
     /// <param name="context">The database context.</param>
@@ -55,6 +57,8 @@ public sealed partial class AuthenticationService : IAuthenticationService
     /// <param name="tenantContext">The ambient tenant scope, established here during sign-in.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="logger">The logger.</param>
+    /// <param name="mfa">The second-factor server, where one is configured.</param>
+    /// <param name="tickets">Seals the ticket between the two sign-in steps.</param>
     public AuthenticationService(
         ErpDbContext context,
         IPasswordHasher passwordHasher,
@@ -62,8 +66,12 @@ public sealed partial class AuthenticationService : IAuthenticationService
         IPermissionChecker permissionChecker,
         ITenantContext tenantContext,
         IClock clock,
-        ILogger<AuthenticationService> logger)
+        ILogger<AuthenticationService> logger,
+        IMfaProvider? mfa = null,
+        IMfaTicketProtector? tickets = null)
     {
+        _mfa = mfa;
+        _tickets = tickets;
         _context = context;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
@@ -205,6 +213,18 @@ public sealed partial class AuthenticationService : IAuthenticationService
             user.SetPassword(_passwordHasher.Hash(request.Password!), now);
         }
 
+        // The password is right. Where the user has enrolled a second factor, sign-in
+        // stops here with a ticket rather than tokens, and finishes once the factor
+        // passes. A successful login is recorded only then.
+        if (await ChallengeAsync(user, now, cancellationToken) is { } challenge)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Result.Success(new AuthenticationResponse(
+                string.Empty, challenge.ExpiresAtUtc, string.Empty,
+                user.MustChangePassword, user.DisplayName, challenge));
+        }
+
         user.RecordSuccessfulLogin(now);
 
         AuthenticationResponse response = await IssueTokensAsync(
@@ -215,6 +235,253 @@ public sealed partial class AuthenticationService : IAuthenticationService
         LogSignInSucceeded(_logger, user.UserName);
 
         return Result.Success(response);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<AuthenticationResponse>> VerifyMfaCodeAsync(
+        MfaCodeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        DateTimeOffset now = _clock.UtcNow;
+
+        if (ReadTicket(request.Ticket, "signin", now) is not [string tenant, string userText]
+            || _mfa is not { IsEnabled: true })
+        {
+            return Result.Failure<AuthenticationResponse>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(TenantId.From(Guid.Parse(tenant)));
+
+        (User? user, MfaFactor? factor) = await LoadForMfaAsync(
+            userText, request.FactorId, now, cancellationToken);
+
+        if (user is null || factor is null || factor.Kind == MfaFactorKind.Push)
+        {
+            return Result.Failure<AuthenticationResponse>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        Result<bool> checkedCode = await _mfa.CheckCodeAsync(factor.Serial, request.Code, cancellationToken);
+
+        if (checkedCode.IsFailure)
+        {
+            return Result.Failure<AuthenticationResponse>(checkedCode.Error);
+        }
+
+        if (!checkedCode.Value)
+        {
+            // A wrong code counts towards the same lockout as a wrong password, so the
+            // second factor cannot be guessed at leisure once the password is known.
+            user.RecordFailedLogin(now);
+            await _context.SaveChangesAsync(cancellationToken);
+            LogSignInFailed(_logger, user.UserName, "wrong second-factor code");
+
+            return Result.Failure<AuthenticationResponse>(Error.Unauthorized(
+                "Authentication.WrongCode", "That code is not right. Try the next one."));
+        }
+
+        return Result.Success(await FinishMfaAsync(
+            user, factor, now, request.UserAgent, request.IpAddress, cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<MfaPushStarted>> SendMfaPushAsync(
+        string ticket,
+        Guid factorId,
+        CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset now = _clock.UtcNow;
+
+        if (ReadTicket(ticket, "signin", now) is not [string tenant, string userText]
+            || _mfa is not { IsEnabled: true }
+            || _tickets is null)
+        {
+            return Result.Failure<MfaPushStarted>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(TenantId.From(Guid.Parse(tenant)));
+
+        (User? user, MfaFactor? factor) = await LoadForMfaAsync(userText, factorId, now, cancellationToken);
+
+        if (user is null || factor is not { Kind: MfaFactorKind.Push })
+        {
+            return Result.Failure<MfaPushStarted>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        Result<string> sent = await _mfa.SendPushAsync(factor.Serial, cancellationToken);
+
+        if (sent.IsFailure)
+        {
+            return Result.Failure<MfaPushStarted>(sent.Error);
+        }
+
+        DateTimeOffset expires = now.AddMinutes(2);
+
+        return Result.Success(new MfaPushStarted(
+            _tickets.Protect($"push|{tenant}|{userText}|{factor.Id.Value}|{sent.Value}", expires),
+            expires));
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<AuthenticationResponse?>> PollMfaPushAsync(
+        MfaPushPollRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        DateTimeOffset now = _clock.UtcNow;
+
+        // Both tickets, and for the same user: the push ticket alone would let anyone
+        // who saw it in transit collect the tokens.
+        if (ReadTicket(request.Ticket, "signin", now) is not [string tenant, string userText]
+            || ReadTicket(request.PushTicket, "push", now) is not [string pushTenant, string pushUser, string factorText, string transaction]
+            || pushTenant != tenant
+            || pushUser != userText
+            || _mfa is not { IsEnabled: true })
+        {
+            return Result.Failure<AuthenticationResponse?>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        Result<bool> approved = await _mfa.IsPushApprovedAsync(transaction, cancellationToken);
+
+        if (approved.IsFailure)
+        {
+            return Result.Failure<AuthenticationResponse?>(approved.Error);
+        }
+
+        if (!approved.Value)
+        {
+            return Result.Success<AuthenticationResponse?>(null);
+        }
+
+        using IDisposable scope = _tenantContext.BeginScope(TenantId.From(Guid.Parse(tenant)));
+
+        (User? user, MfaFactor? factor) = await LoadForMfaAsync(
+            userText, Guid.Parse(factorText), now, cancellationToken);
+
+        if (user is null || factor is null)
+        {
+            return Result.Failure<AuthenticationResponse?>(AuthenticationErrors.InvalidCredentials);
+        }
+
+        return Result.Success<AuthenticationResponse?>(await FinishMfaAsync(
+            user, factor, now, request.UserAgent, request.IpAddress, cancellationToken));
+    }
+
+    /// <summary>
+    /// The second-factor step a sign-in must pass, or null when the user has enrolled
+    /// none or no second-factor server is configured.
+    /// </summary>
+    private async Task<MfaChallenge?> ChallengeAsync(
+        User user,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (_mfa is not { IsEnabled: true } || _tickets is null)
+        {
+            return null;
+        }
+
+        List<MfaFactor> factors = await _context.MfaFactors
+            .Where(f => f.UserId == user.Id && f.ActivatedAtUtc != null)
+            .ToListAsync(cancellationToken);
+
+        if (factors.Count == 0)
+        {
+            return null;
+        }
+
+        DateTimeOffset expires = now.AddMinutes(5);
+
+        return new MfaChallenge(
+            _tickets.Protect($"signin|{user.TenantId.Value}|{user.Id.Value}", expires),
+            expires,
+            [.. factors
+                .OrderBy(f => ChoiceOrder(f.Kind))
+                .ThenBy(f => f.CreatedAtUtc)
+                .Select(f => new MfaFactorChoice(f.Id.Value, f.Kind, f.Label))]);
+    }
+
+    /// <summary>Push first - one tap - then the authenticator, backup codes last.</summary>
+    private static int ChoiceOrder(MfaFactorKind kind) => kind switch
+    {
+        MfaFactorKind.Push => 0,
+        MfaFactorKind.Authenticator => 1,
+        _ => 2,
+    };
+
+    /// <summary>Opens a ticket of the given kind and returns its fields after the kind.</summary>
+    private string[]? ReadTicket(string? ticket, string kind, DateTimeOffset now)
+    {
+        string? payload = _tickets?.Unprotect(ticket, now);
+
+        if (payload is null)
+        {
+            return null;
+        }
+
+        string[] parts = payload.Split('|');
+
+        return parts.Length > 1 && parts[0] == kind && parts.Skip(1).All(p => p.Length > 0)
+            ? parts[1..]
+            : null;
+    }
+
+    /// <summary>The user and their active factor, if both still stand and the user may sign in.</summary>
+    private async Task<(User? User, MfaFactor? Factor)> LoadForMfaAsync(
+        string userText,
+        Guid factorId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(userText, out Guid userGuid))
+        {
+            return (null, null);
+        }
+
+        UserId userId = UserId.From(userGuid);
+
+        User? user = await _context.Users
+            .Include(u => u.Roles)
+            .Include(u => u.FirmAccess)
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null || user.EnsureCanAuthenticate(now).IsFailure)
+        {
+            return (null, null);
+        }
+
+        MfaFactorId id = MfaFactorId.From(factorId);
+
+        MfaFactor? factor = await _context.MfaFactors
+            .FirstOrDefaultAsync(
+                f => f.Id == id && f.UserId == userId && f.ActivatedAtUtc != null,
+                cancellationToken);
+
+        return (user, factor);
+    }
+
+    /// <summary>Records the sign-in and issues the tokens, once the second factor passed.</summary>
+    private async Task<AuthenticationResponse> FinishMfaAsync(
+        User user,
+        MfaFactor factor,
+        DateTimeOffset now,
+        string? userAgent,
+        string? ipAddress,
+        CancellationToken cancellationToken)
+    {
+        factor.RecordUse(now);
+        user.RecordSuccessfulLogin(now);
+
+        AuthenticationResponse response = await IssueTokensAsync(
+            user, now, userAgent, ipAddress, existingToken: null, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        LogSignInSucceeded(_logger, user.UserName);
+
+        return response;
     }
 
     /// <inheritdoc />

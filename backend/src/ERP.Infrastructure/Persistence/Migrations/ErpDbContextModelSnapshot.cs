@@ -1106,6 +1106,67 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("voucher_lines", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Identity.MfaFactor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ActivatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at_utc");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("label");
+
+                    b.Property<DateTimeOffset?>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at_utc");
+
+                    b.Property<string>("Serial")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("serial");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_mfa_factors");
+
+                    b.HasIndex("Serial")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_mfa_factors_serial");
+
+                    b.HasIndex("UserId", "ActivatedAtUtc")
+                        .HasDatabaseName("ix_user_mfa_factors_user");
+
+                    b.ToTable("user_mfa_factors", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Identity.Permission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7281,6 +7342,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_voucher_lines_vouchers_voucher_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Identity.MfaFactor", b =>
+                {
+                    b.HasOne("ERP.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_mfa_factors_users_user_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Identity.RefreshToken", b =>

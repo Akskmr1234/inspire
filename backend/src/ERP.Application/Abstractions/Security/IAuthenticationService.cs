@@ -1,3 +1,4 @@
+using ERP.Domain.Identity;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 
@@ -64,12 +65,61 @@ public sealed record RefreshRequest(
 /// anything else.
 /// </param>
 /// <param name="DisplayName">The user's display name.</param>
+/// <param name="Mfa">
+/// Set when the password was right but a second factor is still needed: the tokens are
+/// then empty, and the client finishes sign-in with the ticket.
+/// </param>
 public sealed record AuthenticationResponse(
     string AccessToken,
     DateTimeOffset ExpiresAtUtc,
     string RefreshToken,
     bool MustChangePassword,
-    string DisplayName);
+    string DisplayName,
+    MfaChallenge? Mfa = null);
+
+/// <summary>A second factor the user can finish signing in with.</summary>
+/// <param name="FactorId">The factor.</param>
+/// <param name="Kind">What kind it is.</param>
+/// <param name="Label">The user's name for it.</param>
+public sealed record MfaFactorChoice(Guid FactorId, MfaFactorKind Kind, string Label);
+
+/// <summary>What the client needs to finish a sign-in with a second factor.</summary>
+/// <param name="Ticket">Proof the password step passed, valid for five minutes.</param>
+/// <param name="ExpiresAtUtc">When the ticket stops being accepted.</param>
+/// <param name="Factors">The user's factors, push first.</param>
+public sealed record MfaChallenge(
+    string Ticket,
+    DateTimeOffset ExpiresAtUtc,
+    IReadOnlyList<MfaFactorChoice> Factors);
+
+/// <summary>A code typed to finish signing in.</summary>
+/// <param name="Ticket">The ticket from the password step.</param>
+/// <param name="FactorId">The factor the code is from.</param>
+/// <param name="Code">The code: from the authenticator app, or a backup code.</param>
+/// <param name="UserAgent">The client's user-agent string.</param>
+/// <param name="IpAddress">The client's IP address.</param>
+public sealed record MfaCodeRequest(
+    string Ticket,
+    Guid FactorId,
+    string Code,
+    string? UserAgent = null,
+    string? IpAddress = null);
+
+/// <summary>A push sent to the user's phone.</summary>
+/// <param name="PushTicket">What to poll with.</param>
+/// <param name="ExpiresAtUtc">When the push stops being answerable.</param>
+public sealed record MfaPushStarted(string PushTicket, DateTimeOffset ExpiresAtUtc);
+
+/// <summary>Asks whether the phone has approved a push.</summary>
+/// <param name="Ticket">The ticket from the password step.</param>
+/// <param name="PushTicket">The ticket from sending the push.</param>
+/// <param name="UserAgent">The client's user-agent string.</param>
+/// <param name="IpAddress">The client's IP address.</param>
+public sealed record MfaPushPollRequest(
+    string Ticket,
+    string PushTicket,
+    string? UserAgent = null,
+    string? IpAddress = null);
 
 /// <summary>Signs users in, renews their tokens, and signs them out.</summary>
 /// <remarks>
@@ -89,6 +139,32 @@ public interface IAuthenticationService
     /// <returns>The tokens, or a generic authentication failure.</returns>
     Task<Result<AuthenticationResponse>> SignInAsync(
         SignInRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finishes a sign-in with a code from the user's second factor.</summary>
+    /// <param name="request">The ticket and the code.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The tokens, or a generic authentication failure.</returns>
+    Task<Result<AuthenticationResponse>> VerifyMfaCodeAsync(
+        MfaCodeRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a sign-in request to the phone behind a push factor.</summary>
+    /// <param name="ticket">The ticket from the password step.</param>
+    /// <param name="factorId">The push factor.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>What to poll with, or why it could not be sent.</returns>
+    Task<Result<MfaPushStarted>> SendMfaPushAsync(
+        string ticket,
+        Guid factorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Finishes a sign-in once the phone has approved the push.</summary>
+    /// <param name="request">The two tickets.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The tokens once approved; null while still waiting.</returns>
+    Task<Result<AuthenticationResponse?>> PollMfaPushAsync(
+        MfaPushPollRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>Exchanges a refresh token for a new pair.</summary>

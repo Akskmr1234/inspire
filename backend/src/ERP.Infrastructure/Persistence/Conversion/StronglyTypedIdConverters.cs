@@ -661,3 +661,13 @@ public sealed class EditRequestIdConverter : ValueConverter<EditRequestId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="MfaFactorId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class MfaFactorIdConverter : ValueConverter<MfaFactorId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="MfaFactorIdConverter"/> class.</summary>
+    public MfaFactorIdConverter()
+        : base(id => id.Value, value => MfaFactorId.From(value))
+    {
+    }
+}
