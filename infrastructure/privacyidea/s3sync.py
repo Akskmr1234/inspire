@@ -23,12 +23,14 @@ other's uploads.
 
 import datetime
 import os
+import re
 import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 import boto3
 from botocore.config import Config
@@ -37,7 +39,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 DATA = os.environ.get("PI_DATA", "/data")
 DB = os.path.join(DATA, "privacyidea.sqlite")
 KEY = os.environ.get("PI_S3_KEY", "privacyidea/privacyidea.sqlite").strip("/")
-BUCKET = os.environ.get("PI_S3_BUCKET", "")
+def setting(name: str, default: str = "") -> str:
+    """An environment value without the spaces, line breaks or quotes a paste brings."""
+    return os.environ.get(name, default).strip().strip("'\"").strip()
+
+
+BUCKET = setting("PI_S3_BUCKET")
 INTERVAL = max(1.0, float(os.environ.get("PI_S3_SYNC_SECONDS", "5")))
 
 
@@ -45,13 +52,24 @@ def log(message: str) -> None:
     print(f"[s3sync] {message}", file=sys.stderr, flush=True)
 
 
+def endpoint() -> str:
+    """The endpoint's scheme and host. Cloudflare shows the S3 address with the
+    bucket on the end (https://<id>.r2.cloudflarestorage.com/<bucket>); the bucket
+    is given separately, so a path pasted here is dropped."""
+    raw = setting("PI_S3_ENDPOINT")
+    parts = urlsplit(raw)
+    if parts.path not in ("", "/"):
+        log(f"Ignoring the path '{parts.path}' on PI_S3_ENDPOINT: the bucket comes from PI_S3_BUCKET.")
+    return f"{parts.scheme}://{parts.netloc}"
+
+
 def client():
     return boto3.client(
         "s3",
-        endpoint_url=os.environ["PI_S3_ENDPOINT"],
-        aws_access_key_id=os.environ["PI_S3_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["PI_S3_SECRET_ACCESS_KEY"],
-        region_name=os.environ.get("PI_S3_REGION", "auto"),
+        endpoint_url=endpoint(),
+        aws_access_key_id=setting("PI_S3_ACCESS_KEY_ID"),
+        aws_secret_access_key=setting("PI_S3_SECRET_ACCESS_KEY"),
+        region_name=setting("PI_S3_REGION", "auto") or "auto",
         config=Config(retries={"max_attempts": 5, "mode": "standard"}, s3={"addressing_style": "path"}),
     )
 
@@ -78,7 +96,7 @@ def restore() -> None:
             sys.exit(f"[s3sync] Cannot read s3://{BUCKET}/{KEY}: {error}. Not starting, so "
                      "an empty database never replaces the stored one.")
     except BotoCoreError as error:
-        sys.exit(f"[s3sync] Cannot reach {os.environ['PI_S3_ENDPOINT']}: {error}. Not starting.")
+        sys.exit(f"[s3sync] Cannot reach {endpoint()}: {error}. Not starting.")
 
     fd, partial = tempfile.mkstemp(dir=DATA, suffix=".download")
     os.close(fd)
@@ -100,7 +118,8 @@ HINTS = {
     "InvalidAccessKeyId": "PI_S3_ACCESS_KEY_ID is not a known key. Use the S3 'Access Key ID' "
                           "shown when the R2 API token was created, not the token value.",
     "SignatureDoesNotMatch": "PI_S3_SECRET_ACCESS_KEY does not match the key id. Use the S3 "
-                             "'Secret Access Key' shown when the R2 API token was created.",
+                             "'Secret Access Key' shown when the R2 API token was created, "
+                             "from the same token as the key id.",
     "Unauthorized": "The credentials were rejected. Use the S3 'Access Key ID' and 'Secret "
                     "Access Key' of an R2 API token, not the token value.",
     "AccessDenied": f"The key is valid but may not read bucket '{BUCKET}'. Give the R2 API "
@@ -108,6 +127,22 @@ HINTS = {
     "NoSuchBucket": f"There is no bucket '{BUCKET}' at PI_S3_ENDPOINT. Check the name, and for "
                     "an EU bucket use https://<account-id>.eu.r2.cloudflarestorage.com.",
 }
+
+
+def shape() -> str:
+    """For R2, how the keys compare with the shape R2 issues: a 32-character key id
+    and a 64-character secret, both hexadecimal. Lengths only - never the values."""
+    if "r2.cloudflarestorage.com" not in endpoint():
+        return ""
+    key, secret = setting("PI_S3_ACCESS_KEY_ID"), setting("PI_S3_SECRET_ACCESS_KEY")
+    hexadecimal = re.compile(r"[0-9a-f]+")
+    notes = []
+    if len(key) != 32 or not hexadecimal.fullmatch(key):
+        notes.append(f"the key id is {len(key)} characters, not R2's 32 hexadecimal")
+    if len(secret) != 64 or not hexadecimal.fullmatch(secret):
+        notes.append(f"the secret is {len(secret)} characters, not R2's 64 hexadecimal"
+                     + (" - that looks like the token value" if len(secret) == 40 else ""))
+    return f" ({'; '.join(notes)}.)" if notes else " (Both have R2's shape, so check they come from the same token.)"
 
 
 def explain(s3) -> str:
@@ -118,7 +153,7 @@ def explain(s3) -> str:
     except ClientError as error:
         code = error.response.get("Error", {}).get("Code", "")
         if code in HINTS:
-            sys.exit(f"[s3sync] {code}: {HINTS[code]} Not starting.")
+            sys.exit(f"[s3sync] {code}: {HINTS[code]}{shape()} Not starting.")
         return code
 
 
