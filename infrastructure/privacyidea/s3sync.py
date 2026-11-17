@@ -66,11 +66,17 @@ def restore() -> None:
     try:
         s3.head_object(Bucket=BUCKET, Key=KEY)
     except ClientError as error:
-        if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+        code = error.response.get("Error", {}).get("Code")
+        if code in ("403", "400"):
+            # A HEAD response has no body, so it cannot say why. Ask again with a
+            # GET, whose error names the cause.
+            code = explain(s3)
+        if code in ("404", "NoSuchKey", "NotFound"):
             log(f"s3://{BUCKET}/{KEY} does not exist yet: starting with a new database.")
             return
-        sys.exit(f"[s3sync] Cannot read s3://{BUCKET}/{KEY}: {error}. Not starting, so "
-                 "an empty database never replaces the stored one.")
+        if code != "Readable":
+            sys.exit(f"[s3sync] Cannot read s3://{BUCKET}/{KEY}: {error}. Not starting, so "
+                     "an empty database never replaces the stored one.")
     except BotoCoreError as error:
         sys.exit(f"[s3sync] Cannot reach {os.environ['PI_S3_ENDPOINT']}: {error}. Not starting.")
 
@@ -88,6 +94,32 @@ def restore() -> None:
     finally:
         if os.path.exists(partial):
             os.remove(partial)
+
+
+HINTS = {
+    "InvalidAccessKeyId": "PI_S3_ACCESS_KEY_ID is not a known key. Use the S3 'Access Key ID' "
+                          "shown when the R2 API token was created, not the token value.",
+    "SignatureDoesNotMatch": "PI_S3_SECRET_ACCESS_KEY does not match the key id. Use the S3 "
+                             "'Secret Access Key' shown when the R2 API token was created.",
+    "Unauthorized": "The credentials were rejected. Use the S3 'Access Key ID' and 'Secret "
+                    "Access Key' of an R2 API token, not the token value.",
+    "AccessDenied": f"The key is valid but may not read bucket '{BUCKET}'. Give the R2 API "
+                    f"token 'Object Read & Write' on that bucket.",
+    "NoSuchBucket": f"There is no bucket '{BUCKET}' at PI_S3_ENDPOINT. Check the name, and for "
+                    "an EU bucket use https://<account-id>.eu.r2.cloudflarestorage.com.",
+}
+
+
+def explain(s3) -> str:
+    """Repeats a refused HEAD as a one-byte GET and reports the error code it names."""
+    try:
+        s3.get_object(Bucket=BUCKET, Key=KEY, Range="bytes=0-0")
+        return "Readable"
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code", "")
+        if code in HINTS:
+            sys.exit(f"[s3sync] {code}: {HINTS[code]} Not starting.")
+        return code
 
 
 def marker():
