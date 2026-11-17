@@ -1,14 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IconBox } from '@/components/icons';
 import {
+  IconBox,
+  IconDocument,
+  IconReceipt,
+  IconUser,
+} from '@/components/icons';
+import {
+  AddLineButton,
+  FooterSection,
+  formatQuantity,
   InvoiceActions,
   InvoiceBody,
   InvoiceCard,
   InvoiceFields,
+  InvoiceFooter,
   InvoiceHeader,
   InvoiceLines,
   InvoiceWindow,
+  LineNumberCell,
+  LineNumberHeader,
+  LinesEmptyHint,
+  LinesTotalRow,
+  NarrationInput,
+  NumberCell,
+  PartyCard,
   RemoveLineButton,
+  useLineAttention,
+  ValueField,
+  type PartyDetails,
 } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -17,8 +36,16 @@ import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
+import { DateField, Field, TextField } from '@/components/Form';
 import { addScanned, BarcodeScan } from '@/components/BarcodeScan';
-import { productOption, stockByProduct } from '@/components/DocumentLines';
+import {
+  productOption,
+  stockByProduct,
+  useLineColumns,
+  type LineColumn,
+} from '@/components/DocumentLines';
+import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
+import { ShortcutHints } from '@/components/ShortcutHints';
 import {
   SerialLineSummary,
   SerialPickerDialog,
@@ -53,8 +80,15 @@ import {
   type StockValuationReport,
 } from '@/lib/stock';
 import { moneyAlways } from '@/lib/money';
-import { listCustomers } from '@/lib/customers';
-import { listSuppliers } from '@/lib/suppliers';
+import { listCustomers, type CustomerSummary } from '@/lib/customers';
+import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
+import {
+  getPurchaseOrder,
+  getSalesOrder,
+  listPurchaseOrders,
+  listSalesOrders,
+  SalesOrderKind,
+} from '@/lib/orders';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/stores/session';
 import { shortcutProps } from '@/lib/shortcuts';
@@ -553,26 +587,64 @@ export function StockEntry({
   // The customer a delivery note goes to, or the supplier a receipt note comes from.
   // Fetched only on those two; every other document names nobody.
   const party = namesParty(type);
-  const parties = useQuery<
-    readonly { id: string; code: string; name: string }[],
-    ApiError
-  >({
-    queryKey: ['note-parties', type],
-    queryFn: async () =>
-      type === StockDocumentType.deliveryNote
-        ? (await listCustomers('', true)).map((customer) => ({
-            id: customer.customerId,
-            code: customer.code,
-            name: customer.name,
-          }))
-        : (await listSuppliers('', true)).map((supplier) => ({
-            id: supplier.supplierId,
-            code: supplier.code,
-            name: supplier.name,
-          })),
-    enabled: party,
+  const customers = useQuery<readonly CustomerSummary[], ApiError>({
+    queryKey: ['customers', '', false],
+    queryFn: () => listCustomers('', false),
+    enabled: party && type === StockDocumentType.deliveryNote,
     staleTime: 60 * 1000,
   });
+
+  const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
+    queryKey: ['suppliers', '', false],
+    queryFn: () => listSuppliers('', false),
+    enabled: party && type === StockDocumentType.receiptNote,
+    staleTime: 60 * 1000,
+  });
+
+  const partyOptions = useMemo(() => {
+    if (type === StockDocumentType.deliveryNote) {
+      return (customers.data ?? []).map((customer) => ({
+        value: customer.customerId,
+        label: `${customer.code} — ${customer.name}`,
+        ...(customer.contact.mobileNumber ? { detail: customer.contact.mobileNumber } : {}),
+      }));
+    }
+    if (type === StockDocumentType.receiptNote) {
+      return (suppliers.data ?? []).map((supplier) => ({
+        value: supplier.supplierId,
+        label: `${supplier.code} — ${supplier.name}`,
+        ...(supplier.contact.mobileNumber ? { detail: supplier.contact.mobileNumber } : {}),
+      }));
+    }
+    return [];
+  }, [type, customers.data, suppliers.data]);
+
+  const selectedPartyDetails: PartyDetails | undefined = useMemo(() => {
+    if (type === StockDocumentType.deliveryNote) {
+      const c = customers.data?.find((cand) => cand.customerId === partyId);
+      if (!c) return undefined;
+      return {
+        code: c.code,
+        name: c.name,
+        contact: c.contact,
+        terms: c.terms,
+        taxDetails: c.taxDetails,
+      };
+    }
+    if (type === StockDocumentType.receiptNote) {
+      const s = suppliers.data?.find((cand) => cand.supplierId === partyId);
+      if (!s) return undefined;
+      return {
+        code: s.code,
+        name: s.name,
+        contact: s.contact,
+        terms: s.terms,
+        taxDetails: s.taxDetails,
+      };
+    }
+    return undefined;
+  }, [type, partyId, customers.data, suppliers.data]);
+
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [warehouseId, setWarehouseId] = useState(
     fixedWarehouseId ??
@@ -595,17 +667,98 @@ export function StockEntry({
       : [emptyLine()],
   );
 
-  // Every stocked product of the firm, fetched once. A transaction screen that
-  // searched per keystroke would be a round trip per character on a master this size;
-  // the grid's own filtering handles the picking.
+  const referenceSources: readonly ReferenceSource[] = useMemo(() => {
+    if (type === StockDocumentType.deliveryNote) {
+      return [
+        {
+          key: 'salesOrder',
+          label: t('references.salesOrder'),
+          list: async () =>
+            (await listSalesOrders({}, 1, 100, SalesOrderKind.order)).items.map((row) => ({
+              id: row.salesOrderId,
+              number: row.number,
+              date: row.date,
+              party: row.customerName,
+              total: row.total,
+            })),
+        },
+      ];
+    }
+    if (type === StockDocumentType.receiptNote) {
+      return [
+        {
+          key: 'purchaseOrder',
+          label: t('references.purchaseOrder'),
+          list: async () =>
+            (await listPurchaseOrders({}, 1, 100)).items.map((row) => ({
+              id: row.purchaseOrderId,
+              number: row.number,
+              date: row.date,
+              party: row.supplierName,
+              total: row.total,
+            })),
+        },
+      ];
+    }
+    return [];
+  }, [type, t]);
+
+  const loadReference = async (sourceKey: string, id: string): Promise<void> => {
+    if (sourceKey === 'salesOrder') {
+      const order = await getSalesOrder(id);
+      setPartyId(order.customerLedgerId);
+      if (order.warehouseId) setWarehouseId(order.warehouseId);
+      setReference(order.header.number);
+      setLines(
+        order.lines.map((l) => ({
+          key: crypto.randomUUID(),
+          productId: l.productId,
+          quantity: String(l.quantity),
+          rate: String(l.rate),
+          batchId: '',
+          batchNumber: '',
+          expiresOn: '',
+          serialNumbers: '',
+          warrantyUntil: '',
+          remarks: '',
+        })),
+      );
+    }
+    if (sourceKey === 'purchaseOrder') {
+      const order = await getPurchaseOrder(id);
+      setPartyId(order.supplierLedgerId);
+      if (order.warehouseId) setWarehouseId(order.warehouseId);
+      setReference(order.header.number);
+      setLines(
+        order.lines.map((l) => ({
+          key: crypto.randomUUID(),
+          productId: l.productId,
+          quantity: String(l.quantity),
+          rate: String(l.rate),
+          batchId: '',
+          batchNumber: '',
+          expiresOn: '',
+          serialNumbers: '',
+          warrantyUntil: '',
+          remarks: '',
+        })),
+      );
+    }
+  };
+
+  const lineAttention = useLineAttention();
+
+  const addLine = (): void => {
+    setLines((current) => [...current, emptyLine()]);
+    lineAttention.attend('last', { focus: true });
+  };
+
+  // Every stocked product of the firm, fetched once.
   const products = useQuery<readonly ProductSummary[], ApiError>({
     queryKey: ['products', '', '', false],
     queryFn: () => listProducts('', '', false),
   });
 
-  // What is on the shelf, for the product picker. A storekeeper choosing what to
-  // issue or write off is asking exactly this, and was opening the stock report in
-  // another tab to find out.
   const valuation = useQuery<StockValuationReport, ApiError>({
     queryKey: ['stock-valuation', 'picker', warehouseId],
     queryFn: () => fetchStockValuation(warehouseId, '', true),
@@ -623,8 +776,6 @@ export function StockEntry({
   );
 
   const showRate = carriesRate(type);
-  // A dispatch is a transfer whose far end the server fills in, so nothing here asks
-  // for one.
   const transfer = isTransfer(type) && !dispatching;
   const counting = isCount(type);
   const quantityLabel = counting ? t('stock.counted') : t('stock.quantity');
@@ -634,8 +785,6 @@ export function StockEntry({
       (product) => product.id === productId && product.tracksBatches,
     );
 
-  // Only where the firm has switched serial numbers on. Off, no line asks for one and
-  // the server takes the document without them.
   const serialsOn = useSerialNumbersEnabled();
   const serialised = (productId: string): boolean =>
     serialsOn &&
@@ -643,12 +792,32 @@ export function StockEntry({
       (product) => product.id === productId && product.tracksSerialNumbers,
     );
 
-  // The columns appear once a product that needs them is on the grid rather than
-  // always. Most firms track batches and serials on a handful of products, and a
-  // permanently empty column on every other document would be in the way of the ones
-  // they do enter.
   const anyBatched = lines.some((line) => batched(line.productId));
   const anySerialised = lines.some((line) => serialised(line.productId));
+
+  const stockColumns: readonly LineColumn[] = [
+    { key: 'product', label: t('stock.product'), defaultOn: true, fixed: true },
+    { key: 'quantity', label: quantityLabel, defaultOn: true, fixed: true },
+    ...(showRate ? [{ key: 'rate', label: t('stock.rate'), defaultOn: true }] : []),
+    ...(anyBatched ? [{ key: 'batch', label: t('stock.batch'), defaultOn: true }] : []),
+    ...(anySerialised ? [{ key: 'units', label: t('stock.units'), defaultOn: true }] : []),
+    { key: 'remarks', label: t('stock.remarks'), defaultOn: true },
+  ];
+  const columns = useLineColumns('stock-entry', stockColumns);
+
+  const totalQuantity = lines.reduce(
+    (sum, l) => sum + (Number.isFinite(Number(l.quantity || 0)) ? Number(l.quantity || 0) : 0),
+    0,
+  );
+  const totalValuation = lines.reduce(
+    (sum, l) =>
+      sum +
+      (Number.isFinite(Number(l.quantity || 0)) && Number.isFinite(Number(l.rate || 0))
+        ? Number(l.quantity || 0) * Number(l.rate || 0)
+        : 0),
+    0,
+  );
+  const validLines = lines.filter((l) => l.productId !== '');
 
   // One more of the scanned product, on its line or a new one.
   const scanned = (product: ProductSummary): number => {
@@ -727,87 +896,76 @@ export function StockEntry({
       }}
     >
       <InvoiceBody>
+        {problem && <Alert tone="error">{problem}</Alert>}
+
         <InvoiceCard>
           <InvoiceFields>
-            <label className="block md:col-span-2">
-              <span className="field-label">{t('stock.type')}</span>
-              {/* Shown as text rather than as a select of one where the screen is for
-              one kind: a dropdown that cannot be changed is a control that lies. */}
-              {lockedType === undefined ? (
-                <SearchSelect
-                  value={String(type)}
-                  onChange={(value) => {
-                    const next = Number(value);
-                    setType(next);
-
-                    // A destination only means something on a transfer, and the server
-                    // refuses one anywhere else.
-                    if (!isTransfer(next)) {
-                      setDestinationId('');
-                    }
-                  }}
-                  label={t('stock.type')}
-                  // Moving goods between godowns means nothing where there is only one.
-                  options={STOCK_TYPES.filter(
-                    (candidate) => godownsOn || !isTransfer(candidate),
-                  ).map((candidate) => ({
-                    value: String(candidate),
-                    label: t(typeKey(candidate)),
-                  }))}
-                />
-              ) : (
-                <input value={t(typeKey(lockedType))} disabled className="field-input" />
-              )}
-            </label>
-
-            <label className="block">
-              <span className="field-label">{t('stock.date')}</span>
-              <input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                className="field-input"
-                required
-              />
-            </label>
-
-            <label
-              className={clsx(
-                'block',
-                !godownsOn && !transfer && !fixedWarehouseId && 'hidden',
-              )}
-            >
-              <span className="field-label">
-                {transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
-              </span>
-              {fixedWarehouseId ? (
-                <input
-                  value={
-                    warehouses.find((warehouse) => warehouse.id === fixedWarehouseId)
-                      ?.name ?? ''
-                  }
-                  disabled
-                  className="field-input"
-                />
-              ) : (
-                <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+            <div className="col-span-2 min-w-0">
+              <Field label={t('stock.type')}>
+                {lockedType === undefined ? (
                   <SearchSelect
-                    value={warehouseId}
-                    onChange={setWarehouseId}
-                    label={t('stock.warehouse')}
-                    placeholder={t('stock.choose')}
-                    options={warehouses.map((warehouse) => ({
-                      value: warehouse.id,
-                      label: warehouse.name,
+                    value={String(type)}
+                    onChange={(value) => {
+                      const next = Number(value);
+                      setType(next);
+                      if (!isTransfer(next)) {
+                        setDestinationId('');
+                      }
+                    }}
+                    label={t('stock.type')}
+                    options={STOCK_TYPES.filter(
+                      (candidate) => godownsOn || !isTransfer(candidate),
+                    ).map((candidate) => ({
+                      value: String(candidate),
+                      label: t(typeKey(candidate)),
                     }))}
                   />
-                </QuickAdd>
-              )}
-            </label>
+                ) : (
+                  <input value={t(typeKey(lockedType))} disabled className="field-input" />
+                )}
+              </Field>
+            </div>
+
+            <DateField
+              label={t('stock.date')}
+              required
+              value={date}
+              onChange={setDate}
+            />
+
+            {(!godownsOn && !transfer && !fixedWarehouseId) ? null : (
+              <Field
+                label={transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
+                required
+              >
+                {fixedWarehouseId ? (
+                  <input
+                    value={
+                      warehouses.find((warehouse) => warehouse.id === fixedWarehouseId)
+                        ?.name ?? ''
+                    }
+                    disabled
+                    className="field-input"
+                  />
+                ) : (
+                  <QuickAdd kind="warehouse" onCreated={setWarehouseId}>
+                    <SearchSelect
+                      value={warehouseId}
+                      onChange={setWarehouseId}
+                      label={t('stock.warehouse')}
+                      placeholder={t('stock.choose')}
+                      options={warehouses.map((warehouse) => ({
+                        value: warehouse.id,
+                        label: warehouse.name,
+                      }))}
+                    />
+                  </QuickAdd>
+                )}
+              </Field>
+            )}
 
             {transfer && (
-              <label className="block">
-                <span className="field-label">{t('stock.toWarehouse')}</span>
+              <Field label={t('stock.toWarehouse')} required>
                 <SearchSelect
                   value={destinationId}
                   onChange={setDestinationId}
@@ -817,135 +975,112 @@ export function StockEntry({
                     .filter((warehouse) => warehouse.id !== warehouseId)
                     .map((warehouse) => ({ value: warehouse.id, label: warehouse.name }))}
                 />
-              </label>
+              </Field>
             )}
 
             {party && (
-              <label className="block md:col-span-2">
-                <span className="field-label">
-                  {type === StockDocumentType.deliveryNote
-                    ? t('notes.customer')
-                    : t('notes.supplier')}
-                </span>
-                <QuickAdd
-                  kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
-                  onCreated={setPartyId}
+              <div
+                className="col-span-2 min-w-0"
+                data-party-field
+                {...shortcutProps('customer')}
+              >
+                <Field
+                  label={
+                    type === StockDocumentType.deliveryNote
+                      ? t('notes.customer')
+                      : t('notes.supplier')
+                  }
+                  required
                 >
-                  <SearchSelect
-                    value={partyId}
-                    onChange={setPartyId}
-                    label={
-                      type === StockDocumentType.deliveryNote
-                        ? t('notes.customer')
-                        : t('notes.supplier')
-                    }
-                    placeholder={t('stock.choose')}
-                    options={(parties.data ?? []).map((candidate) => ({
-                      value: candidate.id,
-                      label: `${candidate.code} — ${candidate.name}`,
-                    }))}
-                  />
-                </QuickAdd>
-              </label>
+                  <QuickAdd
+                    kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
+                    onCreated={setPartyId}
+                  >
+                    <SearchSelect
+                      value={partyId}
+                      onChange={setPartyId}
+                      label={
+                        type === StockDocumentType.deliveryNote
+                          ? t('notes.customer')
+                          : t('notes.supplier')
+                      }
+                      placeholder={`${t('stock.choose')} (F2)`}
+                      options={partyOptions}
+                    />
+                  </QuickAdd>
+                </Field>
+              </div>
             )}
 
             {!dispatching && (
-              <label className="block">
-                <span className="field-label">{t('stock.reference')}</span>
-                <input
-                  value={reference}
-                  onChange={(event) => setReference(event.target.value)}
-                  className="field-input"
-                />
-              </label>
+              <TextField
+                label={t('stock.reference')}
+                value={reference}
+                onChange={setReference}
+              />
             )}
 
-            <label className="col-span-2 block">
-              <span className="field-label">
-                {reasonRequired ? t('stock.reason') : t('stock.narration')}
-              </span>
-              <input
-                value={narration}
-                onChange={(event) => setNarration(event.target.value)}
-                required={reasonRequired}
-                placeholder={reasonRequired ? t('stock.reasonPlaceholder') : undefined}
-                className="field-input"
-              />
-            </label>
+            <div
+              className="col-span-2 min-w-0 md:col-end-[-1]"
+              {...shortcutProps('scan')}
+            >
+              <BarcodeScan asField products={products.data ?? []} onScan={scanned} />
+            </div>
           </InvoiceFields>
         </InvoiceCard>
-
-        {problem && <Alert tone="error">{problem}</Alert>}
 
         <InvoiceCard
           fill
           icon={<IconBox className="size-[18px]" />}
           title={t('invoice.items')}
+          meta={t('invoice.itemCount', { count: validLines.length })}
           actions={
-            <button
-              {...shortcutProps('add-line')}
-              type="button"
-              onClick={() => setLines((current) => [...current, emptyLine()])}
-              className="btn-secondary btn-xs"
-            >
-              {t('stock.addLine')}
-            </button>
+            <>
+              <AddLineButton onClick={addLine} />
+              {columns.picker}
+            </>
           }
         >
-          <div className="mb-2">
-            <BarcodeScan products={products.data ?? []} onScan={scanned} />
-          </div>
-
-          {/*
-        A card a line on a phone, the way the billing screens lay theirs out: the
-        table put the product picker across the whole dialog and the quantity behind
-        a sideways scroll, with the rate, batch and remarks further off still.
-      */}
           <InvoiceLines>
-            <table className="line-table">
-              <thead className="bg-surface-2 text-[13px] text-ink-muted">
+            <table className="line-table sm:min-w-[40rem] lg:min-w-[46rem]">
+              <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
                 <tr>
-                  <th className="px-3 py-2 text-start font-semibold">
+                  <LineNumberHeader />
+                  <th className="px-3 py-2.5 text-start font-medium">
                     {t('stock.product')}
                   </th>
-                  <th className="px-3 py-2 text-end font-semibold">{quantityLabel}</th>
-                  {showRate && (
-                    <th className="px-3 py-2 text-end font-semibold">
+                  <th className="px-2 py-2.5 text-end font-medium">{quantityLabel}</th>
+                  {showRate && columns.shows('rate') && (
+                    <th className="px-2 py-2.5 text-end font-medium">
                       {t('stock.rate')}
                     </th>
                   )}
-                  {anyBatched && (
-                    <th className="px-3 py-2 text-start font-semibold">
+                  {anyBatched && columns.shows('batch') && (
+                    <th className="px-3 py-2.5 text-start font-medium">
                       {t('stock.batch')}
                     </th>
                   )}
-                  {anySerialised && (
-                    <th className="px-3 py-2 text-start font-semibold">
+                  {anySerialised && columns.shows('units') && (
+                    <th className="px-3 py-2.5 text-start font-medium">
                       {t('stock.units')}
                     </th>
                   )}
-                  <th className="px-3 py-2 text-start font-semibold">
-                    {t('stock.remarks')}
-                  </th>
-                  <th className="text-end" />
+                  {columns.shows('remarks') && (
+                    <th className="px-3 py-2.5 text-start font-medium">
+                      {t('stock.remarks')}
+                    </th>
+                  )}
+                  <th className="line-action-column rounded-e-lg" />
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
+                {lines.map((line, index) => (
                   <tr key={line.key} className="border-t border-line">
+                    <LineNumberCell number={index + 1} />
                     <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
-                      {/*
-                    A picker that can be typed into, showing what each product is
-                    and what is on the shelf. It was a native select of the whole
-                    master — tens of thousands of rows that can only be scrolled,
-                    with the browser's type-ahead matching the code rather than the
-                    name anybody looks a product up by.
-                  */}
                       <SearchSelect
                         value={line.productId}
                         onChange={(productId) =>
-                          // The batch goes with the product it belonged to. Keeping it
-                          // would offer a lot of the old product against the new one.
                           update(line.key, {
                             productId,
                             batchId: '',
@@ -961,33 +1096,20 @@ export function StockEntry({
                         placeholder={t('stock.choose')}
                       />
                     </td>
-                    <td data-label={quantityLabel} className="px-2 py-1">
-                      <input
-                        type="number"
-                        step="any"
-                        value={line.quantity}
-                        onChange={(event) =>
-                          update(line.key, { quantity: event.target.value })
-                        }
-                        className="field-input-sm text-end font-mono tabular-nums"
+                    <NumberCell
+                      label={quantityLabel}
+                      value={line.quantity}
+                      onChange={(val) => update(line.key, { quantity: val })}
+                    />
+                    {showRate && columns.shows('rate') && (
+                      <NumberCell
+                        label={t('stock.rate')}
+                        value={line.rate}
+                        placeholder={t('stock.ratePlaceholder')}
+                        onChange={(val) => update(line.key, { rate: val })}
                       />
-                    </td>
-                    {showRate && (
-                      <td data-label={t('stock.rate')} className="px-2 py-1">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          value={line.rate}
-                          onChange={(event) =>
-                            update(line.key, { rate: event.target.value })
-                          }
-                          placeholder={t('stock.ratePlaceholder')}
-                          className="field-input-sm text-end font-mono tabular-nums"
-                        />
-                      </td>
                     )}
-                    {anyBatched && (
+                    {anyBatched && columns.shows('batch') && (
                       <td data-label={t('stock.batch')} className="px-2 py-1">
                         {batched(line.productId) ? (
                           <BatchCell
@@ -1003,7 +1125,7 @@ export function StockEntry({
                         )}
                       </td>
                     )}
-                    {anySerialised && (
+                    {anySerialised && columns.shows('units') && (
                       <td data-label={t('stock.units')} className="px-2 py-1">
                         {serialised(line.productId) ? (
                           <SerialCell
@@ -1024,15 +1146,17 @@ export function StockEntry({
                         )}
                       </td>
                     )}
-                    <td data-label={t('stock.remarks')} className="px-2 py-1">
-                      <input
-                        value={line.remarks}
-                        onChange={(event) =>
-                          update(line.key, { remarks: event.target.value })
-                        }
-                        className="field-input-sm"
-                      />
-                    </td>
+                    {columns.shows('remarks') && (
+                      <td data-label={t('stock.remarks')} className="px-2 py-1">
+                        <input
+                          value={line.remarks}
+                          onChange={(event) =>
+                            update(line.key, { remarks: event.target.value })
+                          }
+                          className="field-input-sm"
+                        />
+                      </td>
+                    )}
                     <td className="px-2 py-1 text-end">
                       <RemoveLineButton
                         disabled={lines.length === 1}
@@ -1047,26 +1171,151 @@ export function StockEntry({
                   </tr>
                 ))}
               </tbody>
+              <LinesTotalRow
+                label={t('invoice.linesTotal')}
+                span={2}
+                cells={[
+                  {
+                    key: 'quantity',
+                    label: quantityLabel,
+                    value: formatQuantity(totalQuantity),
+                  },
+                  ...(showRate && columns.shows('rate')
+                    ? [
+                        {
+                          key: 'rate',
+                          label: t('stock.rate'),
+                          value: moneyAlways(totalValuation),
+                        },
+                      ]
+                    : []),
+                  ...(anyBatched && columns.shows('batch') ? [{ key: 'batch' }] : []),
+                  ...(anySerialised && columns.shows('units') ? [{ key: 'units' }] : []),
+                  ...(columns.shows('remarks') ? [{ key: 'remarks' }] : []),
+                  { key: 'actions' },
+                ]}
+              />
             </table>
+
+            {validLines.length === 0 && <LinesEmptyHint scan />}
           </InvoiceLines>
         </InvoiceCard>
+
+        <InvoiceFooter
+          className={party ? 'xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]' : 'xl:grid-cols-1'}
+        >
+          {party ? (
+            <PartyCard
+              icon={<IconUser className="size-[18px]" />}
+              title={
+                type === StockDocumentType.deliveryNote
+                  ? t('invoice.customerDetails')
+                  : t('invoice.supplierDetails')
+              }
+              party={selectedPartyDetails}
+              empty={
+                type === StockDocumentType.deliveryNote
+                  ? t('invoice.noCustomer')
+                  : t('invoice.noSupplier')
+              }
+              choose={
+                type === StockDocumentType.deliveryNote
+                  ? t('invoice.chooseCustomer')
+                  : t('invoice.chooseSupplier')
+              }
+              money={moneyAlways}
+            >
+              <NarrationInput
+                compact
+                value={narration}
+                onChange={setNarration}
+                label={reasonRequired ? t('stock.reason') : t('stock.narration')}
+              />
+            </PartyCard>
+          ) : (
+            <FooterSection
+              icon={<IconDocument className="size-[18px]" />}
+              title={t('stock.documentDetails')}
+            >
+              <NarrationInput
+                compact
+                value={narration}
+                onChange={setNarration}
+                label={reasonRequired ? t('stock.reason') : t('stock.narration')}
+              />
+            </FooterSection>
+          )}
+
+          <FooterSection
+            highlight
+            icon={<IconReceipt className="size-5" />}
+            title={t('invoice.bill')}
+          >
+            <div className="flex flex-col gap-2">
+              <ValueField
+                label={t('invoice.itemsCount')}
+                value={String(validLines.length)}
+              />
+              <ValueField
+                label={quantityLabel}
+                value={formatQuantity(totalQuantity)}
+              />
+              {showRate && (
+                <ValueField
+                  label={t('stock.valuationTotal')}
+                  value={moneyAlways(totalValuation)}
+                />
+              )}
+              <div
+                data-bill-total
+                className="mt-1 flex items-baseline justify-between border-t border-line pt-2"
+              >
+                <span className="font-semibold text-ink">
+                  {showRate ? t('invoice.total') : quantityLabel}
+                </span>
+                <span className="font-mono text-lg font-bold text-ink">
+                  {showRate ? moneyAlways(totalValuation) : formatQuantity(totalQuantity)}
+                </span>
+              </div>
+            </div>
+          </FooterSection>
+        </InvoiceFooter>
       </InvoiceBody>
 
       <InvoiceActions
         start={
-          !dispatching && !directSave ? (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={post}
-                onChange={(event) => setPost(event.target.checked)}
-              />
-              {t('stock.postNow')}
-            </label>
-          ) : undefined
+          <>
+            {referenceSources.length > 0 && (
+              <LoadFromButton sources={referenceSources} onLoad={loadReference} />
+            )}
+            {!dispatching && !directSave && (
+              <label className="flex items-center gap-2 text-sm text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={post}
+                  onChange={(event) => setPost(event.target.checked)}
+                />
+                {t('stock.postNow')}
+              </label>
+            )}
+          </>
         }
+        hints={
+          <ShortcutHints
+            actions={[
+              ...(party ? (['customer'] as const) : []),
+              'scan',
+              'add-line',
+              'save',
+            ]}
+          />
+        }
+        total={{
+          label: showRate ? t('invoice.total') : quantityLabel,
+          amount: showRate ? moneyAlways(totalValuation) : formatQuantity(totalQuantity),
+        }}
         primary={{
-          label: t('stock.save'),
+          label: busy ? t('common.saving') : (post ? t('stock.saveAndPost') : t('stock.save')),
           onClick: () => form.current?.requestSubmit(),
           shortcut: 'save',
           disabled: busy,

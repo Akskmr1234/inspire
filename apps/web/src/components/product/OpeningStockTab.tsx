@@ -366,7 +366,7 @@ export function OpeningStockTab({
           </select>
         </td>
       )}
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-1.5 text-end">
         <input
           type="number"
           inputMode="decimal"
@@ -375,10 +375,10 @@ export function OpeningStockTab({
           aria-label={t('stock.quantity')}
           value={row.quantity}
           onChange={(event) => change({ quantity: event.target.value })}
-          className="field-input-sm w-24 text-end tabular-nums"
+          className="field-input-sm ms-auto w-24 text-end tabular-nums"
         />
       </td>
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-1.5 text-end">
         <input
           type="number"
           inputMode="decimal"
@@ -387,7 +387,7 @@ export function OpeningStockTab({
           aria-label={t('stock.rate')}
           value={row.rate}
           onChange={(event) => change({ rate: event.target.value })}
-          className="field-input-sm w-24 text-end tabular-nums"
+          className="field-input-sm ms-auto w-24 text-end tabular-nums"
         />
       </td>
       {batched && (

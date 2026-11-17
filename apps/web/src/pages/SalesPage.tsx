@@ -43,6 +43,7 @@ import {
   LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
+  NumberCell,
   PartyCard,
   RemoveLineButton,
   useLineAttention,
@@ -91,7 +92,10 @@ import {
   fetchProductBatches,
   fetchProductSerials,
   findSerial,
+  getStockDocument,
+  listStockDocuments,
   SerialStatus,
+  StockDocumentType,
   type BatchStockRow,
   type SerialNumberView,
 } from '@/lib/stock';
@@ -1445,6 +1449,31 @@ function EntryDialog({
               total: row.total,
             })),
         },
+        {
+          key: 'deliveryNote',
+          label: t('references.deliveryNote'),
+          list: async () => {
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10);
+            const today = new Date().toISOString().slice(0, 10);
+            const docs = await listStockDocuments(
+              thirtyDaysAgo,
+              today,
+              StockDocumentType.deliveryNote,
+              '',
+            );
+            return docs
+              .filter((d) => !d.invoiceId)
+              .map((d) => ({
+                id: d.id,
+                number: d.number,
+                date: d.date,
+                party: d.partyName ?? '',
+                total: d.totalValue,
+              }));
+          },
+        },
       ];
 
   /** The rate a loaded line was taxed at, or nothing where the firm charges no tax. */
@@ -1483,6 +1512,35 @@ function EntryDialog({
             rate: String(rate),
             inclusiveRate: (rate * (1 + tax / 100)).toFixed(2),
             taxPercentage: String(tax),
+          };
+        }),
+      );
+      return;
+    }
+
+    if (sourceKey === 'deliveryNote') {
+      const note = await getStockDocument(id);
+      if (note.partyLedgerId) setCustomerId(note.partyLedgerId);
+      if (note.warehouseId) setWarehouseId(note.warehouseId);
+      setReference(note.number);
+      setLines(
+        note.lines.map((line) => {
+          const product = (products.data ?? []).find(
+            (candidate) => candidate.id === line.productId,
+          );
+          const rate = product ? masterRate(product, rateType) : line.rate;
+          const tax = taxOn ? lineTaxRate(taxMode, product, settings.defaultTaxRate) : 0;
+          return {
+            ...emptyLine,
+            productId: line.productId,
+            quantity: String(line.quantity),
+            rate: String(rate),
+            inclusiveRate: (rate * (1 + tax / 100)).toFixed(2),
+            taxPercentage: String(tax),
+            batchNumber: line.batchNumber ?? '',
+            batchId: line.batchId ?? undefined,
+            expiresOn: line.expiresOn ?? '',
+            serialNumbers: [],
           };
         }),
       );
@@ -3542,52 +3600,6 @@ function Field({
       {label}
       {children}
     </label>
-  );
-}
-
-function NumberCell({
-  value,
-  onChange,
-  label,
-  error,
-  subtitle,
-  placeholder,
-  readOnly = false,
-}: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly label: string;
-  readonly error?: string | undefined;
-  readonly subtitle?: string | undefined;
-  readonly placeholder?: string | undefined;
-  /** Shown, not typed into - and passed over by Enter and Tab. */
-  readonly readOnly?: boolean;
-}): React.JSX.Element {
-  return (
-    <td data-label={label} className="px-2 py-1 text-end">
-      <input
-        type="number"
-        inputMode="decimal"
-        aria-label={label}
-        value={value}
-        placeholder={placeholder}
-        readOnly={readOnly}
-        tabIndex={readOnly ? -1 : undefined}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        className={clsx(
-          'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
-          readOnly && 'bg-surface-2 text-ink-muted',
-          error && 'field-invalid',
-        )}
-      />
-      {subtitle && (
-        // Under its box on a phone's card too, not in the captions' column.
-        <span className="col-start-2 mt-0.5 block text-[10px] tabular-nums text-ink-muted text-end">
-          {subtitle}
-        </span>
-      )}
-    </td>
   );
 }
 

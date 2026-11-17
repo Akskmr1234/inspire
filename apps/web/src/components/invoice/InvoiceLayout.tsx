@@ -1264,3 +1264,58 @@ export function RemoveLineButton({
     </button>
   );
 }
+
+/**
+ * A numeric input cell in the lines table: aligned to the right (end) directly
+ * beneath its header across all resolutions, formatted in monospaced tabular numerals.
+ */
+export function NumberCell({
+  value,
+  onChange,
+  label,
+  error,
+  subtitle,
+  placeholder,
+  readOnly = false,
+  step = 'any',
+  min = '0',
+}: {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly label: string;
+  readonly error?: string | undefined;
+  readonly subtitle?: string | undefined;
+  readonly placeholder?: string | undefined;
+  /** Shown, not typed into - and passed over by Enter and Tab. */
+  readonly readOnly?: boolean;
+  readonly step?: string;
+  readonly min?: string;
+}): React.JSX.Element {
+  return (
+    <td data-label={label} className="px-2 py-1 text-end">
+      <input
+        type="number"
+        inputMode="decimal"
+        step={step}
+        min={min}
+        aria-label={label}
+        value={value}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        tabIndex={readOnly ? -1 : undefined}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className={clsx(
+          'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
+          readOnly && 'bg-surface-2 text-ink-muted',
+          error && 'field-invalid',
+        )}
+      />
+      {subtitle && (
+        <span className="col-start-2 mt-0.5 block text-[10px] tabular-nums text-ink-muted text-end">
+          {subtitle}
+        </span>
+      )}
+    </td>
+  );
+}

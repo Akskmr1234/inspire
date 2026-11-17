@@ -30,11 +30,13 @@ import {
   LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
+  NumberCell,
   PartyCard,
   RemoveLineButton,
   useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
 import { ShortcutHints } from '@/components/ShortcutHints';
+import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printableOrder } from '@/lib/printing';
 import { ReportFrame } from '@/components/ReportFrame';
@@ -937,6 +939,53 @@ function OrderEntryDialog({
     { quantity: 0, rate: 0 },
   );
 
+  const referenceSources: readonly ReferenceSource[] = useMemo(() => {
+    if (kind === 'sales' && !quotation) {
+      return [
+        {
+          key: 'quotation',
+          label: t('references.quotation'),
+          list: async () =>
+            (await listSalesOrders({}, 1, 100, SalesOrderKind.quotation)).items.map(
+              (row) => ({
+                id: row.salesOrderId,
+                number: row.number,
+                date: row.date,
+                party: row.customerName,
+                total: row.total,
+              }),
+            ),
+        },
+      ];
+    }
+    return [];
+  }, [kind, quotation, t]);
+
+  const loadReference = async (sourceKey: string, id: string): Promise<void> => {
+    if (sourceKey === 'quotation') {
+      const q = await getSalesOrder(id);
+      setDraft((current) => ({
+        ...current,
+        partyId: q.customerLedgerId,
+        warehouseId: q.warehouseId,
+        referenceNumber: q.header.number,
+      }));
+      setLines(
+        q.lines.map((l) => {
+          const taxPct = l.taxable > 0 ? Math.round((l.tax / l.taxable) * 10000) / 100 : 0;
+          return {
+            key: crypto.randomUUID(),
+            productId: l.productId,
+            quantity: String(l.quantity),
+            rate: String(l.rate),
+            discount: String(l.discount || 0),
+            taxPercentage: String(taxPct),
+          };
+        }),
+      );
+    }
+  };
+
   return (
     <InvoiceWindow
       title={documentTitle}
@@ -965,7 +1014,11 @@ function OrderEntryDialog({
         <InvoiceCard>
           {/* Two lines on a wide screen: who, when, the numbers, and the scan. */}
           <InvoiceFields>
-            <div className="col-span-2 min-w-0" data-party-field>
+            <div
+              className="col-span-2 min-w-0"
+              data-party-field
+              {...shortcutProps('customer')}
+            >
               <Field
                 label={kind === 'purchase' ? t('orders.supplier') : t('orders.customer')}
                 required
@@ -983,7 +1036,7 @@ function OrderEntryDialog({
                     label={
                       kind === 'purchase' ? t('orders.supplier') : t('orders.customer')
                     }
-                    placeholder={t('common.choose')}
+                    placeholder={`${t('common.choose')} (F2)`}
                   />
                 </QuickAdd>
               </Field>
@@ -1039,13 +1092,10 @@ function OrderEntryDialog({
               </Field>
             )}
 
-            <NarrationInput
-              value={draft.narration}
-              onChange={(value) => set('narration', value)}
-              label={t('invoice.narration')}
-              className="col-span-2 lg:col-span-3 xl:col-span-6"
-            />
-            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
+            <div
+              className="col-span-2 min-w-0 md:col-end-[-1]"
+              {...shortcutProps('scan')}
+            >
               <BarcodeScan
                 asField
                 products={products.data ?? []}
@@ -1193,7 +1243,7 @@ function OrderEntryDialog({
                       )}
 
                       {columns.shows('taxPercent') && (
-                        <td data-label={t('orders.taxPercent')} className="px-2 py-1">
+                        <td data-label={t('orders.taxPercent')} className="px-2 py-1 text-end">
                           <input
                             type="number"
                             list="erp-order-tax-rates"
@@ -1342,7 +1392,14 @@ function OrderEntryDialog({
                 : t('invoice.chooseCustomer')
             }
             money={moneyAlways}
-          />
+          >
+            <NarrationInput
+              compact
+              value={draft.narration}
+              onChange={(value) => set('narration', value)}
+              label={t('invoice.narration')}
+            />
+          </PartyCard>
 
           {(taxOn || (chargesShown && !chargesInBill)) && (
             <FooterSection
@@ -1398,9 +1455,15 @@ function OrderEntryDialog({
       </InvoiceBody>
 
       <InvoiceActions
+        start={
+          referenceSources.length > 0 && (
+            <LoadFromButton sources={referenceSources} onLoad={loadReference} />
+          )
+        }
         hints={
           <ShortcutHints
             actions={[
+              'customer',
               'scan',
               'add-line',
               ...(chargesShown ? (['charges'] as const) : []),
@@ -1745,37 +1808,3 @@ function Detail({
   );
 }
 
-function NumberCell({
-  value,
-  onChange,
-  label,
-  error,
-}: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly label: string;
-  readonly error?: string | undefined;
-}): React.JSX.Element {
-  /*
-    The cell end-aligns its box, because the header above it is end-aligned too.
-    Left as it was, a `w-24` input sat at the start of a wider cell with its
-    caption over the gap to its right — every numeric column on these entry grids
-    was a heading pointing at the space beside the figures.
-  */
-  return (
-    <td data-label={label} className="px-2 py-1 text-end">
-      <input
-        type="number"
-        inputMode="decimal"
-        aria-label={label}
-        aria-invalid={error ? true : undefined}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={clsx(
-          'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
-          error && 'field-invalid',
-        )}
-      />
-    </td>
-  );
-}
