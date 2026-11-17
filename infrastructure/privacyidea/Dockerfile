@@ -9,7 +9,7 @@ ARG PI_VERSION=3.14
 
 ENV PI_HOME=/opt/privacyidea \
     PI_DATA=/data \
-    PRIVACYIDEA_CONFIGFILE=/data/pi.cfg \
+    PRIVACYIDEA_CONFIGFILE=/opt/privacyidea/pi.cfg \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -22,7 +22,7 @@ RUN python -m venv "$PI_HOME" \
 
 # Plain COPY + chmod (not COPY --chmod) so the image also builds without BuildKit.
 COPY entrypoint.sh /usr/local/bin/privacyidea-entrypoint
-COPY app.py "$PI_HOME/app.py"
+COPY app.py pi.cfg prepare.py "$PI_HOME/"
 RUN chmod 0755 /usr/local/bin/privacyidea-entrypoint
 
 # Starts as root only to take ownership of /data - hosting platforms often mount
