@@ -36,6 +36,7 @@ import {
   LinesEmptyHint,
   LinesTotalRow,
   NarrationInput,
+  NumberCell,
   PartyCard,
   RemoveLineButton,
   useLineAttention,
@@ -99,7 +100,7 @@ import {
   type PurchaseLineInput,
 } from '@/lib/purchase';
 import { getPurchaseOrder, listPurchaseOrders } from '@/lib/orders';
-import { ReferenceLoader, type ReferenceSource } from '@/components/ReferenceLoader';
+import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
 import { moneyAlways } from '@/lib/money';
 import { shortcutProps } from '@/lib/shortcuts';
 
@@ -1039,7 +1040,11 @@ function EntryDialog({
               the lines without typing them - a new purchase from its order, a new
               return from the purchase it sends goods back against, or a scan. */}
           <InvoiceFields>
-            <div className="col-span-2 min-w-0" data-party-field>
+            <div
+              className="col-span-2 min-w-0"
+              data-party-field
+              {...shortcutProps('customer')}
+            >
               <Field label={t('purchase.supplier')} required error={errors['supplierId']}>
                 <QuickAdd kind="supplier" onCreated={(id) => set('supplierId', id)}>
                   <SearchSelect
@@ -1054,7 +1059,7 @@ function EntryDialog({
                     }))}
                     invalid={errors['supplierId'] !== undefined}
                     label={t('purchase.supplier')}
-                    placeholder={t('purchase.chooseSupplier')}
+                    placeholder={`${t('purchase.chooseSupplier')} (F2)`}
                   />
                 </QuickAdd>
               </Field>
@@ -1143,25 +1148,10 @@ function EntryDialog({
               </Field>
             )}
 
-            {!editing && (
-              <ReferenceLoader
-                asField
-                sources={referenceSources}
-                onLoad={loadReference}
-                className="col-span-2 lg:col-span-3"
-              />
-            )}
-            <NarrationInput
-              value={draft.narration}
-              onChange={(value) => set('narration', value)}
-              label={t('invoice.narration')}
-              className={
-                editing
-                  ? 'col-span-2 lg:col-span-3 xl:col-span-6'
-                  : 'col-span-2 lg:col-span-3'
-              }
-            />
-            <div className="col-span-2 min-w-0" {...shortcutProps('scan')}>
+            <div
+              className="col-span-2 min-w-0 md:col-end-[-1]"
+              {...shortcutProps('scan')}
+            >
               <BarcodeScan
                 asField
                 products={products.data ?? []}
@@ -1341,7 +1331,14 @@ function EntryDialog({
             empty={t('invoice.noSupplier')}
             choose={t('invoice.chooseSupplier')}
             money={moneyAlways}
-          />
+          >
+            <NarrationInput
+              compact
+              value={draft.narration}
+              onChange={(value) => set('narration', value)}
+              label={t('invoice.narration')}
+            />
+          </PartyCard>
 
           {(taxOn || (chargesShown && !chargesInBill)) && (
             <FooterSection
@@ -1397,9 +1394,15 @@ function EntryDialog({
       </InvoiceBody>
 
       <InvoiceActions
+        start={
+          !editing && referenceSources.length > 0 && (
+            <LoadFromButton sources={referenceSources} onLoad={loadReference} />
+          )
+        }
         hints={
           <ShortcutHints
             actions={[
+              'customer',
               'scan',
               'add-line',
               ...(chargesShown ? (['charges'] as const) : []),
@@ -1982,41 +1985,6 @@ function Detail({
       <span className="text-xs text-ink-muted">{label}</span>
       <div className="tabular-nums text-ink">{value}</div>
     </div>
-  );
-}
-
-function NumberCell({
-  value,
-  onChange,
-  label,
-  error,
-}: {
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly label: string;
-  readonly error?: string | undefined;
-}): React.JSX.Element {
-  /*
-    The cell end-aligns its box, because the header above it is end-aligned too.
-    Left as it was, a `w-24` input sat at the start of a wider cell with its
-    caption over the gap to its right — every numeric column on these entry grids
-    was a heading pointing at the space beside the figures.
-  */
-  return (
-    <td data-label={label} className="px-2 py-1 text-end">
-      <input
-        type="number"
-        inputMode="decimal"
-        aria-label={label}
-        aria-invalid={error ? true : undefined}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={clsx(
-          'field-input-sm ms-auto w-20 text-end tabular-nums lg:w-24',
-          error && 'field-invalid',
-        )}
-      />
-    </td>
   );
 }
 
