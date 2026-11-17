@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  IconBox,
-  IconDocument,
-  IconReceipt,
-  IconUser,
-} from '@/components/icons';
+import { IconBox, IconDocument, IconReceipt, IconUser } from '@/components/icons';
 import {
   AddLineButton,
   FooterSection,
@@ -606,14 +601,18 @@ export function StockEntry({
       return (customers.data ?? []).map((customer) => ({
         value: customer.customerId,
         label: `${customer.code} — ${customer.name}`,
-        ...(customer.contact.mobileNumber ? { detail: customer.contact.mobileNumber } : {}),
+        ...(customer.contact.mobileNumber
+          ? { detail: customer.contact.mobileNumber }
+          : {}),
       }));
     }
     if (type === StockDocumentType.receiptNote) {
       return (suppliers.data ?? []).map((supplier) => ({
         value: supplier.supplierId,
         label: `${supplier.code} — ${supplier.name}`,
-        ...(supplier.contact.mobileNumber ? { detail: supplier.contact.mobileNumber } : {}),
+        ...(supplier.contact.mobileNumber
+          ? { detail: supplier.contact.mobileNumber }
+          : {}),
       }));
     }
     return [];
@@ -674,13 +673,15 @@ export function StockEntry({
           key: 'salesOrder',
           label: t('references.salesOrder'),
           list: async () =>
-            (await listSalesOrders({}, 1, 100, SalesOrderKind.order)).items.map((row) => ({
-              id: row.salesOrderId,
-              number: row.number,
-              date: row.date,
-              party: row.customerName,
-              total: row.total,
-            })),
+            (await listSalesOrders({}, 1, 100, SalesOrderKind.order)).items.map(
+              (row) => ({
+                id: row.salesOrderId,
+                number: row.number,
+                date: row.date,
+                party: row.customerName,
+                total: row.total,
+              }),
+            ),
         },
       ];
     }
@@ -800,13 +801,16 @@ export function StockEntry({
     { key: 'quantity', label: quantityLabel, defaultOn: true, fixed: true },
     ...(showRate ? [{ key: 'rate', label: t('stock.rate'), defaultOn: true }] : []),
     ...(anyBatched ? [{ key: 'batch', label: t('stock.batch'), defaultOn: true }] : []),
-    ...(anySerialised ? [{ key: 'units', label: t('stock.units'), defaultOn: true }] : []),
+    ...(anySerialised
+      ? [{ key: 'units', label: t('stock.units'), defaultOn: true }]
+      : []),
     { key: 'remarks', label: t('stock.remarks'), defaultOn: true },
   ];
   const columns = useLineColumns('stock-entry', stockColumns);
 
   const totalQuantity = lines.reduce(
-    (sum, l) => sum + (Number.isFinite(Number(l.quantity || 0)) ? Number(l.quantity || 0) : 0),
+    (sum, l) =>
+      sum + (Number.isFinite(Number(l.quantity || 0)) ? Number(l.quantity || 0) : 0),
     0,
   );
   const totalValuation = lines.reduce(
@@ -921,19 +925,18 @@ export function StockEntry({
                     }))}
                   />
                 ) : (
-                  <input value={t(typeKey(lockedType))} disabled className="field-input" />
+                  <input
+                    value={t(typeKey(lockedType))}
+                    disabled
+                    className="field-input"
+                  />
                 )}
               </Field>
             </div>
 
-            <DateField
-              label={t('stock.date')}
-              required
-              value={date}
-              onChange={setDate}
-            />
+            <DateField label={t('stock.date')} required value={date} onChange={setDate} />
 
-            {(!godownsOn && !transfer && !fixedWarehouseId) ? null : (
+            {!godownsOn && !transfer && !fixedWarehouseId ? null : (
               <Field
                 label={transfer ? t('stock.fromWarehouse') : t('stock.warehouse')}
                 required
@@ -993,7 +996,9 @@ export function StockEntry({
                   required
                 >
                   <QuickAdd
-                    kind={type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'}
+                    kind={
+                      type === StockDocumentType.deliveryNote ? 'customer' : 'supplier'
+                    }
                     onCreated={setPartyId}
                   >
                     <SearchSelect
@@ -1202,7 +1207,9 @@ export function StockEntry({
         </InvoiceCard>
 
         <InvoiceFooter
-          className={party ? 'xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]' : 'xl:grid-cols-1'}
+          className={
+            party ? 'xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]' : 'xl:grid-cols-1'
+          }
         >
           {party ? (
             <PartyCard
@@ -1256,10 +1263,7 @@ export function StockEntry({
                 label={t('invoice.itemsCount')}
                 value={String(validLines.length)}
               />
-              <ValueField
-                label={quantityLabel}
-                value={formatQuantity(totalQuantity)}
-              />
+              <ValueField label={quantityLabel} value={formatQuantity(totalQuantity)} />
               {showRate && (
                 <ValueField
                   label={t('stock.valuationTotal')}
@@ -1315,7 +1319,11 @@ export function StockEntry({
           amount: showRate ? moneyAlways(totalValuation) : formatQuantity(totalQuantity),
         }}
         primary={{
-          label: busy ? t('common.saving') : (post ? t('stock.saveAndPost') : t('stock.save')),
+          label: busy
+            ? t('common.saving')
+            : post
+              ? t('stock.saveAndPost')
+              : t('stock.save'),
           onClick: () => form.current?.requestSubmit(),
           shortcut: 'save',
           disabled: busy,
