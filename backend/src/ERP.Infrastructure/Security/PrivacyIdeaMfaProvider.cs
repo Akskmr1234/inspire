@@ -516,7 +516,8 @@ public sealed partial class PrivacyIdeaMfaProvider : IMfaProvider
 
                 try
                 {
-                    json = JsonDocument.Parse(body).RootElement.Clone();
+                    using JsonDocument document = JsonDocument.Parse(body);
+                    json = document.RootElement.Clone();
                 }
                 catch (JsonException)
                 {
@@ -562,7 +563,8 @@ public sealed partial class PrivacyIdeaMfaProvider : IMfaProvider
         {
             using HttpResponseMessage response = await _http.SendAsync(request, cancellationToken);
             string body = await response.Content.ReadAsStringAsync(cancellationToken);
-            JsonElement json = JsonDocument.Parse(body).RootElement;
+            using JsonDocument document = JsonDocument.Parse(body);
+            JsonElement json = document.RootElement;
 
             if (response.IsSuccessStatusCode
                 && json.GetProperty("result").GetProperty("value").TryGetProperty("token", out JsonElement token)
