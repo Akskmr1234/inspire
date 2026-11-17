@@ -2,3 +2,9 @@
 from privacyidea.app import create_app
 
 application = create_app(config_name="production", config_file="/opt/privacyidea/pi.cfg", silent=True)
+
+
+@application.route("/healthcheck")
+@application.route("/healthcheck/")
+def healthcheck():
+    return "OK", 200
