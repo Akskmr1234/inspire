@@ -1395,7 +1395,8 @@ function EntryDialog({
 
       <InvoiceActions
         start={
-          !editing && referenceSources.length > 0 && (
+          !editing &&
+          referenceSources.length > 0 && (
             <LoadFromButton sources={referenceSources} onLoad={loadReference} />
           )
         }

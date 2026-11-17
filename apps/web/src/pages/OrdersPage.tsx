@@ -972,7 +972,8 @@ function OrderEntryDialog({
       }));
       setLines(
         q.lines.map((l) => {
-          const taxPct = l.taxable > 0 ? Math.round((l.tax / l.taxable) * 10000) / 100 : 0;
+          const taxPct =
+            l.taxable > 0 ? Math.round((l.tax / l.taxable) * 10000) / 100 : 0;
           return {
             key: crypto.randomUUID(),
             productId: l.productId,
@@ -1243,7 +1244,10 @@ function OrderEntryDialog({
                       )}
 
                       {columns.shows('taxPercent') && (
-                        <td data-label={t('orders.taxPercent')} className="px-2 py-1 text-end">
+                        <td
+                          data-label={t('orders.taxPercent')}
+                          className="px-2 py-1 text-end"
+                        >
                           <input
                             type="number"
                             list="erp-order-tax-rates"
@@ -1807,4 +1811,3 @@ function Detail({
     </div>
   );
 }
-
