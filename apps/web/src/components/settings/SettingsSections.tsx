@@ -458,6 +458,7 @@ export function SalesSettings(): React.JSX.Element {
     readonly label: string;
   }[] = [
     { key: 'showSalesScan', label: t('prefs.showSalesScan') },
+    { key: 'showTouchCatalog', label: t('prefs.showTouchCatalog') },
     { key: 'showSalesReference', label: t('prefs.showSalesReference') },
     { key: 'pickSalesmen', label: t('prefs.pickSalesmen') },
     { key: 'showBillingName', label: t('prefs.showBillingName') },
@@ -600,6 +601,7 @@ export function SalesSettings(): React.JSX.Element {
 /** The switches on the sales screen card: every one a yes or no. */
 type SalesScreenSetting =
   | 'showSalesScan'
+  | 'showTouchCatalog'
   | 'showSalesReference'
   | 'pickSalesmen'
   | 'showBillingName'
