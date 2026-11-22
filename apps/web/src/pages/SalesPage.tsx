@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { usePartyOption } from '@/lib/partyLabel';
 import { useSearchParams } from 'react-router-dom';
 import { TerritoryKind, useTerritories } from '@/lib/places';
 import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
@@ -799,6 +800,7 @@ function EntryDialog({
   readonly onShowHeld: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const settings = useSettings();
   const taxOn = useTaxOn();
   const godownsOn = useGodownsOn();
@@ -2171,7 +2173,7 @@ function EntryDialog({
                     onChange={setCustomerId}
                     options={(customers.data ?? []).map((customer) => ({
                       value: customer.customerId,
-                      label: `${customer.code} — ${customer.name}`,
+                      ...partyOption(customer),
                       ...(customer.contact.mobileNumber
                         ? { detail: customer.contact.mobileNumber }
                         : {}),

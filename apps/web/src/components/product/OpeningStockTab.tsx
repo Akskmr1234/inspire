@@ -17,6 +17,7 @@ import {
   type StockLineInput,
 } from '@/lib/stock';
 import { useGodownsOn, useSettings } from '@/stores/settings';
+import { usePendingSave } from '@/components/product/PendingSaves';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 
 /** A row being typed: one dated quantity, in one warehouse, of one batch. */
@@ -205,6 +206,26 @@ export function OpeningStockTab({
   };
 
   // New rows: one document per date and warehouse, since a document has one of each.
+  const writeRows = async (filled: readonly Row[]): Promise<void> => {
+    const groups = new Map<string, Row[]>();
+    for (const row of filled) {
+      const key = `${row.date}|${row.warehouseId}`;
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    }
+    for (const group of groups.values()) {
+      const first = group[0];
+      if (!first) continue;
+      await createStockDocument({
+        type: StockDocumentType.openingStock,
+        date: first.date,
+        warehouseId: first.warehouseId,
+        postImmediately: true,
+        lines: group.map(lineOf),
+      });
+    }
+    setRows([blankRow()]);
+  };
+
   const saveRows = (): void => {
     const filled = rows.filter((row) => row.quantity.trim() !== '');
     const problem = filled.map(problemIn).find((found) => found !== null);
@@ -214,26 +235,20 @@ export function OpeningStockTab({
     }
 
     void run(async () => {
-      const groups = new Map<string, Row[]>();
-      for (const row of filled) {
-        const key = `${row.date}|${row.warehouseId}`;
-        groups.set(key, [...(groups.get(key) ?? []), row]);
-      }
-      for (const group of groups.values()) {
-        const first = group[0];
-        if (!first) continue;
-        await createStockDocument({
-          type: StockDocumentType.openingStock,
-          date: first.date,
-          warehouseId: first.warehouseId,
-          postImmediately: true,
-          lines: group.map(lineOf),
-        });
-      }
-      setRows([blankRow()]);
+      await writeRows(filled);
       return t('openingStock.saved', { count: filled.length });
     });
   };
+
+  // The product's one Save also posts any rows typed here and not yet saved.
+  usePendingSave('openingStock', async () => {
+    const filled = rows.filter((row) => row.quantity.trim() !== '');
+    if (filled.length === 0) return;
+    const problem = filled.map(problemIn).find((found) => found !== null);
+    if (problem) throw new Error(`${t('products.tabOpeningStock')}: ${problem}`);
+    await writeRows(filled);
+    await refresh();
+  });
 
   // A correction: cancel the document and post it again, this line as now typed.
   const saveEdit = (): void => {

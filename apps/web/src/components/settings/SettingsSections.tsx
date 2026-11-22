@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { usePartyOption } from '@/lib/partyLabel';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -175,6 +176,18 @@ export function GeneralSettings(): React.JSX.Element {
             ))}
           </div>
         </Field>
+      </SettingsCard>
+
+      <SettingsCard title={t('prefs.displayTitle')} hint={t('prefs.displayHint')}>
+        <SelectField
+          label={t('prefs.partyDisplay')}
+          value={settings.partyDisplay}
+          onChange={(partyDisplay) => settings.update({ partyDisplay })}
+          options={[
+            { value: 'codeAndName', label: t('prefs.partyCodeAndName') },
+            { value: 'nameOnly', label: t('prefs.partyNameOnly') },
+          ]}
+        />
       </SettingsCard>
 
       <SettingsCard title={t('settings.taxTitle')} hint={t('settings.taxHint')}>
@@ -441,6 +454,7 @@ function ledgerOptions(
  */
 export function SalesSettings(): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const settings = useSettings();
   const taxOn = useTaxOn();
   const ledgers = useAllLedgers();
@@ -492,7 +506,7 @@ export function SalesSettings(): React.JSX.Element {
             onChange={(id) => settings.update({ walkInCustomerId: id })}
             options={(customers.data ?? []).map((customer) => ({
               value: customer.customerId,
-              label: `${customer.code} — ${customer.name}`,
+              ...partyOption(customer),
             }))}
             placeholder={t('prefs.primaryCustomer')}
           />
@@ -549,7 +563,7 @@ export function SalesSettings(): React.JSX.Element {
           onChange={(id) => settings.update({ defaultCustomerId: id })}
           options={(customers.data ?? []).map((customer) => ({
             value: customer.customerId,
-            label: `${customer.code} — ${customer.name}`,
+            ...partyOption(customer),
           }))}
         />
         {taxOn && (
@@ -792,6 +806,7 @@ export function OnlinePaymentTypes({
 /** What a purchase does to the product master, and what a new one starts with. */
 export function PurchaseSettings(): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const settings = useSettings();
 
   const suppliers = useQuery<readonly SupplierSummary[], ApiError>({
@@ -812,7 +827,7 @@ export function PurchaseSettings(): React.JSX.Element {
           onChange={(id) => settings.update({ defaultSupplierId: id })}
           options={(suppliers.data ?? []).map((supplier) => ({
             value: supplier.supplierId,
-            label: `${supplier.code} — ${supplier.name}`,
+            ...partyOption(supplier),
           }))}
         />
       </SettingsCard>

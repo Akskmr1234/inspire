@@ -94,12 +94,14 @@ public sealed class DataResetEndpointTests
         // With nothing left, the firm is given its Primary customer, supplier and godown,
         // and a unit, the first time each list is read - and only the once.
         CustomerResponse customer = await PrimaryCustomerAsync(client);
-        customer.Code.ShouldBe("PRIMARY-CUSTOMER");
+        customer.Code.ShouldBe("1000");
         (await PrimaryCustomerAsync(client)).CustomerId.ShouldBe(customer.CustomerId);
 
         SupplierResponse supplier = (await client.GetFromJsonAsync<List<SupplierResponse>>("/api/v1/purchase/suppliers"))!
             .ShouldHaveSingleItem();
         supplier.IsPrimary.ShouldBeTrue();
+        // Both Primary parties are 1000: codes are unique within a kind of ledger.
+        supplier.Code.ShouldBe("1000");
 
         // The default every sale starts with cannot be withdrawn.
         (await client.PutAsJsonAsync($"/api/v1/sales/customers/{customer.CustomerId}/active", new { IsActive = false }))

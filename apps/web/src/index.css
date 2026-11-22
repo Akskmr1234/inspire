@@ -895,6 +895,14 @@
     @apply mt-1 text-xs text-ink-subtle;
   }
 
+  /* The barcode box: where a scanner types, so it has to be found at a glance on every
+     screen that has one. Amber border and tint, a stronger ring when it has the cursor. */
+  .field-barcode {
+    @apply border-amber-400 bg-amber-50 font-mono tracking-wide
+           focus:border-amber-500 focus:ring-4 focus:ring-amber-400/30
+           dark:border-amber-500/70 dark:bg-amber-500/10;
+  }
+
   /* A box the form has something to say about. Red border, red focus ring — never a
      red fill, which reads as "disabled" as readily as "wrong". */
   .field-error,

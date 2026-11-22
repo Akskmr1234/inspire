@@ -89,6 +89,24 @@ public sealed class ProductionEndpointTests
         detail.Components.Count.ShouldBe(2);
         detail.Summary.EstimatedCost.ShouldBe(35m);
 
+        // The cake's cost in the product master is what its components cost, per cake:
+        // three of flour at 5 and one of sugar at 20 make two, so 35 / 2.
+        (await CostOfAsync(client, kit.Cake)).ShouldBe(17.5m);
+
+        // Changing the recipe changes the cost: now four of flour and one of sugar make one.
+        HttpResponseMessage revised = await client.PutAsJsonAsync($"{Boms}/{id}", new
+        {
+            ProductId = kit.Cake,
+            OutputQuantity = 1m,
+            Components = new[]
+            {
+                new { ProductId = kit.Flour, Quantity = 4m },
+                new { ProductId = kit.Sugar, Quantity = 1m },
+            },
+        });
+        revised.StatusCode.ShouldBe(HttpStatusCode.NoContent, await revised.Content.ReadAsStringAsync());
+        (await CostOfAsync(client, kit.Cake)).ShouldBe(40m);
+
         // One bill per finished good.
         (await client.PostAsJsonAsync(Boms, bill)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
@@ -104,6 +122,10 @@ public sealed class ProductionEndpointTests
         (await client.GetFromJsonAsync<List<BillOfMaterialsSummary>>(Boms))!
             .ShouldContain(row => row.Id == id && row.ComponentCount == 2);
     }
+
+    private static async Task<decimal> CostOfAsync(HttpClient client, Guid product) =>
+        (await client.GetFromJsonAsync<ERP.Application.Inventory.Products.ProductDetail>(
+            $"{Inventory}/products/{product}"))!.Cost;
 
     private static Task<HttpResponseMessage> SendAsync(
         HttpClient client,

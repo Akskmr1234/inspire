@@ -543,8 +543,13 @@ public sealed partial class DatabaseSeeder
             return;
         }
 
+        // The chart's own ledgers, by code. Customers and suppliers are left out: their
+        // codes are unique only within their kind (the Primary customer and supplier are
+        // both 1000), and no chart account is ever looked up among them.
         Dictionary<string, Ledger> ledgers = await _context.Ledgers
-            .Where(ledger => ledger.FirmId == firm.Id)
+            .Where(ledger => ledger.FirmId == firm.Id
+                && ledger.Kind != LedgerKind.Customer
+                && ledger.Kind != LedgerKind.Supplier)
             .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
 
         // Which charges belong on which documents, and which way each moves the total.
@@ -622,8 +627,13 @@ public sealed partial class DatabaseSeeder
             .Include(existing => existing.Accounts)
             .FirstOrDefaultAsync(existing => existing.FirmId == firm.Id, cancellationToken);
 
+        // The chart's own ledgers, by code. Customers and suppliers are left out: their
+        // codes are unique only within their kind (the Primary customer and supplier are
+        // both 1000), and no chart account is ever looked up among them.
         Dictionary<string, Ledger> ledgers = await _context.Ledgers
-            .Where(ledger => ledger.FirmId == firm.Id)
+            .Where(ledger => ledger.FirmId == firm.Id
+                && ledger.Kind != LedgerKind.Customer
+                && ledger.Kind != LedgerKind.Supplier)
             .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
 
         (StockAccount Account, string Code)[] defaults =
@@ -691,8 +701,13 @@ public sealed partial class DatabaseSeeder
             .Include(existing => existing.Accounts)
             .FirstOrDefaultAsync(existing => existing.FirmId == firm.Id, cancellationToken);
 
+        // The chart's own ledgers, by code. Customers and suppliers are left out: their
+        // codes are unique only within their kind (the Primary customer and supplier are
+        // both 1000), and no chart account is ever looked up among them.
         Dictionary<string, Ledger> ledgers = await _context.Ledgers
-            .Where(ledger => ledger.FirmId == firm.Id)
+            .Where(ledger => ledger.FirmId == firm.Id
+                && ledger.Kind != LedgerKind.Customer
+                && ledger.Kind != LedgerKind.Supplier)
             .ToDictionaryAsync(ledger => ledger.Code, StringComparer.Ordinal, cancellationToken);
 
         (TaxComponentType Component, TaxDirection Direction, string Code)[] defaults =

@@ -75,6 +75,34 @@ public sealed class TransactionReportEndpointTests
     }
 
     [Fact]
+    public async Task Opening_stock_entered_in_the_period_reads_as_opening_not_as_another_receipt()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+
+        // Opening stock keyed today - the day the product is set up - then a purchase.
+        HttpResponseMessage opened = await client.PostAsJsonAsync("/api/v1/inventory/stock/documents", new
+        {
+            Type = 1,
+            Date = Today,
+            masters.WarehouseId,
+            PostImmediately = true,
+            Lines = new[] { new { masters.ProductId, Quantity = 7m, Rate = 5m } },
+        });
+        opened.StatusCode.ShouldBe(HttpStatusCode.Created, await opened.Content.ReadAsStringAsync());
+        await BuyAsync(client, masters);
+
+        StockSummaryRow today = (await client.GetFromJsonAsync<StockSummaryReport>(
+            $"/api/v1/inventory/stock/summary?from={Today:yyyy-MM-dd}&to={Today:yyyy-MM-dd}&productId={masters.ProductId}"))!
+            .Rows.ShouldHaveSingleItem();
+
+        today.Opening.ShouldBe(7m);
+        today.Purchase.ShouldBe(10m);
+        today.OtherIn.ShouldBe(0m);
+        today.Closing.ShouldBe(17m);
+    }
+
+    [Fact]
     public async Task The_stock_summary_reads_opening_purchases_sales_and_closing()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

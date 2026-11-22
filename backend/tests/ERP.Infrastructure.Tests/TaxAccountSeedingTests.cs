@@ -154,6 +154,28 @@ public sealed class TaxAccountSeedingTests
         accounts[(TaxComponentType.Cess, TaxDirection.Output)].ShouldBe("CESS-OUTPUT");
     }
 
+    [Fact]
+    public async Task Seeding_runs_again_once_the_Primary_customer_and_supplier_share_their_code()
+    {
+        // Both Primary parties are 1000. Seeding runs on every start, and once looked the
+        // firm's ledgers up in one dictionary by code, which two ledgers sharing a code
+        // broke - the API then failed to start at all.
+        (TenantId tenant, FirmId firm) = await SeedAsync(TaxRegime.GccVat, "primary-twice", "PRIMTWICE");
+
+        await using (ErpDbContext context = _fixture.CreateContext(PostgresFixture.ScopedTo(tenant)))
+        {
+            ERP.Infrastructure.Persistence.Repositories.PrimaryParties primary = new(context);
+            await primary.EnsureAsync(firm, LedgerKind.Customer);
+            await primary.EnsureAsync(firm, LedgerKind.Supplier);
+
+            (await context.Ledgers.CountAsync(ledger =>
+                    ledger.FirmId == firm && ledger.IsPrimary && ledger.Code == "1000"))
+                .ShouldBe(2);
+        }
+
+        await SeedAsync(TaxRegime.GccVat, "primary-twice", "PRIMTWICE");
+    }
+
     private static Task<TaxAccountMap> LoadMapAsync(ErpDbContext context, FirmId firmId) =>
         context.TaxAccountMaps
             .Include(map => map.Accounts)

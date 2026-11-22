@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { usePartyOption } from '@/lib/partyLabel';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { Modal, ModalButton } from '@/components/Modal';
@@ -602,6 +603,7 @@ function OrderEntryDialog({
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const words = useOrderWords(quotation);
   const { taxRates, defaultTaxRate, preferredWarehouseId } = useSettings();
   const taxOn = useTaxOn();
@@ -715,7 +717,7 @@ function OrderEntryDialog({
     if (kind === 'purchase') {
       return (suppliers.data ?? []).map((supplier) => ({
         value: supplier.supplierId,
-        label: `${supplier.code} — ${supplier.name}`,
+        ...partyOption(supplier),
         ...(supplier.contact.mobileNumber
           ? { detail: supplier.contact.mobileNumber }
           : {}),
@@ -724,10 +726,10 @@ function OrderEntryDialog({
 
     return (customers.data ?? []).map((customer) => ({
       value: customer.customerId,
-      label: `${customer.code} — ${customer.name}`,
+      ...partyOption(customer),
       ...(customer.contact.mobileNumber ? { detail: customer.contact.mobileNumber } : {}),
     }));
-  }, [kind, suppliers.data, customers.data]);
+  }, [kind, suppliers.data, customers.data, partyOption]);
 
   // The same default the purchase screen applies, and for the same reason: an order
   // in a firm with one store goes to that store, and asking every time is asking a

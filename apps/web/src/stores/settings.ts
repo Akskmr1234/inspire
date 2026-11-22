@@ -225,6 +225,8 @@ export interface AppSettings {
   readonly pickSalesmen: boolean;
   /** Whether a sale shows the name it is billed to, under the customer's details. */
   readonly showBillingName: boolean;
+  /** How customers and suppliers read in a dropdown: code and name, or the name alone. */
+  readonly partyDisplay: 'codeAndName' | 'nameOnly';
   /** Whether a sale shows the narration box, under the customer's details. */
   readonly showSalesNarration: boolean;
   /** Whether a sale shows the barcode box. */
@@ -339,6 +341,7 @@ const DEFAULTS: AppSettings = {
   showSalesReference: false,
   pickSalesmen: false,
   showBillingName: true,
+  partyDisplay: 'codeAndName',
   showSalesNarration: true,
   showSalesScan: true,
   showTouchCatalog: false,

@@ -2,6 +2,7 @@ import { isHeldForApproval } from '@/lib/approvals';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { usePartyOption } from '@/lib/partyLabel';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
@@ -531,6 +532,7 @@ function EntryDialog({
   readonly onError: (message: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const { taxRates, defaultTaxRate, preferredWarehouseId, allowSaveDraft } =
     useSettings();
   const taxOn = useTaxOn();
@@ -1052,7 +1054,7 @@ function EntryDialog({
                     onChange={(value) => set('supplierId', value)}
                     options={(suppliers.data ?? []).map((supplier) => ({
                       value: supplier.supplierId,
-                      label: `${supplier.code} — ${supplier.name}`,
+                      ...partyOption(supplier),
                       ...(supplier.contact.mobileNumber
                         ? { detail: supplier.contact.mobileNumber }
                         : {}),

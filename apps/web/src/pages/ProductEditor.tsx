@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ReportSkeleton } from '@/components/ReportFrame';
@@ -23,6 +23,12 @@ import { listMaster, type UnitSummary } from '@/lib/inventory';
 import { currentDecimals, moneyAlways } from '@/lib/money';
 import { SearchSelect } from '@/components/SearchSelect';
 import { OpeningStockTab } from '@/components/product/OpeningStockTab';
+import {
+  PendingSavesContext,
+  usePendingSave,
+  type PendingFlush,
+} from '@/components/product/PendingSaves';
+import { useConfirm } from '@/components/ConfirmPrompt';
 import { useSettings, useTaxOn } from '@/stores/settings';
 import { useSerialNumbersEnabled } from '@/components/SerialNumbers';
 
@@ -238,12 +244,21 @@ function EditorBody({
     await queryClient.invalidateQueries({ queryKey: ['products'] });
   };
 
+  // What the Barcodes and Opening Stock tabs have typed but not added: the one Save
+  // writes it with everything else, whichever tab it is pressed on.
+  const pending = useRef(new Map<string, PendingFlush>());
+  const registerPending = useCallback((key: string, flush: PendingFlush | null) => {
+    if (flush) pending.current.set(key, flush);
+    else pending.current.delete(key);
+  }, []);
+  const { ask, prompt } = useConfirm();
+
   /*
     One Save for both tabs. Sequential rather than parallel, because the API groups the
     fields five ways: if the rates are refused, what went before has landed and the
     message names one thing rather than several.
   */
-  const save = useMutation<void, ApiError>({
+  const save = useMutation<void, Error>({
     mutationFn: async () => {
       await saveProductTab(product.id, 'description', {
         description: form.description.trim(),
@@ -298,15 +313,33 @@ function EditorBody({
           storage: blank(form.storage),
         });
       }
+
+      // Then whatever the other tabs hold: a barcode typed, opening stock rows.
+      for (const flush of pending.current.values()) {
+        await flush();
+      }
     },
     onSuccess: async () => {
       await refresh();
+      // Back to the list, brought up to date first so the product is in it.
+      await queryClient.refetchQueries({ queryKey: ['products'] });
       onClose();
     },
     // The server owns the rules - an MRP a retail rate may not exceed, a unit that
     // does not convert - so its own message is shown rather than one guessed at here.
-    onError: (failure) => setError(failure.detail || failure.code),
+    onError: (failure) => {
+      const api = failure as Partial<ApiError>;
+      setError(api.detail || api.code || failure.message);
+    },
   });
+
+  const saveAll = (): void => {
+    if (!canSave) return;
+    ask(t('common.confirmSave'), () => {
+      setError(null);
+      save.mutate();
+    });
+  };
 
   // Barcodes, opening stock and the two flags act at once and leave the editor open.
   const action = useMutation<void, ApiError, () => Promise<void>>({
@@ -421,90 +454,103 @@ function EditorBody({
         <span className="shrink-0 pb-1.5 ps-2 sm:hidden">{status}</span>
       </nav>
 
-      {editing && (
-        <form
-          className="space-y-6"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (canSave) {
-              setError(null);
-              save.mutate();
-            }
-          }}
-        >
-          {tab === 'description' ? (
-            <DescriptionFields product={product} units={units} form={form} set={set} />
-          ) : (
-            <DetailsFields
-              form={form}
-              set={set}
-              deviceAttributes={enableDeviceAttributes}
-            />
-          )}
-
-          <div className="page-actions">
-            {/* The two flags mean different things and are routinely confused, so they
-                are two buttons with their own words rather than one toggle. */}
-            {tab === 'details' && (
-              <>
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  className="btn-secondary"
-                  onClick={() =>
-                    run(async () => {
-                      await setProductFlag(
-                        product.id,
-                        'discontinued',
-                        !product.isDiscontinued,
-                      );
-                    })
-                  }
-                >
-                  {product.isDiscontinued
-                    ? t('products.resume')
-                    : t('products.discontinue')}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  className="btn-secondary"
-                  onClick={() =>
-                    run(async () => {
-                      await setProductFlag(product.id, 'active', !product.isActive);
-                    })
-                  }
-                >
-                  {product.isActive ? t('masters.withdraw') : t('masters.restore')}
-                </button>
-              </>
+      <PendingSavesContext.Provider value={registerPending}>
+        {prompt}
+        {editing && (
+          <form
+            className="space-y-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveAll();
+            }}
+          >
+            {tab === 'description' ? (
+              <DescriptionFields product={product} units={units} form={form} set={set} />
+            ) : (
+              <DetailsFields
+                form={form}
+                set={set}
+                deviceAttributes={enableDeviceAttributes}
+              />
             )}
+          </form>
+        )}
 
-            <button type="button" onClick={onClose} className="btn-secondary">
-              {t('common.cancel')}
+        {/* Mounted throughout, so what is typed on a tab survives going to another, and
+            the one Save can write it. */}
+        <div hidden={tab !== 'barcodes'}>
+          <BarcodesTab product={product} run={run} busy={action.isPending} />
+        </div>
+
+        <div hidden={tab !== 'openingStock'}>
+          <OpeningStockTab product={product} units={units} />
+        </div>
+
+        {tab === 'photos' && (
+          <PhotoSlots
+            queryKey={['product-photos', product.id]}
+            load={() => getProductPhotos(product.id)}
+            save={(slot, content) => setProductPhoto(product.id, slot, content)}
+            canEdit={can('inventory:product:edit')}
+          />
+        )}
+      </PendingSavesContext.Provider>
+
+      {/* One Save on every tab: the description, the details, and anything typed on
+          Barcodes or Opening Stock and not yet added - then back to the list. */}
+      <div className="page-actions">
+        {/* The two flags mean different things and are routinely confused, so they
+            are two buttons with their own words rather than one toggle. */}
+        {tab === 'details' && (
+          <>
+            <button
+              type="button"
+              disabled={action.isPending}
+              className="btn-secondary"
+              onClick={() =>
+                run(async () => {
+                  await setProductFlag(
+                    product.id,
+                    'discontinued',
+                    !product.isDiscontinued,
+                  );
+                })
+              }
+            >
+              {product.isDiscontinued ? t('products.resume') : t('products.discontinue')}
             </button>
-            <button type="submit" disabled={!canSave} className="btn-primary">
-              {save.isPending ? t('common.saving') : t('products.save')}
+
+            <button
+              type="button"
+              disabled={action.isPending}
+              className="btn-secondary"
+              onClick={() =>
+                run(async () => {
+                  await setProductFlag(product.id, 'active', !product.isActive);
+                })
+              }
+            >
+              {product.isActive ? t('masters.withdraw') : t('masters.restore')}
             </button>
-          </div>
-        </form>
-      )}
+          </>
+        )}
 
-      {tab === 'barcodes' && (
-        <BarcodesTab product={product} run={run} busy={action.isPending} />
-      )}
-
-      {tab === 'openingStock' && <OpeningStockTab product={product} units={units} />}
-
-      {tab === 'photos' && (
-        <PhotoSlots
-          queryKey={['product-photos', product.id]}
-          load={() => getProductPhotos(product.id)}
-          save={(slot, content) => setProductPhoto(product.id, slot, content)}
-          canEdit={can('inventory:product:edit')}
-        />
-      )}
+        <button
+          type="button"
+          onClick={() => ask(t('common.confirmClose'), onClose)}
+          className="btn-secondary"
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={saveAll}
+          disabled={!canSave}
+          className="btn-primary"
+        >
+          {save.isPending ? t('common.saving') : t('products.save')}
+        </button>
+      </div>
     </section>
   );
 }
@@ -853,9 +899,27 @@ function BarcodesTab({
   const [wholesaleRate, setWholesaleRate] = useState('');
   const [maximumRetailPrice, setMaximumRetailPrice] = useState('');
 
+  // The product's one Save also adds a barcode typed here and not yet added.
+  usePendingSave('barcode', async () => {
+    if (!barcode.trim()) return;
+    await addProductBarcode(product.id, {
+      barcode: barcode.trim(),
+      cost: optional(cost),
+      retailRate: optional(retailRate),
+      wholesaleRate: optional(wholesaleRate),
+      maximumRetailPrice: optional(maximumRetailPrice),
+    });
+    setBarcode('');
+    setCost('');
+    setRetailRate('');
+    setWholesaleRate('');
+    setMaximumRetailPrice('');
+  });
+
   return (
     <div className="space-y-4">
       <form
+        data-no-confirm=""
         className="panel toolbar"
         onSubmit={(event) => {
           event.preventDefault();
@@ -883,7 +947,12 @@ function BarcodesTab({
           setMaximumRetailPrice('');
         }}
       >
-        <Compact label={t('products.barcode')} value={barcode} onChange={setBarcode} />
+        <Compact
+          label={t('products.barcode')}
+          value={barcode}
+          onChange={setBarcode}
+          barcode
+        />
         <Compact label={t('products.cost')} value={cost} onChange={setCost} numeric />
         <Compact
           label={t('products.retailRate')}
@@ -1102,11 +1171,14 @@ function Compact({
   value,
   onChange,
   numeric = false,
+  barcode = false,
 }: {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly numeric?: boolean;
+  /** The barcode box, highlighted as it is on every screen. */
+  readonly barcode?: boolean;
 }): React.JSX.Element {
   return (
     <label className="field">
@@ -1115,7 +1187,11 @@ function Compact({
         {...(numeric ? { type: 'number', step: 'any' } : {})}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={clsx('field-input-sm w-full sm:w-32', numeric && 'text-end')}
+        className={clsx(
+          'field-input-sm w-full sm:w-32',
+          numeric && 'text-end',
+          barcode && 'field-barcode sm:w-44',
+        )}
       />
     </label>
   );

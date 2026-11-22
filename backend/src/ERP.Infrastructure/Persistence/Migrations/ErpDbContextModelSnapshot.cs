@@ -782,17 +782,17 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_ledgers_tenant");
 
-                    b.HasIndex("FirmId", "Code")
-                        .IsUnique()
-                        .HasDatabaseName("ix_ledgers_firm_code")
-                        .HasFilter("is_deleted = false");
-
                     b.HasIndex("FirmId", "Kind")
                         .HasDatabaseName("ix_ledgers_firm_kind");
 
                     b.HasIndex("FirmId", "MobileNumber")
                         .HasDatabaseName("ix_ledgers_firm_mobile")
                         .HasFilter("mobile_number IS NOT NULL");
+
+                    b.HasIndex("FirmId", "Kind", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ledgers_firm_kind_code")
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "FirmId", "Kind" }, "ix_ledgers_primary")
                         .IsUnique()

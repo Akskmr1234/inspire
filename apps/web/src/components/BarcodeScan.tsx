@@ -168,8 +168,8 @@ export function BarcodeScan({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/60 p-2">
-      <IconBarcode className="size-5 shrink-0 text-ink-muted" />
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50/60 p-2 dark:border-amber-500/50 dark:bg-amber-500/5">
+      <IconBarcode className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
       <input
         type="text"
         value={code}
@@ -184,7 +184,7 @@ export function BarcodeScan({
         aria-label={t('stock.barcodeScanner')}
         placeholder={t('stock.barcodeScanPlaceholder')}
         enterKeyHint="go"
-        className="field-input min-w-40 flex-1"
+        className="field-input field-barcode min-w-40 flex-1"
       />
       {notice && (
         <span
@@ -231,7 +231,7 @@ export function ScanField({
   return (
     <Field label={label} htmlFor={id} aside={notice} className={className}>
       <div className="relative min-w-0">
-        <IconBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" />
+        <IconBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-amber-600 dark:text-amber-400" />
         <input
           id={id}
           type="text"
@@ -246,7 +246,7 @@ export function ScanField({
           }}
           placeholder={placeholder}
           enterKeyHint="go"
-          className="field-input ps-9"
+          className="field-input field-barcode ps-9"
         />
       </div>
     </Field>

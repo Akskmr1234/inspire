@@ -86,6 +86,9 @@ export function BomsPage(): React.JSX.Element {
       window.setTimeout(() => setNotice(null), 4000);
       await queryClient.invalidateQueries({ queryKey: ['boms'] });
       await queryClient.invalidateQueries({ queryKey: ['bom'] });
+      // Saving a bill sets its finished good's cost in the product master.
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      await queryClient.invalidateQueries({ queryKey: ['product'] });
     },
     onError: (failure) => setError(failure.detail || failure.code),
   });
@@ -260,6 +263,16 @@ function BomForm({
   );
   const options = products.map((product) => productOption(product, undefined));
 
+  // What the components cost - each one's quantity times its cost, added up - and so
+  // what one of the finished good costs: the cost saving writes to its product.
+  const batchCost = lines.reduce((sum, line) => {
+    const unit = products.find((product) => product.id === line.productId);
+    const unitCost = costs.get(line.productId) ?? unit?.cost ?? 0;
+    const quantity = Number(line.quantity);
+    return sum + (Number.isFinite(quantity) ? quantity * unitCost : 0);
+  }, 0);
+  const perUnit = Number(output) > 0 ? batchCost / Number(output) : 0;
+
   const update = (key: string, patch: Partial<ComponentDraft>): void =>
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
@@ -406,6 +419,24 @@ function BomForm({
           </tbody>
         </table>
       </div>
+
+      <dl className="flex flex-wrap justify-end gap-x-8 gap-y-1 rounded-xl border border-line bg-surface-2/50 px-4 py-2 text-sm">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-ink-muted">{t('boms.batchCost')}</dt>
+          <dd className="font-mono font-semibold text-ink tabular-nums">
+            {moneyAlways(batchCost)}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-ink-muted">{t('boms.costPerUnit')}</dt>
+          <dd className="font-mono font-bold text-brand-600 tabular-nums dark:text-brand-300">
+            {moneyAlways(perUnit)}
+          </dd>
+        </div>
+        <p className="basis-full text-end text-xs text-ink-muted">
+          {t('boms.costUpdatesProduct')}
+        </p>
+      </dl>
 
       {problem && <Alert tone="error">{problem}</Alert>}
 
