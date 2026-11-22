@@ -14,6 +14,8 @@ export interface TouchProductGridProps {
   readonly rateType?: SalesRateType;
   readonly masterRate?: (product: ProductSummary, rateType: SalesRateType) => number;
   readonly onHand?: ReadonlyMap<string, number>;
+  /** Each product's small picture, by product id; products without one show their initials. */
+  readonly thumbnails?: Readonly<Record<string, string>>;
   readonly className?: string;
 }
 
@@ -28,6 +30,7 @@ export function TouchProductGrid({
   rateType = 'retail',
   masterRate,
   onHand = new Map(),
+  thumbnails = {},
   className,
 }: TouchProductGridProps): React.JSX.Element {
   const { t, i18n } = useTranslation();
@@ -175,10 +178,27 @@ export function TouchProductGrid({
                   )}
                   title={`${displayName} (${product.code})`}
                 >
-                  {/* Top: Description and inCart Badge */}
+                  {/* Top: thumbnail, description and inCart Badge */}
                   <div className="flex items-start justify-between gap-1.5 w-full">
-                    <span className="line-clamp-2 text-xs font-medium text-ink leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
-                      {displayName}
+                    <span className="flex min-w-0 items-start gap-2">
+                      {thumbnails[product.id] ? (
+                        <img
+                          src={thumbnails[product.id]}
+                          alt=""
+                          loading="lazy"
+                          className="size-9 shrink-0 rounded-md border border-line bg-white object-cover"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-2 text-[11px] font-bold text-ink-subtle uppercase"
+                        >
+                          {displayName.trim().slice(0, 2)}
+                        </span>
+                      )}
+                      <span className="line-clamp-2 text-xs font-medium text-ink leading-snug group-hover:text-brand-600 dark:group-hover:text-brand-400">
+                        {displayName}
+                      </span>
                     </span>
                     {inCart > 0 && (
                       <span

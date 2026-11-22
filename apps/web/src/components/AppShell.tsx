@@ -867,25 +867,23 @@ function Navigation({
   const { pathname } = useLocation();
   const [open, setOpen] = useState(readOpenGroups);
 
-  // The section holding the screen on show opens with it, so arriving from a link
-  // or the palette never leaves the active entry folded out of sight.
+  // The section holding the screen on show opens with it - and only it - so arriving
+  // from a link or the palette shows that section's entries and folds the rest away.
   const activeGroup = menu.data?.items.find((entry) => holdsRoute(entry, pathname))?.code;
 
   useEffect(() => {
     if (activeGroup) {
       setOpen((current) =>
-        current.has(activeGroup) ? current : new Set([...current, activeGroup]),
+        current.size === 1 && current.has(activeGroup) ? current : new Set([activeGroup]),
       );
     }
   }, [activeGroup]);
 
+  // One section open at a time: opening Masters folds Sales, Purchase and the rest,
+  // so only the chosen menu's entries are listed.
   const toggle = (code: string): void =>
     setOpen((current) => {
-      const next = new Set(current);
-
-      if (!next.delete(code)) {
-        next.add(code);
-      }
+      const next = current.has(code) ? new Set<string>() : new Set([code]);
 
       writeOpenGroups(next);
       return next;

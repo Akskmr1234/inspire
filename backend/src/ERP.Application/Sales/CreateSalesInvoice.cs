@@ -80,6 +80,10 @@ public sealed record SalesInvoiceChargeInput(Guid LedgerId, decimal Amount);
 /// The unit the total is rounded to - 0.25, 1, 5 - as the firm's settings say. Zero, the
 /// default, rounds to the currency's own precision alone.
 /// </param>
+/// <param name="BillingMobile">A walk-in customer's mobile number, typed at the counter.</param>
+/// <param name="BillingAddress">A walk-in customer's address, typed at the counter.</param>
+/// <param name="AreaId">The area the sale was made in, for reports by area.</param>
+/// <param name="RouteId">The route the sale was made on, for reports by route.</param>
 /// <remarks>
 /// A draft, and only a draft. Nothing moves until it is posted, which is a command of its
 /// own - so an invoice can be corrected while it is being typed, and a mistake found at
@@ -106,7 +110,11 @@ public sealed record CreateSalesInvoiceCommand(
     bool PaidInFull = false,
     string? BillingName = null,
     string? OnlinePaymentType = null,
-    decimal RoundTo = 0m) : ICommand<SalesInvoiceResponse>, ITransactional;
+    decimal RoundTo = 0m,
+    string? BillingMobile = null,
+    string? BillingAddress = null,
+    Guid? AreaId = null,
+    Guid? RouteId = null) : ICommand<SalesInvoiceResponse>, ITransactional;
 
 /// <summary>An invoice as it now stands.</summary>
 /// <param name="SalesInvoiceId">The invoice.</param>
@@ -168,6 +176,12 @@ public sealed class CreateSalesInvoiceCommandValidator
 
         RuleFor(c => c.BillingName)
             .MaximumLength(SalesInvoice.MaximumBillingNameLength);
+
+        RuleFor(c => c.BillingMobile)
+            .MaximumLength(SalesInvoice.MaximumBillingMobileLength);
+
+        RuleFor(c => c.BillingAddress)
+            .MaximumLength(SalesInvoice.MaximumBillingAddressLength);
 
         RuleFor(c => c.OnlinePaymentType)
             .MaximumLength(SalesInvoice.MaximumOnlinePaymentTypeLength);

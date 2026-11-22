@@ -105,6 +105,10 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
             .HasMaxLength(SalesInvoice.MaximumOnlinePaymentTypeLength);
         builder.Property(invoice => invoice.BillingName)
             .HasMaxLength(SalesInvoice.MaximumBillingNameLength);
+        builder.Property(invoice => invoice.BillingMobile)
+            .HasMaxLength(SalesInvoice.MaximumBillingMobileLength);
+        builder.Property(invoice => invoice.BillingAddress)
+            .HasMaxLength(SalesInvoice.MaximumBillingAddressLength);
 
         // Zero - the currency's own rounding, and nothing more - for every sale entered
         // before a firm could round to a unit of its own.

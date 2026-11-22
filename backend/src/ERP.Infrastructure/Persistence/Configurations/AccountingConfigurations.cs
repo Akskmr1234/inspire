@@ -105,11 +105,14 @@ public sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
         builder.Ignore(l => l.IsCashOrBank);
         builder.Ignore(l => l.IsParty);
 
+        // Unique within a kind: the Primary customer and the Primary supplier are both
+        // 1000. Creating a ledger still refuses any code another ledger uses
+        // (IsCodeInUseAsync), so only the two Primary records share one.
         builder
-            .HasIndex(l => new { l.FirmId, l.Code })
+            .HasIndex(l => new { l.FirmId, l.Kind, l.Code })
             .IsUnique()
             .HasFilter("is_deleted = false")
-            .HasDatabaseName("ix_ledgers_firm_code");
+            .HasDatabaseName("ix_ledgers_firm_kind_code");
 
         builder.HasIndex(l => l.TenantId).HasDatabaseName("ix_ledgers_tenant");
 

@@ -80,7 +80,11 @@ public sealed class StockSummaryReader : IStockSummaryReader
             Totals totals = byProduct.TryGetValue(bucket.ProductId, out Totals? found) ? found : new Totals();
             byProduct[bucket.ProductId] = totals;
 
-            if (bucket.Before)
+            // Opening is what was on hand before the period, and also the opening stock
+            // entered in it: a product's opening stock is usually keyed on the day it is
+            // set up, inside the period being looked at, and belongs in Opening rather
+            // than among the period's other receipts.
+            if (bucket.Before || bucket.DocumentType == StockDocumentType.OpeningStock)
             {
                 totals.Opening += bucket.Quantity;
                 continue;

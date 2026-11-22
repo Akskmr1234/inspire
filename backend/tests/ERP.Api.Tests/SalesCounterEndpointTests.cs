@@ -112,6 +112,8 @@ public sealed class SalesCounterEndpointTests
             PaymentMode = SalesPaymentMode.Online,
             OnlinePaymentType = "Google Pay",
             BillingName = "  Rashid Khan ",
+            BillingMobile = " 5550 1234 ",
+            BillingAddress = "Street 12, Al Sadd",
             RoundTo = 0.25m,
             Post = true,
         }));
@@ -124,6 +126,8 @@ public sealed class SalesCounterEndpointTests
         SalesInvoiceDetail detail = (await client.GetFromJsonAsync<SalesInvoiceDetail>(
             $"{Invoices}/{invoice.SalesInvoiceId}"))!;
         detail.BillingName.ShouldBe("Rashid Khan");
+        detail.BillingMobile.ShouldBe("5550 1234");
+        detail.BillingAddress.ShouldBe("Street 12, Al Sadd");
         detail.OnlinePaymentType.ShouldBe("Google Pay");
         detail.RoundTo.ShouldBe(0.25m);
 

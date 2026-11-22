@@ -26,6 +26,7 @@ import {
 } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { usePartyOption } from '@/lib/partyLabel';
 import clsx from 'clsx';
 import { DataGrid, GridAction, type GridColumn } from '@/components/DataGrid';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
@@ -570,6 +571,7 @@ export function StockEntry({
   }) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const partyOption = usePartyOption();
   const godownsOn = useGodownsOn();
   const directSave = useDirectSave();
 
@@ -600,7 +602,7 @@ export function StockEntry({
     if (type === StockDocumentType.deliveryNote) {
       return (customers.data ?? []).map((customer) => ({
         value: customer.customerId,
-        label: `${customer.code} — ${customer.name}`,
+        ...partyOption(customer),
         ...(customer.contact.mobileNumber
           ? { detail: customer.contact.mobileNumber }
           : {}),
@@ -609,14 +611,14 @@ export function StockEntry({
     if (type === StockDocumentType.receiptNote) {
       return (suppliers.data ?? []).map((supplier) => ({
         value: supplier.supplierId,
-        label: `${supplier.code} — ${supplier.name}`,
+        ...partyOption(supplier),
         ...(supplier.contact.mobileNumber
           ? { detail: supplier.contact.mobileNumber }
           : {}),
       }));
     }
     return [];
-  }, [type, customers.data, suppliers.data]);
+  }, [type, customers.data, suppliers.data, partyOption]);
 
   const selectedPartyDetails: PartyDetails | undefined = useMemo(() => {
     if (type === StockDocumentType.deliveryNote) {
@@ -1102,12 +1104,14 @@ export function StockEntry({
                       />
                     </td>
                     <NumberCell
+                      concealed={!line.productId}
                       label={quantityLabel}
                       value={line.quantity}
                       onChange={(val) => update(line.key, { quantity: val })}
                     />
                     {showRate && columns.shows('rate') && (
                       <NumberCell
+                        concealed={!line.productId}
                         label={t('stock.rate')}
                         value={line.rate}
                         placeholder={t('stock.ratePlaceholder')}

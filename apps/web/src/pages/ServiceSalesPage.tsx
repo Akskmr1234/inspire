@@ -1150,9 +1150,9 @@ function ServiceSaleForm({
                         }
                       }}
                       aria-label={t('serviceSales.barcode')}
-                      className="field-input-sm w-48 pe-8 font-mono"
+                      className="field-input-sm field-barcode w-48 pe-8 font-mono"
                     />
-                    <IconBarcode className="pointer-events-none absolute inset-y-0 end-2 my-auto size-4 text-ink-subtle" />
+                    <IconBarcode className="pointer-events-none absolute inset-y-0 end-2 my-auto size-4 text-amber-600 dark:text-amber-400" />
                   </span>
                 </label>
               )}

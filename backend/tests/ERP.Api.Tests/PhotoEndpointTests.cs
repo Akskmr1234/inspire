@@ -46,6 +46,33 @@ public sealed class PhotoEndpointTests
     }
 
     [Fact]
+    public async Task A_products_thumbnail_is_kept_with_its_photograph_for_the_catalog()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+        string photos = $"/api/v1/inventory/products/{masters.ProductId}/photos";
+        const string Thumbnail = "data:image/jpeg;base64,/9j/thumb=";
+
+        (await client.PutAsJsonAsync($"{photos}/1", new { Content = Picture, Thumbnail }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Every product's thumbnail in one small answer, never the full pictures.
+        Dictionary<Guid, string> thumbnails = (await client.GetFromJsonAsync<Dictionary<Guid, string>>(
+            "/api/v1/inventory/products/thumbnails"))!;
+        thumbnails[masters.ProductId].ShouldBe(Thumbnail);
+
+        // Something that is not a picture is refused as a thumbnail too.
+        (await client.PutAsJsonAsync($"{photos}/1", new { Content = Picture, Thumbnail = "hello" }))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        // Removing the photograph removes its thumbnail.
+        (await client.PutAsJsonAsync($"{photos}/1", new { Content = (string?)null }))
+            .StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.GetFromJsonAsync<Dictionary<Guid, string>>("/api/v1/inventory/products/thumbnails"))!
+            .ShouldNotContainKey(masters.ProductId);
+    }
+
+    [Fact]
     public async Task A_party_keeps_three_photographs_and_the_first_is_its_card_photo()
     {
         HttpClient client = await _factory.CreateAuthenticatedClientAsync();

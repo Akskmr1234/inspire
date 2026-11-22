@@ -286,6 +286,14 @@ public static class MenuCatalogue
                     "sales",
                     "/sales/delivery-notes",
                     "inventory:stock-adjustment:view"),
+                // The cashier's counter: fast billing, shifts and the day close.
+                new(
+                    "transactions.pos",
+                    "Point of sale",
+                    "نقطة البيع",
+                    "sales",
+                    "/sales/pos",
+                    "sales:pos:view"),
                 new(
                     "transactions.sales",
                     "Sales invoices",

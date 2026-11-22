@@ -1,5 +1,6 @@
 using ERP.Application.Inventory.Products;
 using ERP.Domain.Inventory;
+using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Persistence.Repositories;
@@ -27,4 +28,27 @@ public sealed class ProductPhotoRepository : IProductPhotoRepository
 
     /// <inheritdoc />
     public void Remove(ProductPhoto photo) => _context.ProductPhotos.Remove(photo);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, string>> ListThumbnailsAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default)
+    {
+        // Only the thumbnails, never the full pictures: a catalog of hundreds of
+        // products asks for this at once.
+        var rows = await _context.ProductPhotos.AsNoTracking()
+            .Where(photo => photo.FirmId == firmId && photo.Thumbnail != null)
+            .OrderBy(photo => photo.Slot)
+            .Select(photo => new { photo.ProductId, photo.Thumbnail })
+            .ToListAsync(cancellationToken);
+
+        Dictionary<Guid, string> thumbnails = [];
+
+        foreach (var row in rows)
+        {
+            thumbnails.TryAdd(row.ProductId.Value, row.Thumbnail!);
+        }
+
+        return thumbnails;
+    }
 }

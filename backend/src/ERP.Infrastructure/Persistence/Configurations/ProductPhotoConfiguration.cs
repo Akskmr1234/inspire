@@ -18,6 +18,7 @@ public sealed class ProductPhotoConfiguration : IEntityTypeConfiguration<Product
 
         builder.Property(photo => photo.Content).HasMaxLength(ProductPhoto.MaximumLength).IsRequired();
         builder.Property(photo => photo.Slot).IsRequired();
+        builder.Property(photo => photo.Thumbnail).HasMaxLength(ProductPhoto.MaximumThumbnailLength);
 
         builder.HasOne<Product>()
             .WithMany()

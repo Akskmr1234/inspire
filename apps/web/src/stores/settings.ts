@@ -225,6 +225,24 @@ export interface AppSettings {
   readonly pickSalesmen: boolean;
   /** Whether a sale shows the name it is billed to, under the customer's details. */
   readonly showBillingName: boolean;
+  /** How customers and suppliers read in a dropdown: code and name, or the name alone. */
+  readonly partyDisplay: 'codeAndName' | 'nameOnly';
+  /** The point of sale's payment button chosen at the start of a bill. */
+  readonly posDefaultPayment: 'cash' | 'card' | 'upi' | 'online';
+  /** Whether the point of sale asks "Do you want to save?" before each bill. */
+  readonly posAskBeforeSave: boolean;
+  /** Whether the point of sale prints the bill as soon as it is paid. */
+  readonly posAutoPrint: boolean;
+  /** Whether cashiers may take returns at the point of sale. */
+  readonly posAllowReturns: boolean;
+  /** Whether cashiers may give a discount on a line at the point of sale. */
+  readonly posAllowDiscount: boolean;
+  /** Whether cashiers may change a line's rate at the point of sale. */
+  readonly posAllowRateChange: boolean;
+  /** Whether the point of sale shows the product catalog beside the bill. */
+  readonly posShowCatalog: boolean;
+  /** The online payment type a UPI payment is recorded as. */
+  readonly posUpiMethod: string;
   /** Whether a sale shows the narration box, under the customer's details. */
   readonly showSalesNarration: boolean;
   /** Whether a sale shows the barcode box. */
@@ -339,6 +357,15 @@ const DEFAULTS: AppSettings = {
   showSalesReference: false,
   pickSalesmen: false,
   showBillingName: true,
+  partyDisplay: 'codeAndName',
+  posDefaultPayment: 'cash',
+  posAskBeforeSave: false,
+  posAutoPrint: true,
+  posAllowReturns: true,
+  posAllowDiscount: false,
+  posAllowRateChange: false,
+  posShowCatalog: true,
+  posUpiMethod: 'UPI',
   showSalesNarration: true,
   showSalesScan: true,
   showTouchCatalog: false,

@@ -107,6 +107,11 @@ internal static class PermissionCatalogue
         new("sales", "loyalty", [PermissionVerb.View, PermissionVerb.Edit], "Loyalty points and privilege cards"),
         new("sales", "discount", [PermissionVerb.View, PermissionVerb.Edit], "Discounts on a document"),
         new("sales", "report", ReadOnly, "Sales reports"),
+        new(
+            "sales",
+            "pos",
+            [PermissionVerb.View, PermissionVerb.Create, PermissionVerb.Approve],
+            "Point of sale: open the counter (view), open and close one's own shift (create), close the day (approve)"),
 
         // ---------------------------------------------------------- purchase
         new("purchase", "requisition", AllVerbs, "Purchase requisitions"),
@@ -220,6 +225,9 @@ internal static class PermissionCatalogue
                 new("sales", ["quotation", "order", "delivery-note", "invoice", "customer", "loyalty"],
                     [PermissionVerb.View, PermissionVerb.Create, PermissionVerb.Edit, PermissionVerb.Print]),
                 new("sales", ["report"], [PermissionVerb.View, PermissionVerb.Print]),
+
+                // A cashier opens and closes their own shift; closing the day is a manager's.
+                new("sales", ["pos"], [PermissionVerb.View, PermissionVerb.Create]),
                 new("inventory", ["product", "batch", "serial-number"], [PermissionVerb.View]),
                 new("service", ["job-card"], [PermissionVerb.View, PermissionVerb.Create]),
             ]),

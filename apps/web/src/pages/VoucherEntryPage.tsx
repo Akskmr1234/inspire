@@ -3,9 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { useConfirm } from '@/components/ConfirmPrompt';
 import { PageHeading } from '@/components/PageHeading';
 import { Spinner } from '@/components/ReportFrame';
-import { DateField, Field, SelectField, TextField } from '@/components/Form';
+import {
+  DateField,
+  Field,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from '@/components/Form';
 import { SearchSelect, type SelectOption } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
 import { useIsNarrow } from '@/components/DataGrid';
@@ -20,7 +27,7 @@ import {
   type LedgerSummary,
 } from '@/lib/ledgers';
 import { moneyAlways as money } from '@/lib/money';
-import { PAYMENT_MODES } from '@/lib/paymentModes';
+import { isKnownPaymentMode, PAYMENT_MODES } from '@/lib/paymentModes';
 import {
   getVoucher,
   KIND_PATH,
@@ -315,6 +322,7 @@ function JournalForm({
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
+  const { ask, prompt } = useConfirm();
   const post = useMutation<SaveAnswer, ApiError>({
     mutationFn: () =>
       saveVoucher(
@@ -417,9 +425,10 @@ function JournalForm({
         className="card card-body space-y-5"
         onSubmit={(event) => {
           event.preventDefault();
-          if (canSubmit) post.mutate();
+          if (canSubmit) ask(t('common.confirmSave'), () => post.mutate());
         }}
       >
+        {prompt}
         {/* As on a payment or a receipt: when and under what reference first, then
             the ledgers, the narration under them and one button. */}
         <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -558,11 +567,11 @@ function JournalForm({
           )}
         </LinesFrame>
 
-        <TextField
+        <TextAreaField
           label={t('vouchers.narration')}
+          rows={2}
           value={narration}
           onChange={setNarration}
-          className="w-full"
         />
 
         {unnamed && <p className="alert-error text-xs">{t('vouchers.ledgerRequired')}</p>}
@@ -573,15 +582,18 @@ function JournalForm({
 
         <div className="form-actions flex-wrap items-center">
           <BalanceBadge totals={totals} />
-          {existing && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void navigate(KIND_PATH.journal)}
-            >
-              {t('common.cancel')}
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() =>
+              ask(
+                t('common.confirmClose'),
+                () => void navigate(existing ? KIND_PATH.journal : '/'),
+              )
+            }
+          >
+            {t('common.cancel')}
+          </button>
           <button
             {...shortcutProps('save')}
             type="submit"
@@ -1100,6 +1112,7 @@ function MoneyForm({
   const navigate = useNavigate();
   const narrow = useIsNarrow(CARDS_BELOW);
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
+  const onlinePaymentTypes = useSettings((state) => state.onlinePaymentTypes);
   const billWise = useSettings((state) =>
     direction === 'receipt' ? state.billWiseReceipts : state.billWisePayments,
   );
@@ -1128,6 +1141,11 @@ function MoneyForm({
       date: '',
       inFavourOf: '',
     },
+  );
+  // Paid online: the method (PhonePe, Google Pay...) from the online payment types
+  // master. Kept on the money line's narration, like the card details.
+  const [onlineMethod, setOnlineMethod] = useState(
+    onlineMethodOf(draft?.accountNarration ?? null),
   );
   const [card, setCard] = useState<CardDetails>({
     type: '',
@@ -1181,12 +1199,24 @@ function MoneyForm({
   }, [all]);
 
   const modeOptions = useMemo(
-    (): readonly SelectOption[] =>
-      PAYMENT_MODES.filter((option) => option.value !== 'Credit').map((option) => ({
+    (): readonly SelectOption[] => [
+      ...PAYMENT_MODES.filter((option) => option.value !== 'Credit').map((option) => ({
         value: option.value,
         label: t(option.labelKey),
       })),
-    [t],
+      // A mode no longer offered (e.g. "Bank transfer") stays on the voucher that has it.
+      ...(mode && !isKnownPaymentMode(mode) ? [{ value: mode, label: mode }] : []),
+    ],
+    [t, mode],
+  );
+
+  const methodOptions = useMemo(
+    (): readonly SelectOption[] => [
+      ...onlinePaymentTypes
+        .filter((type) => (type.active || type.name === onlineMethod) && type.name.trim())
+        .map((type) => ({ value: type.name, label: type.name })),
+    ],
+    [onlinePaymentTypes, onlineMethod],
   );
 
   const entered = lines.filter((line) => parseAmount(line.amount) > 0);
@@ -1219,6 +1249,12 @@ function MoneyForm({
     return null;
   };
 
+  /** The online method, as the money line's narration, when one was chosen. */
+  const onlineNote = (): string | null =>
+    mode === 'Online' && onlineMethod.trim()
+      ? `${ONLINE_NOTE_PREFIX}${onlineMethod.trim()}`
+      : null;
+
   /** The card details, as the money line's narration, when any were given. */
   const cardNote = (): string | null => {
     if (mode !== 'Card') return null;
@@ -1230,6 +1266,7 @@ function MoneyForm({
     return parts.length > 0 ? `${t('paymentModes.card')}: ${parts.join(' · ')}` : null;
   };
 
+  const { ask, prompt } = useConfirm();
   const post = useMutation<SaveAnswer, ApiError>({
     mutationFn: () => {
       const partySide = direction === 'receipt' ? CREDIT : DEBIT;
@@ -1281,7 +1318,9 @@ function MoneyForm({
         amount: Math.round(total * 100) / 100,
         // A correction that leaves the card details blank keeps the ones it had.
         narration:
-          cardNote() ?? (mode === 'Card' ? (draft?.accountNarration ?? null) : null),
+          cardNote() ??
+          onlineNote() ??
+          (mode === 'Card' ? (draft?.accountNarration ?? null) : null),
       };
 
       return saveVoucher(
@@ -1408,9 +1447,10 @@ function MoneyForm({
           event.preventDefault();
           const wrong = check();
           setProblem(wrong);
-          if (wrong === null) post.mutate();
+          if (wrong === null) ask(t('common.confirmSave'), () => post.mutate());
         }}
       >
+        {prompt}
         <div className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface-2/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <DateField
             label={t('vouchers.date')}
@@ -1492,6 +1532,21 @@ function MoneyForm({
               size="sm"
             />
           </fieldset>
+        )}
+
+        {mode === 'Online' && methodOptions.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label={t('vouchers.onlineMethod')}>
+              <SearchSelect
+                value={onlineMethod}
+                onChange={(value) => setOnlineMethod(value)}
+                options={methodOptions}
+                size="sm"
+                label={t('vouchers.onlineMethod')}
+                placeholder={t('common.choose')}
+              />
+            </Field>
+          </div>
         )}
 
         {mode === 'Card' && (
@@ -1606,11 +1661,11 @@ function MoneyForm({
           </div>
         </LinesFrame>
 
-        <TextField
+        <TextAreaField
           label={t('vouchers.narration')}
+          rows={2}
           value={narration}
           onChange={setNarration}
-          className="w-full"
         />
 
         {existing && (
@@ -1620,15 +1675,18 @@ function MoneyForm({
         {problem && <p className="alert-error text-xs">{problem}</p>}
 
         <div className="form-actions">
-          {existing && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void navigate(KIND_PATH[direction])}
-            >
-              {t('common.cancel')}
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() =>
+              ask(
+                t('common.confirmClose'),
+                () => void navigate(existing ? KIND_PATH[direction] : '/'),
+              )
+            }
+          >
+            {t('common.cancel')}
+          </button>
           <button
             {...shortcutProps('save')}
             type="submit"
@@ -1648,4 +1706,14 @@ function MoneyForm({
       </form>
     </section>
   );
+}
+
+/** How the online method is written on a voucher's money line. */
+const ONLINE_NOTE_PREFIX = 'Online: ';
+
+/** The online method a money line's narration names, or blank. */
+function onlineMethodOf(narration: string | null): string {
+  return narration?.startsWith(ONLINE_NOTE_PREFIX)
+    ? narration.slice(ONLINE_NOTE_PREFIX.length).trim()
+    : '';
 }

@@ -4,6 +4,7 @@ using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
 using ERP.Domain.Numbering;
+using ERP.Domain.Parties;
 using ERP.Domain.Sales;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
@@ -339,11 +340,26 @@ public sealed class CreateSalesInvoiceCommandHandler
         Context context)
     {
         Result details = invoice.SetDetails(
-            request.ReferenceNumber, request.Narration, request.BillingName);
+            request.ReferenceNumber,
+            request.Narration,
+            request.BillingName,
+            request.BillingMobile,
+            request.BillingAddress);
 
         if (details.IsFailure)
         {
             return details;
+        }
+
+        // The area and route chosen on the bill, or the customer's own: a report by area
+        // then finds the sale whether or not the counter touched the boxes.
+        Result territory = invoice.SetTerritory(
+            request.AreaId is { } area ? TerritoryId.From(area) : context.Customer.AreaId,
+            request.RouteId is { } route ? TerritoryId.From(route) : context.Customer.RouteId);
+
+        if (territory.IsFailure)
+        {
+            return territory;
         }
 
         // Before the payment: paid in full takes the total, and the total is what it

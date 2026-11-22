@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState } from 'r
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { ConfirmPrompt } from '@/components/ConfirmPrompt';
 import { Field } from '@/components/Form';
 import {
   IconBarcode,
@@ -75,10 +76,9 @@ export function InvoiceWindow({
   const [confirming, setConfirming] = useState(false);
   const clicked = useRef<EventTarget | null>(null);
 
-  const requestClose = (): void => {
-    if (dirty) setConfirming(true);
-    else onClose();
-  };
+  // Every way out asks first - "Do you want to close?" - and, with work entered,
+  // says it will be lost and offers to hold the bill where that is possible.
+  const requestClose = (): void => setConfirming(true);
 
   return (
     <Dialog.Root open modal={!docked} onOpenChange={(open) => !open && requestClose()}>
@@ -128,9 +128,10 @@ export function InvoiceWindow({
             </RequestClose.Provider>
           </Docked.Provider>
           {confirming && (
-            <DiscardPrompt
+            <ClosePrompt
+              dirty={dirty}
               onKeep={() => setConfirming(false)}
-              onDiscard={onClose}
+              onClose={onClose}
               {...(onHold ? { onHold } : {})}
             />
           )}
@@ -141,60 +142,38 @@ export function InvoiceWindow({
 }
 
 /**
- * Whether to throw away an invoice with work in it - or hold it, where it can be held.
- * Keeping it is the default.
+ * "Do you want to close?" With work entered it says that work will be lost, keeps
+ * the focus on No, and offers to hold the bill where it can be held.
  */
-function DiscardPrompt({
+function ClosePrompt({
+  dirty,
   onKeep,
-  onDiscard,
+  onClose,
   onHold,
 }: {
+  readonly dirty: boolean;
   readonly onKeep: () => void;
-  readonly onDiscard: () => void;
+  readonly onClose: () => void;
   readonly onHold?: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
 
-  // Escape answers "keep" - caught at the window, ahead of the dialog's own
-  // listener, so it does not ask again.
-  useEffect(() => {
-    const escape = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
-      event.stopPropagation();
-      onKeep();
-    };
-    window.addEventListener('keydown', escape, true);
-    return () => window.removeEventListener('keydown', escape, true);
-  }, [onKeep]);
-
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/40 p-4">
-      <div
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="invoice-discard-title"
-        className="animate-rise w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-float"
-      >
-        <h3 id="invoice-discard-title" className="text-base font-semibold text-ink">
-          {t('invoice.discardTitle')}
-        </h3>
-        <p className="mt-1.5 text-sm text-ink-muted">{t('invoice.discardBody')}</p>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button type="button" onClick={onKeep} className="btn-secondary" autoFocus>
-            {t('invoice.keepEditing')}
-          </button>
-          {onHold && (
-            <button type="button" onClick={onHold} className="btn-secondary">
-              <IconPause className="size-4" />
-              {t('invoice.hold')}
-            </button>
-          )}
-          <button type="button" onClick={onDiscard} className="btn-danger">
-            {t('invoice.discard')}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmPrompt
+      title={t('common.confirmClose')}
+      {...(dirty ? { body: t('invoice.discardBody') } : {})}
+      danger={dirty}
+      focusCancel={dirty}
+      onConfirm={onClose}
+      onCancel={onKeep}
+    >
+      {dirty && onHold && (
+        <button type="button" onClick={onHold} className="btn-secondary">
+          <IconPause className="size-4" />
+          {t('invoice.hold')}
+        </button>
+      )}
+    </ConfirmPrompt>
   );
 }
 
@@ -290,12 +269,15 @@ export function InvoiceActions({
   const onCancel = useContext(RequestClose);
   const bar = useRef<HTMLElement>(null);
   const billInView = useBillTotalInView(bar);
+  // Every way to save asks first - the button or its key alike, since the keys
+  // click the button.
+  const [asking, setAsking] = useState<InvoiceAction | null>(null);
 
   const button = (action: InvoiceAction, main: boolean): React.JSX.Element => (
     <button
       key={action.label}
       type="button"
-      onClick={action.onClick}
+      onClick={() => setAsking(action)}
       disabled={action.disabled}
       {...(action.shortcut ? shortcutProps(action.shortcut) : {})}
       title={action.shortcut ? shortcutFor(action.shortcut) : undefined}
@@ -343,17 +325,25 @@ export function InvoiceActions({
         )}
         {hints && <div className="hidden min-w-0 flex-1 lg:flex">{hints}</div>}
         <div className="flex w-full items-center gap-2 sm:ms-auto sm:w-auto">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="btn-ghost hidden text-ink-muted sm:inline-flex"
-          >
+          <button type="button" onClick={onCancel} className="btn-secondary px-3 sm:px-4">
             {t('common.cancel')}
           </button>
           {secondary.map((action) => button(action, false))}
           {button(primary, true)}
         </div>
       </div>
+      {asking && (
+        <ConfirmPrompt
+          title={t('common.confirmSave')}
+          body={asking.label}
+          onConfirm={() => {
+            const action = asking;
+            setAsking(null);
+            action.onClick();
+          }}
+          onCancel={() => setAsking(null)}
+        />
+      )}
     </footer>
   );
 }
@@ -566,8 +556,11 @@ function lineOf(box: HTMLElement): Element | null {
   return row;
 }
 
-/** Enter in a line: the next box, the next line's product, or a new line. */
-function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
+/**
+ * Enter in a line: the next box, the next line's product, or a new line. Exported so a
+ * list of lines outside an invoice - a bill of materials - moves the same way.
+ */
+export function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
   if (
     event.key !== 'Enter' ||
     event.altKey ||
@@ -585,6 +578,10 @@ function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
 
   // A picker chose something only if it took the key for itself.
   if (box.getAttribute('role') === 'combobox' && !event.defaultPrevented) return;
+
+  // The key is this handler's from here on: inside a form, Enter in a box would
+  // otherwise also submit it - and save the document mid-entry.
+  event.preventDefault();
 
   const boxes = lineBoxes(row);
   const next = boxes[boxes.indexOf(box) + 1];
@@ -1094,11 +1091,17 @@ export function PartyCard({
   choose,
   money,
   className,
+  hideDetails = false,
   children,
 }: {
   readonly icon: React.ReactNode;
   readonly title: string;
   readonly party: PartyDetails | undefined;
+  /**
+   * Leave out the account's mobile, address, tax number and credit: a walk-in sale's
+   * account has none, and the customer's own are typed in the fields below instead.
+   */
+  readonly hideDetails?: boolean;
   /** Said when nobody is chosen yet. */
   readonly empty: string;
   /** The button's caption when nobody is chosen: "Choose customer". */
@@ -1145,7 +1148,7 @@ export function PartyCard({
             {party.name}
           </p>
           <p className="text-xs text-ink-muted">{party.code}</p>
-          <dl className="mt-2 space-y-1 text-sm">
+          <dl className={clsx('mt-2 space-y-1 text-sm', hideDetails && 'hidden')}>
             {rows.map(([label, value]) => (
               <div key={label} className="flex gap-3">
                 <dt className="w-32 shrink-0 truncate text-ink-muted">{label}</dt>
@@ -1228,13 +1231,19 @@ export function NarrationInput({
       className={className}
       aside={value.length > 0 ? `${value.length}/${NARRATION_LIMIT}` : undefined}
     >
-      <input
+      {/* A text area, so Enter starts a new line instead of submitting the form and
+          saving the document. Ctrl+Enter still saves. */}
+      <textarea
         id={id}
         value={value}
         maxLength={NARRATION_LIMIT}
+        rows={compact ? 2 : 3}
         onChange={(event) => onChange(event.target.value)}
         placeholder={label}
-        className={compact ? 'field-input-sm' : 'field-input'}
+        className={clsx(
+          compact ? 'field-input-sm' : 'field-input',
+          'h-auto resize-y py-1.5',
+        )}
       />
     </Field>
   );
@@ -1279,10 +1288,16 @@ export function NumberCell({
   readOnly = false,
   step = 'any',
   min = '0',
+  concealed = false,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly label: string;
+  /**
+   * Not shown yet - a line's quantity and rate wait for its product. The box is
+   * still there, invisible, so Enter from the product lands in it and it appears.
+   */
+  readonly concealed?: boolean;
   readonly error?: string | undefined;
   readonly subtitle?: string | undefined;
   readonly placeholder?: string | undefined;
@@ -1302,16 +1317,18 @@ export function NumberCell({
         value={value}
         placeholder={placeholder}
         readOnly={readOnly}
-        tabIndex={readOnly ? -1 : undefined}
+        tabIndex={readOnly || concealed ? -1 : undefined}
         aria-invalid={error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
           'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
           readOnly && 'bg-surface-2 text-ink-muted',
           error && 'field-invalid',
+          concealed &&
+            'pointer-events-none opacity-0 focus:pointer-events-auto focus:opacity-100',
         )}
       />
-      {subtitle && (
+      {subtitle && !concealed && (
         <span className="col-start-2 mt-0.5 block text-[10px] tabular-nums text-ink-muted text-end">
           {subtitle}
         </span>

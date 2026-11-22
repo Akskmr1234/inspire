@@ -18,6 +18,9 @@ public sealed class ProductPhoto : AggregateRoot<ProductPhotoId>, IFirmScoped
     /// <summary>How many photographs a product may have.</summary>
     public const int MaximumSlots = 3;
 
+    /// <summary>The longest a thumbnail may be, as a data URL: a small picture of about 96px.</summary>
+    public const int MaximumThumbnailLength = 40_000;
+
     private ProductPhoto(
         ProductPhotoId id,
         TenantId tenantId,
@@ -49,6 +52,13 @@ public sealed class ProductPhoto : AggregateRoot<ProductPhotoId>, IFirmScoped
 
     /// <summary>Gets the picture, as a data URL.</summary>
     public string Content { get; private set; }
+
+    /// <summary>
+    /// Gets a small copy of the picture, for lists that show many products at once: the
+    /// sales catalog. Made by the browser when the picture is saved; null for a picture
+    /// saved before thumbnails were kept.
+    /// </summary>
+    public string? Thumbnail { get; private set; }
 
     /// <summary>Records one of a product's photographs.</summary>
     /// <param name="tenantId">The owning tenant.</param>
@@ -91,6 +101,24 @@ public sealed class ProductPhoto : AggregateRoot<ProductPhotoId>, IFirmScoped
         }
 
         Content = content;
+        return Result.Success();
+    }
+
+    /// <summary>Sets the small copy of the picture; null clears it.</summary>
+    /// <param name="thumbnail">The thumbnail, as a data URL.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result SetThumbnail(string? thumbnail)
+    {
+        if (thumbnail is not null
+            && (!thumbnail.StartsWith("data:image/", StringComparison.Ordinal)
+                || thumbnail.Length > MaximumThumbnailLength))
+        {
+            return Result.Failure(Error.Validation(
+                "ProductPhoto.ThumbnailInvalid",
+                "A thumbnail is a small picture of at most about thirty kilobytes."));
+        }
+
+        Thumbnail = thumbnail;
         return Result.Success();
     }
 }

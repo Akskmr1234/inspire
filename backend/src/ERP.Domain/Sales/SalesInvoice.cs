@@ -1,5 +1,6 @@
 using ERP.Domain.Accounting;
 using ERP.Domain.Inventory;
+using ERP.Domain.Parties;
 using ERP.Domain.Taxation;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
@@ -110,6 +111,12 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
     /// <summary>The longest the name billed may be.</summary>
     public const int MaximumBillingNameLength = 120;
+
+    /// <summary>The longest a walk-in customer's mobile number may be.</summary>
+    public const int MaximumBillingMobileLength = 20;
+
+    /// <summary>The longest a walk-in customer's address may be.</summary>
+    public const int MaximumBillingAddressLength = 250;
 
     /// <summary>The longest an online payment's type may be: "Google Pay", "PhonePe".</summary>
     public const int MaximumOnlinePaymentTypeLength = 60;
@@ -262,6 +269,18 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// account for, and the printed bill has to say who this one was.
     /// </remarks>
     public string? BillingName { get; private set; }
+
+    /// <summary>Gets the walk-in customer's mobile number, typed at the counter.</summary>
+    public string? BillingMobile { get; private set; }
+
+    /// <summary>Gets the walk-in customer's address, typed at the counter.</summary>
+    public string? BillingAddress { get; private set; }
+
+    /// <summary>Gets the area the sale was made in; the customer's own unless changed.</summary>
+    public TerritoryId? AreaId { get; private set; }
+
+    /// <summary>Gets the route the sale was made on; the customer's own unless changed.</summary>
+    public TerritoryId? RouteId { get; private set; }
 
     /// <summary>Gets the unit the total is rounded to: 0.25, 1, 5. Zero rounds to the currency alone.</summary>
     public decimal RoundTo { get; private set; }
@@ -774,8 +793,15 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     /// <param name="referenceNumber">The customer's own reference.</param>
     /// <param name="narration">What is printed on the invoice.</param>
     /// <param name="billingName">The name the invoice is made out to, where it says one.</param>
+    /// <param name="billingMobile">A walk-in customer's mobile number.</param>
+    /// <param name="billingAddress">A walk-in customer's address.</param>
     /// <returns>Success, or the reason it was refused.</returns>
-    public Result SetDetails(string? referenceNumber, string? narration, string? billingName = null)
+    public Result SetDetails(
+        string? referenceNumber,
+        string? narration,
+        string? billingName = null,
+        string? billingMobile = null,
+        string? billingAddress = null)
     {
         if (!IsEditable)
         {
@@ -793,9 +819,48 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 $"A billing name is at most {MaximumBillingNameLength} characters."));
         }
 
+        string? mobile = Trimmed(billingMobile);
+
+        if (mobile is { Length: > MaximumBillingMobileLength })
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.BillingMobileTooLong",
+                $"A mobile number is at most {MaximumBillingMobileLength} characters."));
+        }
+
+        string? address = Trimmed(billingAddress);
+
+        if (address is { Length: > MaximumBillingAddressLength })
+        {
+            return Result.Failure(Error.Validation(
+                "SalesInvoice.BillingAddressTooLong",
+                $"An address is at most {MaximumBillingAddressLength} characters."));
+        }
+
         ReferenceNumber = Trimmed(referenceNumber);
         Narration = Trimmed(narration);
         BillingName = name;
+        BillingMobile = mobile;
+        BillingAddress = address;
+
+        return Result.Success();
+    }
+
+    /// <summary>Sets the area and route the sale was made in, for reports by area or route.</summary>
+    /// <param name="areaId">The area; null for none.</param>
+    /// <param name="routeId">The route; null for none.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    public Result SetTerritory(TerritoryId? areaId, TerritoryId? routeId)
+    {
+        if (!IsEditable)
+        {
+            return Result.Failure(Error.BusinessRule(
+                "SalesInvoice.NotEditable",
+                $"Invoice '{Number}' is {Status} and can no longer be changed."));
+        }
+
+        AreaId = areaId;
+        RouteId = routeId;
 
         return Result.Success();
     }

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { PosSettings } from '@/components/settings/PosSettings';
 import { BranchSettings } from '@/components/settings/BranchSettings';
 import { FirmSettings } from '@/components/settings/FirmSettings';
 import { useSearchParams } from 'react-router-dom';
@@ -25,6 +26,7 @@ import { useSettings } from '@/stores/settings';
 const TABS = [
   'general',
   'sales',
+  'pos',
   'purchase',
   'inventory',
   'accounts',
@@ -76,6 +78,7 @@ export function SettingsPage(): React.JSX.Element {
 
       {tab === 'general' && <GeneralSettings />}
       {tab === 'sales' && <SalesSettings />}
+      {tab === 'pos' && <PosSettings />}
       {tab === 'purchase' && <PurchaseSettings />}
       {tab === 'inventory' && <InventorySettings />}
       {tab === 'accounts' && <AccountsSettings />}

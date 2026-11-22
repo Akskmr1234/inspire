@@ -4,6 +4,7 @@ using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Parties;
 using ERP.Domain.Inventory;
 using ERP.SharedKernel.Results;
+using ERP.SharedKernel.Tenancy;
 
 namespace ERP.Application.Inventory.Products;
 
@@ -15,7 +16,12 @@ public sealed record ListProductPhotosQuery(Guid ProductId) : IQuery<PhotoSetRes
 /// <param name="ProductId">The product.</param>
 /// <param name="Slot">Which photograph, from one; the first is its main one.</param>
 /// <param name="Content">The picture as a data URL; null removes it.</param>
-public sealed record SetProductPhotoCommand(Guid ProductId, int Slot, string? Content) : ICommand;
+/// <param name="Thumbnail">A small copy of the picture, for the sales catalog.</param>
+public sealed record SetProductPhotoCommand(Guid ProductId, int Slot, string? Content, string? Thumbnail = null)
+    : ICommand;
+
+/// <summary>Every product's thumbnail in the selected firm, for the sales catalog.</summary>
+public sealed record ListProductThumbnailsQuery : IQuery<IReadOnlyDictionary<Guid, string>>;
 
 /// <summary>Where product photographs are kept.</summary>
 public interface IProductPhotoRepository
@@ -35,11 +41,20 @@ public interface IProductPhotoRepository
     /// <summary>Removes a photograph.</summary>
     /// <param name="photo">The photograph.</param>
     void Remove(ProductPhoto photo);
+
+    /// <summary>Each product's thumbnail: its first photograph that has one.</summary>
+    /// <param name="firmId">The firm.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The thumbnails, by product.</returns>
+    Task<IReadOnlyDictionary<Guid, string>> ListThumbnailsAsync(
+        FirmId firmId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Handles product photographs.</summary>
 public sealed class ProductPhotoHandlers
     : IQueryHandler<ListProductPhotosQuery, PhotoSetResponse>,
+      IQueryHandler<ListProductThumbnailsQuery, IReadOnlyDictionary<Guid, string>>,
       ICommandHandler<SetProductPhotoCommand>
 {
     private readonly IProductRepository _products;
@@ -118,6 +133,13 @@ public sealed class ProductPhotoHandlers
             {
                 return replaced;
             }
+
+            Result thumbnail = photo.SetThumbnail(request.Thumbnail);
+
+            if (thumbnail.IsFailure)
+            {
+                return thumbnail;
+            }
         }
         else
         {
@@ -129,6 +151,13 @@ public sealed class ProductPhotoHandlers
                 return created;
             }
 
+            Result thumbnail = created.Value.SetThumbnail(request.Thumbnail);
+
+            if (thumbnail.IsFailure)
+            {
+                return thumbnail;
+            }
+
             _photos.Add(created.Value);
         }
 
@@ -137,6 +166,19 @@ public sealed class ProductPhotoHandlers
     }
 
     /// <summary>Finds a product of the selected firm.</summary>
+    /// <inheritdoc />
+    public async Task<Result<IReadOnlyDictionary<Guid, string>>> Handle(
+        ListProductThumbnailsQuery request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return _tenantContext.FirmId is not { } firmId
+            ? Result.Failure<IReadOnlyDictionary<Guid, string>>(Error.BusinessRule(
+                "Firm.NotSelected", "Select a firm first."))
+            : Result.Success(await _photos.ListThumbnailsAsync(firmId, cancellationToken));
+    }
+
     private async Task<Result<Product>> FindAsync(Guid productId, CancellationToken cancellationToken)
     {
         Product? product = await _products.FindAsync(ProductId.From(productId), cancellationToken);

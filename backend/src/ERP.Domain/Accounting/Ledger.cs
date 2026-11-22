@@ -110,10 +110,10 @@ public sealed record PartyDetails(
 public sealed class Ledger : AggregateRoot<LedgerId>, IFirmScoped, IAuditable, ISoftDeletable
 {
     /// <summary>The code of the Primary customer a firm is given when it has none.</summary>
-    public const string PrimaryCustomerCode = "PRIMARY-CUSTOMER";
+    public const string PrimaryCustomerCode = "1000";
 
     /// <summary>The code of the Primary supplier a firm is given when it has none.</summary>
-    public const string PrimarySupplierCode = "PRIMARY-SUPPLIER";
+    public const string PrimarySupplierCode = "1000";
 
     private Ledger(
         LedgerId id,

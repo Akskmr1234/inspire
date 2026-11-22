@@ -161,4 +161,18 @@ describe('TouchProductGrid', () => {
     expect(screen.getByText('Out of stock')).toBeTruthy();
     expect(screen.getByText(/45 in stock/i)).toBeTruthy();
   });
+
+  it('shows a small picture for a product that has one, and its initials otherwise', () => {
+    const { container } = render(
+      <TouchProductGrid
+        products={sampleProducts}
+        onSelectProduct={() => undefined}
+        thumbnails={{ 'prod-1': 'data:image/jpeg;base64,/9j/thumb=' }}
+      />,
+    );
+
+    const pictures = container.querySelectorAll('img');
+    expect(pictures.length).toBe(1);
+    expect(pictures[0]?.getAttribute('src')).toBe('data:image/jpeg;base64,/9j/thumb=');
+  });
 });

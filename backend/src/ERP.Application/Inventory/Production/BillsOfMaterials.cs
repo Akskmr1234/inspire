@@ -242,6 +242,7 @@ public sealed class BillOfMaterialsHandlers
 
         _bills.Add(created.Value);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await RollUpCostAsync(firmId, created.Value, product, cancellationToken);
 
         return Result.Success(created.Value.Id.Value);
     }
@@ -275,6 +276,11 @@ public sealed class BillOfMaterialsHandlers
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (products.TryGetValue(bill.ProductId, out Product? finished))
+        {
+            await RollUpCostAsync(bill.FirmId, bill, finished, cancellationToken);
+        }
 
         return Result.Success();
     }
@@ -367,6 +373,41 @@ public sealed class BillOfMaterialsHandlers
         }
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Sets the finished good's cost to what its components cost: each component's
+    /// quantity times its cost, added up, for one unit of what the bill makes.
+    /// </summary>
+    /// <remarks>
+    /// The component costs are the ones the bill shows - the average cost of the stock on
+    /// hand, or the product's own cost where none is held - so the finished good's cost
+    /// in the product master always matches the bill's estimate. Left alone when the
+    /// components have no cost yet, rather than written down to nothing.
+    /// </remarks>
+    private async Task RollUpCostAsync(
+        FirmId firmId,
+        BillOfMaterials bill,
+        Product finished,
+        CancellationToken cancellationToken)
+    {
+        BillOfMaterialsDetail? detail = await _reader.FindAsync(firmId, bill.Id, cancellationToken);
+
+        if (detail is null || detail.Summary.OutputQuantity <= 0m || detail.Summary.EstimatedCost <= 0m)
+        {
+            return;
+        }
+
+        decimal unitCost = decimal.Round(
+            detail.Summary.EstimatedCost / detail.Summary.OutputQuantity, 4, MidpointRounding.AwayFromZero);
+
+        if (unitCost == finished.Rates.Cost)
+        {
+            return;
+        }
+
+        finished.SetRates(finished.Rates with { Cost = unitCost });
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyDictionary<ProductId, Product>> LoadAsync(
