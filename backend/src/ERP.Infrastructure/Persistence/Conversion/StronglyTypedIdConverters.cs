@@ -671,3 +671,23 @@ public sealed class MfaFactorIdConverter : ValueConverter<MfaFactorId, Guid>
     {
     }
 }
+
+/// <summary>Converts <see cref="PosShiftId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PosShiftIdConverter : ValueConverter<PosShiftId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PosShiftIdConverter"/> class.</summary>
+    public PosShiftIdConverter()
+        : base(id => id.Value, value => PosShiftId.From(value))
+    {
+    }
+}
+
+/// <summary>Converts <see cref="PosDayCloseId"/> to and from <see cref="Guid"/>.</summary>
+public sealed class PosDayCloseIdConverter : ValueConverter<PosDayCloseId, Guid>
+{
+    /// <summary>Initialises a new instance of the <see cref="PosDayCloseIdConverter"/> class.</summary>
+    public PosDayCloseIdConverter()
+        : base(id => id.Value, value => PosDayCloseId.From(value))
+    {
+    }
+}

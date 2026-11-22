@@ -318,6 +318,12 @@ public class ErpDbContext : DbContext
     /// <summary>Gets the second factors users have enrolled.</summary>
     public DbSet<MfaFactor> MfaFactors => Set<MfaFactor>();
 
+    /// <summary>Gets the cashiers' shifts at the point of sale.</summary>
+    public DbSet<PosShift> PosShifts => Set<PosShift>();
+
+    /// <summary>Gets the closed trading days at the point of sale.</summary>
+    public DbSet<PosDayClose> PosDayCloses => Set<PosDayClose>();
+
     /// <summary>Gets the document numbering series.</summary>
     public DbSet<NumberingSeries> NumberingSeries => Set<NumberingSeries>();
 
@@ -500,6 +506,10 @@ public class ErpDbContext : DbContext
             .HaveConversion<RefreshTokenIdConverter>();
         configurationBuilder.Properties<MfaFactorId>()
             .HaveConversion<MfaFactorIdConverter>();
+        configurationBuilder.Properties<PosShiftId>()
+            .HaveConversion<PosShiftIdConverter>();
+        configurationBuilder.Properties<PosDayCloseId>()
+            .HaveConversion<PosDayCloseIdConverter>();
         configurationBuilder.Properties<AccountGroupId>()
             .HaveConversion<AccountGroupIdConverter>();
         configurationBuilder.Properties<LedgerId>().HaveConversion<LedgerIdConverter>();

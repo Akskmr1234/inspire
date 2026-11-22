@@ -121,6 +121,7 @@ const WarehousesPage = lazyScreen(
 const CustomersPage = lazyScreen(() => import('@/pages/CustomersPage'), 'CustomersPage');
 const ProductsPage = lazyScreen(() => import('@/pages/ProductsPage'), 'ProductsPage');
 const SalesPage = lazyScreen(() => import('@/pages/SalesPage'), 'SalesPage');
+const PosPage = lazyScreen(() => import('@/pages/PosPage'), 'PosPage');
 const SalesReturnsPage = lazyScreen(
   () => import('@/pages/SalesPage'),
   'SalesReturnsPage',
@@ -439,6 +440,7 @@ export function App(): React.JSX.Element {
               <Route path="/sales/territories" element={<TerritoriesPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/sales/invoices" element={<SalesPage />} />
+              <Route path="/sales/pos" element={<PosPage />} />
               <Route path="/sales/returns" element={<SalesReturnsPage />} />
               <Route path="/sales/customers" element={<CustomersPage />} />
               <Route path="/purchase/invoices" element={<PurchasePage />} />

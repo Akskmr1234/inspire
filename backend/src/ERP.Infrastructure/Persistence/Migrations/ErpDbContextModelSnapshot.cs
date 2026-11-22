@@ -5388,6 +5388,167 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("purchase_order_line_taxes", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Sales.PosDayClose", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date")
+                        .HasColumnName("business_date");
+
+                    b.Property<decimal>("CardTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("card_total");
+
+                    b.Property<decimal>("CashTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cash_total");
+
+                    b.Property<DateTimeOffset>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at_utc");
+
+                    b.Property<Guid>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<decimal>("CreditTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("credit_total");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<decimal>("OnlineTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("online_total");
+
+                    b.Property<int>("ReturnsCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("returns_count");
+
+                    b.Property<decimal>("ReturnsTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("returns_total");
+
+                    b.Property<int>("SalesCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("sales_count");
+
+                    b.Property<decimal>("SalesTotal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("sales_total");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pos_day_closes");
+
+                    b.HasIndex("FirmId", "BusinessDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pos_day_closes_firm_date");
+
+                    b.ToTable("pos_day_closes", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.PosShift", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date")
+                        .HasColumnName("business_date");
+
+                    b.Property<DateTimeOffset?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at_utc");
+
+                    b.Property<decimal?>("CountedCash")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("counted_cash");
+
+                    b.Property<decimal?>("ExpectedCash")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("expected_cash");
+
+                    b.Property<Guid>("FirmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("firm_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTimeOffset>("OpenedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at_utc");
+
+                    b.Property<decimal>("OpeningCash")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("opening_cash");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pos_shifts");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_pos_shifts_user_id");
+
+                    b.HasIndex("FirmId", "BusinessDate")
+                        .HasDatabaseName("ix_pos_shifts_firm_date");
+
+                    b.HasIndex("FirmId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pos_shifts_one_open")
+                        .HasFilter("closed_at_utc IS NULL");
+
+                    b.HasIndex("FirmId", "UserId", "ClosedAtUtc")
+                        .HasDatabaseName("ix_pos_shifts_firm_user");
+
+                    b.ToTable("pos_shifts", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8112,6 +8273,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_purchase_order_line_taxes_purchase_order_lines_purchase_ord~");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.PosShift", b =>
+                {
+                    b.HasOne("ERP.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_pos_shifts_users_user_id");
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoice", b =>
