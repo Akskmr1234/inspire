@@ -92,6 +92,7 @@ import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { TouchProductGrid } from '@/components/product/TouchProductGrid';
+import { fetchProductThumbnails } from '@/lib/photos';
 import {
   fetchProductBatches,
   fetchProductSerials,
@@ -1262,6 +1263,15 @@ function EntryDialog({
         .map((product) => productOption(product, onHand.get(product.id) ?? 0)),
     [products.data, onHand, lines, kind],
   );
+
+  // The catalog's small pictures, fetched once for every product - only when the
+  // catalog is in use.
+  const thumbnails = useQuery<Readonly<Record<string, string>>, ApiError>({
+    queryKey: ['product-thumbnails'],
+    queryFn: fetchProductThumbnails,
+    enabled: settings.showTouchCatalog === true,
+    staleTime: 5 * 60_000,
+  });
 
   const posProducts = useMemo(
     () =>
@@ -2557,6 +2567,7 @@ function EntryDialog({
                   rateType={rateType}
                   masterRate={masterRate}
                   onHand={onHand}
+                  thumbnails={thumbnails.data ?? {}}
                 />
               </div>
             )}

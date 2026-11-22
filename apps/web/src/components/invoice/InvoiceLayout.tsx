@@ -556,8 +556,11 @@ function lineOf(box: HTMLElement): Element | null {
   return row;
 }
 
-/** Enter in a line: the next box, the next line's product, or a new line. */
-function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
+/**
+ * Enter in a line: the next box, the next line's product, or a new line. Exported so a
+ * list of lines outside an invoice - a bill of materials - moves the same way.
+ */
+export function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
   if (
     event.key !== 'Enter' ||
     event.altKey ||
@@ -575,6 +578,10 @@ function moveOnEnter(event: React.KeyboardEvent<HTMLElement>): void {
 
   // A picker chose something only if it took the key for itself.
   if (box.getAttribute('role') === 'combobox' && !event.defaultPrevented) return;
+
+  // The key is this handler's from here on: inside a form, Enter in a box would
+  // otherwise also submit it - and save the document mid-entry.
+  event.preventDefault();
 
   const boxes = lineBoxes(row);
   const next = boxes[boxes.indexOf(box) + 1];

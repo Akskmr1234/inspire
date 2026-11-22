@@ -395,6 +395,21 @@ public sealed class ProductsController : ApiControllerBase
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
     }
 
+    /// <summary>Reads every product's thumbnail, for the sales catalog.</summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>Small pictures as data URLs, by product; products without one are left out.</returns>
+    /// <response code="200">The thumbnails.</response>
+    [HttpGet("thumbnails")]
+    [RequiresPermission("inventory", "product", "view")]
+    [ProducesResponseType(typeof(IReadOnlyDictionary<Guid, string>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetThumbnailsAsync(CancellationToken cancellationToken)
+    {
+        Result<IReadOnlyDictionary<Guid, string>> result = await _sender.Send(
+            new ListProductThumbnailsQuery(), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
     /// <summary>Sets or removes one of a product's photographs.</summary>
     /// <param name="id">The product.</param>
     /// <param name="slot">Which photograph, one to three.</param>
@@ -412,13 +427,13 @@ public sealed class ProductsController : ApiControllerBase
     public async Task<IActionResult> SetPhotoAsync(
         Guid id,
         int slot,
-        [FromBody] PartyPhotoResponse request,
+        [FromBody] ProductPhotoRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         Result result = await _sender.Send(
-            new SetProductPhotoCommand(id, slot, request.Content), cancellationToken);
+            new SetProductPhotoCommand(id, slot, request.Content, request.Thumbnail), cancellationToken);
 
         return result.IsSuccess ? NoContent() : Problem(result.Error);
     }
@@ -612,3 +627,8 @@ public sealed record ClassifyProductRequest(
     [property: JsonRequired] Guid CategoryId,
     Guid? BrandId = null,
     Guid? TaxSlabId = null);
+
+/// <summary>A product photograph being saved.</summary>
+/// <param name="Content">The picture as a data URL; null removes it.</param>
+/// <param name="Thumbnail">A small copy of it, for the sales catalog.</param>
+public sealed record ProductPhotoRequest(string? Content, string? Thumbnail = null);

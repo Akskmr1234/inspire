@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
-import { EmptyState, ReportFrame } from '@/components/ReportFrame';
+import { EmptyState, ReportFrame, ReportSummaryFigures } from '@/components/ReportFrame';
 import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
@@ -1105,7 +1105,29 @@ export function StockSummaryPage(): React.JSX.Element {
   );
 
   return (
-    <ReportFrame title={t('nav.stockSummary')} controls={controls} query={query}>
+    <ReportFrame
+      title={t('nav.stockSummary')}
+      controls={controls}
+      query={query}
+      summary={(report) => {
+        const sum = (pick: (row: StockSummaryRow) => number): string =>
+          trim(report.rows.reduce((total, row) => total + pick(row), 0));
+        return (
+          <ReportSummaryFigures
+            title={t('reports.summary')}
+            figures={[
+              { label: t('reports.products'), value: String(report.rows.length) },
+              { label: t('stock.opening'), value: sum((row) => row.opening) },
+              { label: t('stockRegister.purchase'), value: sum((row) => row.purchase) },
+              { label: t('stockRegister.sales'), value: sum((row) => row.sales) },
+              { label: t('stockRegister.otherIn'), value: sum((row) => row.otherIn) },
+              { label: t('stockRegister.otherOut'), value: sum((row) => row.otherOut) },
+              { label: t('stock.closing'), value: sum((row) => row.closing) },
+            ]}
+          />
+        );
+      }}
+    >
       {(report) => (
         <DataGrid
           gridKey="stock-summary"

@@ -490,7 +490,11 @@ function EditorBody({
           <PhotoSlots
             queryKey={['product-photos', product.id]}
             load={() => getProductPhotos(product.id)}
-            save={(slot, content) => setProductPhoto(product.id, slot, content)}
+            save={async (slot, content) => {
+              await setProductPhoto(product.id, slot, content);
+              // The sales catalog shows the new thumbnail next time it is opened.
+              await queryClient.invalidateQueries({ queryKey: ['product-thumbnails'] });
+            }}
             canEdit={can('inventory:product:edit')}
           />
         )}

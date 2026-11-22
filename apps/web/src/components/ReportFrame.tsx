@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { PageHeading } from '@/components/PageHeading';
 import type { ApiError } from '@/lib/api';
 import { useMoney } from '@/lib/money';
+import { useSession } from '@/stores/session';
 
 /**
  * A screen's filters: open on a wide screen, folded behind a button on a phone.
@@ -84,6 +85,7 @@ export function ReportFrame<TData>({
   query,
   isEmpty,
   children,
+  summary,
 }: {
   readonly title: string;
   /** Controls beside the print button, such as "New ledger". */
@@ -102,8 +104,15 @@ export function ReportFrame<TData>({
   readonly query: UseQueryResult<TData, ApiError>;
   readonly isEmpty?: (data: TData) => boolean;
   readonly children: (data: TData) => React.ReactNode;
+  /**
+   * The report's own summary for its period, under the figures and above the footer:
+   * totals, counts, what the period came to.
+   */
+  readonly summary?: (data: TData) => React.ReactNode;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const filters = useRef<HTMLDivElement>(null);
+  const period = useReportPeriod(filters, query.dataUpdatedAt);
 
   // Subscribed to, not read. The report body below is a function this calls, and the
   // `money` it uses inside reads the setting at call time — so this subscription is
@@ -166,7 +175,11 @@ export function ReportFrame<TData>({
       */}
       {banner}
 
-      {controls && <FilterBar>{controls}</FilterBar>}
+      {controls && (
+        <div ref={filters} className="contents">
+          <FilterBar>{controls}</FilterBar>
+        </div>
+      )}
 
       {/*
         A refetch of a report that is already on screen shows a hairline rather than
@@ -195,7 +208,11 @@ export function ReportFrame<TData>({
         (isEmpty?.(query.data) === true ? (
           <EmptyState message={t('reports.noData')} />
         ) : (
-          children(query.data)
+          <>
+            {children(query.data)}
+            {summary && <div className="report-summary">{summary(query.data)}</div>}
+            <ReportFooter title={title} period={period} />
+          </>
         ))}
     </section>
   );
@@ -457,3 +474,109 @@ export function BalanceBadge({
   showing the old precision until the next navigation.
 */
 export { money, moneyAlways } from '@/lib/money';
+
+/**
+ * The period a report's figures are for, read from its own date filters at the moment
+ * the figures arrived - so it names what was asked for, not what has since been typed
+ * into the boxes and not yet applied. Two dates are a range, one is "as at".
+ */
+function useReportPeriod(
+  filters: React.RefObject<HTMLDivElement | null>,
+  dataUpdatedAt: number,
+): { readonly from?: string; readonly to?: string; readonly asAt?: string } | null {
+  const [period, setPeriod] = useState<{
+    readonly from?: string;
+    readonly to?: string;
+    readonly asAt?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const dates = Array.from(
+      filters.current?.querySelectorAll<HTMLInputElement>('input[type="date"]') ?? [],
+    )
+      .map((input) => input.value)
+      .filter((value) => value !== '');
+
+    const [first, second] = dates;
+    setPeriod(
+      first && second ? { from: first, to: second } : first ? { asAt: first } : null,
+    );
+  }, [filters, dataUpdatedAt]);
+
+  return period;
+}
+
+/** A date as the reader writes it, from the ISO form a date box holds. */
+function readableDate(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString();
+}
+
+/**
+ * The foot of every report: the period it covers, when it was printed and by whom. On
+ * paper each page also carries its number and the page count (`@page` in the styles).
+ */
+function ReportFooter({
+  title,
+  period,
+}: {
+  readonly title: string;
+  readonly period: {
+    readonly from?: string;
+    readonly to?: string;
+    readonly asAt?: string;
+  } | null;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  const who = useSession((state) => state.displayName);
+  const [printedAt] = useState(() => new Date());
+
+  return (
+    <footer className="report-footer">
+      <span className="font-semibold text-ink">{title}</span>
+      {period?.from && period.to && (
+        <span>
+          {t('reports.footerPeriod', {
+            from: readableDate(period.from),
+            to: readableDate(period.to),
+          })}
+        </span>
+      )}
+      {period?.asAt && (
+        <span>{t('reports.footerAsAt', { date: readableDate(period.asAt) })}</span>
+      )}
+      <span className="ms-auto">
+        {who
+          ? t('reports.footerPrintedBy', { when: printedAt.toLocaleString(), who })
+          : t('reports.footerPrinted', { when: printedAt.toLocaleString() })}
+      </span>
+    </footer>
+  );
+}
+
+/** A report's summary for its period: a row of labelled figures. */
+export function ReportSummaryFigures({
+  title,
+  figures,
+}: {
+  readonly title: string;
+  readonly figures: readonly { readonly label: string; readonly value: string }[];
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span className="text-xs font-bold tracking-wider text-ink-muted uppercase">
+        {title}
+      </span>
+      <dl className="flex flex-wrap gap-x-6 gap-y-1">
+        {figures.map((figure) => (
+          <div key={figure.label} className="flex items-baseline gap-2">
+            <dt className="text-ink-muted">{figure.label}</dt>
+            <dd className="font-mono font-semibold text-ink tabular-nums">
+              {figure.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}

@@ -39,16 +39,46 @@ export async function getProductPhotos(
   return (await request<PhotoSet>(`/inventory/products/${productId}/photos`)).photos;
 }
 
-/** Sets one of a product's photographs; null removes it. */
-export function setProductPhoto(
+/**
+ * A small copy of a picture already held as a data URL - about 96 pixels on its longer
+ * side, a few kilobytes - for lists that show many products at once.
+ */
+export function thumbnailOf(dataUrl: string, longest = 96): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('not a picture'));
+    image.onload = () => {
+      const scale = Math.min(1, longest / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    image.src = dataUrl;
+  });
+}
+
+/**
+ * Sets one of a product's photographs; null removes it. A thumbnail goes with it, for
+ * the sales catalog; a picture the browser cannot shrink is saved without one.
+ */
+export async function setProductPhoto(
   productId: string,
   slot: number,
   content: string | null,
 ): Promise<void> {
+  const thumbnail = content ? await thumbnailOf(content).catch(() => null) : null;
+
   return request<void>(`/inventory/products/${productId}/photos/${slot}`, {
     method: 'PUT',
-    body: { content },
+    body: { content, thumbnail },
   });
+}
+
+/** Every product's thumbnail, by product id: one small request for the whole catalog. */
+export function fetchProductThumbnails(): Promise<Readonly<Record<string, string>>> {
+  return request<Readonly<Record<string, string>>>('/inventory/products/thumbnails');
 }
 
 /** An employee's, customer's or supplier's photographs, one entry a slot. */

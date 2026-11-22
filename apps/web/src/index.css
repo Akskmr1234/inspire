@@ -895,6 +895,17 @@
     @apply mt-1 text-xs text-ink-subtle;
   }
 
+  /* The foot of a report: its period, and when and by whom it was printed. */
+  .report-footer {
+    @apply mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-2
+           text-xs text-ink-muted;
+  }
+
+  /* A report's own summary of its period, above the footer. */
+  .report-summary {
+    @apply rounded-xl border border-line bg-surface-2/50 px-4 py-3 text-sm;
+  }
+
   /* The barcode box: where a scanner types, so it has to be found at a glance on every
      screen that has one. Amber border and tint, a stronger ring when it has the cursor. */
   .field-barcode {
@@ -1471,7 +1482,14 @@
   }
 
   @page {
-    margin: 14mm 12mm;
+    margin: 14mm 12mm 16mm;
+
+    /* Every printed page says which it is and how many there are. */
+    @bottom-right {
+      content: 'Page ' counter(page) ' of ' counter(pages);
+      font-size: 8pt;
+      color: #4b5563;
+    }
   }
 
   html,

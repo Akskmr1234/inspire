@@ -2567,6 +2567,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<string>("Thumbnail")
+                        .HasMaxLength(40000)
+                        .HasColumnType("character varying(40000)")
+                        .HasColumnName("thumbnail");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()

@@ -1,6 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconLayers } from '@/components/icons';
-import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
+import {
+  AddLineButton,
+  LineNumberCell,
+  LineNumberHeader,
+  moveOnEnter,
+  NumberCell,
+  RemoveLineButton,
+} from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -38,7 +45,6 @@ import {
   trim,
   type StockEntryProps,
 } from '@/pages/StockOperationsPage';
-import { shortcutProps } from '@/lib/shortcuts';
 
 /** Every stocked product of the firm, for the pickers. */
 function useStockedProducts(): readonly ProductSummary[] {
@@ -278,6 +284,18 @@ function BomForm({
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
 
+  // As on a sale: a line just added takes the cursor in its product box.
+  const body = useRef<HTMLTableSectionElement>(null);
+  const lineCount = useRef(lines.length);
+  useEffect(() => {
+    if (lines.length > lineCount.current) {
+      body.current
+        ?.querySelector<HTMLInputElement>('[data-line-row]:last-child [role="combobox"]')
+        ?.focus();
+    }
+    lineCount.current = lines.length;
+  }, [lines.length]);
+
   return (
     <form
       className="space-y-4"
@@ -346,27 +364,51 @@ function BomForm({
         </label>
       </div>
 
-      <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
-        <table className="line-table">
-          <thead className="bg-surface-2 text-[13px] text-ink-muted">
+      {/* Laid out as a sale's items are: the same header, numbered lines, the number
+          boxes waiting for a product, Enter to the next box and a new line at the end. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-ink">
+          {t('boms.components')}{' '}
+          <span className="text-xs font-normal text-ink-muted">
+            {t('invoice.itemCount', {
+              count: lines.filter((line) => line.productId).length,
+            })}
+          </span>
+        </span>
+        <AddLineButton
+          onClick={() => setLines((current) => [...current, blankComponent()])}
+        />
+      </div>
+      <div
+        className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card"
+        onKeyDown={moveOnEnter}
+      >
+        <table className="line-table sm:min-w-[40rem]">
+          <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
             <tr>
-              <th className="px-3 py-2 text-start font-semibold">
+              <LineNumberHeader />
+              <th className="px-3 py-2.5 text-start font-medium">
                 {t('boms.component')}
               </th>
-              <th className="px-3 py-2 text-end font-semibold">{t('stock.quantity')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('boms.cost')}</th>
-              <th className="px-3 py-2 text-start font-semibold">{t('stock.remarks')}</th>
-              <th />
+              <th className="px-2 py-2.5 text-end font-medium">{t('stock.quantity')}</th>
+              <th className="px-2 py-2.5 text-end font-medium">{t('boms.unitCost')}</th>
+              <th className="px-2 py-2.5 text-end font-medium">{t('boms.cost')}</th>
+              <th className="px-2 py-2.5 text-start font-medium">{t('stock.remarks')}</th>
+              <th className="rounded-e-lg" />
             </tr>
           </thead>
-          <tbody>
-            {lines.map((line) => {
+          <tbody ref={body}>
+            {lines.map((line, index) => {
               const unit = products.find((product) => product.id === line.productId);
               const unitCost = costs.get(line.productId) ?? unit?.cost ?? 0;
 
               return (
-                <tr key={line.key} className="border-t border-line">
-                  <td data-label={t('boms.component')} className="min-w-64 px-2 py-1">
+                <tr key={line.key} data-line-row className="border-t border-line">
+                  <LineNumberCell number={index + 1} />
+                  <td
+                    data-label={t('boms.component')}
+                    className="min-w-40 px-2 py-1 lg:min-w-64"
+                  >
                     <SearchSelect
                       value={line.productId}
                       onChange={(id) => update(line.key, { productId: id })}
@@ -376,19 +418,22 @@ function BomForm({
                       options={options.filter((option) => option.value !== productId)}
                     />
                   </td>
-                  <td data-label={t('stock.quantity')} className="px-2 py-1">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={line.quantity}
-                      onChange={(event) =>
-                        update(line.key, { quantity: event.target.value })
-                      }
-                      className="field-input-sm text-end font-mono tabular-nums"
-                    />
+                  <NumberCell
+                    label={t('stock.quantity')}
+                    concealed={!line.productId}
+                    value={line.quantity}
+                    onChange={(value) => update(line.key, { quantity: value })}
+                  />
+                  <td
+                    data-label={t('boms.unitCost')}
+                    className="px-2 py-1 text-end font-mono text-ink-muted tabular-nums"
+                  >
+                    {line.productId ? moneyAlways(unitCost) : ''}
                   </td>
-                  <td data-label={t('boms.cost')} className="cell-numeric">
+                  <td
+                    data-label={t('boms.cost')}
+                    className="px-2 py-1 text-end font-mono font-semibold text-ink tabular-nums"
+                  >
                     {line.productId && Number(line.quantity) > 0
                       ? moneyAlways(Number(line.quantity) * unitCost)
                       : ''}
@@ -396,6 +441,7 @@ function BomForm({
                   <td data-label={t('stock.remarks')} className="px-2 py-1">
                     <input
                       value={line.remarks}
+                      aria-label={t('stock.remarks')}
                       onChange={(event) =>
                         update(line.key, { remarks: event.target.value })
                       }
@@ -441,14 +487,6 @@ function BomForm({
       {problem && <Alert tone="error">{problem}</Alert>}
 
       <div className="form-actions">
-        <button
-          {...shortcutProps('add-line')}
-          type="button"
-          onClick={() => setLines((current) => [...current, blankComponent()])}
-          className="btn-secondary"
-        >
-          {t('stock.addLine')}
-        </button>
         {onToggle && initial && (
           <button
             type="button"
@@ -758,27 +796,35 @@ function RunLines({
           return next.quantity;
         }}
       />
-      <div className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card">
+      <div
+        className="overflow-x-auto sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:shadow-card"
+        onKeyDown={moveOnEnter}
+      >
         <table className="line-table">
-          <thead className="bg-surface-2 text-[13px] text-ink-muted">
+          <thead className="sticky top-0 z-10 bg-surface-2 text-start text-[13px] text-ink-muted">
             <tr>
-              <th className="px-3 py-2 text-start font-semibold">{t('stock.product')}</th>
-              <th className="px-3 py-2 text-end font-semibold">{t('stock.quantity')}</th>
+              <LineNumberHeader />
+              <th className="px-3 py-2.5 text-start font-medium">{t('stock.product')}</th>
+              <th className="px-2 py-2.5 text-end font-medium">{t('stock.quantity')}</th>
               {anyBatched && (
-                <th className="px-3 py-2 text-start font-semibold">{t('stock.batch')}</th>
+                <th className="px-2 py-2.5 text-start font-medium">{t('stock.batch')}</th>
               )}
-              <th />
+              <th className="rounded-e-lg" />
             </tr>
           </thead>
           <tbody>
-            {lines.map((line) => {
+            {lines.map((line, index) => {
               const held = onHand?.get(line.productId);
               const short =
                 outgoing && held !== undefined && Number(line.quantity) > held;
 
               return (
-                <tr key={line.key} className="border-t border-line">
-                  <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
+                <tr key={line.key} data-line-row className="border-t border-line">
+                  <LineNumberCell number={index + 1} />
+                  <td
+                    data-label={t('stock.product')}
+                    className="min-w-40 px-2 py-1 lg:min-w-64"
+                  >
                     <SearchSelect
                       value={line.productId}
                       onChange={(productId) =>
@@ -799,9 +845,14 @@ function RunLines({
                       onChange={(event) =>
                         update(line.key, { quantity: event.target.value })
                       }
+                      aria-label={t('stock.quantity')}
+                      tabIndex={line.productId ? undefined : -1}
                       className={clsx(
-                        'field-input-sm text-end font-mono tabular-nums',
+                        'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',
                         short && 'border-amber-500',
+                        // As on a sale: the quantity waits for the product.
+                        !line.productId &&
+                          'pointer-events-none opacity-0 focus:pointer-events-auto focus:opacity-100',
                       )}
                     />
                   </td>
@@ -847,14 +898,9 @@ function RunLines({
           </tbody>
         </table>
       </div>
-      <button
-        {...shortcutProps('add-line')}
-        type="button"
-        onClick={() => onChange([...lines, blankRunLine()])}
-        className="btn-secondary btn-sm"
-      >
-        {t('stock.addLine')}
-      </button>
+      <div>
+        <AddLineButton onClick={() => onChange([...lines, blankRunLine()])} />
+      </div>
     </section>
   );
 }
