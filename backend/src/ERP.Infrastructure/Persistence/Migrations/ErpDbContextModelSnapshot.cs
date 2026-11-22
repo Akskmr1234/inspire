@@ -5396,13 +5396,27 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0m)
                         .HasColumnName("amount_received");
 
+                    b.Property<Guid?>("AreaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("area_id");
+
                     b.Property<Guid?>("BillId")
                         .HasColumnType("uuid")
                         .HasColumnName("bill_id");
 
+                    b.Property<string>("BillingAddress")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("billing_address");
+
                     b.Property<Guid?>("BillingManLedgerId")
                         .HasColumnType("uuid")
                         .HasColumnName("billing_man_ledger_id");
+
+                    b.Property<string>("BillingMobile")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("billing_mobile");
 
                     b.Property<string>("BillingName")
                         .HasMaxLength(120)
@@ -5541,6 +5555,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(19,4)")
                         .HasDefaultValue(0m)
                         .HasColumnName("round_to");
+
+                    b.Property<Guid?>("RouteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("route_id");
 
                     b.Property<Guid?>("SalesOrderId")
                         .HasColumnType("uuid")

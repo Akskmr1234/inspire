@@ -103,10 +103,12 @@ describe('the payment mode', () => {
       fix, so what it is worth pinning is that the list is there at all.
     */
     expect(screen.getByRole('option', { name: 'Cheque' })).toBeTruthy();
+    // Bank transfer is no longer offered: a transfer is Online, with its method.
+    expect(screen.queryByRole('option', { name: 'Bank transfer' })).toBeNull();
 
-    await user.click(screen.getByRole('option', { name: 'Bank transfer' }));
+    await user.click(screen.getByRole('option', { name: 'Online' }));
 
-    expect((field as HTMLInputElement).value).toBe('Bank transfer');
+    expect((field as HTMLInputElement).value).toBe('Online');
   });
 });
 

@@ -1223,12 +1223,14 @@ function OrderEntryDialog({
                       />
 
                       <NumberCell
+                        concealed={!line.productId}
                         value={line.quantity}
                         label={t('orders.quantity')}
                         error={errorsForLine['quantity']}
                         onChange={(value) => change(index, { quantity: value })}
                       />
                       <NumberCell
+                        concealed={!line.productId}
                         value={line.rate}
                         label={t('orders.rate')}
                         error={errorsForLine['rate']}
@@ -1237,6 +1239,7 @@ function OrderEntryDialog({
 
                       {columns.shows('discount') && (
                         <NumberCell
+                          concealed={!line.productId}
                           value={line.discount}
                           label={t('orders.discount')}
                           onChange={(value) => change(index, { discount: value })}

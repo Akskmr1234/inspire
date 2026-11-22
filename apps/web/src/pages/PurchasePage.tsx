@@ -1564,12 +1564,14 @@ function LineRow({
         <ProductDetailCells product={product} shows={columns.shows} labels={t} />
 
         <NumberCell
+          concealed={!line.productId}
           value={line.quantity}
           error={errors['quantity']}
           label={t('purchase.quantity')}
           onChange={(value) => onChange({ quantity: value })}
         />
         <NumberCell
+          concealed={!line.productId}
           value={line.rate}
           error={errors['rate']}
           label={t('purchase.rate')}
@@ -1578,6 +1580,7 @@ function LineRow({
 
         {columns.shows('discount') && (
           <NumberCell
+            concealed={!line.productId}
             value={line.discount}
             error={errors['discount']}
             label={t('purchase.discount')}

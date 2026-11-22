@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { ConfirmPrompt } from '@/components/ConfirmPrompt';
 import { IconClose, IconDocument } from '@/components/icons';
 import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
 
@@ -31,6 +40,52 @@ import { shortcutFor, shortcutProps, type EntryAction } from '@/lib/shortcuts';
  * the foot - every `.form-actions` row inside one is that bar - so a dialog anywhere
  * in the application reads like the bills do.
  */
+interface ModalControl {
+  /** Closes the window - asking "Do you want to close?" first in an editor. */
+  readonly requestClose: () => void;
+  /** Runs a save once "Do you want to save?" is answered yes. */
+  readonly confirmSave: (save: () => void) => void;
+}
+
+const ModalControlContext = createContext<ModalControl | null>(null);
+
+/** The window's own close, which asks first; outside a Modal, `fallback`. */
+export function useModalClose(fallback: () => void): () => void {
+  return useContext(ModalControlContext)?.requestClose ?? fallback;
+}
+
+/** Wraps a save so it asks "Do you want to save?" first; outside a Modal, as is. */
+export function useConfirmedSave(): (save: () => void) => void {
+  return useContext(ModalControlContext)?.confirmSave ?? ((save) => save());
+}
+
+/** The buttons that save: what makes a window an editor, and what asks first. */
+const SAVE_SHORTCUTS = new Set<string>(['save', 'draft', 'print']);
+
+/** A window is an editor when it holds a form or a button that saves. */
+function isEditor(content: HTMLElement | null): boolean {
+  return (
+    content?.querySelector(
+      'form:not([data-no-confirm]), [data-shortcut="save"], [data-shortcut="draft"]',
+    ) != null
+  );
+}
+
+/** Cancel beside Save: every `.form-actions` row without one gets it. */
+function CancelButton({ onClick }: { readonly onClick: () => void }): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <button
+      type="button"
+      data-modal-cancel=""
+      onClick={onClick}
+      className="btn-secondary"
+    >
+      {t('common.cancel')}
+    </button>
+  );
+}
+
 export function Modal({
   title,
   subtitle,
@@ -53,6 +108,70 @@ export function Modal({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const [isFullscreen, setIsFullscreen] = useState(size === 'fullscreen');
+  const content = useRef<HTMLDivElement | null>(null);
+  // The content as state too: Radix mounts it after this component, and the Cancel
+  // slots can only be found once it is there.
+  const [contentElement, setContentElement] = useState<HTMLDivElement | null>(null);
+  const contentRef = useCallback((element: HTMLDivElement | null) => {
+    content.current = element;
+    setContentElement(element);
+  }, []);
+  const [asking, setAsking] = useState<'close' | { readonly save: () => void } | null>(
+    null,
+  );
+  // A form submit that was answered yes, let through on its second pass.
+  const confirmedForm = useRef<HTMLFormElement | null>(null);
+
+  const requestClose = useCallback((): void => {
+    if (isEditor(content.current)) setAsking('close');
+    else onClose();
+  }, [onClose]);
+
+  const confirmSave = useCallback((save: () => void): void => {
+    setAsking({ save });
+  }, []);
+
+  // Enter in a field, a submit button, or the save key: every form submit asks
+  // first, then goes through as it would have.
+  const onSubmitCapture = (event: React.FormEvent<HTMLDivElement>): void => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-no-confirm'))
+      return;
+    if (confirmedForm.current === form) {
+      confirmedForm.current = null;
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter ?? null;
+    setAsking({
+      save: () => {
+        confirmedForm.current = form;
+        if (submitter instanceof HTMLElement)
+          form.requestSubmit(submitter as HTMLButtonElement);
+        else form.requestSubmit();
+      },
+    });
+  };
+
+  const cancelHosts = useCancelHosts(contentElement);
+
+  // A form's own Cancel, in its row of buttons, closes the way every Cancel does:
+  // asking "Do you want to close?" first.
+  const onClickCapture = (event: React.MouseEvent<HTMLDivElement>): void => {
+    const button = (event.target as HTMLElement).closest('button');
+    if (
+      !button ||
+      button.hasAttribute('data-modal-cancel') ||
+      !button.closest('.form-actions') ||
+      button.textContent?.trim() !== t('common.cancel')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    requestClose();
+  };
 
   return (
     /*
@@ -60,7 +179,7 @@ export function Modal({
       unmounted when it should not, which is how every caller already uses it.
       `onOpenChange` therefore only ever fires to close.
     */
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open onOpenChange={(open) => !open && requestClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/65 dark:bg-black/80 backdrop-blur-md transition-opacity duration-200" />
         <div
@@ -70,6 +189,9 @@ export function Modal({
           )}
         >
           <Dialog.Content
+            ref={contentRef}
+            onSubmitCapture={onSubmitCapture}
+            onClickCapture={onClickCapture}
             aria-describedby={undefined}
             /*
               Prevent outside clicks or interactions from closing the modal; it
@@ -166,14 +288,40 @@ export function Modal({
             >
               {/* Full screen, the content is a card on the canvas, as an invoice's
                   are; in a dialog the dialog is the card. */}
-              {isFullscreen ? (
-                <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5 [&>*]:shrink-0">
-                  {children}
-                </div>
-              ) : (
-                children
-              )}
+              <ModalControlContext.Provider value={{ requestClose, confirmSave }}>
+                {isFullscreen ? (
+                  <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5 [&>*]:shrink-0">
+                    {children}
+                  </div>
+                ) : (
+                  children
+                )}
+              </ModalControlContext.Provider>
             </div>
+            {cancelHosts.map((host) =>
+              createPortal(<CancelButton onClick={requestClose} />, host),
+            )}
+            {asking === 'close' && (
+              <ConfirmPrompt
+                title={t('common.confirmClose')}
+                onConfirm={() => {
+                  setAsking(null);
+                  onClose();
+                }}
+                onCancel={() => setAsking(null)}
+              />
+            )}
+            {asking !== null && asking !== 'close' && (
+              <ConfirmPrompt
+                title={t('common.confirmSave')}
+                onConfirm={() => {
+                  const { save } = asking;
+                  setAsking(null);
+                  save();
+                }}
+                onCancel={() => setAsking(null)}
+              />
+            )}
           </Dialog.Content>
         </div>
       </Dialog.Portal>
@@ -196,10 +344,13 @@ export function ModalButton({
   /** What a keyboard shortcut presses this button for - save, a draft, print. */
   readonly shortcut?: EntryAction;
 }): React.JSX.Element {
+  const confirmed = useConfirmedSave();
+  const saves = shortcut !== undefined && SAVE_SHORTCUTS.has(shortcut);
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={saves ? () => confirmed(onClick) : onClick}
       disabled={disabled}
       {...(shortcut ? shortcutProps(shortcut) : {})}
       {...(shortcut ? { title: shortcutFor(shortcut) } : {})}
@@ -219,4 +370,58 @@ export function ModalButton({
       )}
     </button>
   );
+}
+
+/**
+ * The `.form-actions` rows in the window that have no Cancel of their own, each with
+ * a slot at its start for one. Watched, because a tab or a step can bring a form in
+ * after the window opened.
+ */
+function useCancelHosts(root: HTMLElement | null): HTMLElement[] {
+  const { t } = useTranslation();
+  const [hosts, setHosts] = useState<HTMLElement[]>([]);
+
+  useEffect(() => {
+    if (!root) return undefined;
+    const cancelLabel = t('common.cancel');
+
+    const scan = (): void => {
+      const found: HTMLElement[] = [];
+      root.querySelectorAll<HTMLElement>('.form-actions').forEach((row) => {
+        // Only a row that saves, and that has no Cancel already.
+        const saves = row.querySelector(
+          'button[type="submit"], [data-shortcut="save"], [data-shortcut="draft"]',
+        );
+        if (!saves) return;
+        let host = row.querySelector<HTMLElement>(':scope > [data-cancel-host]');
+        const hasOwn = Array.from(row.querySelectorAll('button')).some(
+          (button) =>
+            !host?.contains(button) && button.textContent?.trim() === cancelLabel,
+        );
+        if (hasOwn) {
+          host?.remove();
+          return;
+        }
+        if (!host) {
+          host = document.createElement('span');
+          host.setAttribute('data-cancel-host', '');
+          host.className = 'contents';
+          row.insertBefore(host, row.firstChild);
+        }
+        found.push(host);
+      });
+      setHosts((current) =>
+        current.length === found.length && current.every((h, i) => h === found[i])
+          ? current
+          : found,
+      );
+    };
+
+    scan();
+    const watcher = new MutationObserver(scan);
+    watcher.observe(root, { childList: true, subtree: true });
+    return () => watcher.disconnect();
+  }, [root, t]);
+
+  return hosts;
 }

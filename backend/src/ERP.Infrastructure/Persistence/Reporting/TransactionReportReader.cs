@@ -217,11 +217,33 @@ public sealed class TransactionReportReader : ITransactionReportReader
             lines = lines.Where(line => carrying.Contains(line.Id));
         }
 
+        // By the area and route on the bill; a bill that names none (made before it
+        // could, or from an order or a job card) goes by its customer's.
+        if (query.AreaId is { } areaFilter)
+        {
+            TerritoryId area = TerritoryId.From(areaFilter);
+            invoices = invoices.Where(invoice =>
+                invoice.AreaId == area
+                || (invoice.AreaId == null
+                    && _context.Ledgers.Any(customer =>
+                        customer.Id == invoice.CustomerLedgerId && customer.AreaId == area)));
+        }
+
+        if (query.RouteId is { } routeFilter)
+        {
+            TerritoryId route = TerritoryId.From(routeFilter);
+            invoices = invoices.Where(invoice =>
+                invoice.RouteId == route
+                || (invoice.RouteId == null
+                    && _context.Ledgers.Any(customer =>
+                        customer.Id == invoice.CustomerLedgerId && customer.RouteId == route)));
+        }
+
         var rows = await (
                 from line in lines
                 join invoice in invoices on line.SalesInvoiceId equals invoice.Id
                 join product in Products(query) on line.ProductId equals product.Id
-                join customer in Parties(query) on invoice.CustomerLedgerId equals customer.Id
+                join customer in _context.Ledgers.AsNoTracking() on invoice.CustomerLedgerId equals customer.Id
                 select new
                 {
                     Bill = invoice.Id,

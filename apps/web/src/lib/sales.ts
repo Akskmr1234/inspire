@@ -161,6 +161,14 @@ export interface SalesInvoiceDetail {
   readonly onlinePaymentType?: string | null;
   /** The unit its total was rounded to; zero for the currency alone. */
   readonly roundTo?: number;
+  /** A walk-in customer's mobile number. */
+  readonly billingMobile?: string | null;
+  /** A walk-in customer's address. */
+  readonly billingAddress?: string | null;
+  /** The area the sale was made in. */
+  readonly areaId?: string | null;
+  /** The route the sale was made on. */
+  readonly routeId?: string | null;
 }
 
 /** What posting produced. */
@@ -277,6 +285,14 @@ export interface SalesInvoiceInput {
   readonly onlinePaymentType?: string | null;
   /** The unit the total is rounded to - 0.25, 1 - or zero for the currency alone. */
   readonly roundTo?: number;
+  /** A walk-in customer's mobile number. */
+  readonly billingMobile?: string | null;
+  /** A walk-in customer's address. */
+  readonly billingAddress?: string | null;
+  /** The area the sale was made in; the customer's own when not sent. */
+  readonly areaId?: string | null;
+  /** The route the sale was made on; the customer's own when not sent. */
+  readonly routeId?: string | null;
 }
 
 /**

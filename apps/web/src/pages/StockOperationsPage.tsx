@@ -1102,12 +1102,14 @@ export function StockEntry({
                       />
                     </td>
                     <NumberCell
+                      concealed={!line.productId}
                       label={quantityLabel}
                       value={line.quantity}
                       onChange={(val) => update(line.key, { quantity: val })}
                     />
                     {showRate && columns.shows('rate') && (
                       <NumberCell
+                        concealed={!line.productId}
                         label={t('stock.rate')}
                         value={line.rate}
                         placeholder={t('stock.ratePlaceholder')}

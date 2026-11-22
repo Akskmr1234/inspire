@@ -20,10 +20,12 @@ export interface PaymentMode {
   readonly labelKey: string;
 }
 
+// Bank transfer is not offered: a transfer arrives as Online (with the method it
+// came by) or as a bank voucher. Old vouchers that say "Bank transfer" keep it - an
+// editor offers an unknown stored value back rather than blanking it.
 export const PAYMENT_MODES: readonly PaymentMode[] = [
   { value: 'Cash', labelKey: 'paymentModes.cash' },
   { value: 'Cheque', labelKey: 'paymentModes.cheque' },
-  { value: 'Bank transfer', labelKey: 'paymentModes.bankTransfer' },
   { value: 'Card', labelKey: 'paymentModes.card' },
   { value: 'Online', labelKey: 'paymentModes.online' },
   { value: 'Credit', labelKey: 'paymentModes.credit' },

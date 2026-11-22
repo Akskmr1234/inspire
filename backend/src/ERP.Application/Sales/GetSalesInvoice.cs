@@ -86,6 +86,10 @@ public sealed record SalesInvoiceChargeDetail(Guid LedgerId, decimal Amount, boo
 /// <param name="BillingName">The name it is made out to, where it says one.</param>
 /// <param name="OnlinePaymentType">How an online payment was made.</param>
 /// <param name="RoundTo">The unit its total was rounded to; zero for the currency alone.</param>
+/// <param name="BillingMobile">A walk-in customer's mobile number.</param>
+/// <param name="BillingAddress">A walk-in customer's address.</param>
+/// <param name="AreaId">The area the sale was made in.</param>
+/// <param name="RouteId">The route the sale was made on.</param>
 public sealed record SalesInvoiceDetail(
     SalesInvoiceResponse Header,
     DateOnly Date,
@@ -113,7 +117,11 @@ public sealed record SalesInvoiceDetail(
     Guid? DeliveryNoteId = null,
     string? BillingName = null,
     string? OnlinePaymentType = null,
-    decimal RoundTo = 0m);
+    decimal RoundTo = 0m,
+    string? BillingMobile = null,
+    string? BillingAddress = null,
+    Guid? AreaId = null,
+    Guid? RouteId = null);
 
 /// <summary>Handles <see cref="GetSalesInvoiceQuery"/>.</summary>
 /// <remarks>
@@ -227,6 +235,10 @@ public sealed class GetSalesInvoiceQueryHandler
             invoice.DeliveryNoteId?.Value,
             invoice.BillingName,
             invoice.OnlinePaymentType,
-            invoice.RoundTo));
+            invoice.RoundTo,
+            invoice.BillingMobile,
+            invoice.BillingAddress,
+            invoice.AreaId?.Value,
+            invoice.RouteId?.Value));
     }
 }

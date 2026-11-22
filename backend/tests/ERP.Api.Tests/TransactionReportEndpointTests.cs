@@ -162,6 +162,62 @@ public sealed class TransactionReportEndpointTests
             .Rows.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task A_sale_reads_by_the_area_and_route_on_the_bill_or_else_its_customers()
+    {
+        HttpClient client = await _factory.CreateAuthenticatedClientAsync();
+        TestMasters masters = await TestMasters.ArrangeAsync(client);
+        await BuyAsync(client, masters);
+        string tag = Guid.NewGuid().ToString("N")[..8];
+
+        Guid north = await TerritoryAsync(client, ERP.Domain.Parties.TerritoryKind.Area, $"North {tag}");
+        Guid south = await TerritoryAsync(client, ERP.Domain.Parties.TerritoryKind.Area, $"South {tag}");
+        Guid van = await TerritoryAsync(client, ERP.Domain.Parties.TerritoryKind.Route, $"Van {tag}");
+
+        // One sale names an area and a route on the bill; the other names neither.
+        HttpResponseMessage named = await client.PostAsJsonAsync("/api/v1/sales/invoices", new
+        {
+            Date = Today,
+            CustomerLedgerId = masters.CustomerId,
+            WarehouseId = masters.WarehouseId,
+            Kind = 1,
+            Lines = new[] { new { masters.ProductId, Quantity = 1m, Rate = 10m, TaxPercentage = 0m } },
+            AreaId = north,
+            RouteId = van,
+            Post = true,
+        });
+        named.StatusCode.ShouldBe(HttpStatusCode.Created, await named.Content.ReadAsStringAsync());
+        Guid namedId = (await named.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!.SalesInvoiceId;
+
+        SalesInvoiceDetail detail = (await client.GetFromJsonAsync<SalesInvoiceDetail>(
+            $"/api/v1/sales/invoices/{namedId}"))!;
+        detail.AreaId.ShouldBe(north);
+        detail.RouteId.ShouldBe(van);
+
+        Guid unnamed = await SellAsync(client, masters, 1m);
+
+        // By the bill's area and route: only the sale that names them.
+        TransactionReport inNorth = await ReadAsync(
+            client, $"document=Sales&groupBy=Bill&partyLedgerId={masters.CustomerId}&areaId={north}");
+        inNorth.Rows.ShouldHaveSingleItem().Key.ShouldBe(namedId.ToString());
+        (await ReadAsync(
+            client, $"document=Sales&groupBy=Bill&partyLedgerId={masters.CustomerId}&routeId={van}"))
+            .Rows.ShouldHaveSingleItem().Key.ShouldBe(namedId.ToString());
+        (await ReadAsync(
+            client, $"document=Sales&groupBy=Bill&partyLedgerId={masters.CustomerId}&areaId={south}"))
+            .Rows.ShouldBeEmpty();
+        unnamed.ShouldNotBe(namedId);
+    }
+
+    private static async Task<Guid> TerritoryAsync(
+        HttpClient client, ERP.Domain.Parties.TerritoryKind kind, string name)
+    {
+        HttpResponseMessage created = await client.PostAsJsonAsync(
+            "/api/v1/parties/territories", new { Kind = kind, Name = name });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        return await created.Content.ReadFromJsonAsync<Guid>();
+    }
+
     private static async Task<TransactionReport> ReadAsync(HttpClient client, string query)
     {
         HttpResponseMessage response = await client.GetAsync(

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import { TerritoryKind, useTerritories } from '@/lib/places';
 import { CreditLimitPolicy, getPolicies, type FirmPolicies } from '@/lib/policies';
 import { isHeldForApproval } from '@/lib/approvals';
 import clsx from 'clsx';
@@ -690,6 +691,10 @@ interface SaleDraft {
   readonly rateType: SalesRateType;
   readonly narration: string;
   readonly billingName: string;
+  readonly billingMobile?: string;
+  readonly billingAddress?: string;
+  readonly areaId?: string;
+  readonly routeId?: string;
   readonly paidAmount: string;
   readonly paymentReference: string;
   readonly additionalLedgers: readonly AdditionalLedgerItem[];
@@ -901,6 +906,18 @@ function EntryDialog({
   const [billingName, setBillingName] = useState(
     editing?.billingName ?? start?.billingName ?? '',
   );
+  // The walk-in customer's mobile and address, printed on the bill with the name.
+  const [billingMobile, setBillingMobile] = useState(
+    editing?.billingMobile ?? start?.billingMobile ?? '',
+  );
+  const [billingAddress, setBillingAddress] = useState(
+    editing?.billingAddress ?? start?.billingAddress ?? '',
+  );
+  // The area and route the sale is made in: the customer's own, unless changed.
+  const [areaId, setAreaId] = useState(editing?.areaId ?? start?.areaId ?? '');
+  const [routeId, setRouteId] = useState(editing?.routeId ?? start?.routeId ?? '');
+  const areas = useTerritories(TerritoryKind.area);
+  const routes = useTerritories(TerritoryKind.route);
   // Blank means the whole bill for a cash or online sale and nothing for one on account;
   // a figure typed here is a part payment. A posted sale being corrected shows what it
   // took, unless that was the whole of it.
@@ -1067,6 +1084,16 @@ function EntryDialog({
     () => customers.data?.find((c) => c.customerId === customerId),
     [customers.data, customerId],
   );
+  // A customer chosen afresh brings their own area and route; a bill being corrected
+  // or taken off hold keeps what it had until the customer is changed.
+  const territoryCustomer = useRef(customerId);
+  useEffect(() => {
+    if (!selectedCustomer || territoryCustomer.current === customerId) return;
+    territoryCustomer.current = customerId;
+    setAreaId(selectedCustomer.profile.areaId ?? '');
+    setRouteId(selectedCustomer.profile.routeId ?? '');
+  }, [customerId, selectedCustomer]);
+
   // The account a walk-in sale goes to - the firm's Primary customer, or the one
   // Settings › Sales names - whose bill is made out to whatever name the counter types.
   const isWalkIn =
@@ -1919,6 +1946,11 @@ function EntryDialog({
         narration: narration.trim() || null,
         // The name typed for a walk-in customer; a named one's bill carries their own.
         billingName: isWalkIn && showBillingName ? billingName.trim() || null : null,
+        billingMobile: isWalkIn && showBillingName ? billingMobile.trim() || null : null,
+        billingAddress:
+          isWalkIn && showBillingName ? billingAddress.trim() || null : null,
+        areaId: areaId || null,
+        routeId: routeId || null,
         onlinePaymentType: onlineOn ? onlineType.trim() || null : null,
         roundTo,
         charges: chargesPayload,
@@ -2034,6 +2066,10 @@ function EntryDialog({
         rateType,
         narration,
         billingName,
+        billingMobile,
+        billingAddress,
+        areaId,
+        routeId,
         paidAmount,
         paymentReference,
         additionalLedgers,
@@ -2543,29 +2579,77 @@ function EntryDialog({
             empty={t('invoice.noCustomer')}
             choose={t('invoice.chooseCustomer')}
             money={moneyAlways}
+            hideDetails={isWalkIn && showBillingName}
           >
-            {showBillingName && selectedCustomer && (
-              <CompactField label={t('sales.billingName')}>
-                {isWalkIn ? (
+            {showBillingName && selectedCustomer && isWalkIn && (
+              // A walk-in customer, typed at the counter: name, mobile and address,
+              // printed on the bill.
+              <fieldset className="min-w-0 space-y-2">
+                <legend className="mb-1 text-[11px] font-bold tracking-wider text-ink-muted uppercase">
+                  {t('sales.walkingCustomer')}
+                </legend>
+                <CompactField label={t('sales.customerName')}>
                   <input
                     value={billingName}
                     maxLength={120}
-                    aria-label={t('sales.billingName')}
                     onChange={(event) => setBillingName(event.target.value)}
                     placeholder={t('sales.billingNamePlaceholder')}
                     className="field-input-sm"
                   />
-                ) : (
-                  // A named customer's bill is made out to them.
-                  <input
-                    value={selectedCustomer.name}
-                    readOnly
-                    tabIndex={-1}
-                    aria-label={t('sales.billingName')}
-                    className="field-input-sm bg-surface-2 text-ink-muted"
-                  />
-                )}
-              </CompactField>
+                </CompactField>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <CompactField label={t('sales.customerMobile')}>
+                    <input
+                      value={billingMobile}
+                      maxLength={20}
+                      inputMode="tel"
+                      autoComplete="off"
+                      onChange={(event) => setBillingMobile(event.target.value)}
+                      className="field-input-sm"
+                    />
+                  </CompactField>
+                  <CompactField label={t('sales.customerAddress')}>
+                    <input
+                      value={billingAddress}
+                      maxLength={250}
+                      onChange={(event) => setBillingAddress(event.target.value)}
+                      className="field-input-sm"
+                    />
+                  </CompactField>
+                </div>
+              </fieldset>
+            )}
+            {(areas.length > 0 || routes.length > 0) && (
+              <div className="grid grid-cols-2 gap-2">
+                <CompactField label={t('sales.area')}>
+                  <select
+                    value={areaId}
+                    onChange={(event) => setAreaId(event.target.value)}
+                    className="field-input-sm"
+                  >
+                    <option value="">{t('common.none')}</option>
+                    {areas.map((area) => (
+                      <option key={area.id} value={area.id}>
+                        {area.name}
+                      </option>
+                    ))}
+                  </select>
+                </CompactField>
+                <CompactField label={t('sales.route')}>
+                  <select
+                    value={routeId}
+                    onChange={(event) => setRouteId(event.target.value)}
+                    className="field-input-sm"
+                  >
+                    <option value="">{t('common.none')}</option>
+                    {routes.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {route.name}
+                      </option>
+                    ))}
+                  </select>
+                </CompactField>
+              </div>
             )}
             {showNarration && (
               <NarrationInput
@@ -3109,6 +3193,7 @@ function LineRow({
         <ProductDetailCells product={product} shows={shows} labels={t} />
         <NumberCell
           label={t('sales.quantity')}
+          concealed={!line.productId}
           value={line.quantity}
           error={errors['quantity']}
           onChange={(value) => onChange({ quantity: value })}
@@ -3116,6 +3201,7 @@ function LineRow({
         {enableFreeQty && shows('freeQuantity') && (
           <NumberCell
             label={t('sales.freeQuantity')}
+            concealed={!line.productId}
             value={line.freeQuantity ?? '0'}
             onChange={(value) => onChange({ freeQuantity: value })}
           />
@@ -3123,6 +3209,7 @@ function LineRow({
         {reverseCalc ? (
           <NumberCell
             label={`${t('sales.rate')} (${t('sales.inclusiveRate')})`}
+            concealed={!line.productId}
             value={line.inclusiveRate ?? ''}
             readOnly={rateLocked}
             error={errors['rate']}
@@ -3140,6 +3227,7 @@ function LineRow({
         ) : (
           <NumberCell
             label={t('sales.rate')}
+            concealed={!line.productId}
             value={line.rate}
             readOnly={rateLocked}
             error={errors['rate']}
@@ -3160,6 +3248,7 @@ function LineRow({
         {enableDiscount && shows('discount') && (
           <NumberCell
             label={t('sales.itemDiscount')}
+            concealed={!line.productId}
             value={line.discount}
             onChange={(value) => onChange({ discount: value })}
           />
@@ -3167,6 +3256,7 @@ function LineRow({
         {shows('taxPercent') && (
           <NumberCell
             label={t('sales.taxPercent')}
+            concealed={!line.productId}
             value={line.taxPercentage}
             error={errors['taxPercentage']}
             onChange={(value) => onChange({ taxPercentage: value })}
@@ -3447,6 +3537,18 @@ function DocumentDialog({
                 <Detail label={t('sales.currency')} value={document.currency} />
                 {document.billingName && (
                   <Detail label={t('sales.billingName')} value={document.billingName} />
+                )}
+                {document.billingMobile && (
+                  <Detail
+                    label={t('sales.customerMobile')}
+                    value={document.billingMobile}
+                  />
+                )}
+                {document.billingAddress && (
+                  <Detail
+                    label={t('sales.customerAddress')}
+                    value={document.billingAddress}
+                  />
                 )}
                 <Detail
                   label={t('sales.paymentMode')}

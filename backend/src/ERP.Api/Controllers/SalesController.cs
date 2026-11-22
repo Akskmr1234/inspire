@@ -308,7 +308,11 @@ public sealed class SalesController : ApiControllerBase
             PaidInFull: request.PaidInFull,
             BillingName: request.BillingName,
             OnlinePaymentType: request.OnlinePaymentType,
-            RoundTo: request.RoundTo);
+            RoundTo: request.RoundTo,
+            BillingMobile: request.BillingMobile,
+            BillingAddress: request.BillingAddress,
+            AreaId: request.AreaId,
+            RouteId: request.RouteId);
 
         return new UpdateSalesInvoiceCommand(id, changes, request.Post, request.Reason);
     }
@@ -336,6 +340,10 @@ public sealed class SalesController : ApiControllerBase
 /// <param name="BillingName">The name the invoice is made out to.</param>
 /// <param name="OnlinePaymentType">How an online payment was made: Google Pay, PhonePe.</param>
 /// <param name="RoundTo">The unit the total is rounded to. Zero rounds to the currency alone.</param>
+/// <param name="BillingMobile">A walk-in customer's mobile number.</param>
+/// <param name="BillingAddress">A walk-in customer's address.</param>
+/// <param name="AreaId">The area the sale was made in.</param>
+/// <param name="RouteId">The route the sale was made on.</param>
 public sealed record UpdateSalesInvoiceRequest(
     [property: JsonRequired] DateOnly Date,
     [property: JsonRequired] Guid CustomerLedgerId,
@@ -357,7 +365,11 @@ public sealed record UpdateSalesInvoiceRequest(
     bool PaidInFull = false,
     string? BillingName = null,
     string? OnlinePaymentType = null,
-    decimal RoundTo = 0m);
+    decimal RoundTo = 0m,
+    string? BillingMobile = null,
+    string? BillingAddress = null,
+    Guid? AreaId = null,
+    Guid? RouteId = null);
 
 /// <summary>Why an invoice is being cancelled.</summary>
 /// <param name="Reason">

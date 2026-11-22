@@ -50,9 +50,11 @@ function frame(create: () => Promise<void>) {
           }}
         >
           <MasterField label="Code" value="" onChange={() => undefined} />
-          <button type="submit" disabled={busy}>
-            Add
-          </button>
+          <div className="form-actions">
+            <button type="submit" disabled={busy}>
+              Add
+            </button>
+          </div>
         </form>
       )}
     />
@@ -113,6 +115,9 @@ describe('the add form', () => {
     await waitFor(() => expect(screen.getByText('C-001')).toBeTruthy());
     await user.click(screen.getByRole('button', { name: 'New customer' }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
+    // Saving asks first.
+    expect(screen.getByRole('alertdialog').textContent).toContain('Do you want to save?');
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
@@ -128,6 +133,9 @@ describe('the add form', () => {
     await waitFor(() => expect(screen.getByText('C-001')).toBeTruthy());
     await user.click(screen.getByRole('button', { name: 'New customer' }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
+    // Saving asks first.
+    expect(screen.getByRole('alertdialog').textContent).toContain('Do you want to save?');
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
 
     // Behind the dialog the message would be unreadable, and closing the dialog to
     // show it would take the fields away from the person about to correct them.
@@ -139,7 +147,7 @@ describe('the add form', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeTruthy();
   });
 
-  it('is dismissed by Escape, like every other dialog here', async () => {
+  it('is dismissed by Escape, like every other dialog here, once that is confirmed', async () => {
     const user = userEvent.setup();
     renderPage(frame(async () => undefined));
 
@@ -147,6 +155,30 @@ describe('the add form', () => {
     await user.click(screen.getByRole('button', { name: 'New customer' }));
     await user.keyboard('{Escape}');
 
+    // "Do you want to close?" - No keeps the form, Yes closes it.
+    expect(screen.getByRole('alertdialog').textContent).toContain(
+      'Do you want to close?',
+    );
+    await user.click(screen.getByRole('button', { name: 'No' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('has a Cancel beside the save button, which asks before closing', async () => {
+    const user = userEvent.setup();
+    renderPage(frame(async () => undefined));
+
+    await waitFor(() => expect(screen.getByText('C-001')).toBeTruthy());
+    await user.click(screen.getByRole('button', { name: 'New customer' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByRole('alertdialog').textContent).toContain(
+      'Do you want to close?',
+    );
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

@@ -547,11 +547,20 @@ export function printableSale(
     narration: invoice.narration,
     currency: invoice.currency,
     partyLabel: 'billTo',
-    // A walk-in sale is made out to the name the counter typed, not to the account
-    // every walk-in customer shares.
-    party: invoice.billingName
-      ? { name: invoice.billingName, code: null, lines: [], taxNumber: null }
-      : billedTo,
+    // A walk-in sale is made out to the name, mobile and address the counter typed,
+    // not to the account every walk-in customer shares. A named customer prints with
+    // their own name, address and mobile from the customer master.
+    party:
+      invoice.billingName || invoice.billingMobile || invoice.billingAddress
+        ? {
+            name: invoice.billingName || billedTo.name,
+            code: null,
+            lines: [invoice.billingAddress ?? '', invoice.billingMobile ?? ''].filter(
+              (line) => line.trim() !== '',
+            ),
+            taxNumber: null,
+          }
+        : billedTo,
     warehouse: warehouse ? warehouse.name : null,
     goods: invoice.lines.map((line) => {
       const product = products.get(line.productId);

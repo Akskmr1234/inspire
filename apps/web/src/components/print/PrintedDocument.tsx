@@ -461,7 +461,7 @@ export function PrintedDocument({
                     <span className="text-[0.85em] font-bold uppercase opacity-70">
                       {en('printing.narration')}:
                     </span>{' '}
-                    {document.narration}
+                    <span className="whitespace-pre-line">{document.narration}</span>
                   </>
                 }
               />
@@ -470,7 +470,7 @@ export function PrintedDocument({
                 <span className="text-[0.85em] font-bold uppercase opacity-70">
                   {t('printing.narration')}:
                 </span>{' '}
-                {document.narration}
+                <span className="whitespace-pre-line">{document.narration}</span>
               </div>
             ))}
         </div>
