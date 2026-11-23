@@ -107,6 +107,12 @@ Two-step sign-in (authenticator app, approve on phone, backup codes) is off unle
 the `Erp__Mfa__PrivacyIdea__*` variables are set. It needs one more service,
 privacyIDEA — free and open source. See [TWO_FACTOR.md](TWO_FACTOR.md).
 
+Uploaded files — product, party and return photographs, and print logos — stay in
+the database unless the `Erp__Storage__S3__*` variables are set; then they go to
+Cloudflare R2, and the ones already saved move across on their own. Scheduled
+database backups to R2 are one more optional service. See
+[FILE_STORAGE.md](FILE_STORAGE.md).
+
 ---
 
 ## Web variables

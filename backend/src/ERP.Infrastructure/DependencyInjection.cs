@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Persistence;
 using ERP.Application.Abstractions.Security;
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Accounting.Reports;
 using ERP.Application.Inventory.Masters;
@@ -28,6 +29,7 @@ using ERP.Infrastructure.Persistence.Reporting;
 using ERP.Infrastructure.Persistence.Repositories;
 using ERP.Infrastructure.Persistence.Seeding;
 using ERP.Infrastructure.Security;
+using ERP.Infrastructure.Storage;
 using ERP.Infrastructure.Tenancy;
 using ERP.Infrastructure.Time;
 using ERP.SharedKernel.Abstractions;
@@ -88,6 +90,16 @@ public static class DependencyInjection
         services.AddHttpClient<IMfaProvider, PrivacyIdeaMfaProvider>(client =>
             client.Timeout = TimeSpan.FromSeconds(15));
         services.AddScoped<IMfaAdministration, MfaAdministration>();
+
+        // Uploaded files - photographs and print logos - in Cloudflare R2 or any
+        // S3-compatible bucket. Off unless configured, in which case they stay in the
+        // database exactly as before. Switched on, the files already in the database
+        // are moved across in the background.
+        services.AddOptions<FileStorageOptions>()
+            .Bind(configuration.GetSection(FileStorageOptions.SectionName));
+        services.AddSingleton<IFileStore, S3FileStore>();
+        services.AddSingleton<StoredFileMigration>();
+        services.AddHostedService(sp => sp.GetRequiredService<StoredFileMigration>());
         services.AddScoped<IEasyRetailSource, EasyRetailSource>();
         services.AddScoped<IEasyRetailImporter, EasyRetailImporter>();
         services.AddScoped<IDataReset, DataReset>();

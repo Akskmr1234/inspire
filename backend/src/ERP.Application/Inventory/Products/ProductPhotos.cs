@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Parties;
 using ERP.Domain.Inventory;
@@ -59,22 +60,26 @@ public sealed class ProductPhotoHandlers
 {
     private readonly IProductRepository _products;
     private readonly IProductPhotoRepository _photos;
+    private readonly IFileStore _files;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="ProductPhotoHandlers"/> class.</summary>
     /// <param name="products">The product master.</param>
     /// <param name="photos">Where the photographs are kept.</param>
+    /// <param name="files">Where the pictures themselves go, when file storage is on.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public ProductPhotoHandlers(
         IProductRepository products,
         IProductPhotoRepository photos,
+        IFileStore files,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _products = products;
         _photos = photos;
+        _files = files;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
@@ -98,7 +103,7 @@ public sealed class ProductPhotoHandlers
         return Result.Success(new PhotoSetResponse(
         [
             .. Enumerable.Range(1, ProductPhoto.MaximumSlots)
-                .Select(slot => photos.FirstOrDefault(photo => photo.Slot == slot)?.Content),
+                .Select(slot => _files.LinkFor(photos.FirstOrDefault(photo => photo.Slot == slot)?.Content)),
         ]));
     }
 
@@ -117,21 +122,24 @@ public sealed class ProductPhotoHandlers
         Product product = found.Value;
         IReadOnlyList<ProductPhoto> photos = await _photos.ListAsync(product.Id, cancellationToken);
         ProductPhoto? photo = photos.FirstOrDefault(candidate => candidate.Slot == request.Slot);
+        string?[] replaced = photo is null ? [] : [photo.Content, photo.Thumbnail];
+        ProductPhoto? kept = photo;
 
         if (request.Content is null)
         {
             if (photo is not null)
             {
                 _photos.Remove(photo);
+                kept = null;
             }
         }
         else if (photo is not null)
         {
-            Result replaced = photo.Replace(request.Content);
+            Result changed = photo.Replace(request.Content);
 
-            if (replaced.IsFailure)
+            if (changed.IsFailure)
             {
-                return replaced;
+                return changed;
             }
 
             Result thumbnail = photo.SetThumbnail(request.Thumbnail);
@@ -159,9 +167,35 @@ public sealed class ProductPhotoHandlers
             }
 
             _photos.Add(created.Value);
+            kept = created.Value;
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        List<string> stored = [];
+
+        if (kept is not null)
+        {
+            Result moved = await StoreAsync(kept, stored, cancellationToken);
+
+            if (moved.IsFailure)
+            {
+                await DeleteAsync(stored);
+                return moved;
+            }
+        }
+
+        bool saved = false;
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            saved = true;
+        }
+        finally
+        {
+            // Saved, the pictures it replaced go; not saved, the ones just stored do.
+            await DeleteAsync(saved ? replaced : stored);
+        }
+
         return Result.Success();
     }
 
@@ -173,10 +207,68 @@ public sealed class ProductPhotoHandlers
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        return _tenantContext.FirmId is not { } firmId
-            ? Result.Failure<IReadOnlyDictionary<Guid, string>>(Error.BusinessRule(
-                "Firm.NotSelected", "Select a firm first."))
-            : Result.Success(await _photos.ListThumbnailsAsync(firmId, cancellationToken));
+        if (_tenantContext.FirmId is not { } firmId)
+        {
+            return Result.Failure<IReadOnlyDictionary<Guid, string>>(Error.BusinessRule(
+                "Firm.NotSelected", "Select a firm first."));
+        }
+
+        IReadOnlyDictionary<Guid, string> thumbnails = await _photos.ListThumbnailsAsync(firmId, cancellationToken);
+
+        Dictionary<Guid, string> links = [];
+
+        foreach ((Guid productId, string thumbnail) in thumbnails)
+        {
+            if (_files.LinkFor(thumbnail) is { } link)
+            {
+                links[productId] = link;
+            }
+        }
+
+        return Result.Success<IReadOnlyDictionary<Guid, string>>(links);
+    }
+
+    /// <summary>Puts a photograph's picture and thumbnail in file storage, when it is on.</summary>
+    private async Task<Result> StoreAsync(ProductPhoto photo, List<string> stored, CancellationToken cancellationToken)
+    {
+        if (!_files.IsEnabled)
+        {
+            return Result.Success();
+        }
+
+        string folder = $"{photo.FirmId.Value}/products/{photo.ProductId.Value}";
+        Result<string> content = await _files.KeepAsync(folder, photo.Content, cancellationToken);
+
+        if (content.IsFailure)
+        {
+            return content;
+        }
+
+        stored.Add(content.Value);
+        string? thumbnail = null;
+
+        if (photo.Thumbnail is { } small)
+        {
+            Result<string> kept = await _files.KeepAsync(folder, small, cancellationToken);
+
+            if (kept.IsFailure)
+            {
+                return kept;
+            }
+
+            stored.Add(kept.Value);
+            thumbnail = kept.Value;
+        }
+
+        return photo.MoveTo(content.Value, thumbnail);
+    }
+
+    private async Task DeleteAsync(IEnumerable<string?> files)
+    {
+        foreach (string? file in files)
+        {
+            await _files.DeleteAsync(file, CancellationToken.None);
+        }
     }
 
     private async Task<Result<Product>> FindAsync(Guid productId, CancellationToken cancellationToken)

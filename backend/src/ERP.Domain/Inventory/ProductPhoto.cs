@@ -1,4 +1,5 @@
 using ERP.SharedKernel.Abstractions;
+using ERP.SharedKernel.Files;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -50,7 +51,7 @@ public sealed class ProductPhoto : AggregateRoot<ProductPhotoId>, IFirmScoped
     /// <summary>Gets which of the product's photographs this is, from one.</summary>
     public int Slot { get; private set; }
 
-    /// <summary>Gets the picture, as a data URL.</summary>
+    /// <summary>Gets the picture, as a data URL, or a reference to it in file storage.</summary>
     public string Content { get; private set; }
 
     /// <summary>
@@ -101,6 +102,27 @@ public sealed class ProductPhoto : AggregateRoot<ProductPhotoId>, IFirmScoped
         }
 
         Content = content;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Records that the picture and its thumbnail now live in file storage, keeping only
+    /// references to them.
+    /// </summary>
+    /// <param name="content">The reference to the picture.</param>
+    /// <param name="thumbnail">The reference to the thumbnail, or null for none.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>Only the server calls this, with references it made itself.</remarks>
+    public Result MoveTo(string content, string? thumbnail)
+    {
+        if (!StoredFile.IsReference(content) || (thumbnail is not null && !StoredFile.IsReference(thumbnail)))
+        {
+            return Result.Failure(Error.Validation(
+                "ProductPhoto.ReferenceInvalid", "A stored photograph needs a reference to its file."));
+        }
+
+        Content = content;
+        Thumbnail = thumbnail;
         return Result.Success();
     }
 

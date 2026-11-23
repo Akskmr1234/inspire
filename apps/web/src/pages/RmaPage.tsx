@@ -1333,7 +1333,9 @@ function Thumbnail({
   const photo = useQuery<string, ApiError>({
     queryKey: ['rma-photo', rmaId, photoId],
     queryFn: () => getRmaPhoto(rmaId, photoId),
-    staleTime: Infinity,
+    // With file storage on, the answer is a link that expires after some hours; asking
+    // again now and then keeps it fresh. Without it, the picture itself never changes.
+    staleTime: 30 * 60 * 1000,
   });
 
   return (

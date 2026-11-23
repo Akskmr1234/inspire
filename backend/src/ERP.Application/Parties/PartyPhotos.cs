@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Accounting;
 using ERP.Domain.Parties;
@@ -12,7 +13,9 @@ namespace ERP.Application.Parties;
 public sealed record GetPartyPhotoQuery(Guid LedgerId) : IQuery<PartyPhotoResponse>;
 
 /// <summary>A party's photograph.</summary>
-/// <param name="Content">The picture as a data URL, or null when there is none.</param>
+/// <param name="Content">
+/// The picture as a data URL, or a link to it when file storage is on; null when there is none.
+/// </param>
 public sealed record PartyPhotoResponse(string? Content);
 
 /// <summary>Sets, replaces or removes one of a customer's, supplier's or employee's photographs.</summary>
@@ -26,7 +29,10 @@ public sealed record SetPartyPhotoCommand(Guid LedgerId, string? Content, int Sl
 public sealed record ListPartyPhotosQuery(Guid LedgerId) : IQuery<PhotoSetResponse>;
 
 /// <summary>A record's photographs, one entry a slot.</summary>
-/// <param name="Photos">The pictures as data URLs, in slot order; null where a slot is empty.</param>
+/// <param name="Photos">
+/// The pictures as data URLs, or links to them when file storage is on, in slot order; null
+/// where a slot is empty.
+/// </param>
 public sealed record PhotoSetResponse(IReadOnlyList<string?> Photos);
 
 /// <summary>Handles party photographs.</summary>
@@ -37,22 +43,26 @@ public sealed class PartyPhotoHandlers
 {
     private readonly ILedgerRepository _ledgers;
     private readonly IPlaceRepository _places;
+    private readonly IFileStore _files;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="PartyPhotoHandlers"/> class.</summary>
     /// <param name="ledgers">The ledger repository.</param>
     /// <param name="places">Where the photographs are kept.</param>
+    /// <param name="files">Where the pictures themselves go, when file storage is on.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public PartyPhotoHandlers(
         ILedgerRepository ledgers,
         IPlaceRepository places,
+        IFileStore files,
         ITenantContext tenantContext,
         IUnitOfWork unitOfWork)
     {
         _ledgers = ledgers;
         _places = places;
+        _files = files;
         _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
@@ -74,7 +84,7 @@ public sealed class PartyPhotoHandlers
         PartyPhoto? photo = await _places.FindPhotoAsync(
             party.Value.Id, cancellationToken: cancellationToken);
 
-        return Result.Success(new PartyPhotoResponse(photo?.Content));
+        return Result.Success(new PartyPhotoResponse(_files.LinkFor(photo?.Content)));
     }
 
     /// <inheritdoc />
@@ -96,7 +106,7 @@ public sealed class PartyPhotoHandlers
         return Result.Success(new PhotoSetResponse(
         [
             .. Enumerable.Range(1, PartyPhoto.MaximumSlots)
-                .Select(slot => photos.FirstOrDefault(photo => photo.Slot == slot)?.Content),
+                .Select(slot => _files.LinkFor(photos.FirstOrDefault(photo => photo.Slot == slot)?.Content)),
         ]));
     }
 
@@ -114,21 +124,24 @@ public sealed class PartyPhotoHandlers
 
         PartyPhoto? photo = await _places.FindPhotoAsync(
             party.Value.Id, request.Slot, cancellationToken);
+        string? replaced = photo?.Content;
+        PartyPhoto? kept = photo;
 
         if (request.Content is null)
         {
             if (photo is not null)
             {
                 _places.RemovePhoto(photo);
+                kept = null;
             }
         }
         else if (photo is not null)
         {
-            Result replaced = photo.Replace(request.Content);
+            Result changed = photo.Replace(request.Content);
 
-            if (replaced.IsFailure)
+            if (changed.IsFailure)
             {
-                return replaced;
+                return changed;
             }
         }
         else
@@ -142,9 +155,44 @@ public sealed class PartyPhotoHandlers
             }
 
             _places.AddPhoto(created.Value);
+            kept = created.Value;
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        string? stored = null;
+
+        if (kept is not null && _files.IsEnabled)
+        {
+            Result<string> moved = await _files.KeepAsync(
+                $"{kept.FirmId.Value}/parties/{kept.LedgerId.Value}", kept.Content, cancellationToken);
+
+            if (moved.IsFailure)
+            {
+                return moved;
+            }
+
+            stored = moved.Value;
+            Result referenced = kept.MoveTo(stored);
+
+            if (referenced.IsFailure)
+            {
+                await _files.DeleteAsync(stored, CancellationToken.None);
+                return referenced;
+            }
+        }
+
+        bool saved = false;
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            saved = true;
+        }
+        finally
+        {
+            // Saved, the picture it replaced goes; not saved, the one just stored does.
+            await _files.DeleteAsync(saved ? replaced : stored, CancellationToken.None);
+        }
+
         return Result.Success();
     }
 
