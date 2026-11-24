@@ -92,7 +92,7 @@ import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { TouchProductGrid } from '@/components/product/TouchProductGrid';
-import { fetchProductThumbnails } from '@/lib/photos';
+import { useProductThumbnails } from '@/lib/photos';
 import {
   fetchProductBatches,
   fetchProductSerials,
@@ -1251,6 +1251,8 @@ function EntryDialog({
 
   // The counter's item search leaves out what the master hides from it. A line that
   // already holds such an item still shows it, and its code or barcode still finds it.
+  // Every product's small picture, for the item search and the catalog.
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
     () =>
       (products.data ?? [])
@@ -1260,18 +1262,11 @@ function EntryDialog({
             isReturn(kind) ||
             lines.some((line) => line.productId === product.id),
         )
-        .map((product) => productOption(product, onHand.get(product.id) ?? 0)),
-    [products.data, onHand, lines, kind],
+        .map((product) =>
+          productOption(product, onHand.get(product.id) ?? 0, thumbnails),
+        ),
+    [products.data, onHand, lines, kind, thumbnails],
   );
-
-  // The catalog's small pictures, fetched once for every product - only when the
-  // catalog is in use.
-  const thumbnails = useQuery<Readonly<Record<string, string>>, ApiError>({
-    queryKey: ['product-thumbnails'],
-    queryFn: fetchProductThumbnails,
-    enabled: settings.showTouchCatalog === true,
-    staleTime: 5 * 60_000,
-  });
 
   const posProducts = useMemo(
     () =>
@@ -2567,7 +2562,7 @@ function EntryDialog({
                   rateType={rateType}
                   masterRate={masterRate}
                   onHand={onHand}
-                  thumbnails={thumbnails.data ?? {}}
+                  thumbnails={thumbnails}
                 />
               </div>
             )}

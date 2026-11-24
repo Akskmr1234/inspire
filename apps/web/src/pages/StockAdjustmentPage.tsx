@@ -7,6 +7,8 @@ import { PageHeading } from '@/components/PageHeading';
 import { SearchSelect } from '@/components/SearchSelect';
 import { PageTabs, StockHistoryTable } from '@/components/StockHistory';
 import { productOption } from '@/components/DocumentLines';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
+import { useProductThumbnails } from '@/lib/photos';
 import { BarcodeScan } from '@/components/BarcodeScan';
 import type { ApiError } from '@/lib/api';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
@@ -89,6 +91,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
   const godownsOn = useGodownsOn();
   const preferredWarehouseId = useSettings((state) => state.preferredWarehouseId);
   const fileInput = useRef<HTMLInputElement>(null);
+  const thumbnails = useProductThumbnails();
 
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -403,7 +406,7 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
               .filter(
                 (product) => !positions.has(product.id) && !extra.includes(product.id),
               )
-              .map((product) => productOption(product, 0))}
+              .map((product) => productOption(product, 0, thumbnails))}
           />
         </div>
         <div className="w-full">
@@ -481,10 +484,16 @@ function CountSheet({ onPosted }: { readonly onPosted: () => void }): React.JSX.
               return (
                 <tr key={row.product.id} className="border-t border-line">
                   <td data-label={t('stock.product')} className="px-3 py-1.5">
-                    <span className="font-mono text-xs text-ink-muted">
-                      {row.product.code}
-                    </span>{' '}
-                    {row.product.description}
+                    <ProductPictureLabel
+                      productId={row.product.id}
+                      name={row.product.description}
+                      thumbnails={thumbnails}
+                    >
+                      <span className="font-mono text-xs text-ink-muted">
+                        {row.product.code}
+                      </span>{' '}
+                      {row.product.description}
+                    </ProductPictureLabel>
                   </td>
                   <td data-label={t('adjustment.colSystem')} className="cell-numeric">
                     {quantity(row.system)} {row.product.stockUnitCode}

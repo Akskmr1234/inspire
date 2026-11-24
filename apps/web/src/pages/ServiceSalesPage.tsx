@@ -16,6 +16,7 @@ import {
   TextField,
 } from '@/components/Form';
 import { productOption } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
 import { MobileSearch } from '@/components/MobileSearch';
 import { SuggestInput } from '@/components/SuggestInput';
@@ -483,9 +484,13 @@ function ServiceSaleForm({
     });
   };
 
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
-    () => (products.data ?? []).map((product) => productOption(product, undefined)),
-    [products.data],
+    () =>
+      (products.data ?? []).map((product) =>
+        productOption(product, undefined, thumbnails),
+      ),
+    [products.data, thumbnails],
   );
 
   // Where a payment at the counter goes: the drawer for cash, the bank otherwise.

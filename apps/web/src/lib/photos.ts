@@ -1,4 +1,5 @@
-import { request } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { request, type ApiError } from '@/lib/api';
 
 /** How many photographs a product or a person may have. */
 export const PHOTO_SLOTS = 3;
@@ -79,6 +80,41 @@ export async function setProductPhoto(
 /** Every product's thumbnail, by product id: one small request for the whole catalog. */
 export function fetchProductThumbnails(): Promise<Readonly<Record<string, string>>> {
   return request<Readonly<Record<string, string>>>('/inventory/products/thumbnails');
+}
+
+const NO_THUMBNAILS: Readonly<Record<string, string>> = {};
+
+/**
+ * Whether the firm keeps any product pictures at all - one that keeps none should see
+ * no empty frames. Stops at the first, so it costs nothing however many there are.
+ */
+export function hasThumbnails(thumbnails: Readonly<Record<string, string>>): boolean {
+  for (const key in thumbnails) {
+    if (Object.hasOwn(thumbnails, key)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Every product's thumbnail, by product id, for any screen that lists products.
+ *
+ * One request shared by them all and kept for a few minutes. With file storage on the
+ * answers are links that expire after hours, so the screens ask again now and then.
+ * Somebody who may not read it simply sees no pictures.
+ */
+export function useProductThumbnails(enabled = true): Readonly<Record<string, string>> {
+  const query = useQuery<Readonly<Record<string, string>>, ApiError>({
+    queryKey: ['product-thumbnails'],
+    queryFn: fetchProductThumbnails,
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  return query.data ?? NO_THUMBNAILS;
 }
 
 /** An employee's, customer's or supplier's photographs, one entry a slot. */

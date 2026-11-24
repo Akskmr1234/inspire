@@ -15,6 +15,8 @@ import { MasterPicker, useMasterRows } from '@/components/MasterPicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ArabicNameField } from '@/components/ArabicNameField';
 import { ProductEditor } from '@/pages/ProductEditor';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
+import { useProductThumbnails } from '@/lib/photos';
 import type { ApiError } from '@/lib/api';
 import type { BrandSummary, CategorySummary, UnitSummary } from '@/lib/inventory';
 import type { TaxRate } from '@/lib/taxRates';
@@ -40,6 +42,7 @@ import { moneyAlways } from '@/lib/money';
  */
 export function ProductsPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
   const queryClient = useQueryClient();
   const serialsOn = useSerialNumbersEnabled();
 
@@ -124,6 +127,13 @@ export function ProductsPage(): React.JSX.Element {
       key: 'description',
       header: t('products.description'),
       value: (row) => row.description,
+      render: (row) => (
+        <ProductPictureLabel
+          productId={row.id}
+          name={row.description}
+          thumbnails={thumbnails}
+        />
+      ),
       // Given the width the other columns leave. A product description is the one
       // column on this screen carrying prose, and it was sharing the table's width
       // equally with a column holding "EA" — so a forty-character description wrapped

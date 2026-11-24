@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconLayers } from '@/components/icons';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
 import {
   AddLineButton,
   LineNumberCell,
@@ -17,6 +18,7 @@ import { ReportFrame } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { BatchPick } from '@/components/BatchPick';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import type { ApiError } from '@/lib/api';
 import {
   createBom,
@@ -70,6 +72,7 @@ function useStockedProducts(): readonly ProductSummary[] {
  */
 export function BomsPage(): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
   const queryClient = useQueryClient();
   const can = useSession((state) => state.can);
 
@@ -110,9 +113,15 @@ export function BomsPage(): React.JSX.Element {
       header: t('boms.product'),
       value: (row) => `${row.productCode} ${row.productName}`,
       render: (row) => (
-        <button type="button" onClick={() => void open(row.id)} className="cell-link">
-          <span className="font-mono text-xs">{row.productCode}</span> {row.productName}
-        </button>
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productName}
+          thumbnails={thumbnails}
+        >
+          <button type="button" onClick={() => void open(row.id)} className="cell-link">
+            <span className="font-mono text-xs">{row.productCode}</span> {row.productName}
+          </button>
+        </ProductPictureLabel>
       ),
     },
     {
@@ -267,7 +276,10 @@ function BomForm({
       component.unitCost,
     ]),
   );
-  const options = products.map((product) => productOption(product, undefined));
+  const thumbnails = useProductThumbnails();
+  const options = products.map((product) =>
+    productOption(product, undefined, thumbnails),
+  );
 
   // What the components cost - each one's quantity times its cost, added up - and so
   // what one of the finished good costs: the cost saving writes to its product.
@@ -581,8 +593,9 @@ function ProductionEntry({
   });
 
   const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
+  const thumbnails = useProductThumbnails();
   const options = products.map((product) =>
-    productOption(product, onHand.get(product.id) ?? 0),
+    productOption(product, onHand.get(product.id) ?? 0, thumbnails),
   );
   const batched = (id: string): boolean =>
     products.some((product) => product.id === id && product.tracksBatches);
