@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { IconCheck, IconInbox, IconTruck } from '@/components/icons';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
 import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +10,7 @@ import { Modal } from '@/components/Modal';
 import { ReportFrame, ReportSkeleton } from '@/components/ReportFrame';
 import { SearchSelect } from '@/components/SearchSelect';
 import { productOption, stockByProduct } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import type { ApiError } from '@/lib/api';
 import { listMaster, type WarehouseSummary } from '@/lib/inventory';
 import { getPolicies, type FirmPolicies } from '@/lib/policies';
@@ -360,6 +362,7 @@ function TransferView({
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
   const can = useSession((state) => state.can);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -519,10 +522,16 @@ function TransferView({
             {detail.lines.map((line) => (
               <tr key={line.productId} className="border-t border-line">
                 <td data-label={t('stock.product')} className="px-3 py-1.5">
-                  <span className="font-mono text-xs text-ink-muted">
-                    {line.productCode}
-                  </span>{' '}
-                  {line.productName}
+                  <ProductPictureLabel
+                    productId={line.productId}
+                    name={line.productName}
+                    thumbnails={thumbnails}
+                  >
+                    <span className="font-mono text-xs text-ink-muted">
+                      {line.productCode}
+                    </span>{' '}
+                    {line.productName}
+                  </ProductPictureLabel>
                 </td>
                 <td data-label={t('transfers.requested')} className="cell-numeric">
                   {trim(line.quantity)} {line.unitCode}
@@ -823,12 +832,15 @@ function RequestForm({
 
   const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
 
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
     () =>
       (products.data ?? [])
         .filter((product) => product.itemType === 1)
-        .map((product) => productOption(product, onHand.get(product.id) ?? 0)),
-    [products.data, onHand],
+        .map((product) =>
+          productOption(product, onHand.get(product.id) ?? 0, thumbnails),
+        ),
+    [products.data, onHand, thumbnails],
   );
 
   const update = (key: string, patch: Partial<RequestLine>): void =>
@@ -1033,6 +1045,7 @@ function ApproveForm({
   readonly onSubmit: (lines: readonly { productId: string; quantity: number }[]) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
 
   const [agreed, setAgreed] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -1076,10 +1089,16 @@ function ApproveForm({
             {detail.lines.map((line) => (
               <tr key={line.productId} className="border-t border-line">
                 <td data-label={t('stock.product')} className="px-3 py-1.5">
-                  <span className="font-mono text-xs text-ink-muted">
-                    {line.productCode}
-                  </span>{' '}
-                  {line.productName}
+                  <ProductPictureLabel
+                    productId={line.productId}
+                    name={line.productName}
+                    thumbnails={thumbnails}
+                  >
+                    <span className="font-mono text-xs text-ink-muted">
+                      {line.productCode}
+                    </span>{' '}
+                    {line.productName}
+                  </ProductPictureLabel>
                 </td>
                 <td data-label={t('transfers.requested')} className="cell-numeric">
                   {trim(line.stockQuantity)} {line.stockUnitCode}

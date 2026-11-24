@@ -13,6 +13,7 @@ import { Panel } from '@/components/Panel';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { DateField, SelectField, TextAreaField, TextField } from '@/components/Form';
 import { productOption } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import { MobileSearch } from '@/components/MobileSearch';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
@@ -473,9 +474,13 @@ function JobCardForm({
       })),
     [customers.data],
   );
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
-    () => (products.data ?? []).map((product) => productOption(product, undefined)),
-    [products.data],
+    () =>
+      (products.data ?? []).map((product) =>
+        productOption(product, undefined, thumbnails),
+      ),
+    [products.data, thumbnails],
   );
   const productById = useMemo(
     () => new Map((products.data ?? []).map((product) => [product.id, product])),

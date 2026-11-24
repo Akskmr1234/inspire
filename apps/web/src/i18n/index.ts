@@ -696,6 +696,7 @@ const en = {
     nameTooLong: 'Max 100 characters.',
   },
   products: {
+    photoOf: 'Picture of {{name}}',
     hideInPos: 'Hide in POS',
     stock: 'Stock',
     search: 'Search',
@@ -3970,6 +3971,7 @@ const ar = {
     nameTooLong: 'بحد أقصى 100 حرف.',
   },
   products: {
+    photoOf: 'صورة {{name}}',
     hideInPos: 'إخفاء في نقطة البيع',
     stock: 'المخزون',
     search: 'بحث',

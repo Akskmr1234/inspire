@@ -60,6 +60,7 @@ import {
   type DraftCharge,
   type LineColumn,
 } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
@@ -705,12 +706,13 @@ function OrderEntryDialog({
 
   const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
 
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
     () =>
       (products.data ?? []).map((product) =>
-        productOption(product, onHand.get(product.id) ?? 0),
+        productOption(product, onHand.get(product.id) ?? 0, thumbnails),
       ),
-    [products.data, onHand],
+    [products.data, onHand, thumbnails],
   );
 
   const partyOptions: readonly SelectOption[] = useMemo(() => {

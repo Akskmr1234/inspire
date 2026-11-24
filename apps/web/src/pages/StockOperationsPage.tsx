@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconBox, IconDocument, IconReceipt, IconUser } from '@/components/icons';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
 import {
   AddLineButton,
   FooterSection,
@@ -40,6 +41,7 @@ import {
   useLineColumns,
   type LineColumn,
 } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import {
@@ -770,12 +772,13 @@ export function StockEntry({
 
   const onHand = useMemo(() => stockByProduct(valuation.data?.rows), [valuation.data]);
 
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
     () =>
       (products.data ?? []).map((product) =>
-        productOption(product, onHand.get(product.id) ?? 0),
+        productOption(product, onHand.get(product.id) ?? 0, thumbnails),
       ),
-    [products.data, onHand],
+    [products.data, onHand, thumbnails],
   );
 
   const showRate = carriesRate(type);
@@ -1575,6 +1578,7 @@ function StockDocumentView({
   readonly onOpenInvoice: (document: StockDocumentDetail) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
   const can = useSession((state) => state.can);
   const godownsOn = useGodownsOn();
   const [reason, setReason] = useState('');
@@ -1750,8 +1754,14 @@ function StockDocumentView({
                   {line.lineNumber}
                 </td>
                 <td data-label={t('stock.product')} className="px-3 py-1.5">
-                  <span className="font-mono">{line.productCode}</span>{' '}
-                  {line.productDescription}
+                  <ProductPictureLabel
+                    productId={line.productId}
+                    name={line.productDescription}
+                    thumbnails={thumbnails}
+                  >
+                    <span className="font-mono">{line.productCode}</span>{' '}
+                    {line.productDescription}
+                  </ProductPictureLabel>
                 </td>
                 <td data-label={t('stock.quantity')} className="cell-numeric">
                   {trim(line.quantity)}

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -23,6 +23,13 @@ export interface SelectOption {
   readonly keywords?: string;
   /** Offered but refused, with the reason in `detail`. */
   readonly disabled?: boolean;
+  /**
+   * A small picture at the start of the row - a product's photograph. Null draws an
+   * empty frame, for a row that could have one but does not, so the labels line up.
+   */
+  readonly image?: string | null;
+  /** Shown at the start of the box while this choice is the one made: its picture. */
+  readonly adornment?: ReactNode;
 }
 
 /** How many matches the list draws at once. */
@@ -103,6 +110,10 @@ export function SearchSelect({
   const input = useRef<HTMLInputElement>(null);
 
   const selected = options.find((option) => option.value === value);
+  // While somebody types, the box holds their search, not the choice, so its picture
+  // steps aside.
+  const adorned =
+    !open && selected?.adornment !== undefined && selected.adornment !== null;
 
   const shown = useMemo(() => {
     const needle = query.trim();
@@ -216,11 +227,18 @@ export function SearchSelect({
             className={clsx(
               size === 'sm' ? 'field-input-sm' : 'field-input',
               'pe-8 font-medium transition-all duration-150',
+              adorned && (size === 'sm' ? 'ps-9' : 'ps-11'),
               joined && 'rounded-e-none',
               open && 'border-brand-500 ring-2 ring-brand-500/20',
               invalid && 'field-invalid',
             )}
           />
+
+          {adorned && (
+            <span className="absolute inset-y-0 start-1.5 flex items-center">
+              {selected?.adornment}
+            </span>
+          )}
 
           <svg
             viewBox="0 0 24 24"
@@ -291,6 +309,21 @@ export function SearchSelect({
                     />
                   </svg>
                 )}
+                {option.image !== undefined &&
+                  (option.image ? (
+                    <img
+                      src={option.image}
+                      alt=""
+                      loading="lazy"
+                      draggable={false}
+                      className="size-9 shrink-0 rounded-md bg-white object-cover ring-1 ring-line"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="size-9 shrink-0 rounded-md bg-surface-3"
+                    />
+                  ))}
                 <div className="min-w-0 flex-1">
                   <span className="block truncate">{option.label}</span>
                   {option.detail && (

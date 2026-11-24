@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
 import { ReportFrame } from '@/components/ReportFrame';
 import {
   BranchFilter,
@@ -13,6 +14,7 @@ import {
 } from '@/components/StockFilters';
 import { trim } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
+import { useProductThumbnails } from '@/lib/photos';
 import { moneyAlways } from '@/lib/money';
 import { useGodownColumns, useGodownsOn } from '@/stores/settings';
 import {
@@ -97,6 +99,7 @@ function usePositionFilters(): {
 function describingColumns(
   t: (key: string) => string,
   withReceived: boolean,
+  thumbnails: Readonly<Record<string, string>>,
 ): readonly GridColumn<PositionLine>[] {
   const productLink = (line: PositionLine, text: string): React.ReactNode =>
     line.productId ? (
@@ -121,7 +124,18 @@ function describingColumns(
       key: 'name',
       header: t('stockPosition.name'),
       value: (line) => line.first.productName,
-      render: (line) => productLink(line, line.first.productName),
+      render: (line) =>
+        line.productId ? (
+          <ProductPictureLabel
+            productId={line.productId}
+            name={line.first.productName}
+            thumbnails={thumbnails}
+          >
+            {productLink(line, line.first.productName)}
+          </ProductPictureLabel>
+        ) : (
+          productLink(line, line.first.productName)
+        ),
       wide: true,
     },
     {
@@ -275,7 +289,11 @@ export function StockRegisterPage(): React.JSX.Element {
     'branch',
   ]);
 
-  const columns = useGodownColumns([...describingColumns(t, false), ...figureColumns(t)]);
+  const thumbnails = useProductThumbnails();
+  const columns = useGodownColumns([
+    ...describingColumns(t, false, thumbnails),
+    ...figureColumns(t),
+  ]);
 
   return (
     <ReportFrame
@@ -346,8 +364,9 @@ export function StockAgingPage(): React.JSX.Element {
     'branch',
   ]);
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<PositionLine>[] = [
-    ...describingColumns(t, true),
+    ...describingColumns(t, true, thumbnails),
     ...figureColumns(t),
     {
       key: 'age',

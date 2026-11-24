@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { RemoveLineButton } from '@/components/invoice/InvoiceLayout';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -13,6 +14,7 @@ import { SearchSelect } from '@/components/SearchSelect';
 import { QuickAdd } from '@/components/QuickAdd';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { productOption } from '@/components/DocumentLines';
+import { useProductThumbnails } from '@/lib/photos';
 import type { ApiError } from '@/lib/api';
 import { listCustomers, type CustomerSummary } from '@/lib/customers';
 import { listMaster, startingGodown, type WarehouseSummary } from '@/lib/inventory';
@@ -477,9 +479,10 @@ function RmaForm({
     () => (products.data ?? []).filter((product) => product.itemType === 1),
     [products.data],
   );
+  const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
-    () => stocked.map((product) => productOption(product, undefined)),
-    [stocked],
+    () => stocked.map((product) => productOption(product, undefined, thumbnails)),
+    [stocked, thumbnails],
   );
   const productById = useMemo(
     () => new Map(stocked.map((product) => [product.id, product])),
@@ -841,6 +844,7 @@ function RmaView({
   readonly onClose: (message?: string) => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const thumbnails = useProductThumbnails();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const can = useSession((state) => state.can);
@@ -1060,8 +1064,14 @@ function RmaView({
                   className="border-t border-line"
                 >
                   <td data-label={t('rma.product')} className="px-3 py-2">
-                    <span className="font-mono text-xs">{line.productCode}</span>{' '}
-                    {line.productName}
+                    <ProductPictureLabel
+                      productId={line.productId}
+                      name={line.productName}
+                      thumbnails={thumbnails}
+                    >
+                      <span className="font-mono text-xs">{line.productCode}</span>{' '}
+                      {line.productName}
+                    </ProductPictureLabel>
                   </td>
                   <td data-label={t('stock.quantity')} className="cell-numeric">
                     {trim(line.quantity)} {line.stockUnitCode}

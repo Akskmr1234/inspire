@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { type SelectOption } from '@/components/SearchSelect';
 import { AdditionalLedgerList } from '@/components/AdditionalLedgerList';
+import { ProductThumbnail } from '@/components/product/ProductThumbnail';
+import { hasThumbnails } from '@/lib/photos';
 import { chargeAdds, type LedgerSummary } from '@/lib/ledgers';
 import type { ProductSummary } from '@/lib/products';
 import type { StockValuationRow } from '@/lib/stock';
@@ -21,12 +23,45 @@ import { shortcutProps } from '@/lib/shortcuts';
  * exist would disagree about which of them offers a discount column.
  */
 
-/** A product as a picker row: what it is, and what is on the shelf. */
+/**
+ * A product's picture for a picker row (`thumbnails` from `useProductThumbnails`). A
+ * firm that keeps no pictures gets plain rows; one that does gets a picture on every
+ * row, an empty frame where a product has none, and the chosen product's picture in
+ * the box.
+ */
+export function productPicture(
+  product: Pick<ProductSummary, 'id' | 'description'>,
+  thumbnails: Readonly<Record<string, string>> | undefined,
+): Pick<SelectOption, 'image' | 'adornment'> {
+  if (thumbnails === undefined || !hasThumbnails(thumbnails)) {
+    return {};
+  }
+
+  const thumbnail = thumbnails[product.id];
+
+  return thumbnail
+    ? {
+        image: thumbnail,
+        adornment: (
+          <ProductThumbnail
+            productId={product.id}
+            src={thumbnail}
+            name={product.description}
+            size="xs"
+          />
+        ),
+      }
+    : { image: null };
+}
+
+/** A product as a picker row: what it is, what is on the shelf, and what it looks like. */
 export function productOption(
   product: ProductSummary,
   onHand: number | undefined,
+  thumbnails?: Readonly<Record<string, string>>,
 ): SelectOption {
   return {
+    ...productPicture(product, thumbnails),
     value: product.id,
     // The code leads because that is what somebody reading a supplier's invoice
     // has in front of them, and the description follows on its own line rather

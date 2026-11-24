@@ -4,11 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { DataGrid, type GridColumn } from '@/components/DataGrid';
+import { ProductPictureLabel } from '@/components/product/ProductThumbnail';
+import { productPicture } from '@/components/DocumentLines';
 import { EmptyState, ReportFrame, ReportSummaryFigures } from '@/components/ReportFrame';
 import { PageHeading } from '@/components/PageHeading';
 import { StatusBadge } from '@/components/StatusBadge';
 import { trim, typeKey } from '@/pages/StockOperationsPage';
 import type { ApiError } from '@/lib/api';
+import { useProductThumbnails } from '@/lib/photos';
 import { listMaster, type CategorySummary, type WarehouseSummary } from '@/lib/inventory';
 import { listProducts, type ProductSummary } from '@/lib/products';
 import { useGodownColumns, useGodownsOn } from '@/stores/settings';
@@ -57,6 +60,7 @@ export function StockValuationPage(): React.JSX.Element {
     queryFn: () => fetchStockValuation(warehouseId, categoryId, includeZero),
   });
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<StockValuationRow>[] = [
     { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
     {
@@ -65,12 +69,18 @@ export function StockValuationPage(): React.JSX.Element {
       value: (row) => row.productDescription,
       // Opens the item's movements, which is what explains the figure beside it.
       render: (row) => (
-        <Link
-          to={`/inventory/product-history?productId=${row.productId}`}
-          className="font-medium text-brand-700 hover:underline dark:text-brand-300"
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productDescription}
+          thumbnails={thumbnails}
         >
-          {row.productDescription}
-        </Link>
+          <Link
+            to={`/inventory/product-history?productId=${row.productId}`}
+            className="font-medium text-brand-700 hover:underline dark:text-brand-300"
+          >
+            {row.productDescription}
+          </Link>
+        </ProductPictureLabel>
       ),
     },
     { key: 'category', header: t('products.category'), value: (row) => row.categoryName },
@@ -164,7 +174,8 @@ export function StockValuationPage(): React.JSX.Element {
  */
 export function BatchStockPage(): React.JSX.Element {
   const { t } = useTranslation();
-  const shown = useGodownColumns(batchColumns(t));
+  const thumbnails = useProductThumbnails();
+  const shown = useGodownColumns(batchColumns(t, thumbnails));
 
   const [warehouseId, setWarehouseId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -224,7 +235,8 @@ export function BatchStockPage(): React.JSX.Element {
  */
 export function ExpiryReportPage(): React.JSX.Element {
   const { t } = useTranslation();
-  const shown = useGodownColumns(batchColumns(t, true));
+  const thumbnails = useProductThumbnails();
+  const shown = useGodownColumns(batchColumns(t, thumbnails, true));
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -286,6 +298,7 @@ export function ExpiryReportPage(): React.JSX.Element {
  */
 function batchColumns(
   t: ReturnType<typeof useTranslation>['t'],
+  thumbnails: Readonly<Record<string, string>>,
   expiring = false,
 ): readonly GridColumn<BatchStockRow>[] {
   return [
@@ -295,6 +308,13 @@ function batchColumns(
       key: 'description',
       header: t('products.description'),
       value: (row) => row.productDescription,
+      render: (row) => (
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productDescription}
+          thumbnails={thumbnails}
+        />
+      ),
     },
     { key: 'warehouse', header: t('stock.warehouse'), value: (row) => row.warehouseName },
     {
@@ -439,9 +459,21 @@ export function BatchProfitPage(): React.JSX.Element {
     queryFn: () => fetchSalesProfit(from, to, productId),
   });
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<SalesProfitRow>[] = [
     { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
-    { key: 'name', header: t('products.description'), value: (row) => row.productName },
+    {
+      key: 'name',
+      header: t('products.description'),
+      value: (row) => row.productName,
+      render: (row) => (
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productName}
+          thumbnails={thumbnails}
+        />
+      ),
+    },
     { key: 'batch', header: t('stock.batch'), value: (row) => row.batchNumber ?? '—' },
     {
       key: 'quantity',
@@ -519,6 +551,7 @@ export function BatchProfitPage(): React.JSX.Element {
           label={t('stock.product')}
           placeholder={t('stock.allProducts')}
           options={(products.data ?? []).map((product) => ({
+            ...productPicture(product, thumbnails),
             value: product.id,
             label: `${product.code} — ${product.description}`,
           }))}
@@ -583,6 +616,7 @@ export function ProductHistoryPage(): React.JSX.Element {
 function ProductMovements({ title }: { readonly title: string }): React.JSX.Element {
   const { t } = useTranslation();
   const [params] = useSearchParams();
+  const thumbnails = useProductThumbnails();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -618,6 +652,7 @@ function ProductMovements({ title }: { readonly title: string }): React.JSX.Elem
           label={t('stock.product')}
           placeholder={t('stock.choose')}
           options={(products.data ?? []).map((product) => ({
+            ...productPicture(product, thumbnails),
             value: product.id,
             label: `${product.code} — ${product.description}`,
           }))}
@@ -755,12 +790,20 @@ export function ItemMovementPage(): React.JSX.Element {
     queryFn: () => fetchItemMovement(from, to, warehouseId, categoryId),
   });
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<ItemMovementRow>[] = [
     { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
     {
       key: 'description',
       header: t('products.description'),
       value: (row) => row.productDescription,
+      render: (row) => (
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productDescription}
+          thumbnails={thumbnails}
+        />
+      ),
     },
     { key: 'category', header: t('products.category'), value: (row) => row.categoryName },
     {
@@ -870,6 +913,7 @@ export function SerialStockPage(): React.JSX.Element {
     return list;
   }, [serials.data, statusFilter, search]);
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<SerialNumberView>[] = [
     {
       key: 'number',
@@ -884,10 +928,16 @@ export function SerialStockPage(): React.JSX.Element {
       header: t('stock.product'),
       value: (row) => `${row.productCode} — ${row.productDescription}`,
       render: (row) => (
-        <div>
-          <span className="font-mono text-xs text-ink-muted">{row.productCode}</span>
-          <p className="font-medium text-ink">{row.productDescription}</p>
-        </div>
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productDescription}
+          thumbnails={thumbnails}
+        >
+          <span className="block">
+            <span className="font-mono text-xs text-ink-muted">{row.productCode}</span>
+            <span className="block font-medium text-ink">{row.productDescription}</span>
+          </span>
+        </ProductPictureLabel>
       ),
     },
     {
@@ -987,7 +1037,11 @@ export function SerialStockPage(): React.JSX.Element {
           placeholder="All products"
           options={(products.data ?? [])
             .filter((p) => p.tracksSerialNumbers)
-            .map((p) => ({ value: p.id, label: `${p.code} — ${p.description}` }))}
+            .map((p) => ({
+              ...productPicture(p, thumbnails),
+              value: p.id,
+              label: `${p.code} — ${p.description}`,
+            }))}
         />
       </label>
 
@@ -1060,6 +1114,7 @@ export function StockSummaryPage(): React.JSX.Element {
     ),
   });
 
+  const thumbnails = useProductThumbnails();
   const columns: readonly GridColumn<StockSummaryRow>[] = [
     { key: 'code', header: t('masters.code'), value: (row) => row.productCode },
     {
@@ -1067,17 +1122,23 @@ export function StockSummaryPage(): React.JSX.Element {
       header: t('products.description'),
       value: (row) => row.productDescription,
       render: (row) => (
-        <button
-          type="button"
-          onClick={() =>
-            void navigate(
-              `/inventory/product-history?${new URLSearchParams({ productId: row.productId, from, to }).toString()}`,
-            )
-          }
-          className="text-start font-medium text-brand-700 hover:underline dark:text-brand-300"
+        <ProductPictureLabel
+          productId={row.productId}
+          name={row.productDescription}
+          thumbnails={thumbnails}
         >
-          {row.productDescription}
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              void navigate(
+                `/inventory/product-history?${new URLSearchParams({ productId: row.productId, from, to }).toString()}`,
+              )
+            }
+            className="text-start font-medium text-brand-700 hover:underline dark:text-brand-300"
+          >
+            {row.productDescription}
+          </button>
+        </ProductPictureLabel>
       ),
     },
     {
