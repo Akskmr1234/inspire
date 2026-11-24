@@ -108,6 +108,8 @@
   <ItemGroup Label="Background jobs">
     <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />
     <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <!-- Uploaded files kept in S3-compatible storage (Cloudflare R2). -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.104.9" />
   </ItemGroup>
 
   <ItemGroup Label="Security">

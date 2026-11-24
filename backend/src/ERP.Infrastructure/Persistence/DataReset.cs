@@ -1,7 +1,9 @@
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Platform.Data;
 using ERP.Domain.Tenancy;
 using ERP.Infrastructure.Persistence.Seeding;
+using ERP.SharedKernel.Files;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -99,14 +101,17 @@ public sealed class DataReset : IDataReset
 
     private readonly ErpDbContext _context;
     private readonly ITenantContext _tenantContext;
+    private readonly IFileStore _files;
 
     /// <summary>Initialises a new instance of the <see cref="DataReset"/> class.</summary>
     /// <param name="context">The database context.</param>
     /// <param name="tenantContext">The ambient tenant scope.</param>
-    public DataReset(ErpDbContext context, ITenantContext tenantContext)
+    /// <param name="files">Where photographs are kept, when file storage is on.</param>
+    public DataReset(ErpDbContext context, ITenantContext tenantContext, IFileStore files)
     {
         _context = context;
         _tenantContext = tenantContext;
+        _files = files;
     }
 
     /// <inheritdoc />
@@ -197,6 +202,10 @@ public sealed class DataReset : IDataReset
             ? [.. Transactions, .. Masters]
             : Transactions;
 
+        // The photographs of whatever goes are in file storage, not in the rows; note what
+        // is there now, so what the reset takes with it can be deleted afterwards.
+        HashSet<string> filesBefore = await StoredFilesAsync(firmId, cancellationToken);
+
         IExecutionStrategy strategy = _context.Database.CreateExecutionStrategy();
 
         Dictionary<string, int> removed = await strategy.ExecuteAsync(async () =>
@@ -233,9 +242,55 @@ public sealed class DataReset : IDataReset
             return counts;
         });
 
+        if (filesBefore.Count > 0)
+        {
+            filesBefore.ExceptWith(await StoredFilesAsync(firmId, CancellationToken.None));
+
+            foreach (string file in filesBefore)
+            {
+                await _files.DeleteAsync(file, CancellationToken.None);
+            }
+        }
+
         return Result.Success(new DataResetResult(
             scope,
             removed.Where(pair => pair.Value > 0).ToDictionary(pair => pair.Key, pair => pair.Value)));
+    }
+
+    /// <summary>Every photograph of the firm's that is kept in file storage.</summary>
+    private async Task<HashSet<string>> StoredFilesAsync(FirmId firmId, CancellationToken cancellationToken)
+    {
+        HashSet<string> files = new(StringComparer.Ordinal);
+
+        if (!_files.IsEnabled)
+        {
+            return files;
+        }
+
+        const string Prefix = StoredFile.Prefix;
+
+        files.UnionWith(await _context.ProductPhotos.AsNoTracking()
+            .Where(photo => photo.FirmId == firmId && photo.Content.StartsWith(Prefix))
+            .Select(photo => photo.Content)
+            .ToListAsync(cancellationToken));
+
+        files.UnionWith(await _context.ProductPhotos.AsNoTracking()
+            .Where(photo => photo.FirmId == firmId && photo.Thumbnail != null && photo.Thumbnail.StartsWith(Prefix))
+            .Select(photo => photo.Thumbnail!)
+            .ToListAsync(cancellationToken));
+
+        files.UnionWith(await _context.PartyPhotos.AsNoTracking()
+            .Where(photo => photo.FirmId == firmId && photo.Content.StartsWith(Prefix))
+            .Select(photo => photo.Content)
+            .ToListAsync(cancellationToken));
+
+        files.UnionWith(await _context.RmaPhotos.AsNoTracking()
+            .Where(photo => photo.Content.StartsWith(Prefix)
+                && _context.Rmas.Any(rma => rma.Id == photo.RmaId && rma.FirmId == firmId))
+            .Select(photo => photo.Content)
+            .ToListAsync(cancellationToken));
+
+        return files;
     }
 
     /// <summary>The ledgers the chart of accounts seeded, which a reset keeps.</summary>

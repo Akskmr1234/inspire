@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Platform;
 using ERP.SharedKernel.Results;
@@ -58,16 +59,20 @@ public sealed class GetFirmSettingQueryHandler
 {
     private readonly IFirmSettingRepository _settings;
     private readonly ITenantContext _tenantContext;
+    private readonly IFileStore _files;
 
     /// <summary>Initialises a new instance of the <see cref="GetFirmSettingQueryHandler"/> class.</summary>
     /// <param name="settings">The settings repository.</param>
     /// <param name="tenantContext">The ambient tenant.</param>
+    /// <param name="files">Where pictures in a setting, such as a logo, are kept.</param>
     public GetFirmSettingQueryHandler(
         IFirmSettingRepository settings,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        IFileStore files)
     {
         _settings = settings;
         _tenantContext = tenantContext;
+        _files = files;
     }
 
     /// <inheritdoc />
@@ -93,10 +98,15 @@ public sealed class GetFirmSettingQueryHandler
         string key = FirmSetting.Normalise(request.Key);
         FirmSetting? setting = await _settings.FindAsync(firmId, key, cancellationToken);
 
+        // Pictures kept in file storage go back in, so the screen gets what it saved.
+        string? value = setting is null
+            ? null
+            : await SettingFiles.ResolveAsync(_files, setting.Value, cancellationToken);
+
         // Never having saved one is the ordinary case for a new firm, not an error: the
         // client falls back to its own defaults.
         return Result.Success(new FirmSettingResponse(
-            key, setting?.Value, setting?.ModifiedAtUtc ?? setting?.CreatedAtUtc));
+            key, value, setting?.ModifiedAtUtc ?? setting?.CreatedAtUtc));
     }
 }
 
@@ -105,19 +115,23 @@ public sealed class SaveFirmSettingCommandHandler : ICommandHandler<SaveFirmSett
 {
     private readonly IFirmSettingRepository _settings;
     private readonly ITenantContext _tenantContext;
+    private readonly IFileStore _files;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="SaveFirmSettingCommandHandler"/> class.</summary>
     /// <param name="settings">The settings repository.</param>
     /// <param name="tenantContext">The ambient tenant.</param>
+    /// <param name="files">Where pictures in a setting, such as a logo, are kept.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public SaveFirmSettingCommandHandler(
         IFirmSettingRepository settings,
         ITenantContext tenantContext,
+        IFileStore files,
         IUnitOfWork unitOfWork)
     {
         _settings = settings;
         _tenantContext = tenantContext;
+        _files = files;
         _unitOfWork = unitOfWork;
     }
 
@@ -153,12 +167,47 @@ public sealed class SaveFirmSettingCommandHandler : ICommandHandler<SaveFirmSett
 
         FirmSetting? existing = await _settings.FindAsync(firmId, key, cancellationToken);
 
+        // Pictures in it - a logo on the printed documents - go to file storage when it is
+        // switched on, and the setting keeps only references to them.
+        Result<StoredSetting> stored = await SettingFiles.StoreAsync(
+            _files, firmId, key, request.Value, existing?.Value, cancellationToken);
+
+        if (stored.IsFailure)
+        {
+            return stored;
+        }
+
+        bool succeeded = false;
+
+        try
+        {
+            Result saved = await SaveAsync(existing, firmId, key, stored.Value.Value, cancellationToken);
+            succeeded = saved.IsSuccess;
+            return saved;
+        }
+        finally
+        {
+            // Saved, the pictures it no longer uses go; not saved, the ones just stored do.
+            foreach (string file in succeeded ? stored.Value.Dropped : stored.Value.Added)
+            {
+                await _files.DeleteAsync(file, CancellationToken.None);
+            }
+        }
+    }
+
+    private async Task<Result> SaveAsync(
+        FirmSetting? existing,
+        FirmId firmId,
+        string key,
+        string value,
+        CancellationToken cancellationToken)
+    {
         // An upsert: the screen is saving "the firm's preferences", and making it know
         // whether anybody had saved them before would be asking it to track something
         // it has no reason to care about.
         if (existing is not null)
         {
-            Result replaced = existing.Replace(request.Value);
+            Result replaced = existing.Replace(value);
 
             if (replaced.IsFailure)
             {
@@ -168,7 +217,7 @@ public sealed class SaveFirmSettingCommandHandler : ICommandHandler<SaveFirmSett
         else
         {
             Result<FirmSetting> created = FirmSetting.Create(
-                _tenantContext.TenantId, firmId, key, request.Value);
+                _tenantContext.TenantId, firmId, key, value);
 
             if (created.IsFailure)
             {

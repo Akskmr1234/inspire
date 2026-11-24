@@ -1,5 +1,6 @@
 using ERP.Application.Abstractions.Messaging;
 using ERP.Application.Abstractions.Persistence;
+using ERP.Application.Abstractions.Storage;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Application.Inventory.Masters;
 using ERP.Application.Inventory.Stock;
@@ -40,6 +41,7 @@ public sealed class RmaHandlers
     private readonly ITenantContext _tenantContext;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
+    private readonly IFileStore _files;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>Initialises a new instance of the <see cref="RmaHandlers"/> class.</summary>
@@ -56,6 +58,7 @@ public sealed class RmaHandlers
     /// <param name="tenantContext">The ambient tenant scope.</param>
     /// <param name="currentUser">The acting user.</param>
     /// <param name="clock">The clock.</param>
+    /// <param name="files">Where photographs go, when file storage is on.</param>
     /// <param name="unitOfWork">The unit of work.</param>
     public RmaHandlers(
         IRmaRepository rmas,
@@ -71,6 +74,7 @@ public sealed class RmaHandlers
         ITenantContext tenantContext,
         ICurrentUser currentUser,
         IClock clock,
+        IFileStore files,
         IUnitOfWork unitOfWork)
     {
         _rmas = rmas;
@@ -86,6 +90,7 @@ public sealed class RmaHandlers
         _tenantContext = tenantContext;
         _currentUser = currentUser;
         _clock = clock;
+        _files = files;
         _unitOfWork = unitOfWork;
     }
 
@@ -254,7 +259,42 @@ public sealed class RmaHandlers
             return Result.Failure<Guid>(added.Error);
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        string? stored = null;
+
+        if (_files.IsEnabled)
+        {
+            Result<string> moved = await _files.KeepAsync(
+                $"{found.Value.FirmId.Value}/rmas/{found.Value.Id.Value}", request.Content, cancellationToken);
+
+            if (moved.IsFailure)
+            {
+                return Result.Failure<Guid>(moved.Error);
+            }
+
+            stored = moved.Value;
+            Result referenced = added.Value.MoveTo(stored);
+
+            if (referenced.IsFailure)
+            {
+                await _files.DeleteAsync(stored, CancellationToken.None);
+                return Result.Failure<Guid>(referenced.Error);
+            }
+        }
+
+        bool saved = false;
+
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            saved = true;
+        }
+        finally
+        {
+            if (!saved)
+            {
+                await _files.DeleteAsync(stored, CancellationToken.None);
+            }
+        }
 
         return Result.Success(added.Value.Id.Value);
     }
@@ -271,7 +311,9 @@ public sealed class RmaHandlers
             return found;
         }
 
-        Result removed = found.Value.RemovePhoto(RmaPhotoId.From(request.PhotoId));
+        RmaPhotoId photoId = RmaPhotoId.From(request.PhotoId);
+        string? content = found.Value.Photos.FirstOrDefault(photo => photo.Id == photoId)?.Content;
+        Result removed = found.Value.RemovePhoto(photoId);
 
         if (removed.IsFailure)
         {
@@ -279,6 +321,7 @@ public sealed class RmaHandlers
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _files.DeleteAsync(content, CancellationToken.None);
 
         return Result.Success();
     }
@@ -296,9 +339,9 @@ public sealed class RmaHandlers
         string? content = await _reader.FindPhotoAsync(
             firmId, RmaId.From(request.RmaId), RmaPhotoId.From(request.PhotoId), cancellationToken);
 
-        return content is null
+        return _files.LinkFor(content) is not { } link
             ? Result.Failure<string>(Error.NotFound("Rma.PhotoNotFound", "No such photograph on this return."))
-            : Result.Success(content);
+            : Result.Success(link);
     }
 
     /// <inheritdoc />

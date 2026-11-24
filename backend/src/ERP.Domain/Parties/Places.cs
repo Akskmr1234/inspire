@@ -1,5 +1,6 @@
 using ERP.Domain.Accounting;
 using ERP.SharedKernel.Abstractions;
+using ERP.SharedKernel.Files;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -479,7 +480,7 @@ public sealed class PartyPhoto : AggregateRoot<PartyPhotoId>, IFirmScoped
     /// <summary>Gets which of the party's photographs this is, from one.</summary>
     public int Slot { get; private set; } = 1;
 
-    /// <summary>Gets the picture, as a data URL.</summary>
+    /// <summary>Gets the picture, as a data URL, or a reference to it in file storage.</summary>
     public string Content { get; private set; }
 
     /// <summary>Records a party's photograph.</summary>
@@ -523,6 +524,22 @@ public sealed class PartyPhoto : AggregateRoot<PartyPhotoId>, IFirmScoped
         }
 
         Content = content;
+        return Result.Success();
+    }
+
+    /// <summary>Records that the picture now lives in file storage, keeping only a reference to it.</summary>
+    /// <param name="reference">The reference to the picture.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>Only the server calls this, with a reference it made itself.</remarks>
+    public Result MoveTo(string reference)
+    {
+        if (!StoredFile.IsReference(reference))
+        {
+            return Result.Failure(Error.Validation(
+                "PartyPhoto.ReferenceInvalid", "A stored photograph needs a reference to its file."));
+        }
+
+        Content = reference;
         return Result.Success();
     }
 }

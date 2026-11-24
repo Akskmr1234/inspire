@@ -4,6 +4,7 @@ using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
 using ERP.Domain.Tenancy;
 using ERP.SharedKernel.Abstractions;
+using ERP.SharedKernel.Files;
 using ERP.SharedKernel.Primitives;
 using ERP.SharedKernel.Results;
 using ERP.SharedKernel.Tenancy;
@@ -786,11 +787,30 @@ public sealed class RmaPhoto : Entity<RmaPhotoId>, ITenantScoped
     /// <summary>Gets the return.</summary>
     public RmaId RmaId { get; private set; }
 
-    /// <summary>Gets the picture, as a data URL.</summary>
+    /// <summary>Gets the picture, as a data URL, or a reference to it in file storage.</summary>
     public string Content { get; private set; }
 
     /// <summary>Gets what it shows.</summary>
     public string? Caption { get; private set; }
+
+    /// <summary>Records that the picture now lives in file storage, keeping only a reference to it.</summary>
+    /// <param name="reference">The reference to the picture.</param>
+    /// <returns>Success, or the reason it was refused.</returns>
+    /// <remarks>
+    /// Only the server calls this, with a reference it made itself. Allowed on a finished
+    /// return too: the picture is the same, only where it is kept changes.
+    /// </remarks>
+    public Result MoveTo(string reference)
+    {
+        if (!StoredFile.IsReference(reference))
+        {
+            return Result.Failure(Error.Validation(
+                "Rma.PhotoReferenceInvalid", "A stored photograph needs a reference to its file."));
+        }
+
+        Content = reference;
+        return Result.Success();
+    }
 }
 
 /// <summary>One step in a return's history.</summary>

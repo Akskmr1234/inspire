@@ -1,0 +1,37 @@
+# ============================================================================
+# Optional: scheduled backups of the ERP's PostgreSQL databases to Cloudflare R2
+# (or any S3-compatible storage).
+#
+# Kept out of docker-compose.yml on purpose, so nothing changes for an
+# installation that does not use it. Start it with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d backup
+#
+# Set the R2 values in a .env file next to this one - never commit them. See
+# docs/FILE_STORAGE.md for every setting and for restoring a backup.
+# ============================================================================
+
+services:
+  backup:
+    build:
+      context: ./infrastructure/backup
+    image: inspire-erp/backup:18
+    container_name: erp-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # The same form the API takes; here it reaches the postgres service by name.
+      ConnectionStrings__Postgres: >-
+        Host=postgres;Port=5432;Database=postgres;Username=postgres;Password=postgres
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:?Set BACKUP_S3_ENDPOINT in .env}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?Set BACKUP_S3_BUCKET in .env}
+      BACKUP_S3_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:?Set BACKUP_S3_ACCESS_KEY_ID in .env}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:?Set BACKUP_S3_SECRET_ACCESS_KEY in .env}
+      BACKUP_EVERY_HOURS: ${BACKUP_EVERY_HOURS:-24}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+    # The status page, on the server itself only: /status answers 503 when the last
+    # backup failed, for a monitor to watch.
+    ports:
+      - '127.0.0.1:5200:8080'
