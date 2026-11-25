@@ -246,6 +246,15 @@ public sealed class StockLedgerEntryConfiguration : IEntityTypeConfiguration<Sto
         builder.HasKey(entry => entry.Id);
         builder.Property(entry => entry.Id).ValueGeneratedNever();
 
+        // The branch and the batch's expiry date, kept on every movement as the common
+        // stock table keeps them. The branch is the warehouse's where it has one, else the
+        // branch the movement was made in; the expiry is the batch's. Both are completed by
+        // the database as each row is written (see StockRowBranchInterceptor and the
+        // StockRowBranchAndExpiry migration), so no posting path can leave them out.
+        builder.Property<Guid?>(StockRows.BranchId).HasColumnName("branch_id");
+        builder.Property<DateOnly?>(StockRows.ExpiresOn).HasColumnName("expires_on");
+        builder.HasIndex(StockRows.BranchId).HasDatabaseName("ix_stock_ledger_entries_branch");
+
         builder.Property(entry => entry.Date).IsRequired();
         builder.Property(entry => entry.DocumentType).HasConversion<int>().IsRequired();
         builder.Property(entry => entry.DocumentNumber).HasMaxLength(50).IsRequired();

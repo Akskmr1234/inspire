@@ -3085,6 +3085,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("batch_number");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date")
                         .HasColumnName("date");
@@ -3102,6 +3106,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer")
                         .HasColumnName("document_type");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date")
+                        .HasColumnName("expires_on");
 
                     b.Property<Guid>("FirmId")
                         .HasColumnType("uuid")
@@ -3166,6 +3174,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BatchId")
                         .HasDatabaseName("ix_stock_ledger_entries_batch_id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("ix_stock_ledger_entries_branch");
 
                     b.HasIndex("DocumentId")
                         .HasDatabaseName("ix_stock_ledger_document");
