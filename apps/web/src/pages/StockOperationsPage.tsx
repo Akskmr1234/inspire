@@ -25,6 +25,7 @@ import {
   ValueField,
   type PartyDetails,
 } from '@/components/invoice/InvoiceLayout';
+import { useLineGuards } from '@/components/invoice/LineGuards';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { usePartyOption } from '@/lib/partyLabel';
@@ -838,10 +839,37 @@ export function StockEntry({
     return next.quantity;
   };
 
-  const update = (key: string, patch: Partial<DraftLine>): void =>
+  /** What choosing a product does to a line: the batch and units of another go. */
+  const productPatch = (productId: string): Partial<DraftLine> => ({
+    productId,
+    batchId: '',
+    batchNumber: '',
+    expiresOn: '',
+    serialNumbers: '',
+    warrantyUntil: '',
+  });
+
+  // One item, one line; one empty line at a time. A batch number typed for goods
+  // coming in is checked with its expiry rather than a letter at a time.
+  const guards = useLineGuards<DraftLine>({
+    lines,
+    setLines,
+    blank: emptyLine,
+    attend: lineAttention.attend,
+    choose: (index, productId) => guards.change(index, productPatch(productId)),
+    productOptions,
+    triggers: ['productId', 'batchId', 'expiresOn'],
+  });
+
+  const update = (key: string, patch: Partial<DraftLine>): void => {
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
+    guards.review(
+      lines.findIndex((line) => line.key === key),
+      patch,
+    );
+  };
 
   const form = useRef<HTMLFormElement>(null);
 
@@ -1046,7 +1074,8 @@ export function StockEntry({
           meta={t('invoice.itemCount', { count: validLines.length })}
           actions={
             <>
-              <AddLineButton onClick={addLine} />
+              <AddLineButton onClick={() => guards.add(addLine)} />
+              {guards.dialogs}
               {columns.picker}
             </>
           }
@@ -1083,23 +1112,14 @@ export function StockEntry({
                   <th className="line-action-column rounded-e-lg" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={lineAttention.bodyRef}>
                 {lines.map((line, index) => (
-                  <tr key={line.key} className="border-t border-line">
+                  <tr key={line.key} data-line-row className="border-t border-line">
                     <LineNumberCell number={index + 1} />
                     <td data-label={t('stock.product')} className="min-w-64 px-2 py-1">
                       <SearchSelect
                         value={line.productId}
-                        onChange={(productId) =>
-                          update(line.key, {
-                            productId,
-                            batchId: '',
-                            batchNumber: '',
-                            expiresOn: '',
-                            serialNumbers: '',
-                            warrantyUntil: '',
-                          })
-                        }
+                        onChange={(productId) => update(line.key, productPatch(productId))}
                         options={productOptions}
                         size="sm"
                         label={t('stock.product')}
@@ -1107,6 +1127,7 @@ export function StockEntry({
                       />
                     </td>
                     <NumberCell
+                      quantity
                       concealed={!line.productId}
                       label={quantityLabel}
                       value={line.quantity}

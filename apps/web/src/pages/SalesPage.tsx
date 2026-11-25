@@ -52,6 +52,7 @@ import {
   useLineAttention,
   ValueField,
 } from '@/components/invoice/InvoiceLayout';
+import { useLineGuards } from '@/components/invoice/LineGuards';
 import { ScanField } from '@/components/BarcodeScan';
 import { PrintCenter } from '@/components/print/PrintCenter';
 import { printableSale } from '@/lib/printing';
@@ -165,6 +166,14 @@ interface DraftLine {
   expiresOn?: string;
   /** The units sold, where the product is tracked by serial number. */
   serialNumbers: readonly string[];
+}
+
+/** A product chosen for one line from the list Add item opens. */
+interface PickRequest {
+  readonly index: number;
+  readonly productId: string;
+  /** Tells one choice from the next, should the same product be chosen twice. */
+  readonly nonce: number;
 }
 
 /** Rounds to the currency's two places, half away from zero, as the server's Money does. */
@@ -1647,10 +1656,23 @@ function EntryDialog({
     );
   };
 
-  const change = (index: number, patch: Partial<DraftLine>): void =>
-    setLines((previous) =>
-      previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
-    );
+  // A product chosen from the list Add item opens, for the line still without one:
+  // chosen by that line itself, so it starts at the rate and tax its own picker gives.
+  const [pickFor, setPickFor] = useState<PickRequest | null>(null);
+
+  // One item, one line; one empty line at a time.
+  const guards = useLineGuards<DraftLine>({
+    lines,
+    setLines,
+    blank: () => ({
+      ...emptyLine,
+      taxPercentage: String(modeTaxRate(taxMode, settings.defaultTaxRate)),
+    }),
+    attend: lineAttention.attend,
+    choose: (index, productId) => setPickFor({ index, productId, nonce: Date.now() }),
+    productOptions,
+  });
+  const change = guards.change;
 
   /** A new, empty line at the foot, with the cursor in its product. */
   const addLine = (): void => {
@@ -2385,7 +2407,8 @@ function EntryDialog({
                 <IconGrid className="size-3.5" />
                 <span className="hidden sm:inline">{t('sales.touchCatalog')}</span>
               </button>
-              <AddLineButton onClick={addLine} />
+              <AddLineButton onClick={() => guards.add(addLine)} />
+              {guards.dialogs}
               {lineColumns.picker}
             </>
           }
@@ -2481,6 +2504,8 @@ function EntryDialog({
                         }
                         errors={lineErrors[index] ?? {}}
                         removable={lines.length > 1}
+                        picked={pickFor?.index === index ? pickFor : null}
+                        onPicked={() => setPickFor(null)}
                         onChange={(patch) => change(index, patch)}
                         onRemove={() =>
                           setLines((previous) => previous.filter((_, at) => at !== index))
@@ -2964,12 +2989,18 @@ function LineRow({
   columnCount,
   errors,
   removable,
+  picked = null,
+  onPicked,
   onChange,
   onRemove,
 }: {
   /** Its place on the document, from 1. */
   readonly number: number;
   readonly line: DraftLine;
+  /** A product chosen for this line from the list Add item opens. */
+  readonly picked?: PickRequest | null;
+  /** The choice has been made, and is not to be made again. */
+  readonly onPicked?: () => void;
   readonly products: readonly ProductSummary[];
   readonly productOptions: ReturnType<typeof productOption>[];
   readonly warehouseId: string;
@@ -3178,6 +3209,16 @@ function LineRow({
     }
   };
 
+  // Chosen from the product list instead of this line's own picker: the same choice.
+  const lastPick = useRef<number | null>(null);
+  useEffect(() => {
+    if (!picked || lastPick.current === picked.nonce) return;
+    lastPick.current = picked.nonce;
+    handleProductSelect(picked.productId);
+    onPicked?.();
+    // Only a new pick runs it; the handler itself is new on every render.
+  }, [picked]);
+
   const isExpired = line.expiresOn ? new Date(line.expiresOn) < new Date() : false;
   const isNearExpiry = line.expiresOn
     ? !isExpired &&
@@ -3200,6 +3241,7 @@ function LineRow({
         </td>
         <ProductDetailCells product={product} shows={shows} labels={t} />
         <NumberCell
+          quantity
           label={t('sales.quantity')}
           concealed={!line.productId}
           value={line.quantity}

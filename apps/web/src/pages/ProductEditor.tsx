@@ -215,6 +215,76 @@ function formFrom(product: ProductDetail, places: number): ProductForm {
   };
 }
 
+/** What each of the API's five groups of product fields is sent as, in saving order. */
+function productGroups(form: ProductForm, deviceAttributes: boolean): Map<string, object> {
+  const groups = new Map<string, object>([
+    [
+      'description',
+      {
+        description: form.description.trim(),
+        descriptionArabic: blank(form.descriptionArabic),
+        shortDescription: blank(form.shortDescription),
+        itemName: blank(form.itemName),
+        manufacturer: blank(form.manufacturer),
+        label: blank(form.label),
+        size: blank(form.size),
+        origin: blank(form.origin),
+        rack: blank(form.rack),
+        bin: blank(form.bin),
+      },
+    ],
+    [
+      'classification',
+      {
+        categoryId: form.categoryId,
+        brandId: form.brandId || null,
+        taxSlabId: form.taxSlabId || null,
+      },
+    ],
+    [
+      'rates',
+      {
+        costingMethod: Number(form.costingMethod),
+        cost: number(form.cost),
+        profitPercentage: number(form.profitPercentage),
+        corPercentage: number(form.corPercentage),
+        retailRate: number(form.retailRate),
+        wholesaleRate: number(form.wholesaleRate),
+        otherRate: number(form.otherRate),
+        maximumRetailPrice: number(form.maximumRetailPrice),
+      },
+    ],
+    [
+      'stocking',
+      {
+        purchaseUnitId: form.purchaseUnitId,
+        salesUnitId: form.salesUnitId,
+        minimumLevel: number(form.minimumLevel),
+        reorderLevel: number(form.reorderLevel),
+        maximumLevel: number(form.maximumLevel),
+        movement: Number(form.movement),
+        tracksBatches: form.tracksBatches,
+        tracksSerialNumbers: form.tracksSerialNumbers,
+        shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
+        isPacking: form.isPacking,
+        hideInPos: form.hideInPos,
+      },
+    ],
+  ]);
+
+  if (deviceAttributes) {
+    groups.set('device', {
+      device: blank(form.device),
+      colour: blank(form.colour),
+      battery: blank(form.battery),
+      ram: blank(form.ram),
+      storage: blank(form.storage),
+    });
+  }
+
+  return groups;
+}
+
 function EditorBody({
   product,
   units,
@@ -254,64 +324,23 @@ function EditorBody({
   const { ask, prompt } = useConfirm();
 
   /*
-    One Save for both tabs. Sequential rather than parallel, because the API groups the
+    One Save for every tab. Sequential rather than parallel, because the API groups the
     fields five ways: if the rates are refused, what went before has landed and the
     message names one thing rather than several.
+
+    Only the groups that were changed are sent. Saving opening stock or a barcode from
+    their tabs must not depend on re-saving rates nobody touched - a product brought in
+    from another system can hold figures today's rules would question, and those would
+    otherwise stop the stock from being saved at all.
   */
+  const loaded = useRef(form);
   const save = useMutation<void, Error>({
     mutationFn: async () => {
-      await saveProductTab(product.id, 'description', {
-        description: form.description.trim(),
-        descriptionArabic: blank(form.descriptionArabic),
-        shortDescription: blank(form.shortDescription),
-        itemName: blank(form.itemName),
-        manufacturer: blank(form.manufacturer),
-        label: blank(form.label),
-        size: blank(form.size),
-        origin: blank(form.origin),
-        rack: blank(form.rack),
-        bin: blank(form.bin),
-      });
-
-      await saveProductTab(product.id, 'classification', {
-        categoryId: form.categoryId,
-        brandId: form.brandId || null,
-        taxSlabId: form.taxSlabId || null,
-      });
-
-      await saveProductTab(product.id, 'rates', {
-        costingMethod: Number(form.costingMethod),
-        cost: number(form.cost),
-        profitPercentage: number(form.profitPercentage),
-        corPercentage: number(form.corPercentage),
-        retailRate: number(form.retailRate),
-        wholesaleRate: number(form.wholesaleRate),
-        otherRate: number(form.otherRate),
-        maximumRetailPrice: number(form.maximumRetailPrice),
-      });
-
-      await saveProductTab(product.id, 'stocking', {
-        purchaseUnitId: form.purchaseUnitId,
-        salesUnitId: form.salesUnitId,
-        minimumLevel: number(form.minimumLevel),
-        reorderLevel: number(form.reorderLevel),
-        maximumLevel: number(form.maximumLevel),
-        movement: Number(form.movement),
-        tracksBatches: form.tracksBatches,
-        tracksSerialNumbers: form.tracksSerialNumbers,
-        shelfLifeDays: form.shelfLifeDays.trim() ? Number(form.shelfLifeDays) : null,
-        isPacking: form.isPacking,
-        hideInPos: form.hideInPos,
-      });
-
-      if (enableDeviceAttributes) {
-        await saveProductTab(product.id, 'device', {
-          device: blank(form.device),
-          colour: blank(form.colour),
-          battery: blank(form.battery),
-          ram: blank(form.ram),
-          storage: blank(form.storage),
-        });
+      for (const [group, body] of productGroups(form, enableDeviceAttributes)) {
+        const before = productGroups(loaded.current, enableDeviceAttributes).get(group);
+        if (JSON.stringify(body) !== JSON.stringify(before)) {
+          await saveProductTab(product.id, group, body);
+        }
       }
 
       // Then whatever the other tabs hold: a barcode typed, opening stock rows.

@@ -201,6 +201,58 @@ describe("the party's card", () => {
     expect(screen.getByText('Rajwa Trading')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Choose customer' })).toBeNull();
   });
+
+  it('leaves out what the account does not have, caption and all', () => {
+    render(
+      <PartyCard
+        icon={null}
+        title="Customer details"
+        party={party}
+        empty="No customer chosen yet."
+        money={(value) => value.toFixed(2)}
+      />,
+    );
+
+    // A mobile is set: it shows. No address, tax number or credit limit: none of them.
+    expect(screen.getByText('0500000000')).toBeTruthy();
+    const captions = screen.getAllByRole('term').map((term) => term.textContent);
+    expect(captions).toHaveLength(1);
+    expect(screen.queryByText('—')).toBeNull();
+  });
+
+  it('shows the credit limit and tax number once they are set', () => {
+    render(
+      <PartyCard
+        icon={null}
+        title="Customer details"
+        party={{
+          ...party,
+          terms: { creditLimit: 5000, creditDays: null },
+          taxDetails: { registrationNumber: '29ABCDE1234F1Z5' },
+        }}
+        empty="No customer chosen yet."
+        money={(value) => value.toFixed(2)}
+      />,
+    );
+
+    expect(screen.getByText('5000.00')).toBeTruthy();
+    expect(screen.getByText('29ABCDE1234F1Z5')).toBeTruthy();
+    expect(screen.getAllByRole('term')).toHaveLength(3);
+  });
+
+  it('does not repeat a code that is the same as the name', () => {
+    render(
+      <PartyCard
+        icon={null}
+        title="Customer details"
+        party={{ ...party, code: 'PRIMARY CUSTOMER', name: 'Primary Customer' }}
+        empty="No customer chosen yet."
+        money={(value) => value.toFixed(2)}
+      />,
+    );
+
+    expect(screen.getAllByText(/primary customer/i)).toHaveLength(1);
+  });
 });
 
 describe('InvoiceWindow', () => {

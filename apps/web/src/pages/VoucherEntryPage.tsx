@@ -40,6 +40,7 @@ import {
 } from '@/lib/vouchers';
 import { useSettings } from '@/stores/settings';
 import { shortcutProps } from '@/lib/shortcuts';
+import { ledgerLabel, type PartyDisplay } from '@/lib/partyLabel';
 
 interface CreateVoucherResponse {
   readonly voucherId: string;
@@ -181,11 +182,14 @@ function parseAmount(raw: string): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-/** One ledger as a picker row: the code and name, with its group underneath. */
-function ledgerOption(ledger: LedgerSummary): SelectOption {
+/**
+ * One ledger as a picker row: the code and name - a customer or supplier as General
+ * Settings › Display says - with its group underneath.
+ */
+function ledgerOption(ledger: LedgerSummary, display: PartyDisplay): SelectOption {
   return {
     value: ledger.ledgerId,
-    label: `${ledger.code} · ${ledger.name}`,
+    label: ledgerLabel(ledger, display),
     detail: ledger.groupName,
     keywords: ledger.groupCode,
   };
@@ -284,7 +288,11 @@ function JournalForm({
 
   const ledgers = useLedgers();
   const all = useMemo(() => ledgers.data ?? [], [ledgers.data]);
-  const ledgerOptions = useMemo(() => all.map(ledgerOption), [all]);
+  const partyDisplay = useSettings((state) => state.partyDisplay);
+  const ledgerOptions = useMemo(
+    () => all.map((ledger) => ledgerOption(ledger, partyDisplay)),
+    [all, partyDisplay],
+  );
 
   const totals = useMemo(() => {
     let debit = 0;
@@ -1111,6 +1119,7 @@ function MoneyForm({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const narrow = useIsNarrow(CARDS_BELOW);
+  const partyDisplay = useSettings((state) => state.partyDisplay);
   const defaultPaymentMode = useSettings((state) => state.defaultPaymentMode);
   const onlinePaymentTypes = useSettings((state) => state.onlinePaymentTypes);
   const billWise = useSettings((state) =>
@@ -1180,23 +1189,24 @@ function MoneyForm({
   const accountOptions = useMemo(
     () =>
       moneyAccounts.map((ledger) => ({
-        ...ledgerOption(ledger),
+        ...ledgerOption(ledger, partyDisplay),
         detail:
           ledger.kind === LedgerKind.bank
             ? t('vouchers.groupBank')
             : t('vouchers.groupCash'),
       })),
-    [moneyAccounts, t],
+    [moneyAccounts, partyDisplay, t],
   );
 
   // Parties first, then everything else that is not itself cash or bank.
   const ledgerOptions = useMemo(() => {
-    const parties = all.filter(isParty).map(ledgerOption);
+    const option = (ledger: LedgerSummary): SelectOption => ledgerOption(ledger, partyDisplay);
+    const parties = all.filter(isParty).map(option);
     const others = all
       .filter((ledger) => !isParty(ledger) && !isCashOrBank(ledger))
-      .map(ledgerOption);
+      .map(option);
     return [...parties, ...others];
-  }, [all]);
+  }, [all, partyDisplay]);
 
   const modeOptions = useMemo(
     (): readonly SelectOption[] => [

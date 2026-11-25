@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { usePartyOption } from '@/lib/partyLabel';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -65,6 +64,7 @@ import {
   useTaxOn,
   type OnlinePaymentType,
 } from '@/stores/settings';
+import { ledgerLabel, usePartyOption } from '@/lib/partyLabel';
 
 /** The figure the decimal places are demonstrated on. Big enough to show a grouping separator. */
 const SAMPLE = 1234.5678;
@@ -441,7 +441,8 @@ function ledgerOptions(
     .filter((ledger) => kind === undefined || ledger.kind === kind)
     .map((ledger) => ({
       value: ledger.ledgerId,
-      label: `${ledger.code} — ${ledger.name}`,
+      // Read when the section draws, so a change of display shows the next time it does.
+      label: ledgerLabel(ledger, useSettings.getState().partyDisplay),
     }));
 }
 

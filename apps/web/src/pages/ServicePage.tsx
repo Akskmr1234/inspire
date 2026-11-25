@@ -42,6 +42,7 @@ import { useSession } from '@/stores/session';
 import { useGodownsOn, useSettings } from '@/stores/settings';
 import { Alert, Labelled } from '@/pages/StockOperationsPage';
 import { shortcutProps } from '@/lib/shortcuts';
+import { usePartyOption } from '@/lib/partyLabel';
 
 const STATUS_KEYS: Record<number, string> = {
   [JobCardStatus.received]: 'received',
@@ -463,16 +464,15 @@ function JobCardForm({
         })),
     [ledgers.data],
   );
+  const partyOption = usePartyOption();
   const customerOptions = useMemo(
     () =>
       (customers.data ?? []).map((customer) => ({
         value: customer.customerId,
-        label: customer.name,
-        detail: [customer.code, customer.contact.mobileNumber]
-          .filter(Boolean)
-          .join(' · '),
+        ...partyOption(customer),
+        ...(customer.contact.mobileNumber ? { detail: customer.contact.mobileNumber } : {}),
       })),
-    [customers.data],
+    [customers.data, partyOption],
   );
   const thumbnails = useProductThumbnails();
   const productOptions = useMemo(
