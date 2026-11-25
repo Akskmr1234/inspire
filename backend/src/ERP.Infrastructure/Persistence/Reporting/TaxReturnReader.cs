@@ -334,7 +334,7 @@ public sealed class TaxReturnReader : ITaxReturnReader
                 supplier.TaxRegistrationNumber,
                 component.Type,
                 component.Percentage,
-                Taxable = line.TaxableAmount.Amount,
+                Taxable = line.TaxableValue,
                 Tax = component.Amount,
             }).ToListAsync(cancellationToken);
 
@@ -379,8 +379,8 @@ public sealed class TaxReturnReader : ITaxReturnReader
             select new
             {
                 invoice.Kind,
-                Taxable = line.TaxableAmount.Amount,
-                Tax = line.TaxAmount.Amount,
+                Taxable = line.TaxableValue,
+                Tax = line.TaxValue,
             }).ToListAsync(cancellationToken);
 
         return [.. lines.Select(line => (Sign(line.Kind) * line.Taxable, line.Tax != 0m))];

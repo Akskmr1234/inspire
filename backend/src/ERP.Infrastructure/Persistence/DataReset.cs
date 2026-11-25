@@ -40,6 +40,7 @@ public sealed class DataReset : IDataReset
         // Returns are kept in tables of their own, and name the invoices they return.
         "DELETE FROM sales_returns WHERE firm_id = @firm",
         "DELETE FROM sales_invoices WHERE firm_id = @firm",
+        "DELETE FROM purchase_returns WHERE firm_id = @firm",
         "DELETE FROM purchase_invoices WHERE firm_id = @firm",
         "DELETE FROM sales_orders WHERE firm_id = @firm",
         "DELETE FROM purchase_orders WHERE firm_id = @firm",

@@ -66,12 +66,16 @@ public readonly record struct PurchaseInvoiceChargeId(Guid Value)
 /// costing consumes, which is why it is the one thing on this line the stock ledger reads.
 /// </para>
 /// </remarks>
-public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenantScoped
+public abstract class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenantScoped
 {
     private readonly List<PurchaseInvoiceLineSerial> _serials = [];
     private readonly List<PurchaseInvoiceLineTax> _components = [];
 
-    internal PurchaseInvoiceLine(
+    /// <summary>
+    /// Records a line, of a purchase or of a return: a return's tax components are kept
+    /// with the return, so <c>returned</c> says which kind to make.
+    /// </summary>
+    private protected PurchaseInvoiceLine(
         PurchaseInvoiceLineId id,
         TenantId tenantId,
         PurchaseInvoiceId invoiceId,
@@ -85,7 +89,8 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
         int lineNumber,
         string? batchNumber,
         DateOnly? expiresOn,
-        decimal? sellingRate = null)
+        decimal? sellingRate,
+        bool returned)
         : base(id)
     {
         SellingRate = sellingRate;
@@ -97,19 +102,20 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
         StockQuantity = stockQuantity;
         Rate = rate;
         Discount = discount;
-        TaxableAmount = assessment.TaxableAmount;
-        TaxAmount = assessment.TotalTax;
+        TaxableValue = assessment.TaxableAmount.Amount;
+        Currency = assessment.TaxableAmount.Currency;
+        TaxValue = assessment.TotalTax.Amount;
+        TaxCurrency = assessment.TotalTax.Currency;
         BatchNumber = batchNumber;
         ExpiresOn = expiresOn;
-        _components.AddRange(assessment.Components.Select(component =>
-            new PurchaseInvoiceLineTax(
-                tenantId, id, component.Type, component.Rate.Percentage,
-                component.Amount.Amount)));
+        _components.AddRange(assessment.Components.Select(component => returned
+            ? (PurchaseInvoiceLineTax)new PurchaseReturnLineTax(tenantId, id, component.Type, component.Rate.Percentage, component.Amount.Amount)
+            : new PurchaseEntryLineTax(tenantId, id, component.Type, component.Rate.Percentage, component.Amount.Amount)));
         LineNumber = lineNumber;
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private PurchaseInvoiceLine()
+    private protected PurchaseInvoiceLine()
     {
     }
 
@@ -156,10 +162,27 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
     public decimal Discount { get; private set; }
 
     /// <summary>Gets what the line comes to before tax.</summary>
-    public Money TaxableAmount { get; private set; }
+    public Money TaxableAmount => Money.Raw(TaxableValue, Currency);
 
     /// <summary>Gets the tax on it, across every component.</summary>
-    public Money TaxAmount { get; private set; }
+    public Money TaxAmount => Money.Raw(TaxValue, TaxCurrency);
+
+    /// <summary>Gets the figure of <see cref="TaxableAmount"/>.</summary>
+    /// <remarks>
+    /// The amounts are kept as their figures and currencies - the columns they are stored
+    /// in - so that a return's own details table holds them exactly as the purchase one
+    /// does.
+    /// </remarks>
+    public decimal TaxableValue { get; private set; }
+
+    /// <summary>Gets the currency of <see cref="TaxableAmount"/>.</summary>
+    public CurrencyCode Currency { get; private set; }
+
+    /// <summary>Gets the figure of <see cref="TaxAmount"/>.</summary>
+    public decimal TaxValue { get; private set; }
+
+    /// <summary>Gets the currency of <see cref="TaxAmount"/>.</summary>
+    public CurrencyCode TaxCurrency { get; private set; }
 
     /// <summary>Gets the tax broken down by component, as it was assessed.</summary>
     public IReadOnlyList<PurchaseInvoiceLineTax> Components => _components.AsReadOnly();
@@ -175,8 +198,12 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
 
     /// <summary>Names a serialised unit this line brings in.</summary>
     /// <param name="serialNumber">The number printed on the unit.</param>
-    internal void AddSerial(string serialNumber) =>
-        _serials.Add(new PurchaseInvoiceLineSerial(TenantId, Id, serialNumber));
+    internal void AddSerial(string serialNumber) => _serials.Add(NewSerial(serialNumber));
+
+    /// <summary>Makes the record of a serial number on this line.</summary>
+    /// <param name="serialNumber">The number printed on the unit.</param>
+    /// <returns>The record, of the line's own kind.</returns>
+    private protected abstract PurchaseInvoiceLineSerial NewSerial(string serialNumber);
 }
 
 /// <summary>One serialised unit named by a purchase line.</summary>
@@ -185,9 +212,9 @@ public sealed class PurchaseInvoiceLine : Entity<PurchaseInvoiceLineId>, ITenant
 /// receipt posts, so there is nothing yet to point at - only what the supplier printed on
 /// the box.
 /// </remarks>
-public sealed class PurchaseInvoiceLineSerial : ITenantScoped
+public abstract class PurchaseInvoiceLineSerial : ITenantScoped
 {
-    internal PurchaseInvoiceLineSerial(
+    private protected PurchaseInvoiceLineSerial(
         TenantId tenantId,
         PurchaseInvoiceLineId lineId,
         string serialNumber)
@@ -198,7 +225,7 @@ public sealed class PurchaseInvoiceLineSerial : ITenantScoped
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private PurchaseInvoiceLineSerial() => SerialNumber = string.Empty;
+    private protected PurchaseInvoiceLineSerial() => SerialNumber = string.Empty;
 
     /// <inheritdoc />
     public TenantId TenantId { get; private set; }
@@ -216,9 +243,9 @@ public sealed class PurchaseInvoiceLineSerial : ITenantScoped
 /// discount deducts. The amount is always positive and the direction is the matrix's, for
 /// the same reason it is on a sale: two spellings of the same fact is one too many.
 /// </remarks>
-public sealed class PurchaseInvoiceCharge : Entity<PurchaseInvoiceChargeId>, ITenantScoped
+public abstract class PurchaseInvoiceCharge : Entity<PurchaseInvoiceChargeId>, ITenantScoped
 {
-    internal PurchaseInvoiceCharge(
+    private protected PurchaseInvoiceCharge(
         PurchaseInvoiceChargeId id,
         TenantId tenantId,
         PurchaseInvoiceId invoiceId,
@@ -230,12 +257,13 @@ public sealed class PurchaseInvoiceCharge : Entity<PurchaseInvoiceChargeId>, ITe
         TenantId = tenantId;
         PurchaseInvoiceId = invoiceId;
         LedgerId = ledgerId;
-        Amount = amount;
+        AmountValue = amount.Amount;
+        Currency = amount.Currency;
         IsAddition = isAddition;
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private PurchaseInvoiceCharge()
+    private protected PurchaseInvoiceCharge()
     {
     }
 
@@ -249,7 +277,17 @@ public sealed class PurchaseInvoiceCharge : Entity<PurchaseInvoiceChargeId>, ITe
     public LedgerId LedgerId { get; private set; }
 
     /// <summary>Gets what it comes to, always positive.</summary>
-    public Money Amount { get; private set; }
+    public Money Amount => Money.Raw(AmountValue, Currency);
+
+    /// <summary>Gets the figure of <see cref="Amount"/>.</summary>
+    /// <remarks>
+    /// Kept as its figure and currency - the columns it is stored in - so that a return's
+    /// own additional table holds it exactly as the purchase one does.
+    /// </remarks>
+    public decimal AmountValue { get; private set; }
+
+    /// <summary>Gets the currency of <see cref="Amount"/>.</summary>
+    public CurrencyCode Currency { get; private set; }
 
     /// <summary>Gets whether it adds to the total rather than deducting.</summary>
     public bool IsAddition { get; private set; }
@@ -264,9 +302,9 @@ public sealed class PurchaseInvoiceCharge : Entity<PurchaseInvoiceChargeId>, ITe
 /// a VAT or GST return is built from, and a return asks what was charged under each head
 /// rather than what a total implies at today's rates.
 /// </remarks>
-public sealed class PurchaseInvoiceLineTax : ITenantScoped
+public abstract class PurchaseInvoiceLineTax : ITenantScoped
 {
-    internal PurchaseInvoiceLineTax(
+    private protected PurchaseInvoiceLineTax(
         TenantId tenantId,
         PurchaseInvoiceLineId lineId,
         TaxComponentType type,
@@ -281,7 +319,7 @@ public sealed class PurchaseInvoiceLineTax : ITenantScoped
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private PurchaseInvoiceLineTax()
+    private protected PurchaseInvoiceLineTax()
     {
     }
 

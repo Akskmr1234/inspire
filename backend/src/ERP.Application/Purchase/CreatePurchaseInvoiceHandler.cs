@@ -480,6 +480,17 @@ public sealed class CreatePurchaseInvoiceCommandHandler
                 "That warehouse is not in the selected firm."));
         }
 
+        // A return is against a purchase. The returns are kept apart from the purchases,
+        // and the link points only at the purchases, so naming another return is refused
+        // here, plainly. An invoice that cannot be found is left to posting, as it was.
+        if (request.ReturnsInvoiceId is { } returned
+            && await _invoices.FindAsync(PurchaseInvoiceId.From(returned), cancellationToken) is { IsReturn: true })
+        {
+            return Result.Failure<Context>(Error.Validation(
+                "PurchaseInvoice.ReturnsAReturn",
+                "A return is against a purchase, not another return."));
+        }
+
         List<ProductId> productIds =
             [.. request.Lines.Select(line => ProductId.From(line.ProductId)).Distinct()];
 

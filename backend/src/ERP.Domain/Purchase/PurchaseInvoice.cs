@@ -67,7 +67,7 @@ public enum PurchaseInvoiceStatus
 /// recompute it.
 /// </para>
 /// </remarks>
-public sealed class PurchaseInvoice
+public abstract class PurchaseInvoice
     : AggregateRoot<PurchaseInvoiceId>, IFirmScoped, IAuditable, ISoftDeletable
 {
     /// <summary>The longest a narration or a reference may be.</summary>
@@ -76,7 +76,7 @@ public sealed class PurchaseInvoice
     private readonly List<PurchaseInvoiceLine> _lines = [];
     private readonly List<PurchaseInvoiceCharge> _charges = [];
 
-    private PurchaseInvoice(
+    private protected PurchaseInvoice(
         PurchaseInvoiceId id,
         TenantId tenantId,
         FirmId firmId,
@@ -110,7 +110,7 @@ public sealed class PurchaseInvoice
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private PurchaseInvoice() => Number = string.Empty;
+    private protected PurchaseInvoice() => Number = string.Empty;
 
     /// <inheritdoc />
     public TenantId TenantId { get; private set; }
@@ -320,23 +320,22 @@ public sealed class PurchaseInvoice
 
         Result canPost = financialYear.CanPostOn(date);
 
-        return canPost.IsFailure
-            ? Result.Failure<PurchaseInvoice>(canPost.Error)
-            : Result.Success(new PurchaseInvoice(
-                PurchaseInvoiceId.NewId(),
-                tenantId,
-                firmId,
-                branchId,
-                financialYear.Id,
-                kind,
-                number.Trim(),
-                date,
-                supplier.Id,
-                warehouse.Id,
-                mode,
-                currency,
-                returnsInvoiceId,
-                purchaseOrderId));
+        if (canPost.IsFailure)
+        {
+            return Result.Failure<PurchaseInvoice>(canPost.Error);
+        }
+
+        // A purchase and a return are each kept in tables of their own, so each is made as
+        // its own kind.
+        PurchaseInvoice invoice = kind == PurchaseDocumentKind.Return
+            ? new PurchaseReturn(
+                PurchaseInvoiceId.NewId(), tenantId, firmId, branchId, financialYear.Id, number.Trim(), date,
+                supplier.Id, warehouse.Id, mode, currency, returnsInvoiceId, purchaseOrderId)
+            : new PurchaseEntry(
+                PurchaseInvoiceId.NewId(), tenantId, firmId, branchId, financialYear.Id, number.Trim(), date,
+                supplier.Id, warehouse.Id, mode, currency, returnsInvoiceId, purchaseOrderId);
+
+        return Result.Success(invoice);
     }
 
     /// <summary>Replaces what a draft says, keeping its number.</summary>
@@ -555,21 +554,15 @@ public sealed class PurchaseInvoice
             return Result.Failure<PurchaseInvoiceLine>(paired.Error);
         }
 
-        PurchaseInvoiceLine line = new(
-            PurchaseInvoiceLineId.NewId(),
-            TenantId,
-            Id,
-            product.Id,
-            unit.Id,
-            quantity,
-            stockQuantity,
-            rate,
-            discount,
-            assessment,
-            _lines.Count + 1,
-            Trimmed(batchNumber),
-            expiresOn,
-            product.TracksBatches && sellingRate > 0m ? sellingRate : null);
+        // Each kind's lines are kept with it, in its own details table.
+        decimal? batchRate = product.TracksBatches && sellingRate > 0m ? sellingRate : null;
+        PurchaseInvoiceLine line = IsReturn
+            ? new PurchaseReturnLine(
+                PurchaseInvoiceLineId.NewId(), TenantId, Id, product.Id, unit.Id, quantity, stockQuantity,
+                rate, discount, assessment, _lines.Count + 1, Trimmed(batchNumber), expiresOn, batchRate)
+            : new PurchaseEntryLine(
+                PurchaseInvoiceLineId.NewId(), TenantId, Id, product.Id, unit.Id, quantity, stockQuantity,
+                rate, discount, assessment, _lines.Count + 1, Trimmed(batchNumber), expiresOn, batchRate);
 
         foreach (string serial in serialNumbers ?? [])
         {
@@ -644,13 +637,11 @@ public sealed class PurchaseInvoice
                 + "adding it twice."));
         }
 
-        PurchaseInvoiceCharge added = new(
-            PurchaseInvoiceChargeId.NewId(),
-            TenantId,
-            Id,
-            mapping.LedgerId,
-            Money.Of(amount, Currency),
-            mapping.IsAddition);
+        PurchaseInvoiceCharge added = IsReturn
+            ? new PurchaseReturnCharge(
+                PurchaseInvoiceChargeId.NewId(), TenantId, Id, mapping.LedgerId, Money.Of(amount, Currency), mapping.IsAddition)
+            : new PurchaseEntryCharge(
+                PurchaseInvoiceChargeId.NewId(), TenantId, Id, mapping.LedgerId, Money.Of(amount, Currency), mapping.IsAddition);
 
         _charges.Add(added);
 
