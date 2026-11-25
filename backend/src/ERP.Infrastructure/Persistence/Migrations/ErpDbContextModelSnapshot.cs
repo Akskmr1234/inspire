@@ -988,6 +988,20 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("reference_number");
 
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("SourceNumber")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("source_number");
+
+                    b.Property<string>("SourceType")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("source_type");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasColumnName("status");
@@ -1011,6 +1025,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("IsDeleted")
                         .HasDatabaseName("ix_vouchers_is_deleted");
+
+                    b.HasIndex("SourceId")
+                        .HasDatabaseName("ix_vouchers_source");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_vouchers_tenant");

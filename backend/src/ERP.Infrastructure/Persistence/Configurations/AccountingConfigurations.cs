@@ -194,6 +194,11 @@ public sealed class VoucherConfiguration : IEntityTypeConfiguration<Voucher>
 
         builder.HasIndex(v => v.TenantId).HasDatabaseName("ix_vouchers_tenant");
 
+        // Which transaction the entries came from - a sale, a purchase, a return, a stock
+        // adjustment - so the common voucher table leads back to it. Empty for a voucher
+        // entered as itself: a receipt, a payment, a journal.
+        VoucherSources.Configure(builder);
+
         // Every report is bounded by a date range within a firm - day book, cash
         // book, trial balance, profit and loss. This is the workhorse index.
         builder

@@ -193,6 +193,7 @@ public static class DependencyInjection
         // in, once, in the background.
         services.AddSingleton<StoredTotalsBackfill>();
         services.AddHostedService(sp => sp.GetRequiredService<StoredTotalsBackfill>());
+        services.AddScoped<VoucherSourceInterceptor>();
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();
 
@@ -234,6 +235,7 @@ public static class DependencyInjection
             // modified by the auditing that follows.
             options.AddInterceptors(
                 serviceProvider.GetRequiredService<StoredTotalsInterceptor>(),
+                serviceProvider.GetRequiredService<VoucherSourceInterceptor>(),
                 serviceProvider.GetRequiredService<AuditingInterceptor>(),
                 serviceProvider.GetRequiredService<AuditTrailInterceptor>(),
                 serviceProvider.GetRequiredService<TenantConnectionInterceptor>());
