@@ -57,6 +57,10 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
         builder.Ignore(invoice => invoice.RoundingDifference);
         builder.Ignore(invoice => invoice.Total);
 
+        // Kept on the master as well, for reports and anything reading the table: written
+        // from the same figures on every save, never typed in.
+        StoredTotals.ConfigureMaster(builder);
+
         builder.HasOne<FinancialYear>()
             .WithMany()
             .HasForeignKey(invoice => invoice.FinancialYearId)
@@ -210,6 +214,7 @@ public sealed class PurchaseInvoiceLineConfiguration
         });
 
         builder.Ignore(line => line.LineTotal);
+        StoredTotals.ConfigureLine(builder);
 
         builder.HasMany(line => line.Components)
             .WithOne()

@@ -48,6 +48,10 @@ public sealed class SalesOrderConfiguration : IEntityTypeConfiguration<SalesOrde
         builder.Ignore(order => order.RoundingDifference);
         builder.Ignore(order => order.Total);
 
+        // Kept on the master as well, for reports and anything reading the table: written
+        // from the same figures on every save, never typed in.
+        StoredTotals.ConfigureMaster(builder);
+
         builder.HasOne<FinancialYear>()
             .WithMany()
             .HasForeignKey(order => order.FinancialYearId)
@@ -145,6 +149,7 @@ public sealed class SalesOrderLineConfiguration : IEntityTypeConfiguration<Sales
         builder.Ignore(line => line.OutstandingQuantity);
         builder.Ignore(line => line.IsFulfilled);
         builder.Ignore(line => line.LineTotal);
+        StoredTotals.ConfigureLine(builder);
 
         builder.ComplexProperty(line => line.TaxableAmount, amount =>
         {

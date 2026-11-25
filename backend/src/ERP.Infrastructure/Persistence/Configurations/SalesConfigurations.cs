@@ -59,9 +59,8 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         builder.Property(invoice => invoice.CancellationReason)
             .HasMaxLength(SalesInvoice.MaximumNarrationLength);
 
-        // Every total is derived from the lines and the charges. Storing them as well
-        // would create a second answer that can disagree with the one it came from -
-        // and on an invoice, the two disagreeing is the customer's problem, not ours.
+        // Every total is derived from the lines and the charges. The domain's properties
+        // stay the one answer; the stored copies below are written from them on save.
         builder.Ignore(invoice => invoice.IsEditable);
         builder.Ignore(invoice => invoice.Taxable);
         builder.Ignore(invoice => invoice.Tax);
@@ -69,6 +68,10 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         builder.Ignore(invoice => invoice.GrossTotal);
         builder.Ignore(invoice => invoice.RoundingDifference);
         builder.Ignore(invoice => invoice.Total);
+
+        // Kept on the master as well, for reports and anything reading the table: written
+        // from the same figures on every save, never typed in.
+        StoredTotals.ConfigureMaster(builder);
 
         builder.HasOne<FinancialYear>()
             .WithMany()
@@ -251,6 +254,7 @@ public sealed class SalesInvoiceLineConfiguration : IEntityTypeConfiguration<Sal
         });
 
         builder.Ignore(line => line.LineTotal);
+        StoredTotals.ConfigureLine(builder);
 
         builder.HasMany(line => line.Components)
             .WithOne()

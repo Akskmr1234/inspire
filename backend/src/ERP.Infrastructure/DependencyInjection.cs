@@ -187,6 +187,12 @@ public static class DependencyInjection
         services.AddScoped<IOutstandingBillsReader, OutstandingBillsReader>();
         services.AddScoped<IChequeReportReader, ChequeReportReader>();
 
+        services.AddSingleton<StoredTotalsInterceptor>();
+
+        // Transactions saved before their totals were kept on the master get them filled
+        // in, once, in the background.
+        services.AddSingleton<StoredTotalsBackfill>();
+        services.AddHostedService(sp => sp.GetRequiredService<StoredTotalsBackfill>());
         services.AddScoped<AuditingInterceptor>();
         services.AddScoped<TenantConnectionInterceptor>();
 
@@ -224,7 +230,10 @@ public static class DependencyInjection
                     errorCodesToAdd: null);
             });
 
+            // The totals first, so a master changed only through its lines is stamped as
+            // modified by the auditing that follows.
             options.AddInterceptors(
+                serviceProvider.GetRequiredService<StoredTotalsInterceptor>(),
                 serviceProvider.GetRequiredService<AuditingInterceptor>(),
                 serviceProvider.GetRequiredService<AuditTrailInterceptor>(),
                 serviceProvider.GetRequiredService<TenantConnectionInterceptor>());

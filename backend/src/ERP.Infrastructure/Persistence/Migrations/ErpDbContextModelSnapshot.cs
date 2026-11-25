@@ -4741,6 +4741,36 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("stock_document_id");
 
+                    b.Property<decimal?>("StoredCharges")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("charge_total");
+
+                    b.Property<decimal?>("StoredGross")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("gross_total");
+
+                    b.Property<decimal?>("StoredRounding")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("rounding_difference");
+
+                    b.Property<decimal?>("StoredTax")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("tax_total");
+
+                    b.Property<decimal?>("StoredTaxable")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("taxable_total");
+
+                    b.Property<decimal?>("StoredTotal")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("total");
+
                     b.Property<DateOnly?>("SupplierInvoiceDate")
                         .HasColumnType("date")
                         .HasColumnName("supplier_invoice_date");
@@ -4928,6 +4958,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("stock_quantity");
+
+                    b.Property<decimal>("StoredLineTotal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("line_total")
+                        .HasComputedColumnSql("taxable_amount + tax_amount", true);
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -5144,6 +5181,36 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<decimal?>("StoredCharges")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("charge_total");
+
+                    b.Property<decimal?>("StoredGross")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("gross_total");
+
+                    b.Property<decimal?>("StoredRounding")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("rounding_difference");
+
+                    b.Property<decimal?>("StoredTax")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("tax_total");
+
+                    b.Property<decimal?>("StoredTaxable")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("taxable_total");
+
+                    b.Property<decimal?>("StoredTotal")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("total");
+
                     b.Property<Guid>("SupplierLedgerId")
                         .HasColumnType("uuid")
                         .HasColumnName("supplier_ledger_id");
@@ -5294,6 +5361,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("stock_quantity");
+
+                    b.Property<decimal>("StoredLineTotal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("line_total")
+                        .HasComputedColumnSql("taxable_amount + tax_amount", true);
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -5742,6 +5816,36 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("stock_document_id");
 
+                    b.Property<decimal?>("StoredCharges")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("charge_total");
+
+                    b.Property<decimal?>("StoredGross")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("gross_total");
+
+                    b.Property<decimal?>("StoredRounding")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("rounding_difference");
+
+                    b.Property<decimal?>("StoredTax")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("tax_total");
+
+                    b.Property<decimal?>("StoredTaxable")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("taxable_total");
+
+                    b.Property<decimal?>("StoredTotal")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("total");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -5917,6 +6021,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("stock_quantity");
+
+                    b.Property<decimal>("StoredLineTotal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("line_total")
+                        .HasComputedColumnSql("taxable_amount + tax_amount", true);
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -6146,6 +6257,36 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<decimal?>("StoredCharges")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("charge_total");
+
+                    b.Property<decimal?>("StoredGross")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("gross_total");
+
+                    b.Property<decimal?>("StoredRounding")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("rounding_difference");
+
+                    b.Property<decimal?>("StoredTax")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("tax_total");
+
+                    b.Property<decimal?>("StoredTaxable")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("taxable_total");
+
+                    b.Property<decimal?>("StoredTotal")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("total");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -6292,6 +6433,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("stock_quantity");
+
+                    b.Property<decimal>("StoredLineTotal")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("line_total")
+                        .HasComputedColumnSql("taxable_amount + tax_amount", true);
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
