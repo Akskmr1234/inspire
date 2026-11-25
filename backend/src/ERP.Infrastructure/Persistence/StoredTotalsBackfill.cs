@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using ERP.Application.Abstractions.Tenancy;
 using ERP.Domain.Purchase;
 using ERP.Domain.Sales;
@@ -29,6 +28,10 @@ namespace ERP.Infrastructure.Persistence;
 public sealed partial class StoredTotalsBackfill : BackgroundService
 {
     private const int BatchSize = 100;
+
+    private const string SetTotals =
+        " SET taxable_total = {1}, tax_total = {2}, charge_total = {3}, gross_total = {4},"
+        + " rounding_difference = {5}, total = {6} WHERE id = {0}";
 
     private readonly IServiceScopeFactory _scopes;
     private readonly ITenantContext _tenantContext;
@@ -71,22 +74,18 @@ public sealed partial class StoredTotalsBackfill : BackgroundService
 
             filled += await FillAsync(
                 context => context.SalesInvoices.Include(invoice => invoice.Lines).Include(invoice => invoice.Charges),
-                invoice => row => row.Id == invoice.Id,
                 invoice => invoice.Id.Value,
                 cancellationToken);
             filled += await FillAsync(
                 context => context.PurchaseInvoices.Include(invoice => invoice.Lines).Include(invoice => invoice.Charges),
-                invoice => row => row.Id == invoice.Id,
                 invoice => invoice.Id.Value,
                 cancellationToken);
             filled += await FillAsync(
                 context => context.SalesOrders.Include(order => order.Lines).Include(order => order.Charges),
-                order => row => row.Id == order.Id,
                 order => order.Id.Value,
                 cancellationToken);
             filled += await FillAsync(
                 context => context.PurchaseOrders.Include(order => order.Lines).Include(order => order.Charges),
-                order => row => row.Id == order.Id,
                 order => order.Id.Value,
                 cancellationToken);
         }
@@ -122,7 +121,6 @@ public sealed partial class StoredTotalsBackfill : BackgroundService
 
     private async Task<int> FillAsync<T>(
         Func<ErpDbContext, IQueryable<T>> source,
-        Func<T, Expression<Func<T, bool>>> same,
         Func<T, Guid> idOf,
         CancellationToken cancellationToken)
         where T : class
@@ -166,24 +164,33 @@ public sealed partial class StoredTotalsBackfill : BackgroundService
                     continue;
                 }
 
-                await context.Set<T>()
-                    .Where(same(document))
-                    .ExecuteUpdateAsync(
-                        setters =>
-                        {
-                            for (int index = 0; index < totals.Length; index++)
-                            {
-                                string property = StoredTotals.MasterProperties[index];
-                                decimal value = totals[index];
-                                setters.SetProperty(row => EF.Property<decimal?>(row, property), value);
-                            }
-                        },
-                        cancellationToken);
+                // Written to the table the document is kept in: a sales return's own, say,
+                // rather than through the hierarchy, which a bulk update cannot target.
+                string table = context.Model.FindEntityType(document.GetType())?.GetTableName()
+                    ?? throw new InvalidOperationException($"{document.GetType().Name} is not mapped to a table.");
+                string sql = UpdateFor(table);
+
+                await context.Database.ExecuteSqlRawAsync(
+                    sql,
+                    [idOf(document), totals[0], totals[1], totals[2], totals[3], totals[4], totals[5]],
+                    cancellationToken);
 
                 filled++;
             }
         }
     }
+
+    /// <summary>The statement that writes a master's totals, for each table a master is kept in.</summary>
+    private static string UpdateFor(string table) => table switch
+    {
+        "sales_invoices" => "UPDATE sales_invoices" + SetTotals,
+        "sales_returns" => "UPDATE sales_returns" + SetTotals,
+        "purchase_invoices" => "UPDATE purchase_invoices" + SetTotals,
+        "purchase_returns" => "UPDATE purchase_returns" + SetTotals,
+        "sales_orders" => "UPDATE sales_orders" + SetTotals,
+        "purchase_orders" => "UPDATE purchase_orders" + SetTotals,
+        _ => throw new InvalidOperationException($"'{table}' does not keep transaction totals."),
+    };
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Stored the totals of {Count} transactions on their masters")]
     private partial void LogFilled(int count);

@@ -69,7 +69,7 @@ public sealed class VoucherSourceEndpointTests
         (await SourcesAsync("sales_invoices", sale.SalesInvoiceId))
             .ShouldAllBe(source => source == new Source("Sales", sale.SalesInvoiceId, sale.Number));
 
-        // A return of it is a return.
+        // A return of it is a return, kept in the return master.
         HttpResponseMessage returned = await client.PostAsJsonAsync(Invoices, new
         {
             Date = Today,
@@ -84,7 +84,7 @@ public sealed class VoucherSourceEndpointTests
         returned.StatusCode.ShouldBe(HttpStatusCode.Created, await returned.Content.ReadAsStringAsync());
         SalesInvoiceResponse refund = (await returned.Content.ReadFromJsonAsync<SalesInvoiceResponse>())!;
 
-        (await SourcesAsync("sales_invoices", refund.SalesInvoiceId))
+        (await SourcesAsync("sales_returns", refund.SalesInvoiceId))
             .ShouldAllBe(source => source == new Source("SalesReturn", refund.SalesInvoiceId, refund.Number));
 
         // A payment entered as itself is its own transaction, and names nothing else.
@@ -106,13 +106,13 @@ public sealed class VoucherSourceEndpointTests
         (await SourceOfAsync(payment)).ShouldBe(new Source(null, null, null));
     }
 
-    private static readonly HashSet<string> Masters = ["sales_invoices", "purchase_invoices"];
+    private static readonly HashSet<string> Masters = ["sales_invoices", "sales_returns", "purchase_invoices"];
 
     /// <summary>What each voucher a document names says it came from.</summary>
     private async Task<Source[]> SourcesAsync(string table, Guid id)
     {
         Masters.ShouldContain(table);
-        string receipt = table == "sales_invoices" ? ", d.receipt_voucher_id" : string.Empty;
+        string receipt = table.StartsWith("sales_", StringComparison.Ordinal) ? ", d.receipt_voucher_id" : string.Empty;
         string sql = "SELECT v.source_type AS \"Type\", v.source_id AS \"Id\", v.source_number AS \"Number\" "
             + "FROM vouchers v JOIN " + table + " d ON v.id IN (d.journal_voucher_id" + receipt + ") "
             + "WHERE d.id = {0}";

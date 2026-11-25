@@ -258,8 +258,8 @@ public sealed class TransactionReportReader : ITransactionReportReader
                     product.BrandId,
                     product.CategoryId,
                     line.StockQuantity,
-                    Amount = line.TaxableAmount.Amount,
-                    Tax = line.TaxAmount.Amount,
+                    Amount = line.TaxableValue,
+                    Tax = line.TaxValue,
                 })
             .ToListAsync(cancellationToken);
 
@@ -432,7 +432,7 @@ public sealed class TransactionReportReader : ITransactionReportReader
             List<SalesInvoiceId> ids = [.. signs.Keys.Select(SalesInvoiceId.From)];
             var found = await _context.SalesInvoiceCharges.AsNoTracking()
                 .Where(charge => ids.Contains(charge.SalesInvoiceId))
-                .Select(charge => new { charge.SalesInvoiceId, charge.Amount.Amount, charge.IsAddition })
+                .Select(charge => new { charge.SalesInvoiceId, Amount = charge.AmountValue, charge.IsAddition })
                 .ToListAsync(cancellationToken);
             charges = [.. found.Select(charge => (charge.SalesInvoiceId.Value, charge.Amount, charge.IsAddition))];
         }
@@ -492,7 +492,7 @@ public sealed class TransactionReportReader : ITransactionReportReader
             .Select(group => new
             {
                 Bill = group.Key,
-                Amount = group.Sum(line => line.TaxableAmount.Amount + line.TaxAmount.Amount),
+                Amount = group.Sum(line => line.TaxableValue + line.TaxValue),
             })
             .ToListAsync(cancellationToken);
 

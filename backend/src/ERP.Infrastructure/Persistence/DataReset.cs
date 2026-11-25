@@ -37,6 +37,8 @@ public sealed class DataReset : IDataReset
         "DELETE FROM rmas WHERE firm_id = @firm",
         "DELETE FROM edit_requests WHERE firm_id = @firm",
         "UPDATE purchase_invoices SET returns_invoice_id = NULL WHERE firm_id = @firm",
+        // Returns are kept in tables of their own, and name the invoices they return.
+        "DELETE FROM sales_returns WHERE firm_id = @firm",
         "DELETE FROM sales_invoices WHERE firm_id = @firm",
         "DELETE FROM purchase_invoices WHERE firm_id = @firm",
         "DELETE FROM sales_orders WHERE firm_id = @firm",

@@ -101,7 +101,7 @@ public enum SalesInvoiceStatus
 /// rates would produce.
 /// </para>
 /// </remarks>
-public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, IAuditable, ISoftDeletable
+public abstract class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, IAuditable, ISoftDeletable
 {
     /// <summary>The longest a narration or a reference may be.</summary>
     public const int MaximumNarrationLength = 500;
@@ -127,7 +127,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     private readonly List<SalesInvoiceLine> _lines = [];
     private readonly List<SalesInvoiceCharge> _charges = [];
 
-    private SalesInvoice(
+    private protected SalesInvoice(
         SalesInvoiceId id,
         TenantId tenantId,
         FirmId firmId,
@@ -161,7 +161,7 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
     }
 
     /// <summary>Constructor for EF Core materialisation.</summary>
-    private SalesInvoice() => Number = string.Empty;
+    private protected SalesInvoice() => Number = string.Empty;
 
     /// <inheritdoc />
     public TenantId TenantId { get; private set; }
@@ -469,23 +469,22 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
 
         Result canPost = financialYear.CanPostOn(date);
 
-        return canPost.IsFailure
-            ? Result.Failure<SalesInvoice>(canPost.Error)
-            : Result.Success(new SalesInvoice(
-                SalesInvoiceId.NewId(),
-                tenantId,
-                firmId,
-                branchId,
-                financialYear.Id,
-                kind,
-                number.Trim(),
-                date,
-                customer.Id,
-                warehouse.Id,
-                mode,
-                currency,
-                returnsInvoiceId,
-                salesOrderId));
+        if (canPost.IsFailure)
+        {
+            return Result.Failure<SalesInvoice>(canPost.Error);
+        }
+
+        // A sale and a return are each kept in tables of their own, so each is made as
+        // its own kind.
+        SalesInvoice invoice = kind == SalesDocumentKind.Return
+            ? new SalesReturn(
+                SalesInvoiceId.NewId(), tenantId, firmId, branchId, financialYear.Id, number.Trim(), date,
+                customer.Id, warehouse.Id, mode, currency, returnsInvoiceId, salesOrderId)
+            : new Sale(
+                SalesInvoiceId.NewId(), tenantId, firmId, branchId, financialYear.Id, number.Trim(), date,
+                customer.Id, warehouse.Id, mode, currency, returnsInvoiceId, salesOrderId);
+
+        return Result.Success(invoice);
     }
 
     /// <summary>Replaces what a draft says, keeping its number.</summary>
@@ -695,19 +694,14 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
             return Result.Failure<SalesInvoiceLine>(paired.Error);
         }
 
-        SalesInvoiceLine line = new(
-            SalesInvoiceLineId.NewId(),
-            TenantId,
-            Id,
-            product.Id,
-            batch?.Id,
-            unit.Id,
-            quantity,
-            stockQuantity,
-            rate,
-            discount,
-            assessment,
-            _lines.Count + 1);
+        // Each kind's lines are kept with it, in its own details table.
+        SalesInvoiceLine line = IsReturn
+            ? new SalesReturnLine(
+                SalesInvoiceLineId.NewId(), TenantId, Id, product.Id, batch?.Id, unit.Id,
+                quantity, stockQuantity, rate, discount, assessment, _lines.Count + 1)
+            : new SaleLine(
+                SalesInvoiceLineId.NewId(), TenantId, Id, product.Id, batch?.Id, unit.Id,
+                quantity, stockQuantity, rate, discount, assessment, _lines.Count + 1);
 
         foreach (SerialNumber serial in serials ?? [])
         {
@@ -776,13 +770,11 @@ public sealed class SalesInvoice : AggregateRoot<SalesInvoiceId>, IFirmScoped, I
                 + "adding it twice."));
         }
 
-        SalesInvoiceCharge added = new(
-            SalesInvoiceChargeId.NewId(),
-            TenantId,
-            Id,
-            mapping.LedgerId,
-            Money.Of(amount, Currency),
-            mapping.IsAddition);
+        SalesInvoiceCharge added = IsReturn
+            ? new SalesReturnCharge(
+                SalesInvoiceChargeId.NewId(), TenantId, Id, mapping.LedgerId, Money.Of(amount, Currency), mapping.IsAddition)
+            : new SaleCharge(
+                SalesInvoiceChargeId.NewId(), TenantId, Id, mapping.LedgerId, Money.Of(amount, Currency), mapping.IsAddition);
 
         _charges.Add(added);
 

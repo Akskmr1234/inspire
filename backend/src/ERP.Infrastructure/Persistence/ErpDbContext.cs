@@ -543,6 +543,13 @@ public class ErpDbContext : DbContext
     {
         foreach (IMutableEntityType entityType in modelBuilder.Model.GetEntityTypes())
         {
+            // A filter belongs to the root of a hierarchy and covers its derived types: a
+            // sales return is filtered as the sales invoice it derives from.
+            if (entityType.BaseType is not null)
+            {
+                continue;
+            }
+
             Type clrType = entityType.ClrType;
 
             bool isTenantScoped = typeof(ITenantScoped).IsAssignableFrom(clrType);
@@ -608,7 +615,13 @@ public class ErpDbContext : DbContext
     {
         foreach (IMutableEntityType entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (entityType.GetTableName() is { } tableName)
+            // What the kinds of a split document share has no table of its own: each kind
+            // is kept in its own.
+            if (entityType.ClrType.IsAbstract && IsSplitAcrossTables(entityType))
+            {
+                entityType.SetTableName(null);
+            }
+            else if (entityType.GetTableName() is { } tableName)
             {
                 entityType.SetTableName(ToSnakeCase(tableName));
             }
@@ -618,21 +631,41 @@ public class ErpDbContext : DbContext
                 property.SetColumnName(ToSnakeCase(property.GetColumnName()));
             }
 
+            // A document kept in two sets of tables - a sale and its return - has one key
+            // and one set of indexes in the model but a copy of each on every table, and
+            // PostgreSQL wants every index named apart. Such keys and indexes take the name
+            // of the table they are on, as EF Core gives it; everything else is named here.
+            bool splitAcrossTables = IsSplitAcrossTables(entityType);
+
             foreach (IMutableKey key in entityType.GetKeys())
             {
-                key.SetName(ToSnakeCase(key.GetName()!));
+                key.SetName(splitAcrossTables ? null : ToSnakeCase(key.GetName()!));
             }
 
             foreach (IMutableForeignKey foreignKey in entityType.GetForeignKeys())
             {
-                foreignKey.SetConstraintName(ToSnakeCase(foreignKey.GetConstraintName()!));
+                // A link declared on what the kinds share is held on each kind's table,
+                // and takes that table's name for it.
+                foreignKey.SetConstraintName(
+                    foreignKey.GetConstraintName() is { } constraintName ? ToSnakeCase(constraintName) : null);
             }
 
             foreach (IMutableIndex index in entityType.GetIndexes())
             {
-                index.SetDatabaseName(ToSnakeCase(index.GetDatabaseName()!));
+                index.SetDatabaseName(splitAcrossTables ? null : ToSnakeCase(index.GetDatabaseName()!));
             }
         }
+    }
+
+    /// <summary>Whether an entity type's hierarchy keeps each of its types in a table of its own.</summary>
+    /// <param name="entityType">The entity type.</param>
+    /// <returns>True for a table-per-concrete-type hierarchy with more than one type.</returns>
+    private static bool IsSplitAcrossTables(IMutableEntityType entityType)
+    {
+        IMutableEntityType root = entityType.GetRootType();
+
+        return root.GetMappingStrategy() == RelationalAnnotationNames.TpcMappingStrategy
+            && root.GetDerivedTypes().Any();
     }
 
     /// <summary>Converts a PascalCase identifier to snake_case.</summary>

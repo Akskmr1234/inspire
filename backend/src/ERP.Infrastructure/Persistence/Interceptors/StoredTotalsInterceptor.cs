@@ -55,8 +55,9 @@ public sealed class StoredTotalsInterceptor : SaveChangesInterceptor
 
         foreach (EntityEntry entry in context.ChangeTracker.Entries())
         {
+            // A sales return counts as the sales invoice it derives from.
             if (entry.State is EntityState.Deleted or EntityState.Detached
-                || !StoredTotals.MasterTypes.Contains(entry.Metadata.ClrType))
+                || !StoredTotals.MasterTypes.Contains(entry.Metadata.GetRootType().ClrType))
             {
                 continue;
             }

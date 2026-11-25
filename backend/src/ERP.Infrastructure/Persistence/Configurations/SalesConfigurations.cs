@@ -7,7 +7,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ERP.Infrastructure.Persistence.Configurations;
 
-/// <summary>Maps <see cref="SalesInvoice"/> to the <c>sales_invoices</c> table.</summary>
+/// <summary>
+/// Maps <see cref="SalesInvoice"/>: what a sale and a return share, kept in the tables of
+/// each - <c>sales_invoices</c> and <c>sales_returns</c>.
+/// </summary>
 public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesInvoice>
 {
     /// <inheritdoc />
@@ -15,8 +18,13 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("sales_invoices");
         builder.HasKey(invoice => invoice.Id);
+
+        // Sales and sales returns are one model kept in two sets of tables - the Sales
+        // and Sales Return master, details and additional - as the business's own ledgers
+        // keep them. A query for sales invoices reads both; each document is written to
+        // its own.
+        builder.UseTpcMappingStrategy();
         builder.Property(invoice => invoice.Id).ValueGeneratedNever();
 
         builder.Property(invoice => invoice.Number).HasMaxLength(50).IsRequired();
@@ -26,13 +34,6 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
         builder.Property(invoice => invoice.Kind).HasConversion<int>().IsRequired();
 
         builder.Ignore(invoice => invoice.IsReturn);
-
-        // A return points at the invoice it is against, and nothing may delete that
-        // invoice out from under it - the link is how the credit finds the debt.
-        builder.HasOne<SalesInvoice>()
-            .WithMany()
-            .HasForeignKey(invoice => invoice.ReturnsInvoiceId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(invoice => invoice.ReturnsInvoiceId)
             .HasDatabaseName("ix_sales_invoices_returns_invoice")
@@ -213,7 +214,7 @@ public sealed class SalesInvoiceConfiguration : IEntityTypeConfiguration<SalesIn
     }
 }
 
-/// <summary>Maps <see cref="SalesInvoiceLine"/> to the <c>sales_invoice_lines</c> table.</summary>
+/// <summary>Maps <see cref="SalesInvoiceLine"/>: what the lines of a sale and of a return share.</summary>
 public sealed class SalesInvoiceLineConfiguration : IEntityTypeConfiguration<SalesInvoiceLine>
 {
     /// <inheritdoc />
@@ -221,8 +222,8 @@ public sealed class SalesInvoiceLineConfiguration : IEntityTypeConfiguration<Sal
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("sales_invoice_lines");
         builder.HasKey(line => line.Id);
+        builder.UseTpcMappingStrategy();
         builder.Property(line => line.Id).ValueGeneratedNever();
 
         builder.Property(line => line.Quantity)
@@ -237,21 +238,19 @@ public sealed class SalesInvoiceLineConfiguration : IEntityTypeConfiguration<Sal
 
         builder.Property(line => line.LineNumber).IsRequired();
 
-        builder.ComplexProperty(line => line.TaxableAmount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("taxable_amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
-
-        builder.ComplexProperty(line => line.TaxAmount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("tax_amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("tax_currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
+        // The amounts as their figures and currencies, rather than as complex properties:
+        // a return's lines are kept in a table of their own, and EF Core leaves a complex
+        // property's columns out of a derived type's table.
+        builder.Ignore(line => line.TaxableAmount);
+        builder.Ignore(line => line.TaxAmount);
+        builder.Property(line => line.TaxableValue)
+            .HasColumnName("taxable_amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(line => line.Currency)
+            .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+        builder.Property(line => line.TaxValue)
+            .HasColumnName("tax_amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(line => line.TaxCurrency)
+            .HasColumnName("tax_currency").HasMaxLength(3).IsFixedLength().IsRequired();
 
         builder.Ignore(line => line.LineTotal);
         StoredTotals.ConfigureLine(builder);
@@ -305,7 +304,8 @@ public sealed class SalesInvoiceLineConfiguration : IEntityTypeConfiguration<Sal
 }
 
 /// <summary>
-/// Maps <see cref="SalesInvoiceLineSerial"/> to the <c>sales_invoice_line_serials</c> table.
+/// Maps <see cref="SalesInvoiceLineSerial"/>: what the serial numbers on a sale's and a
+/// return's lines share.
 /// </summary>
 public sealed class SalesInvoiceLineSerialConfiguration
     : IEntityTypeConfiguration<SalesInvoiceLineSerial>
@@ -315,7 +315,7 @@ public sealed class SalesInvoiceLineSerialConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("sales_invoice_line_serials");
+        builder.UseTpcMappingStrategy();
         builder.HasKey(link => new { link.SalesInvoiceLineId, link.SerialNumberId });
 
         builder.HasOne<SerialNumber>()
@@ -333,7 +333,7 @@ public sealed class SalesInvoiceLineSerialConfiguration
     }
 }
 
-/// <summary>Maps <see cref="SalesInvoiceCharge"/> to the <c>sales_invoice_charges</c> table.</summary>
+/// <summary>Maps <see cref="SalesInvoiceCharge"/>: what the charges of a sale and of a return share.</summary>
 public sealed class SalesInvoiceChargeConfiguration : IEntityTypeConfiguration<SalesInvoiceCharge>
 {
     /// <inheritdoc />
@@ -341,17 +341,16 @@ public sealed class SalesInvoiceChargeConfiguration : IEntityTypeConfiguration<S
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("sales_invoice_charges");
         builder.HasKey(charge => charge.Id);
+        builder.UseTpcMappingStrategy();
         builder.Property(charge => charge.Id).ValueGeneratedNever();
 
-        builder.ComplexProperty(charge => charge.Amount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
+        // As its figure and currency, for the same reason as a line's amounts.
+        builder.Ignore(charge => charge.Amount);
+        builder.Property(charge => charge.AmountValue)
+            .HasColumnName("amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(charge => charge.Currency)
+            .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
 
         builder.Ignore(charge => charge.SignedAmount);
 
@@ -375,7 +374,8 @@ public sealed class SalesInvoiceChargeConfiguration : IEntityTypeConfiguration<S
 }
 
 /// <summary>
-/// Maps <see cref="SalesInvoiceLineTax"/> to the <c>sales_invoice_line_taxes</c> table.
+/// Maps <see cref="SalesInvoiceLineTax"/>: what the tax on a sale's and a return's lines
+/// shares.
 /// </summary>
 public sealed class SalesInvoiceLineTaxConfiguration
     : IEntityTypeConfiguration<SalesInvoiceLineTax>
@@ -385,7 +385,7 @@ public sealed class SalesInvoiceLineTaxConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("sales_invoice_line_taxes");
+        builder.UseTpcMappingStrategy();
 
         // One row per head per line. The pair is the key, so a line cannot carry two
         // figures for the same component - which a return would then double-count.
@@ -398,5 +398,182 @@ public sealed class SalesInvoiceLineTaxConfiguration
         // What a tax return reads: every line of every invoice carrying this head.
         builder.HasIndex(tax => new { tax.TenantId, tax.Type })
             .HasDatabaseName("ix_sales_invoice_line_taxes_component");
+    }
+}
+
+// Each kind's tables, and the links between them. The links are declared between the
+// kinds themselves - a sale's line to the sale, a return's line to the return - since a
+// link to what both share could point into either set of tables, and is held by no
+// database key. Declared this way, the database holds each one, and a save writes a
+// master before its lines and a line before its tax.
+
+/// <summary>Maps <see cref="Sale"/>: the Sales master.</summary>
+public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<Sale> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_invoices", table => table.HasCheckConstraint("ck_sales_invoices_kind", "kind = 1"));
+    }
+}
+
+/// <summary>Maps <see cref="SaleLine"/>: the Sales details.</summary>
+public sealed class SaleLineConfiguration : IEntityTypeConfiguration<SaleLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SaleLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_invoice_lines");
+
+        builder.HasOne<Sale>()
+            .WithMany()
+            .HasForeignKey(line => line.SalesInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SaleLineSerial"/>: the serial numbers on a sale's lines.</summary>
+public sealed class SaleLineSerialConfiguration : IEntityTypeConfiguration<SaleLineSerial>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SaleLineSerial> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_invoice_line_serials");
+
+        builder.HasOne<SaleLine>()
+            .WithMany()
+            .HasForeignKey(link => link.SalesInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SaleLineTax"/>: the tax on a sale's lines.</summary>
+public sealed class SaleLineTaxConfiguration : IEntityTypeConfiguration<SaleLineTax>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SaleLineTax> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_invoice_line_taxes");
+
+        builder.HasOne<SaleLine>()
+            .WithMany()
+            .HasForeignKey(tax => tax.SalesInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SaleCharge"/>: the Sales additional table.</summary>
+public sealed class SaleChargeConfiguration : IEntityTypeConfiguration<SaleCharge>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SaleCharge> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_invoice_charges");
+
+        builder.HasOne<Sale>()
+            .WithMany()
+            .HasForeignKey(charge => charge.SalesInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SalesReturn"/>: the Sales Return master.</summary>
+public sealed class SalesReturnConfiguration : IEntityTypeConfiguration<SalesReturn>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SalesReturn> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_returns", table => table.HasCheckConstraint("ck_sales_returns_kind", "kind = 2"));
+
+        // A return points at the sale it is against, and nothing may delete that sale out
+        // from under it - the link is how the credit finds the debt.
+        builder.HasOne<Sale>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReturnsInvoiceId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+/// <summary>Maps <see cref="SalesReturnLine"/>: the Sales Return details.</summary>
+public sealed class SalesReturnLineConfiguration : IEntityTypeConfiguration<SalesReturnLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SalesReturnLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_return_lines", table => table.Property(line => line.SalesInvoiceId).HasColumnName("sales_return_id"));
+
+        builder.HasOne<SalesReturn>()
+            .WithMany()
+            .HasForeignKey(line => line.SalesInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SalesReturnLineSerial"/>: the serial numbers on a return's lines.</summary>
+public sealed class SalesReturnLineSerialConfiguration : IEntityTypeConfiguration<SalesReturnLineSerial>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SalesReturnLineSerial> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable(
+            "sales_return_line_serials",
+            table => table.Property(link => link.SalesInvoiceLineId).HasColumnName("sales_return_line_id"));
+
+        builder.HasOne<SalesReturnLine>()
+            .WithMany()
+            .HasForeignKey(link => link.SalesInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SalesReturnLineTax"/>: the tax on a return's lines.</summary>
+public sealed class SalesReturnLineTaxConfiguration : IEntityTypeConfiguration<SalesReturnLineTax>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SalesReturnLineTax> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable(
+            "sales_return_line_taxes",
+            table => table.Property(tax => tax.SalesInvoiceLineId).HasColumnName("sales_return_line_id"));
+
+        builder.HasOne<SalesReturnLine>()
+            .WithMany()
+            .HasForeignKey(tax => tax.SalesInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="SalesReturnCharge"/>: the Sales Return additional table.</summary>
+public sealed class SalesReturnChargeConfiguration : IEntityTypeConfiguration<SalesReturnCharge>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<SalesReturnCharge> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("sales_return_charges", table => table.Property(charge => charge.SalesInvoiceId).HasColumnName("sales_return_id"));
+
+        builder.HasOne<SalesReturn>()
+            .WithMany()
+            .HasForeignKey(charge => charge.SalesInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

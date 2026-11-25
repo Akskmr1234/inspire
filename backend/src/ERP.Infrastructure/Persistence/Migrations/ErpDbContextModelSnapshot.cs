@@ -5888,69 +5888,52 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("warehouse_id");
 
-                    b.HasKey("Id")
-                        .HasName("pk_sales_invoices");
+                    b.HasKey("Id");
 
-                    b.HasIndex("BillId")
-                        .HasDatabaseName("ix_sales_invoices_bill_id");
+                    b.HasIndex("BillId");
 
-                    b.HasIndex("BillingManLedgerId")
-                        .HasDatabaseName("ix_sales_invoices_billing_man_ledger_id");
+                    b.HasIndex("BillingManLedgerId");
 
-                    b.HasIndex("CustomerLedgerId")
-                        .HasDatabaseName("ix_sales_invoices_customer_ledger_id");
+                    b.HasIndex("CustomerLedgerId");
 
                     b.HasIndex("DeliveryNoteId")
-                        .HasDatabaseName("ix_sales_invoices_delivery_note")
                         .HasFilter("delivery_note_id IS NOT NULL");
 
-                    b.HasIndex("FinancialYearId")
-                        .HasDatabaseName("ix_sales_invoices_financial_year_id");
+                    b.HasIndex("FinancialYearId");
 
-                    b.HasIndex("IsDeleted")
-                        .HasDatabaseName("ix_sales_invoices_is_deleted");
+                    b.HasIndex("IsDeleted");
 
-                    b.HasIndex("JournalVoucherId")
-                        .HasDatabaseName("ix_sales_invoices_journal_voucher_id");
+                    b.HasIndex("JournalVoucherId");
 
-                    b.HasIndex("ReceiptVoucherId")
-                        .HasDatabaseName("ix_sales_invoices_receipt_voucher_id");
+                    b.HasIndex("ReceiptVoucherId");
 
-                    b.HasIndex("ReceivedIntoLedgerId")
-                        .HasDatabaseName("ix_sales_invoices_received_into_ledger_id");
+                    b.HasIndex("ReceivedIntoLedgerId");
 
                     b.HasIndex("ReturnsInvoiceId")
-                        .HasDatabaseName("ix_sales_invoices_returns_invoice")
                         .HasFilter("returns_invoice_id IS NOT NULL");
 
                     b.HasIndex("SalesOrderId")
-                        .HasDatabaseName("ix_sales_invoices_order")
                         .HasFilter("sales_order_id IS NOT NULL");
 
-                    b.HasIndex("SalesmanLedgerId")
-                        .HasDatabaseName("ix_sales_invoices_salesman_ledger_id");
+                    b.HasIndex("SalesmanLedgerId");
 
-                    b.HasIndex("StockDocumentId")
-                        .HasDatabaseName("ix_sales_invoices_stock_document_id");
+                    b.HasIndex("StockDocumentId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_sales_invoices_tenant");
+                    b.HasIndex("TenantId");
 
-                    b.HasIndex("WarehouseId")
-                        .HasDatabaseName("ix_sales_invoices_warehouse_id");
+                    b.HasIndex("WarehouseId");
 
-                    b.HasIndex("FirmId", "Date")
-                        .HasDatabaseName("ix_sales_invoices_date");
+                    b.HasIndex("FirmId", "Date");
 
                     b.HasIndex("FirmId", "Number")
                         .IsUnique()
-                        .HasDatabaseName("ix_sales_invoices_number")
                         .HasFilter("is_deleted = false");
 
-                    b.HasIndex("FirmId", "CustomerLedgerId", "Date")
-                        .HasDatabaseName("ix_sales_invoices_customer");
+                    b.HasIndex("FirmId", "CustomerLedgerId", "Date");
 
-                    b.ToTable("sales_invoices", (string)null);
+                    b.ToTable((string)null);
+
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceCharge", b =>
@@ -5958,6 +5941,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<decimal>("AmountValue")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
 
                     b.Property<bool>("IsAddition")
                         .HasColumnType("boolean")
@@ -5975,37 +5970,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "Amount", "ERP.Domain.Sales.SalesInvoiceCharge.Amount#Money", b1 =>
-                        {
-                            b1.IsRequired();
+                    b.HasKey("Id");
 
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(19, 4)
-                                .HasColumnType("numeric(19,4)")
-                                .HasColumnName("amount");
+                    b.HasIndex("LedgerId");
 
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character(3)")
-                                .HasColumnName("currency")
-                                .IsFixedLength();
-                        });
-
-                    b.HasKey("Id")
-                        .HasName("pk_sales_invoice_charges");
-
-                    b.HasIndex("LedgerId")
-                        .HasDatabaseName("ix_sales_invoice_charges_ledger_id");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_sales_invoice_charges_tenant");
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("SalesInvoiceId", "LedgerId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_sales_invoice_charges_ledger");
+                        .IsUnique();
 
-                    b.ToTable("sales_invoice_charges", (string)null);
+                    b.ToTable((string)null);
+
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLine", b =>
@@ -6017,6 +5993,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("BatchId")
                         .HasColumnType("uuid")
                         .HasColumnName("batch_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
 
                     b.Property<decimal>("Discount")
                         .HasPrecision(19, 4)
@@ -6057,6 +6040,23 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnName("line_total")
                         .HasComputedColumnSql("taxable_amount + tax_amount", true);
 
+                    b.Property<string>("TaxCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("tax_currency")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("TaxValue")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("tax_amount");
+
+                    b.Property<decimal>("TaxableValue")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("numeric(19,4)")
+                        .HasColumnName("taxable_amount");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -6065,59 +6065,21 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("unit_id");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "TaxAmount", "ERP.Domain.Sales.SalesInvoiceLine.TaxAmount#Money", b1 =>
-                        {
-                            b1.IsRequired();
+                    b.HasKey("Id");
 
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(19, 4)
-                                .HasColumnType("numeric(19,4)")
-                                .HasColumnName("tax_amount");
+                    b.HasIndex("BatchId");
 
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character(3)")
-                                .HasColumnName("tax_currency")
-                                .IsFixedLength();
-                        });
+                    b.HasIndex("ProductId");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "TaxableAmount", "ERP.Domain.Sales.SalesInvoiceLine.TaxableAmount#Money", b1 =>
-                        {
-                            b1.IsRequired();
+                    b.HasIndex("TenantId");
 
-                            b1.Property<decimal>("Amount")
-                                .HasPrecision(19, 4)
-                                .HasColumnType("numeric(19,4)")
-                                .HasColumnName("taxable_amount");
+                    b.HasIndex("UnitId");
 
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character(3)")
-                                .HasColumnName("currency")
-                                .IsFixedLength();
-                        });
+                    b.HasIndex("SalesInvoiceId", "LineNumber");
 
-                    b.HasKey("Id")
-                        .HasName("pk_sales_invoice_lines");
+                    b.ToTable((string)null);
 
-                    b.HasIndex("BatchId")
-                        .HasDatabaseName("ix_sales_invoice_lines_batch_id");
-
-                    b.HasIndex("ProductId")
-                        .HasDatabaseName("ix_sales_invoice_lines_product");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_sales_invoice_lines_tenant");
-
-                    b.HasIndex("UnitId")
-                        .HasDatabaseName("ix_sales_invoice_lines_unit_id");
-
-                    b.HasIndex("SalesInvoiceId", "LineNumber")
-                        .HasDatabaseName("ix_sales_invoice_lines_invoice");
-
-                    b.ToTable("sales_invoice_lines", (string)null);
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLineSerial", b =>
@@ -6134,16 +6096,15 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.HasKey("SalesInvoiceLineId", "SerialNumberId")
-                        .HasName("pk_sales_invoice_line_serials");
+                    b.HasKey("SalesInvoiceLineId", "SerialNumberId");
 
-                    b.HasIndex("SerialNumberId")
-                        .HasDatabaseName("ix_sales_invoice_line_serials_serial");
+                    b.HasIndex("SerialNumberId");
 
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_sales_invoice_line_serials_tenant");
+                    b.HasIndex("TenantId");
 
-                    b.ToTable("sales_invoice_line_serials", (string)null);
+                    b.ToTable((string)null);
+
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLineTax", b =>
@@ -6170,13 +6131,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.HasKey("SalesInvoiceLineId", "Type")
-                        .HasName("pk_sales_invoice_line_taxes");
+                    b.HasKey("SalesInvoiceLineId", "Type");
 
-                    b.HasIndex("TenantId", "Type")
-                        .HasDatabaseName("ix_sales_invoice_line_taxes_component");
+                    b.HasIndex("TenantId", "Type");
 
-                    b.ToTable("sales_invoice_line_taxes", (string)null);
+                    b.ToTable((string)null);
+
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesOrder", b =>
@@ -7567,6 +7528,98 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("tenants", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Sales.Sale", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoice");
+
+                    b.ToTable("sales_invoices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_invoices_kind", "kind = 1");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturn", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoice");
+
+                    b.ToTable("sales_returns", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sales_returns_kind", "kind = 2");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleCharge", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceCharge");
+
+                    b.ToTable("sales_invoice_charges", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnCharge", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceCharge");
+
+                    b.ToTable("sales_return_charges", null, t =>
+                        {
+                            t.Property("SalesInvoiceId")
+                                .HasColumnName("sales_return_id");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLine", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLine");
+
+                    b.ToTable("sales_invoice_lines", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLine", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLine");
+
+                    b.ToTable("sales_return_lines", null, t =>
+                        {
+                            t.Property("SalesInvoiceId")
+                                .HasColumnName("sales_return_id");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLineSerial", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLineSerial");
+
+                    b.ToTable("sales_invoice_line_serials", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLineSerial", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLineSerial");
+
+                    b.ToTable("sales_return_line_serials", null, t =>
+                        {
+                            t.Property("SalesInvoiceLineId")
+                                .HasColumnName("sales_return_line_id");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLineTax", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLineTax");
+
+                    b.ToTable("sales_invoice_line_taxes", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLineTax", b =>
+                {
+                    b.HasBaseType("ERP.Domain.Sales.SalesInvoiceLineTax");
+
+                    b.ToTable("sales_return_line_taxes", null, t =>
+                        {
+                            t.Property("SalesInvoiceLineId")
+                                .HasColumnName("sales_return_line_id");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Accounting.AccountGroup", b =>
                 {
                     b.HasOne("ERP.Domain.Accounting.AccountGroup", null)
@@ -8466,83 +8519,65 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasOne("ERP.Domain.Accounting.Bill", null)
                         .WithMany()
                         .HasForeignKey("BillId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_bills_bill_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
                         .HasForeignKey("BillingManLedgerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_ledgers_billing_man_ledger_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
                         .HasForeignKey("CustomerLedgerId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoices_ledgers_customer_ledger_id");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Inventory.StockDocument", null)
                         .WithMany()
                         .HasForeignKey("DeliveryNoteId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_stock_documents_delivery_note_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Tenancy.FinancialYear", null)
                         .WithMany()
                         .HasForeignKey("FinancialYearId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoices_financial_years_financial_year_id");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Accounting.Voucher", null)
                         .WithMany()
                         .HasForeignKey("JournalVoucherId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_vouchers_journal_voucher_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Accounting.Voucher", null)
                         .WithMany()
                         .HasForeignKey("ReceiptVoucherId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_vouchers_receipt_voucher_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
                         .HasForeignKey("ReceivedIntoLedgerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_ledgers_received_into_ledger_id");
-
-                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
-                        .WithMany()
-                        .HasForeignKey("ReturnsInvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_sales_invoices_returns_invoice_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Sales.SalesOrder", null)
                         .WithMany()
                         .HasForeignKey("SalesOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_sales_orders_sales_order_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Accounting.Ledger", null)
                         .WithMany()
                         .HasForeignKey("SalesmanLedgerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_ledgers_salesman_ledger_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Inventory.StockDocument", null)
                         .WithMany()
                         .HasForeignKey("StockDocumentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoices_stock_documents_stock_document_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Inventory.Warehouse", null)
                         .WithMany()
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoices_warehouses_warehouse_id");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceCharge", b =>
@@ -8551,15 +8586,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("LedgerId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_charges_ledgers_ledger_id");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
                         .WithMany("Charges")
                         .HasForeignKey("SalesInvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_charges_sales_invoices_sales_invoice_id");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLine", b =>
@@ -8567,29 +8600,25 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasOne("ERP.Domain.Inventory.Batch", null)
                         .WithMany()
                         .HasForeignKey("BatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sales_invoice_lines_batches_batch_id");
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Inventory.Product", null)
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_lines_products_product_id");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
                         .WithMany("Lines")
                         .HasForeignKey("SalesInvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_lines_sales_invoices_sales_invoice_id");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Inventory.UnitOfMeasure", null)
                         .WithMany()
                         .HasForeignKey("UnitId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_lines_units_of_measure_unit_id");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLineSerial", b =>
@@ -8598,15 +8627,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .WithMany("Serials")
                         .HasForeignKey("SalesInvoiceLineId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_line_serials_sales_invoice_lines_sales_invoic~");
+                        .IsRequired();
 
                     b.HasOne("ERP.Domain.Inventory.SerialNumber", null)
                         .WithMany()
                         .HasForeignKey("SerialNumberId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_line_serials_serial_numbers_serial_number_id");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesInvoiceLineTax", b =>
@@ -8615,8 +8642,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .WithMany("Components")
                         .HasForeignKey("SalesInvoiceLineId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_sales_invoice_line_taxes_sales_invoice_lines_sales_invoice_~");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ERP.Domain.Sales.SalesOrder", b =>
@@ -8709,7 +8735,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_job_cards_financial_years_financial_year_id");
 
-                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
+                    b.HasOne("ERP.Domain.Sales.Sale", null)
                         .WithMany()
                         .HasForeignKey("SalesInvoiceId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -8777,11 +8803,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ERP.Domain.Service.Rma", b =>
                 {
-                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
+                    b.HasOne("ERP.Domain.Sales.SalesReturn", null)
                         .WithMany()
                         .HasForeignKey("CreditNoteId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_rmas_sales_invoices_credit_note_id");
+                        .HasConstraintName("fk_rmas_sales_returns_credit_note_id");
 
                     b.HasOne("ERP.Domain.Purchase.PurchaseInvoice", null)
                         .WithMany()
@@ -8815,7 +8841,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_rmas_stock_documents_replacement_document_id");
 
-                    b.HasOne("ERP.Domain.Sales.SalesInvoice", null)
+                    b.HasOne("ERP.Domain.Sales.Sale", null)
                         .WithMany()
                         .HasForeignKey("SalesInvoiceId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -8880,6 +8906,95 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_branches_firms_firm_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturn", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.Sale", null)
+                        .WithMany()
+                        .HasForeignKey("ReturnsInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sales_returns_sales_invoices_returns_invoice_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleCharge", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.Sale", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoice_charges_sales_invoices_sales_invoice_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnCharge", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SalesReturn", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_return_charges_sales_returns_sales_invoice_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.Sale", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoice_lines_sales_invoices_sales_invoice_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SalesReturn", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_return_lines_sales_returns_sales_invoice_id");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLineSerial", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SaleLine", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoice_line_serials_sales_invoice_lines_sales_invoic~");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLineSerial", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SalesReturnLine", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_return_line_serials_sales_return_lines_sales_invoice_~");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SaleLineTax", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SaleLine", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_invoice_line_taxes_sales_invoice_lines_sales_invoice_~");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Sales.SalesReturnLineTax", b =>
+                {
+                    b.HasOne("ERP.Domain.Sales.SalesReturnLine", null)
+                        .WithMany()
+                        .HasForeignKey("SalesInvoiceLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sales_return_line_taxes_sales_return_lines_sales_invoice_li~");
                 });
 
             modelBuilder.Entity("ERP.Domain.Accounting.Bill", b =>
