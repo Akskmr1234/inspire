@@ -59,6 +59,7 @@ import { listSuppliers, type SupplierSummary } from '@/lib/suppliers';
 import { useSession } from '@/stores/session';
 import { Alert, Labelled, trim } from '@/pages/StockOperationsPage';
 import { shortcutProps } from '@/lib/shortcuts';
+import { usePartyOption } from '@/lib/partyLabel';
 
 const STATUS_KEYS: Record<number, string> = {
   [RmaStatus.requested]: 'requested',
@@ -461,18 +462,16 @@ function RmaForm({
     enabled: partyId !== '',
   });
 
+  const partyOption = usePartyOption();
   const parties = fromCustomer
     ? (customers.data ?? []).map((customer) => ({
         value: customer.customerId,
-        label: customer.name,
-        detail: [customer.code, customer.contact.mobileNumber]
-          .filter(Boolean)
-          .join(' · '),
+        ...partyOption(customer),
+        ...(customer.contact.mobileNumber ? { detail: customer.contact.mobileNumber } : {}),
       }))
     : (suppliers.data ?? []).map((supplier) => ({
         value: supplier.supplierId,
-        label: supplier.name,
-        detail: supplier.code,
+        ...partyOption(supplier),
       }));
 
   const stocked = useMemo(

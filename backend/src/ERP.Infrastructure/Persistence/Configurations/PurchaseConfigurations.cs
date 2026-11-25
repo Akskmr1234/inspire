@@ -7,7 +7,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ERP.Infrastructure.Persistence.Configurations;
 
-/// <summary>Maps <see cref="PurchaseInvoice"/> to the <c>purchase_invoices</c> table.</summary>
+/// <summary>
+/// Maps <see cref="PurchaseInvoice"/>: what a purchase and a return share, kept in the
+/// tables of each - <c>purchase_invoices</c> and <c>purchase_returns</c>.
+/// </summary>
 public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<PurchaseInvoice>
 {
     /// <inheritdoc />
@@ -15,8 +18,13 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("purchase_invoices");
         builder.HasKey(invoice => invoice.Id);
+
+        // Purchases and purchase returns are one model kept in two sets of tables - the
+        // Purchase and Purchase Return master, details and additional - as the business's
+        // own ledgers keep them. A query for purchase invoices reads both; each document
+        // is written to its own.
+        builder.UseTpcMappingStrategy();
         builder.Property(invoice => invoice.Id).ValueGeneratedNever();
 
         builder.Property(invoice => invoice.Number).HasMaxLength(50).IsRequired();
@@ -26,13 +34,6 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
         builder.Property(invoice => invoice.Kind).HasConversion<int>().IsRequired();
 
         builder.Ignore(invoice => invoice.IsReturn);
-
-        // A return points at the purchase it is against, and nothing may delete that
-        // purchase out from under it - the link is how the debit finds the debt.
-        builder.HasOne<PurchaseInvoice>()
-            .WithMany()
-            .HasForeignKey(invoice => invoice.ReturnsInvoiceId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(invoice => invoice.ReturnsInvoiceId)
             .HasDatabaseName("ix_purchase_invoices_returns_invoice")
@@ -56,6 +57,10 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
         builder.Ignore(invoice => invoice.GrossTotal);
         builder.Ignore(invoice => invoice.RoundingDifference);
         builder.Ignore(invoice => invoice.Total);
+
+        // Kept on the master as well, for reports and anything reading the table: written
+        // from the same figures on every save, never typed in.
+        StoredTotals.ConfigureMaster(builder);
 
         builder.HasOne<FinancialYear>()
             .WithMany()
@@ -159,9 +164,7 @@ public sealed class PurchaseInvoiceConfiguration : IEntityTypeConfiguration<Purc
     }
 }
 
-/// <summary>
-/// Maps <see cref="PurchaseInvoiceLine"/> to the <c>purchase_invoice_lines</c> table.
-/// </summary>
+/// <summary>Maps <see cref="PurchaseInvoiceLine"/>: what the lines of a purchase and of a return share.</summary>
 public sealed class PurchaseInvoiceLineConfiguration
     : IEntityTypeConfiguration<PurchaseInvoiceLine>
 {
@@ -170,8 +173,8 @@ public sealed class PurchaseInvoiceLineConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("purchase_invoice_lines");
         builder.HasKey(line => line.Id);
+        builder.UseTpcMappingStrategy();
         builder.Property(line => line.Id).ValueGeneratedNever();
 
         builder.Property(line => line.Quantity)
@@ -193,23 +196,22 @@ public sealed class PurchaseInvoiceLineConfiguration
         // that fits here fits there when the receipt opens it.
         builder.Property(line => line.BatchNumber).HasMaxLength(50);
 
-        builder.ComplexProperty(line => line.TaxableAmount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("taxable_amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
-
-        builder.ComplexProperty(line => line.TaxAmount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("tax_amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("tax_currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
+        // The amounts as their figures and currencies, rather than as complex properties:
+        // a return's lines are kept in a table of their own, and EF Core leaves a complex
+        // property's columns out of a derived type's table.
+        builder.Ignore(line => line.TaxableAmount);
+        builder.Ignore(line => line.TaxAmount);
+        builder.Property(line => line.TaxableValue)
+            .HasColumnName("taxable_amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(line => line.Currency)
+            .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+        builder.Property(line => line.TaxValue)
+            .HasColumnName("tax_amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(line => line.TaxCurrency)
+            .HasColumnName("tax_currency").HasMaxLength(3).IsFixedLength().IsRequired();
 
         builder.Ignore(line => line.LineTotal);
+        StoredTotals.ConfigureLine(builder);
 
         builder.HasMany(line => line.Components)
             .WithOne()
@@ -256,8 +258,8 @@ public sealed class PurchaseInvoiceLineConfiguration
 }
 
 /// <summary>
-/// Maps <see cref="PurchaseInvoiceLineSerial"/> to the
-/// <c>purchase_invoice_line_serials</c> table.
+/// Maps <see cref="PurchaseInvoiceLineSerial"/>: what the serial numbers on a purchase's
+/// and a return's lines share.
 /// </summary>
 public sealed class PurchaseInvoiceLineSerialConfiguration
     : IEntityTypeConfiguration<PurchaseInvoiceLineSerial>
@@ -267,7 +269,7 @@ public sealed class PurchaseInvoiceLineSerialConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("purchase_invoice_line_serials");
+        builder.UseTpcMappingStrategy();
 
         // The number is the key alongside the line, not a reference to a register row:
         // the unit does not exist until the receipt posts. Two boxes with one number on
@@ -285,7 +287,8 @@ public sealed class PurchaseInvoiceLineSerialConfiguration
 }
 
 /// <summary>
-/// Maps <see cref="PurchaseInvoiceCharge"/> to the <c>purchase_invoice_charges</c> table.
+/// Maps <see cref="PurchaseInvoiceCharge"/>: what the charges of a purchase and of a
+/// return share.
 /// </summary>
 public sealed class PurchaseInvoiceChargeConfiguration
     : IEntityTypeConfiguration<PurchaseInvoiceCharge>
@@ -295,17 +298,16 @@ public sealed class PurchaseInvoiceChargeConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("purchase_invoice_charges");
         builder.HasKey(charge => charge.Id);
+        builder.UseTpcMappingStrategy();
         builder.Property(charge => charge.Id).ValueGeneratedNever();
 
-        builder.ComplexProperty(charge => charge.Amount, amount =>
-        {
-            amount.Property(money => money.Amount)
-                .HasColumnName("amount").HasPrecision(19, 4).IsRequired();
-            amount.Property(money => money.Currency)
-                .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
-        });
+        // As its figure and currency, for the same reason as a line's amounts.
+        builder.Ignore(charge => charge.Amount);
+        builder.Property(charge => charge.AmountValue)
+            .HasColumnName("amount").HasPrecision(19, 4).IsRequired();
+        builder.Property(charge => charge.Currency)
+            .HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
 
         builder.Ignore(charge => charge.SignedAmount);
 
@@ -329,8 +331,8 @@ public sealed class PurchaseInvoiceChargeConfiguration
 }
 
 /// <summary>
-/// Maps <see cref="PurchaseInvoiceLineTax"/> to the <c>purchase_invoice_line_taxes</c>
-/// table.
+/// Maps <see cref="PurchaseInvoiceLineTax"/>: what the tax on a purchase's and a return's
+/// lines shares.
 /// </summary>
 public sealed class PurchaseInvoiceLineTaxConfiguration
     : IEntityTypeConfiguration<PurchaseInvoiceLineTax>
@@ -340,7 +342,7 @@ public sealed class PurchaseInvoiceLineTaxConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("purchase_invoice_line_taxes");
+        builder.UseTpcMappingStrategy();
 
         // One row per head per line. The pair is the key, so a line cannot carry two
         // figures for the same component - which a return would then double-reclaim.
@@ -354,5 +356,178 @@ public sealed class PurchaseInvoiceLineTaxConfiguration
         // carrying this head.
         builder.HasIndex(tax => new { tax.TenantId, tax.Type })
             .HasDatabaseName("ix_purchase_invoice_line_taxes_component");
+    }
+}
+
+// Each kind's tables, and the links between them. The links are declared between the
+// kinds themselves - a purchase's line to the purchase, a return's line to the return -
+// since a link to what both share could point into either set of tables, and is held by
+// no database key. Declared this way, the database holds each one, and a save writes a
+// master before its lines and a line before its tax.
+
+/// <summary>Maps <see cref="PurchaseEntry"/>: the Purchase master.</summary>
+public sealed class PurchaseEntryConfiguration : IEntityTypeConfiguration<PurchaseEntry>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseEntry> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_invoices", table => table.HasCheckConstraint("ck_purchase_invoices_kind", "kind = 1"));
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseEntryLine"/>: the Purchase details.</summary>
+public sealed class PurchaseEntryLineConfiguration : IEntityTypeConfiguration<PurchaseEntryLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseEntryLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_invoice_lines");
+
+        builder.HasOne<PurchaseEntry>()
+            .WithMany()
+            .HasForeignKey(line => line.PurchaseInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseEntryLineSerial"/>: the serial numbers on a purchase's lines.</summary>
+public sealed class PurchaseEntryLineSerialConfiguration : IEntityTypeConfiguration<PurchaseEntryLineSerial>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseEntryLineSerial> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_invoice_line_serials");
+
+        builder.HasOne<PurchaseEntryLine>()
+            .WithMany()
+            .HasForeignKey(link => link.PurchaseInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseEntryLineTax"/>: the tax on a purchase's lines.</summary>
+public sealed class PurchaseEntryLineTaxConfiguration : IEntityTypeConfiguration<PurchaseEntryLineTax>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseEntryLineTax> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_invoice_line_taxes");
+
+        builder.HasOne<PurchaseEntryLine>()
+            .WithMany()
+            .HasForeignKey(tax => tax.PurchaseInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseEntryCharge"/>: the Purchase additional table.</summary>
+public sealed class PurchaseEntryChargeConfiguration : IEntityTypeConfiguration<PurchaseEntryCharge>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseEntryCharge> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_invoice_charges");
+
+        builder.HasOne<PurchaseEntry>()
+            .WithMany()
+            .HasForeignKey(charge => charge.PurchaseInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseReturn"/>: the Purchase Return master.</summary>
+public sealed class PurchaseReturnConfiguration : IEntityTypeConfiguration<PurchaseReturn>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseReturn> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_returns", table => table.HasCheckConstraint("ck_purchase_returns_kind", "kind = 2"));
+
+        // A return points at the purchase it is against, and nothing may delete that
+        // purchase out from under it - the link is how the debit finds the debt.
+        builder.HasOne<PurchaseEntry>()
+            .WithMany()
+            .HasForeignKey(invoice => invoice.ReturnsInvoiceId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseReturnLine"/>: the Purchase Return details.</summary>
+public sealed class PurchaseReturnLineConfiguration : IEntityTypeConfiguration<PurchaseReturnLine>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseReturnLine> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_return_lines", table => table.Property(line => line.PurchaseInvoiceId).HasColumnName("purchase_return_id"));
+
+        builder.HasOne<PurchaseReturn>()
+            .WithMany()
+            .HasForeignKey(line => line.PurchaseInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseReturnLineSerial"/>: the serial numbers on a return's lines.</summary>
+public sealed class PurchaseReturnLineSerialConfiguration : IEntityTypeConfiguration<PurchaseReturnLineSerial>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseReturnLineSerial> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_return_line_serials", table => table.Property(link => link.PurchaseInvoiceLineId).HasColumnName("purchase_return_line_id"));
+
+        builder.HasOne<PurchaseReturnLine>()
+            .WithMany()
+            .HasForeignKey(link => link.PurchaseInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseReturnLineTax"/>: the tax on a return's lines.</summary>
+public sealed class PurchaseReturnLineTaxConfiguration : IEntityTypeConfiguration<PurchaseReturnLineTax>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseReturnLineTax> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_return_line_taxes", table => table.Property(tax => tax.PurchaseInvoiceLineId).HasColumnName("purchase_return_line_id"));
+
+        builder.HasOne<PurchaseReturnLine>()
+            .WithMany()
+            .HasForeignKey(tax => tax.PurchaseInvoiceLineId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+/// <summary>Maps <see cref="PurchaseReturnCharge"/>: the Purchase Return additional table.</summary>
+public sealed class PurchaseReturnChargeConfiguration : IEntityTypeConfiguration<PurchaseReturnCharge>
+{
+    /// <inheritdoc />
+    public void Configure(EntityTypeBuilder<PurchaseReturnCharge> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("purchase_return_charges", table => table.Property(charge => charge.PurchaseInvoiceId).HasColumnName("purchase_return_id"));
+
+        builder.HasOne<PurchaseReturn>()
+            .WithMany()
+            .HasForeignKey(charge => charge.PurchaseInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

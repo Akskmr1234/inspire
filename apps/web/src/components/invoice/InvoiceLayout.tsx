@@ -616,13 +616,13 @@ export function useLineAttention(): {
   readonly bodyRef: React.RefObject<HTMLTableSectionElement | null>;
   readonly attend: (
     line: number | 'last',
-    options?: { readonly focus?: boolean },
+    options?: { readonly focus?: boolean | 'quantity' },
   ) => void;
 } {
   const bodyRef = useRef<HTMLTableSectionElement>(null);
   const [wanted, setWanted] = useState<{
     readonly line: number | 'last';
-    readonly focus: boolean;
+    readonly focus: boolean | 'quantity';
   } | null>(null);
 
   useEffect(() => {
@@ -646,7 +646,12 @@ export function useLineAttention(): {
     void row.offsetWidth;
     row.classList.add('line-flash');
 
-    if (wanted.focus) {
+    if (wanted.focus === 'quantity') {
+      // Its quantity, selected, so what is typed replaces it.
+      const box = row.querySelector<HTMLInputElement>('[data-line-quantity]');
+      box?.focus();
+      box?.select();
+    } else if (wanted.focus) {
       row.querySelector<HTMLInputElement>('[role="combobox"]')?.focus();
     }
   }, [wanted]);
@@ -1147,16 +1152,23 @@ export function PartyCard({
           <p className="truncate text-sm font-semibold text-ink" title={party.name}>
             {party.name}
           </p>
-          <p className="text-xs text-ink-muted">{party.code}</p>
+          {/* The code under the name, unless it is the name over again. */}
+          {party.code.trim().localeCompare(party.name.trim(), undefined, {
+            sensitivity: 'base',
+          }) !== 0 && <p className="text-xs text-ink-muted">{party.code}</p>}
+          {/* Only what the account has: a caption with nothing after it - no tax
+              number, no credit limit, no address - is left out rather than dashed. */}
           <dl className={clsx('mt-2 space-y-1 text-sm', hideDetails && 'hidden')}>
-            {rows.map(([label, value]) => (
-              <div key={label} className="flex gap-3">
-                <dt className="w-32 shrink-0 truncate text-ink-muted">{label}</dt>
-                <dd className="min-w-0 truncate text-ink" title={value || undefined}>
-                  {value || '—'}
-                </dd>
-              </div>
-            ))}
+            {rows
+              .filter(([, value]) => value.trim() !== '')
+              .map(([label, value]) => (
+                <div key={label} className="flex gap-3">
+                  <dt className="w-32 shrink-0 truncate text-ink-muted">{label}</dt>
+                  <dd className="min-w-0 truncate text-ink" title={value}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
           </dl>
         </>
       ) : (
@@ -1289,10 +1301,13 @@ export function NumberCell({
   step = 'any',
   min = '0',
   concealed = false,
+  quantity = false,
 }: {
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly label: string;
+  /** The line's quantity: where the cursor goes when a line is to be counted again. */
+  readonly quantity?: boolean;
   /**
    * Not shown yet - a line's quantity and rate wait for its product. The box is
    * still there, invisible, so Enter from the product lands in it and it appears.
@@ -1319,6 +1334,7 @@ export function NumberCell({
         readOnly={readOnly}
         tabIndex={readOnly || concealed ? -1 : undefined}
         aria-invalid={error ? true : undefined}
+        {...(quantity ? { 'data-line-quantity': '' } : {})}
         onChange={(event) => onChange(event.target.value)}
         className={clsx(
           'field-input-sm ms-auto w-20 text-end font-mono tabular-nums lg:w-24',

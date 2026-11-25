@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { LedgerKind } from '@/lib/ledgers';
 import { useSettings } from '@/stores/settings';
 
 /** How a customer or supplier reads in a dropdown: General Settings › Display. */
@@ -41,4 +42,28 @@ export function usePartyOption(): (party: {
     (party) => ({ label: partyLabel(party, display), keywords: party.code }),
     [display],
   );
+}
+
+/**
+ * Any ledger's label in a dropdown. Customers and suppliers read as the firm chose in
+ * General Settings › Display; every other ledger reads "code — name". A code that is the
+ * same as the name is shown once, whatever the kind.
+ */
+export function ledgerLabel(
+  ledger: { readonly code: string; readonly name: string; readonly kind: number },
+  display: PartyDisplay,
+): string {
+  const party = ledger.kind === LedgerKind.customer || ledger.kind === LedgerKind.supplier;
+  return partyLabel(ledger, party ? display : 'codeAndName');
+}
+
+/** {@link ledgerLabel}, with the firm's choice of display. */
+export function useLedgerLabel(): (ledger: {
+  readonly code: string;
+  readonly name: string;
+  readonly kind: number;
+}) => string {
+  const display = useSettings((state) => state.partyDisplay);
+
+  return useCallback((ledger) => ledgerLabel(ledger, display), [display]);
 }

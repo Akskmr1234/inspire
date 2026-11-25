@@ -84,7 +84,7 @@ internal static class AuditCatalogue
     /// <summary>Names the module a record is shown under.</summary>
     /// <param name="entry">The record.</param>
     /// <returns>The module.</returns>
-    internal static string ModuleOf(EntityEntry entry) => Modules[entry.Metadata.ClrType](entry);
+    internal static string ModuleOf(EntityEntry entry) => Modules[entry.Metadata.GetRootType().ClrType](entry);
 }
 
 /// <summary>
@@ -177,9 +177,13 @@ public sealed partial class AuditTrail
 
         foreach (EntityEntry entry in changed)
         {
-            if (AuditCatalogue.IsAudited(entry.Metadata.ClrType))
+            // A sales return is a sales invoice kept in tables of its own: it is audited,
+            // and its lines grouped, as the type its hierarchy starts from.
+            Type audited = entry.Metadata.GetRootType().ClrType;
+
+            if (AuditCatalogue.IsAudited(audited))
             {
-                Change change = ChangeFor(changes, entry.Metadata.ClrType, KeyOf(entry));
+                Change change = ChangeFor(changes, audited, KeyOf(entry));
                 change.Root = entry;
             }
             else if (OwnerOf(entry) is { } owner)
@@ -194,7 +198,7 @@ public sealed partial class AuditTrail
         foreach (((Type type, object key), Change change) in changes)
         {
             change.Root ??= context.ChangeTracker.Entries()
-                .FirstOrDefault(entry => entry.Metadata.ClrType == type && Equals(KeyOf(entry), key));
+                .FirstOrDefault(entry => entry.Metadata.GetRootType().ClrType == type && Equals(KeyOf(entry), key));
 
             if (Describe(type, key, change, batch, now) is { } entry)
             {
@@ -286,7 +290,7 @@ public sealed partial class AuditTrail
         foreach (IForeignKey key in entry.Metadata.GetForeignKeys())
         {
             if (key.PrincipalToDependent is null
-                || !AuditCatalogue.IsAudited(key.PrincipalEntityType.ClrType)
+                || !AuditCatalogue.IsAudited(key.PrincipalEntityType.GetRootType().ClrType)
                 || key.Properties.Count != 1)
             {
                 continue;
@@ -296,7 +300,7 @@ public sealed partial class AuditTrail
 
             if ((property.CurrentValue ?? property.OriginalValue) is { } owner)
             {
-                return (key.PrincipalEntityType.ClrType, owner);
+                return (key.PrincipalEntityType.GetRootType().ClrType, owner);
             }
         }
 
@@ -423,7 +427,7 @@ public sealed partial class AuditTrail
             }
         }
 
-        foreach (IGrouping<string, EntityEntry> lines in change.Children.GroupBy(child => child.Metadata.ClrType.Name))
+        foreach (IGrouping<string, EntityEntry> lines in change.Children.GroupBy(child => child.Metadata.GetRootType().ClrType.Name))
         {
             List<Dictionary<string, object?>> went = [];
             List<Dictionary<string, object?>> came = [];

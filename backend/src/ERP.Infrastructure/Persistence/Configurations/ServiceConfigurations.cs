@@ -76,7 +76,7 @@ public sealed class JobCardConfiguration : IEntityTypeConfiguration<JobCard>
             .HasForeignKey(card => card.TechnicianLedgerId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<SalesInvoice>()
+        builder.HasOne<Sale>()
             .WithMany()
             .HasForeignKey(card => card.SalesInvoiceId)
             .OnDelete(DeleteBehavior.Restrict);
@@ -229,12 +229,14 @@ public sealed class RmaConfiguration : IEntityTypeConfiguration<Rma>
             .HasForeignKey(rma => rma.WarehouseId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<SalesInvoice>()
+        // A customer's return names the sale; a sale is kept in the sales tables.
+        builder.HasOne<Sale>()
             .WithMany()
             .HasForeignKey(rma => rma.SalesInvoiceId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<PurchaseInvoice>()
+        // A return to a supplier names the purchase; a purchase is kept in the purchase tables.
+        builder.HasOne<PurchaseEntry>()
             .WithMany()
             .HasForeignKey(rma => rma.PurchaseInvoiceId)
             .OnDelete(DeleteBehavior.Restrict);
@@ -246,12 +248,14 @@ public sealed class RmaConfiguration : IEntityTypeConfiguration<Rma>
             .HasForeignKey(rma => rma.ReplacementDocumentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<SalesInvoice>()
+        // The credit note is a sales return, kept in the returns' own tables.
+        builder.HasOne<SalesReturn>()
             .WithMany()
             .HasForeignKey(rma => rma.CreditNoteId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne<PurchaseInvoice>()
+        // The debit note is a purchase return, kept in the returns' own tables.
+        builder.HasOne<PurchaseReturn>()
             .WithMany()
             .HasForeignKey(rma => rma.DebitNoteId)
             .OnDelete(DeleteBehavior.Restrict);

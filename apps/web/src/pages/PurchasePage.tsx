@@ -42,6 +42,7 @@ import {
   RemoveLineButton,
   useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
+import { useLineGuards } from '@/components/invoice/LineGuards';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import {
   ChargesPanel,
@@ -740,14 +741,23 @@ function EntryDialog({
 
   const chargesTotal = chargeTotal(activeCharges, ledgers.data ?? [], chargeSetup);
 
-  const change = (index: number, patch: Partial<DraftLine>): void =>
-    setLines((previous) =>
-      previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
-    );
-
   // A line just added, or just scanned onto, is scrolled to and picked out; Add item
   // leaves the cursor in the new line's product.
   const lineAttention = useLineAttention();
+
+  // One item, one line; one empty line at a time. The batch number is typed, so it is
+  // checked with the expiry rather than a letter at a time.
+  const guards = useLineGuards<DraftLine>({
+    lines,
+    setLines,
+    blank: () => emptyLine(defaultTaxRate),
+    attend: lineAttention.attend,
+    choose: (index, productId) =>
+      guards.change(index, productPatch(products.data ?? [], productId)),
+    productOptions,
+    triggers: ['productId', 'expiresOn'],
+  });
+  const change = guards.change;
 
   /** A new, empty line at the foot, with the cursor in its product. */
   const addLine = (): void => {
@@ -1188,7 +1198,8 @@ function EntryDialog({
           meta={t('invoice.itemCount', { count: itemCount })}
           actions={
             <>
-              <AddLineButton onClick={addLine} />
+              <AddLineButton onClick={() => guards.add(addLine)} />
+              {guards.dialogs}
               {columns.picker}
             </>
           }
@@ -1455,6 +1466,27 @@ function EntryDialog({
  * nothing on a shelf yet to offer. A return is the exception - the goods are leaving, so
  * the batch it names has to be one that already exists.
  */
+/**
+ * What choosing a product does to a line: the batch and the units belong to the product
+ * chosen before, so they are dropped rather than carried onto a different one, and the
+ * line starts at the product's cost and its own rate from the tax rate master.
+ */
+function productPatch(
+  products: readonly ProductSummary[],
+  productId: string,
+): Partial<DraftLine> {
+  const chosen = products.find((candidate) => candidate.id === productId);
+
+  return {
+    productId,
+    batchNumber: '',
+    expiresOn: '',
+    serialNumbers: '',
+    ...(chosen?.taxPercentage != null ? { taxPercentage: String(chosen.taxPercentage) } : {}),
+    ...(chosen?.cost ? { rate: String(chosen.cost) } : {}),
+  };
+}
+
 function LineRow({
   number,
   line,
@@ -1531,33 +1563,7 @@ function LineRow({
           */}
           <SearchSelect
             value={line.productId}
-            onChange={(value) =>
-              // The batch and the units belong to the product that was chosen before,
-              // so they are dropped rather than carried onto a different one.
-              onChange({
-                productId: value,
-                batchNumber: '',
-                expiresOn: '',
-                serialNumbers: '',
-                // The product's own rate from the tax rate master, where it has one.
-                ...(products.find((candidate) => candidate.id === value)?.taxPercentage !=
-                null
-                  ? {
-                      taxPercentage: String(
-                        products.find((candidate) => candidate.id === value)
-                          ?.taxPercentage,
-                      ),
-                    }
-                  : {}),
-                ...(products.find((candidate) => candidate.id === value)?.cost
-                  ? {
-                      rate: String(
-                        products.find((candidate) => candidate.id === value)?.cost ?? '',
-                      ),
-                    }
-                  : {}),
-              })
-            }
+            onChange={(value) => onChange(productPatch(products, value))}
             options={productOptions}
             size="sm"
             label={t('purchase.product')}
@@ -1568,6 +1574,7 @@ function LineRow({
         <ProductDetailCells product={product} shows={columns.shows} labels={t} />
 
         <NumberCell
+          quantity
           concealed={!line.productId}
           value={line.quantity}
           error={errors['quantity']}

@@ -46,7 +46,7 @@ public sealed class SalesProfitReader : ISalesProfitReader
                     invoice.DeliveryNoteId,
                     line.ProductId,
                     line.StockQuantity,
-                    Taxable = line.TaxableAmount.Amount,
+                    Taxable = line.TaxableValue,
                 })
             .ToListAsync(cancellationToken);
 

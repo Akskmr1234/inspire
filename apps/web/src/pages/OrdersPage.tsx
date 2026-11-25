@@ -36,6 +36,7 @@ import {
   RemoveLineButton,
   useLineAttention,
 } from '@/components/invoice/InvoiceLayout';
+import { useLineGuards } from '@/components/invoice/LineGuards';
 import { ShortcutHints } from '@/components/ShortcutHints';
 import { LoadFromButton, type ReferenceSource } from '@/components/ReferenceLoader';
 import { PrintCenter } from '@/components/print/PrintCenter';
@@ -910,14 +911,36 @@ function OrderEntryDialog({
     value: OrderHeaderDraft[TField],
   ): void => setDraft((current) => ({ ...current, [field]: value }));
 
-  const change = (index: number, patch: Partial<DraftLine>): void =>
-    setLines((previous) =>
-      previous.map((line, at) => (at === index ? { ...line, ...patch } : line)),
-    );
-
   // A line just added, or just scanned onto, is scrolled to and picked out; Add item
   // leaves the cursor in the new line's product.
   const lineAttention = useLineAttention();
+
+  /** What choosing a product does to a line. */
+  const productPatch = (value: string): Partial<DraftLine> => {
+    const product = (products.data ?? []).find((candidate) => candidate.id === value);
+
+    return {
+      productId: value,
+      // An order starts at the rate the master holds: cost for a purchase, retail for a
+      // sale. Typed over freely — it is a starting point, not a price list.
+      rate: String((kind === 'purchase' ? product?.cost : product?.retailRate) ?? ''),
+      // The product's own rate from the tax rate master, where it has one.
+      ...(product?.taxPercentage != null
+        ? { taxPercentage: String(product.taxPercentage) }
+        : {}),
+    };
+  };
+
+  // One item, one line; one empty line at a time.
+  const guards = useLineGuards<DraftLine>({
+    lines,
+    setLines,
+    blank: () => emptyLine(defaultTaxRate),
+    attend: lineAttention.attend,
+    choose: (index, productId) => guards.change(index, productPatch(productId)),
+    productOptions,
+  });
+  const change = guards.change;
 
   /** A new, empty line at the foot, with the cursor in its product. */
   const addLine = (): void => {
@@ -1134,7 +1157,8 @@ function OrderEntryDialog({
           meta={t('invoice.itemCount', { count: itemCount })}
           actions={
             <>
-              <AddLineButton onClick={addLine} />
+              <AddLineButton onClick={() => guards.add(addLine)} />
+              {guards.dialogs}
               {columns.picker}
             </>
           }
@@ -1189,28 +1213,7 @@ function OrderEntryDialog({
                       >
                         <SearchSelect
                           value={line.productId}
-                          onChange={(value) => {
-                            const product = (products.data ?? []).find(
-                              (candidate) => candidate.id === value,
-                            );
-
-                            change(index, {
-                              productId: value,
-                              // An order starts at the rate the master holds: cost for a
-                              // purchase, retail for a sale. Typed over freely — it is a
-                              // starting point, not a price list.
-                              rate: String(
-                                (kind === 'purchase'
-                                  ? product?.cost
-                                  : product?.retailRate) ?? '',
-                              ),
-                              // The product's own rate from the tax rate master, where it
-                              // has one.
-                              ...(product?.taxPercentage != null
-                                ? { taxPercentage: String(product.taxPercentage) }
-                                : {}),
-                            });
-                          }}
+                          onChange={(value) => change(index, productPatch(value))}
                           options={productOptions}
                           size="sm"
                           label={t('orders.product')}
@@ -1227,6 +1230,7 @@ function OrderEntryDialog({
                       />
 
                       <NumberCell
+                        quantity
                         concealed={!line.productId}
                         value={line.quantity}
                         label={t('orders.quantity')}

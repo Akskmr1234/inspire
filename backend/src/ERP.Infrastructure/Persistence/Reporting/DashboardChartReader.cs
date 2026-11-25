@@ -278,8 +278,8 @@ public sealed class DashboardChartReader : IDashboardChartReader
                 group new
                 {
                     Goods = invoice.Kind == PurchaseDocumentKind.Return
-                        ? -line.TaxableAmount.Amount
-                        : line.TaxableAmount.Amount,
+                        ? -line.TaxableValue
+                        : line.TaxableValue,
                 }
                 by new { invoice.Date.Year, invoice.Date.Month } into month
                 select new { month.Key.Year, month.Key.Month, Goods = month.Sum(row => row.Goods) })

@@ -29,6 +29,7 @@ import {
   type TransactionReportRow,
 } from '@/lib/transactionReports';
 import { useGodownsOn, useTaxOn } from '@/stores/settings';
+import { usePartyOption } from '@/lib/partyLabel';
 
 /** Sales over a period, by month, day, bill, item and more, with every filter the counter uses. */
 export function SalesReportPage(): React.JSX.Element {
@@ -393,17 +394,10 @@ function Filters({
   const areas = useTerritories(TerritoryKind.area);
   const routes = useTerritories(TerritoryKind.route);
 
+  const partyOption = usePartyOption();
   const parties: readonly SelectOption[] = sales
-    ? (customers.data ?? []).map((row) => ({
-        value: row.customerId,
-        label: row.name,
-        detail: row.code,
-      }))
-    : (suppliers.data ?? []).map((row) => ({
-        value: row.supplierId,
-        label: row.name,
-        detail: row.code,
-      }));
+    ? (customers.data ?? []).map((row) => ({ value: row.customerId, ...partyOption(row) }))
+    : (suppliers.data ?? []).map((row) => ({ value: row.supplierId, ...partyOption(row) }));
 
   const pick = (
     label: string,

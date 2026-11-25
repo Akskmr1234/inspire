@@ -14,6 +14,7 @@ import {
   type LedgerSummary,
 } from '@/lib/ledgers';
 import { moneyAlways } from '@/lib/money';
+import { useLedgerLabel } from '@/lib/partyLabel';
 
 /** The voucher types, keyed by the wire value, for the `voucherTypes.<name>` lookup. */
 const TYPE_NAME: Record<number, string> = {
@@ -82,13 +83,14 @@ export function LedgerStatementPage(): React.JSX.Element {
     );
   };
 
+  const labelOf = useLedgerLabel();
   const options = useMemo(
     () =>
       (ledgers.data ?? []).map((ledger) => ({
         value: ledger.ledgerId,
-        label: `${ledger.code} — ${ledger.name}`,
+        label: labelOf(ledger),
       })),
-    [ledgers.data],
+    [ledgers.data, labelOf],
   );
 
   const dr = t('reports.dr');

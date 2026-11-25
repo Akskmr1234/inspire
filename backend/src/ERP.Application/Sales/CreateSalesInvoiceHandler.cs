@@ -554,6 +554,17 @@ public sealed class CreateSalesInvoiceCommandHandler
                 "That warehouse is not in the selected firm."));
         }
 
+        // A return is against a sale. The returns are kept apart from the sales, and the
+        // link points only at the sales, so naming another return is refused here, plainly.
+        // An invoice that cannot be found is left to posting to refuse, as it always was.
+        if (request.ReturnsInvoiceId is { } returned
+            && await _invoices.FindAsync(SalesInvoiceId.From(returned), cancellationToken) is { IsReturn: true })
+        {
+            return Result.Failure<Context>(Error.Validation(
+                "SalesInvoice.ReturnsAReturn",
+                "A return is against a sale, not another return."));
+        }
+
         List<ProductId> productIds =
             [.. request.Lines.Select(line => ProductId.From(line.ProductId)).Distinct()];
 

@@ -11,6 +11,7 @@ import { listLedgers, type LedgerSummary } from '@/lib/ledgers';
 import { moneyAlways } from '@/lib/money';
 import { printableVoucher, type VoucherForPrint } from '@/lib/printing';
 import { PrintCenter } from '@/components/print/PrintCenter';
+import { useLedgerLabel } from '@/lib/partyLabel';
 
 const DEBIT = 1;
 const CREDIT = 2;
@@ -134,13 +135,14 @@ function VoucherForm({
     })),
   );
 
+  const labelOf = useLedgerLabel();
   const options = useMemo(
     () =>
       ledgers.map((ledger) => ({
         value: ledger.ledgerId,
-        label: `${ledger.code} — ${ledger.name}`,
+        label: labelOf(ledger),
       })),
-    [ledgers],
+    [ledgers, labelOf],
   );
 
   const totals = useMemo(() => {

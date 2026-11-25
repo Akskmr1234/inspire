@@ -50,6 +50,7 @@ import {
   useTaxOn,
 } from '@/stores/settings';
 import { shortcutProps } from '@/lib/shortcuts';
+import { usePartyOption } from '@/lib/partyLabel';
 
 const LIST = '/service/sales';
 
@@ -432,14 +433,15 @@ function ServiceSaleForm({
         })),
     [ledgers.data],
   );
+  const partyOption = usePartyOption();
   const customerOptions = useMemo(
     () =>
       (customers.data ?? []).map((row) => ({
         value: row.customerId,
-        label: row.name,
-        detail: [row.code, row.contact.mobileNumber].filter(Boolean).join(' · '),
+        ...partyOption(row),
+        ...(row.contact.mobileNumber ? { detail: row.contact.mobileNumber } : {}),
       })),
-    [customers.data],
+    [customers.data, partyOption],
   );
   const productById = useMemo(
     () => new Map((products.data ?? []).map((product) => [product.id, product])),

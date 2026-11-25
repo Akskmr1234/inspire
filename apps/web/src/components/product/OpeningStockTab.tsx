@@ -81,11 +81,12 @@ export function OpeningStockTab({
     queryKey: ['warehouses', false],
     queryFn: () => listMaster<WarehouseSummary>('warehouses', false),
   });
+  // The preferred warehouse only while it is still one of the firm's active ones: a
+  // stale preference would otherwise be sent, unseen when godowns are off, and refused.
   const defaultWarehouse =
-    preferredWarehouseId ||
-    (warehouses.data?.find((warehouse) => warehouse.isDefault) ?? warehouses.data?.[0])
-      ?.id ||
-    '';
+    (warehouses.data?.find((warehouse) => warehouse.id === preferredWarehouseId) ??
+      warehouses.data?.find((warehouse) => warehouse.isDefault) ??
+      warehouses.data?.[0])?.id ?? '';
 
   const blankRow = (): Row => ({
     key: crypto.randomUUID(),
@@ -105,15 +106,19 @@ export function OpeningStockTab({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Rows typed before the warehouses arrived get the default once it is known.
+  // Rows typed before the warehouses arrived - or holding one that is not among them -
+  // get the default once it is known.
+  const known = warehouses.data;
   useEffect(() => {
     if (!defaultWarehouse) return;
     setRows((current) =>
       current.map((row) =>
-        row.warehouseId ? row : { ...row, warehouseId: defaultWarehouse },
+        row.warehouseId && known?.some((warehouse) => warehouse.id === row.warehouseId)
+          ? row
+          : { ...row, warehouseId: defaultWarehouse },
       ),
     );
-  }, [defaultWarehouse]);
+  }, [defaultWarehouse, known]);
 
   // The documents behind the product's opening stock, read from its ledger.
   const ledger = useQuery<StockLedgerReport, ApiError>({
@@ -246,7 +251,18 @@ export function OpeningStockTab({
     if (filled.length === 0) return;
     const problem = filled.map(problemIn).find((found) => found !== null);
     if (problem) throw new Error(`${t('products.tabOpeningStock')}: ${problem}`);
-    await writeRows(filled);
+    try {
+      await writeRows(filled);
+    } catch (failure) {
+      // Named, so a refusal of the stock is not read as the product itself failing.
+      const reason =
+        failure instanceof ApiError
+          ? failure.detail || failure.code
+          : failure instanceof Error
+            ? failure.message
+            : String(failure);
+      throw new Error(`${t('products.tabOpeningStock')}: ${reason}`);
+    }
     await refresh();
   });
 
